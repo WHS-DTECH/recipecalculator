@@ -1,0 +1,863 @@
+      
+      <!-- Load Extracted Ingredients button removed -->
+        <script>
+          // Helper: set Recipe ID filter and trigger filter
+      function setRecipeIdAndFilter(recipeId) {
+        const filterInput = document.getElementById('filter-recipe-id');
+        console.log('[setRecipeIdAndFilter] Called with recipeId:', recipeId);
+        if (filterInput) {
+          filterInput.value = recipeId;
+          console.log('[setRecipeIdAndFilter] Set filter input value to:', filterInput.value);
+          if (typeof filterAndShowByRecipeId === 'function') {
+            console.log('[setRecipeIdAndFilter] Calling filterAndShowByRecipeId');
+            filterAndShowByRecipeId();
+          } else {
+            console.warn('[setRecipeIdAndFilter] filterAndShowByRecipeId is not a function');
+          }
+        } else {
+          console.warn('[setRecipeIdAndFilter] filter-recipe-id input not found');
+        }
+      }
+          // Load Extracted Ingredients button logic
+          document.addEventListener('DOMContentLoaded', function() {
+            const loadExtractedBtn = document.getElementById('loadExtractedIngredientsBtn');
+            if (loadExtractedBtn) {
+              loadExtractedBtn.addEventListener('click', function() {
+                const recipeId = document.getElementById('recipeSelectForText').value;
+                if (!recipeId) {
+                  alert('Select a recipe first.');
+                  return;
+                }
+                fetch(`/ExtractedIngredients/${recipeId}.txt`)
+                  .then(res => {
+                    if (!res.ok) throw new Error('File not found');
+                    return res.text();
+                  })
+                  .then(text => {
+                    document.getElementById('textConvertArea').value = text;
+                    alert('Extracted ingredients loaded into the box. You can now Save Ingredients.');
+                  })
+                  .catch(err => {
+                    alert('Failed to load extracted ingredients file: ' + err);
+                  });
+              });
+            }
+          });
+        </script>
+          <!-- Exact copy of Ingredients Inventory table and filtering from Calculate Servings page -->
+          <div style="max-width:1100px;margin:3rem auto 2rem auto;">
+            <h2>Ingredients Inventory</h2>
+            <div style="display:flex;align-items:center;gap:1em;margin-bottom:1rem;">
+              <button id="show-ingredients-btn">Show Ingredients</button>
+              <label for="filter-recipe-id" style="font-weight:normal;">Filter by Recipe ID:</label>
+              <input id="filter-recipe-id" type="number" min="1" style="width:70px;">
+              <button id="filter-ingredients-btn">Filter</button>
+              <button id="show-all-btn">Show All</button>
+              <button id="clear-filter-btn">Clear</button>
+            </div>
+            <div id="ingredients-inventory-table"></div>
+          </div>
+          <script src="calculate_servings.js"></script>
+          <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                            // Attach to Show Recipe Ingredients button if present
+                            const showRecipeIngredientsBtn = document.getElementById('show-recipe-ingredients-btn');
+                            if (showRecipeIngredientsBtn) {
+                              showRecipeIngredientsBtn.addEventListener('click', function() {
+                                // Try to get the current recipe ID from the page context
+                                let recipeId = '';
+                                // Try dropdowns or visible elements
+                                const recipeSelect = document.getElementById('recipeSelectForText');
+                                if (recipeSelect && recipeSelect.value) {
+                                  recipeId = recipeSelect.value;
+                                } else {
+                                  // Try to parse from the recipe name display if possible
+                                  const recipeNameDisplay = document.getElementById('recipe-name-display');
+                                  if (recipeNameDisplay) {
+                                    const match = recipeNameDisplay.textContent.match(/ID:?\s*(\d+)/i);
+                                    if (match) recipeId = match[1];
+                                  }
+                                }
+                                console.log('[Show Recipe Ingredients] Clicked. Recipe ID:', recipeId);
+                                if (recipeId) {
+                                  setRecipeIdAndFilter(recipeId);
+                                } else {
+                                  console.warn('[Show Recipe Ingredients] No recipeId found');
+                                }
+                              });
+                            }
+              function filterAndShowByRecipeId(forceShowAll = false) {
+                const recipeId = document.getElementById('filter-recipe-id').value;
+                console.log('[filterAndShowByRecipeId] Called. Recipe ID:', recipeId, 'forceShowAll:', forceShowAll);
+                if (recipeId && !forceShowAll) {
+                  fetch(`/api/ingredients/inventory/all`)
+                    .then(res => res.json())
+                    .then(data => {
+                      const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                      const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
+                      console.log('[filterAndShowByRecipeId] Filtered ingredients:', filtered);
+                      window.renderIngredientsInventoryTable(filtered);
+                    });
+                } else if (typeof renderIngredientsInventory === 'function') {
+                  console.log('[filterAndShowByRecipeId] Showing all ingredients');
+                  renderIngredientsInventory();
+                } else {
+                  console.warn('[filterAndShowByRecipeId] renderIngredientsInventory is not a function');
+                }
+              }
+              document.getElementById('show-ingredients-btn').onclick = function() { filterAndShowByRecipeId(); };
+              document.getElementById('filter-ingredients-btn').onclick = function() {
+                const recipeId = document.getElementById('filter-recipe-id').value;
+                if (!recipeId) return;
+                fetch(`/api/ingredients/inventory/all`)
+                  .then(res => res.json())
+                  .then(data => {
+                    // Support both {data: [...]} and {ingredients: [...]} and raw array
+                    const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                    const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
+                    if (typeof renderIngredientsInventory === 'function') {
+                      // Overwrite the table with only filtered rows
+                      const container = document.getElementById('ingredients-inventory-table');
+                      if (container) {
+                        container.innerHTML = '';
+                        // Reuse the table rendering logic from renderIngredientsInventory, but only for filtered
+                        window.renderIngredientsInventoryTable(filtered);
+                      }
+                    } else if (typeof renderIngredientsTable === 'function') {
+                      renderIngredientsTable(filtered);
+                    }
+                  });
+              };
+              // Helper to render the inventory table for a given array (for filter)
+              window.renderIngredientsInventoryTable = function(ingredients) {
+                const container = document.getElementById('ingredients-inventory-table');
+                if (!container) return;
+                // Use the same logic as in renderIngredientsInventory, but only for the given array
+                fetch('food_brands.json').then(res => res.json()).then(brands => {
+                  fetch('/api/aisle_keywords/all').then(res => res.json()).then(keywordsData => {
+                    const keywords = keywordsData.keywords || [];
+                    const categories = Array.from(new Set(keywords.map(k => k.aisle_category))).filter(Boolean).map((name, i) => ({ id: i + 1, name }));
+                    function safe(val) { return val === null || val === undefined ? '' : val; }
+                    function stripFoodItemDynamic(name) {
+                      let stripped = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+                      brands.forEach(brand => {
+                        const re = new RegExp('^' + brand.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
+                        stripped = stripped.replace(re, '');
+                      });
+                      // Handle patterns like 'number fooditem (abc)' and extract fooditem
+                      // e.g. '16 marshmallows (best to use Explorer lollies)' -> 'marshmallows'
+                      const match = stripped.match(/^(\d+)?\s*([a-zA-Z ]+)/);
+                      if (match && match[2]) {
+                        let item = match[2].trim();
+                        // Special case for marshmallows
+                        if (/marshmallow/i.test(item)) {
+                          return 'marshmallows';
+                        }
+                        return item;
+                      }
+                      // Fallback: special case for marshmallows
+                      if (/marshmallow/i.test(stripped)) {
+                        return 'marshmallows';
+                      }
+                      return stripped.trim();
+                    }
+                    function findCategoryByKeyword(ingredient) {
+                      const lower = (ingredient || '').toLowerCase();
+                      const match = keywords.find(k => lower.includes((k.keyword || '').toLowerCase()));
+                      return match ? match.aisle_category : '';
+                    }
+                    const table = document.createElement('table');
+                    table.style.width = '100%';
+                    table.style.marginTop = '2rem';
+                    table.style.borderCollapse = 'collapse';
+                    table.innerHTML = `
+                      <thead>
+                        <tr style="background:#f5f5f5;">
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${ingredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
+                          ingredients.map(row => {
+                            let stripFood = stripFoodItemDynamic(row.fooditem || '');
+                            let assignedCategory = '';
+                            if (row.aisle_category_id) {
+                              const catObj = categories.find(c => c.id === row.aisle_category_id);
+                              assignedCategory = catObj ? catObj.name : '';
+                            } else {
+                              assignedCategory = findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
+                            }
+                            return `<tr>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.id)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.recipe_id)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.quantity)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_qty)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_unit)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.fooditem) || safe(row.measure_unit)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem; color:green;">${stripFood || safe(row.measure_unit)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${assignedCategory}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">
+                                <select data-id="${row.id}" class="aisle-category-select">
+                                  <option value="">--Assign--</option>
+                                  ${categories.map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
+                                </select>
+                              </td>
+                            </tr>`;
+                          }).join('')}
+                      </tbody>
+                    `;
+                    container.innerHTML = '';
+                    container.appendChild(table);
+                    table.querySelectorAll('.aisle-category-select').forEach(select => {
+                      select.onchange = function() {
+                        const ingredientId = this.getAttribute('data-id');
+                        const aisleId = this.value;
+                        fetch(`/api/ingredients/inventory/assign-aisle`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ ingredient_id: ingredientId, aisle_category_id: aisleId })
+                        }).then(() => {
+                          window.renderIngredientsInventoryTable(ingredients);
+                        });
+                      };
+                    });
+                  });
+                });
+              };
+              document.getElementById('show-all-btn').onclick = function() {
+                document.getElementById('filter-recipe-id').value = '';
+                filterAndShowByRecipeId(true);
+              };
+              document.getElementById('clear-filter-btn').onclick = function() {
+                document.getElementById('filter-recipe-id').value = '';
+                if (typeof renderIngredientsTable === 'function') {
+                  renderIngredientsTable([]);
+                }
+              };
+              // Always auto-filter on page load
+              filterAndShowByRecipeId();
+            });
+          </script>
+    <script>
+      // Save Extracted Ingredients button logic
+      document.addEventListener('DOMContentLoaded', function() {
+        const saveExtractedBtn = document.getElementById('saveExtractedIngredientsBtn');
+        if (saveExtractedBtn) {
+          saveExtractedBtn.addEventListener('click', function() {
+            const recipeId = document.getElementById('recipeSelectForText').value;
+            const textarea = document.getElementById('textConvertArea');
+            if (!recipeId || !textarea.value.trim()) {
+              alert('Select a recipe and enter ingredients.');
+              return;
+            }
+            const ingredientsText = textarea.value.trim();
+            fetch(`/api/ingredients/inventory/${recipeId}/extracted`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ingredients_text: ingredientsText })
+            })
+            .then(async res => {
+              let data;
+              try {
+                data = await res.json();
+              } catch (e) {
+                alert('Failed to save extracted ingredients file: Invalid server response.');
+                return;
+              }
+              if (res.ok && data && (data.success || data.file)) {
+                alert('Extracted ingredients saved to ExtractedIngredients/' + recipeId + '.txt');
+              } else if (data && (data.fileError || data.error)) {
+                      // JavaScript logic moved to <script> tag at end of body. No JS code should be visible here.
+              } else {
+                alert('Failed to save extracted ingredients file: Unknown error (bad response)');
+              }
+            })
+            .catch(err => {
+              alert('Failed to save extracted ingredients file: ' + (err && err.message ? err.message : err));
+            });
+          });
+        }
+      });
+    </script>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ingredients Directory</title>
+  <link rel="stylesheet" href="../shared/style.css">
+  <link rel="icon" type="image/x-icon" href="images/favicon.ico">
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <div class="ingredients-directory-card" style="margin:40px;">
+    <h2>Ingredients Directory</h2>
+    <p>This page will list all ingredients used in recipes, with search and filter options.</p>
+    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+      <button id="deleteAllIngredientsBtn" style="background:#e53935;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">DELETE ALL</button>
+      <select id="recipeSelectForText" style="min-width:180px;"></select>
+      <button id="convertFragmentBtn" style="background:#ff9800;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Convert Fragment</button>
+      <button id="saveExtractedIngredientsBtn" style="background:#1976d2;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Save Extracted Ingredients</button>
+      <button id="loadExtractedIngredientsBtn" style="background:#388e3c;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Load Extracted Ingredients</button>
+      <button id="insertIngredientsBtn" style="background:#6a1b9a;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Insert ingredients</button>
+        <button id="splitQuantityBtn" style="background:#00897b;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;display:none;">Split Quantity</button>
+          <!-- Scripts moved to end of body for reliability -->
+      <!-- Save ingredients button removed -->
+      <span id="selectedRecipeIdLabel" style="font-weight:bold;color:#333;"></span>
+      <span id="save-status" style="margin-left:1rem;color:#009688;font-weight:bold;"></span>
+    </div>
+
+      <!-- Move all main scripts to end of body for reliability -->
+      </div>
+      <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // Convert Fragment button logic
+        const convertFragmentBtn = document.getElementById('convertFragmentBtn');
+        const textArea = document.getElementById('textConvertArea');
+        if (convertFragmentBtn && textArea) {
+          convertFragmentBtn.addEventListener('click', function() {
+            let text = textArea.value.trim();
+            // Remove any 'recipeIngredient' label and extract the array if present
+            let arrayMatch = text.match(/"recipeIngredient"\s*:\s*(\[.*?\])/s);
+            if (arrayMatch) {
+              text = arrayMatch[1];
+            }
+            // Remove any object wrapper (e.g. { ... })
+            if (text.startsWith('{') && text.endsWith('}')) {
+              try {
+                let obj = JSON.parse(text);
+                if (obj.recipeIngredient && Array.isArray(obj.recipeIngredient)) {
+                  text = obj.recipeIngredient.join('\n');
+                }
+              } catch (e) {
+                // fallback: remove outer braces
+                text = text.replace(/^\{/, '').replace(/\}$/,'');
+              }
+            }
+            // If text is a JSON array, flatten it
+            if (text.startsWith('[') && text.endsWith(']')) {
+              try {
+                const arr = JSON.parse(text);
+                if (Array.isArray(arr)) {
+                  text = arr.join('\n');
+                }
+              } catch (e) {}
+            }
+            // Remove any remaining brackets, braces, or quotes, and flatten to lines
+            text = text.replace(/^[\[\]\{\}"]+/g, '').replace(/[\[\]\{\}"]+$/g, '');
+            let lines = text.split(/\r?\n|,/).map(l => l.replace(/^"|"$/g, '').trim()).filter(Boolean);
+            // Helper to convert unicode and vulgar fractions to float
+            function parseFraction(str) {
+              const vulgarMap = {
+                '¼': 0.25, '½': 0.5, '¾': 0.75,
+                '⅐': 1/7, '⅑': 1/9, '⅒': 0.1, '⅓': 1/3, '⅔': 2/3, '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 1/6, '⅚': 5/6, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875
+              };
+              str = str.trim();
+              // Replace vulgar fractions
+              str = str.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, m => ' ' + vulgarMap[m]);
+              // Handle mixed numbers (e.g., 1 1/2)
+              let parts = str.split(' ');
+              let total = 0;
+              for (let part of parts) {
+                if (/^\d+$/.test(part)) total += parseInt(part);
+                else if (/^\d+\/\d+$/.test(part)) {
+                  let [n, d] = part.split('/');
+                  total += parseInt(n) / parseInt(d);
+                } else if (!isNaN(parseFloat(part))) {
+                  total += parseFloat(part);
+                }
+              }
+              return total || null;
+            }
+            // Accept common units
+            const units = [
+              'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons',
+              'g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms', 'ml', 'l', 'litre', 'litres', 'liter', 'liters',
+              'oz', 'ounce', 'ounces', 'lb', 'pound', 'pounds', 'pinch', 'dash', 'clove', 'cloves', 'can', 'cans', 'slice', 'slices', 'stick', 'sticks', 'packet', 'packets', 'piece', 'pieces', 'egg', 'eggs', 'drop', 'drops', 'block', 'blocks', 'sheet', 'sheets', 'bunch', 'bunches', 'sprig', 'sprigs', 'head', 'heads', 'filet', 'filets', 'fillet', 'fillets', 'bag', 'bags', 'jar', 'jars', 'bottle', 'bottles', 'container', 'containers', 'box', 'boxes', 'bar', 'bars', 'roll', 'rolls', 'strip', 'strips', 'cm', 'mm', 'inch', 'inches', 'pinches', 'handful', 'handfuls', 'dozen', 'sheet', 'sheets', 'leaf', 'leaves', 'stalk', 'stalks', 'rib', 'ribs', 'segment', 'segments', 'piece', 'pieces', 'cube', 'cubes', 'drop', 'drops', 'sprinkle', 'sprinkles', 'dash', 'dashes', 'splash', 'splashes', 'liter', 'liters', 'milliliter', 'milliliters', 'millilitre', 'millilitres', 'quart', 'quarts', 'pint', 'pints', 'gallon', 'gallons', 'ml', 'l', 'dl', 'cl', 'mg', 'mcg', 'µg', 'kg', 'g', 'lb', 'oz', 'cup', 'cups', 'tbsp', 'tsp', 'teaspoon', 'tablespoon', 'pinch', 'dash', 'drop', 'handful', 'stick', 'slice', 'piece', 'clove', 'can', 'bunch', 'sprig', 'head', 'filet', 'fillet', 'block', 'sheet', 'bag', 'jar', 'bottle', 'container', 'box', 'bar', 'roll', 'strip', 'cm', 'mm', 'inch', 'pinches', 'handfuls', 'dozen', 'leaves', 'stalks', 'ribs', 'segments', 'cubes', 'sprinkles', 'splashes', 'litre', 'litres', 'millilitre', 'millilitres', 'quart', 'quarts', 'pint', 'pints', 'gallon', 'gallons'
+            ];
+            const unitPattern = units.join('|');
+            const regex = new RegExp(`^([\d\s\/\.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+)\s*(${unitPattern})\b\s*(.+)$`, 'i');
+            // Convert fractions in each line to decimals if possible
+            lines = lines.map(line => {
+              // Only match and replace a leading quantity (fraction/mixed/decimal) at the start
+              const qtyRegex = /^([\d\s\/\.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+)(?=\s*([a-zA-Z]+)\b)/;
+              const match = line.match(qtyRegex);
+              if (match) {
+                const qty = parseFraction(match[1]);
+                if (qty !== null) {
+                  // Replace only the matched quantity at the start
+                  return line.replace(qtyRegex, qty);
+                }
+              }
+              return line;
+            });
+            text = lines.join('\n');
+            textArea.value = text;
+          });
+        }
+
+        // Split Quantity button logic
+        const splitBtn = document.getElementById('splitQuantityBtn');
+        if (splitBtn) {
+          splitBtn.addEventListener('click', function() {
+            const recipeId = document.getElementById('recipeSelectForText').value;
+            if (!recipeId) {
+              alert('Select a recipe first.');
+              return;
+            }
+            fetch('/api/ingredients/inventory/split-quantity', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: recipeId, splitQty: 1 })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                document.getElementById('save-status').innerHTML = '<span style="color:#009688;">Quantities and food items split and updated!</span>';
+                document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+              } else {
+                document.getElementById('save-status').innerHTML = '<span style="color:#e53935;">Failed to split quantities: ' + (data.error || 'Unknown error') + '</span>';
+              }
+            })
+            .catch(() => {
+              document.getElementById('save-status').innerHTML = '<span style="color:#e53935;">Error contacting server.</span>';
+            });
+          });
+        }
+      });
+      </script>
+    <br/>
+    <label for="textConvertArea" style="font-weight:bold;">Paste or enter ingredients here:</label>
+    <textarea id="textConvertArea" rows="4" style="width:100%;max-width:600px;margin:1rem 0;display:block;" placeholder="e.g. 2 cups flour\n1 tsp salt\n..."></textarea>
+    <div style="margin-bottom:1rem;"></div>
+    <div id="insert-ingredients-preview-container" style="display:none;margin-bottom:1.5rem;">
+      <label style="font-weight:bold;">Preview: Extracted Ingredients File</label>
+      <pre id="insert-ingredients-preview" style="background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;max-width:600px;overflow-x:auto;"></pre>
+    </div>
+        <script>
+          // Insert Ingredients button logic
+          document.addEventListener('DOMContentLoaded', function() {
+            const insertBtn = document.getElementById('insertIngredientsBtn');
+            const previewContainer = document.getElementById('insert-ingredients-preview-container');
+            const previewBox = document.getElementById('insert-ingredients-preview');
+            const saveStatus = document.getElementById('save-status');
+            if (insertBtn && previewContainer && previewBox) {
+              insertBtn.addEventListener('click', function() {
+                const recipeId = document.getElementById('recipeSelectForText').value;
+                if (!recipeId) {
+                  alert('Select a recipe first.');
+                  return;
+                }
+                fetch(`/ExtractedIngredients/${recipeId}.txt`)
+                  .then(res => {
+                    if (!res.ok) throw new Error('File not found');
+                    return res.text();
+                  })
+                  .then(text => {
+                    previewBox.textContent = text;
+                    previewContainer.style.display = 'block';
+                    // Split lines and filter out empty lines
+                    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                    if (lines.length === 0) {
+                      saveStatus.innerHTML = '<span style="color:#e53935;">No ingredients found in file.</span>';
+                      return;
+                    }
+                    // Use parseIngredient from ingredients_parse.js for each line
+                    if (typeof parseIngredient !== 'function') {
+                      alert('Ingredient parser not loaded.');
+                      return;
+                    }
+                    const parsedIngredients = lines.map(line => {
+                      const parsed = parseIngredient(line);
+                      return {
+                        ingredient_name: parsed.name || line,
+                        quantity: parsed.quantity || '',
+                        measure_qty: parsed.quantity || '',
+                        measure_unit: parsed.unit || '',
+                        fooditem: parsed.name || line,
+                        stripFoodItem: (typeof stripFoodItem === 'function') ? stripFoodItem(parsed.name || line) : '',
+                        aisle_category_id: null,
+                        recipe_id: recipeId
+                      };
+                    });
+                    fetch('/api/ingredients/inventory/save-bulk', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ ingredients: parsedIngredients })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                      if (data.success) {
+                        // Now trigger split-quantity for this recipe
+                        fetch('/api/ingredients/inventory/split-quantity', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ id: recipeId, splitQty: 1 })
+                        })
+                        .then(res2 => res2.json())
+                        .then(data2 => {
+                          if (data2.success) {
+                            // Now trigger auto-assign aisles
+                            fetch('/api/ingredients/inventory/auto-assign-aisles', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ recipe_id: recipeId })
+                            })
+                            .then(res3 => res3.json())
+                            .then(data3 => {
+                              if (data3.success) {
+                                saveStatus.innerHTML = '<span style="color:#009688;">Ingredients inserted, split, and aisles assigned!</span>';
+                              } else {
+                                saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted and split, but failed to assign aisles.</span>';
+                              }
+                              document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+                            })
+                            .catch(() => {
+                              saveStatus.innerHTML = '<span style="color:#e53935;">Error assigning aisles after split.</span>';
+                              document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+                            });
+                          } else {
+                            saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted, but failed to split quantities.</span>';
+                            document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+                          }
+                        })
+                        .catch(() => {
+                          saveStatus.innerHTML = '<span style="color:#e53935;">Error splitting quantities after insert.</span>';
+                          document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+                        });
+                      } else {
+                        saveStatus.innerHTML = '<span style="color:#e53935;">Failed to insert ingredients from file.</span>';
+                      }
+                    })
+                    .catch(() => {
+                      saveStatus.innerHTML = '<span style="color:#e53935;">Error contacting server.</span>';
+                    });
+                  })
+                  .catch(err => {
+                    previewBox.textContent = 'Failed to load extracted ingredients file: ' + err;
+                    previewContainer.style.display = 'block';
+                  });
+              });
+            }
+          });
+        </script>
+                </script>
+    <div id="reformat-status" style="margin-bottom:1.5rem;"></div>
+    <!-- Duplicate removed: ingredients-inventory-table -->
+      <div id="ingredients-inventory-debug-table"></div>
+    <h3 style="margin-top:3rem;">All Recipes</h3>
+    <div id="recipes-table-container"></div>
+    <script>
+      // Always render ingredients table on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        if (window.renderIngredientsInventory) renderIngredientsInventory();
+      });
+      // Also refresh after inventory actions
+      document.addEventListener('ingredients-inventory-refresh', function() {
+        if (window.renderIngredientsInventory) renderIngredientsInventory();
+      });
+
+      // Save Ingredients to Recipe button logic
+      var saveIngredientsBtn = document.getElementById('saveIngredientsBtn');
+      if (saveIngredientsBtn) saveIngredientsBtn.addEventListener('click', function() {
+        const recipeId = document.getElementById('recipeSelectForText').value;
+        const textarea = document.getElementById('textConvertArea');
+        const saveStatus = document.getElementById('save-status');
+        function showStatus(msg, color) {
+          saveStatus.innerHTML = `<span style="color:${color};cursor:pointer;" id="save-status-close">${msg} (click to dismiss)</span>`;
+          document.getElementById('save-status-close').onclick = () => { saveStatus.textContent = ''; };
+        }
+        if (!recipeId || !textarea.value.trim()) {
+          showStatus('Select a recipe and enter ingredients.', '#e53935');
+          return;
+        }
+        let ingredientsText = textarea.value.trim();
+        // Also save to ExtractedIngredients/{recipeId}.txt
+        fetch(`/api/ingredients/inventory/${recipeId}/extracted`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ingredients_text: ingredientsText })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (!data.success) {
+            console.error('Failed to save extracted ingredients file:', data.fileError || 'Unknown error');
+          }
+        })
+        .catch(err => {
+          console.error('Failed to save extracted ingredients file:', err);
+        });
+        fetch('/api/ingredients/save-bulk', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recipe_id: recipeId, ingredients: ingredientsText })
+        })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            // After saving, immediately sync inventory
+            fetch('/api/ingredients-inventory/sync', { method: 'POST' })
+              .then(res2 => res2.json())
+              .then(data2 => {
+                showStatus('Ingredients saved and inventory synced!', '#009688');
+                document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+              })
+              .catch(() => {
+                showStatus('Ingredients saved, but inventory sync failed.', '#e53935');
+              });
+          } else {
+            showStatus('Save failed.', '#e53935');
+          }
+        })
+        .catch(() => {
+          showStatus('Save failed.', '#e53935');
+        });
+      });
+
+      // Inline editing for ingredients table (basic demo)
+      document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(() => {
+          const table = document.querySelector('#ingredients-inventory-table table');
+          if (!table) return;
+          table.querySelectorAll('td').forEach(td => {
+            td.addEventListener('dblclick', function() {
+              const oldValue = td.textContent;
+              const input = document.createElement('input');
+              input.value = oldValue;
+              input.style.width = '90%';
+              td.textContent = '';
+              td.appendChild(input);
+              input.focus();
+              input.addEventListener('blur', function() {
+                td.textContent = input.value;
+                // TODO: send update to backend if needed
+              });
+              input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') input.blur();
+              });
+            });
+          });
+        }, 500);
+      });
+    </script>
+  </div>
+  <script>
+    // Dynamically load the shared navbar
+    fetch('_navbar.html')
+      .then(res => res.text())
+      .then(html => {
+        document.getElementById('navbar-include').innerHTML = html;
+      });
+  </script>
+  <script src="ingredients_inventory_table.js"></script>
+  <script src="ingredients_parse.js"></script>
+  <script src="text_conversion.js"></script>
+  <script src="split_measure_button.js"></script>
+  <script>
+    // Populate recipe dropdown
+    document.addEventListener('DOMContentLoaded', function() {
+      fetch('/api/recipes')
+        .then(res => res.json())
+        .then(data => {
+          const select = document.getElementById('recipeSelectForText');
+          if (select) {
+            select.innerHTML = '<option value="">-- Select Recipe --</option>' +
+              data.map(r => `<option value="${r.id}">${r.name || r.recipe_title || 'Recipe ' + r.id}</option>`).join('');
+          }
+        });
+      const select = document.getElementById('recipeSelectForText');
+      const recipeIdLabel = document.getElementById('selectedRecipeIdLabel');
+      if (select) {
+        select.addEventListener('change', function() {
+          const recipeId = select.value;
+          if (recipeIdLabel) recipeIdLabel.textContent = recipeId ? `Recipe ID: ${recipeId}` : '';
+          if (!recipeId) return;
+          fetch(`/api/recipes/${recipeId}`)
+            .then(res => res.json())
+            .then(recipe => {
+              // Try to get ingredients as text
+              let text = '';
+              if (Array.isArray(recipe.ingredients)) {
+                text = recipe.ingredients.join('\n');
+              } else if (typeof recipe.ingredients === 'string') {
+                text = recipe.ingredients;
+              }
+              document.getElementById('textConvertArea').value = text;
+              // Automatically trigger Convert Fragment logic
+              const convertFragmentBtn = document.getElementById('convertFragmentBtn');
+              const textArea = document.getElementById('textConvertArea');
+              if (convertFragmentBtn && textArea) {
+                convertFragmentBtn.click();
+              }
+            });
+        });
+      }
+    });
+  </script>
+  <script>
+    function syncInventory(auto) {
+      // If auto, do not show confirm or alert
+      if (!auto) {
+        if (!confirm('This will overwrite the inventory with all ingredients from all recipes. Continue?')) return;
+      }
+      fetch('/api/ingredients-inventory/sync', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+            if (!auto) alert('Inventory synced from all recipes.');
+          } else {
+            if (!auto) alert('Failed to sync inventory.');
+          }
+        })
+        .catch(() => { if (!auto) alert('Error contacting server.'); });
+    }
+  </script>
+  <script>      <!-- All main scripts moved to end of body for reliability -->
+          const textArea = document.getElementById('textConvertArea');
+          if (convertFragmentBtn && textArea) {
+            convertFragmentBtn.addEventListener('click', function() {
+              let text = textArea.value.trim();
+              // Remove any 'recipeIngredient' label and extract the array if present
+              let arrayMatch = text.match(/"recipeIngredient"\s*:\s*(\[.*?\])/s);
+              if (arrayMatch) {
+                text = arrayMatch[1];
+              }
+              // Remove any object wrapper (e.g. { ... })
+              if (text.startsWith('{') && text.endsWith('}')) {
+                try {
+                  let obj = JSON.parse(text);
+                  if (obj.recipeIngredient && Array.isArray(obj.recipeIngredient)) {
+                    text = obj.recipeIngredient.join('\n');
+                  }
+                } catch (e) {
+                  // fallback: remove outer braces
+                  text = text.replace(/^\{/, '').replace(/\}$/, '');
+                }
+              }
+              // If text is a JSON array, flatten it
+              if (text.startsWith('[') && text.endsWith(']')) {
+                try {
+                  const arr = JSON.parse(text);
+                  if (Array.isArray(arr)) {
+                    text = arr.join('\n');
+                  }
+                } catch (e) {}
+              }
+              // Remove any remaining brackets, braces, or quotes, and flatten to lines
+              text = text.replace(/^[\[\]\{\}"]+/g, '').replace(/[\[\]\{\}"]+$/g, '');
+              let lines = text.split(/\r?\n|,/).map(l => l.replace(/^"|"$/g, '').trim()).filter(Boolean);
+
+              // Helper to convert unicode and vulgar fractions to float
+              function parseFraction(str) {
+                const vulgarMap = {
+                  '¼': 0.25, '½': 0.5, '¾': 0.75,
+                  '⅐': 1/7, '⅑': 1/9, '⅒': 0.1, '⅓': 1/3, '⅔': 2/3, '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 1/6, '⅚': 5/6, '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875
+                };
+                str = str.trim();
+                // Replace vulgar fractions
+                str = str.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, m => ' ' + vulgarMap[m]);
+                // Handle mixed numbers (e.g., 1 1/2)
+                let parts = str.split(' ');
+                let total = 0;
+                for (let part of parts) {
+                  if (/^\d+$/.test(part)) total += parseInt(part);
+                  else if (/^\d+\/\d+$/.test(part)) {
+                    let [n, d] = part.split('/');
+                    total += parseInt(n) / parseInt(d);
+                  } else if (!isNaN(parseFloat(part))) {
+                    total += parseFloat(part);
+                  }
+                }
+                return total || null;
+              }
+
+              // Accept common units
+              const units = [
+                'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons',
+                'g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms', 'ml', 'l', 'litre', 'litres', 'liter', 'liters',
+                'oz', 'ounce', 'ounces', 'lb', 'pound', 'pounds', 'pinch', 'dash', 'clove', 'cloves', 'can', 'cans', 'slice', 'slices', 'stick', 'sticks', 'packet', 'packets', 'piece', 'pieces', 'egg', 'eggs', 'drop', 'drops', 'block', 'blocks', 'sheet', 'sheets', 'bunch', 'bunches', 'sprig', 'sprigs', 'head', 'heads', 'filet', 'filets', 'fillet', 'fillets', 'bag', 'bags', 'jar', 'jars', 'bottle', 'bottles', 'container', 'containers', 'box', 'boxes', 'bar', 'bars', 'roll', 'rolls', 'strip', 'strips', 'cm', 'mm', 'inch', 'inches', 'pinches', 'handful', 'handfuls', 'dozen', 'sheet', 'sheets', 'leaf', 'leaves', 'stalk', 'stalks', 'rib', 'ribs', 'segment', 'segments', 'piece', 'pieces', 'cube', 'cubes', 'drop', 'drops', 'sprinkle', 'sprinkles', 'dash', 'dashes', 'splash', 'splashes', 'liter', 'liters', 'milliliter', 'milliliters', 'millilitre', 'millilitres', 'quart', 'quarts', 'pint', 'pints', 'gallon', 'gallons', 'ml', 'l', 'dl', 'cl', 'mg', 'mcg', 'µg', 'kg', 'g', 'lb', 'oz', 'cup', 'cups', 'tbsp', 'tsp', 'teaspoon', 'tablespoon', 'pinch', 'dash', 'drop', 'handful', 'stick', 'slice', 'piece', 'clove', 'can', 'bunch', 'sprig', 'head', 'filet', 'fillet', 'block', 'sheet', 'bag', 'jar', 'bottle', 'container', 'box', 'bar', 'roll', 'strip', 'cm', 'mm', 'inch', 'pinches', 'handfuls', 'dozen', 'leaves', 'stalks', 'ribs', 'segments', 'cubes', 'sprinkles', 'splashes', 'litre', 'litres', 'millilitre', 'millilitres', 'quart', 'quarts', 'pint', 'pints', 'gallon', 'gallons'
+              ];
+              const unitPattern = units.join('|');
+              const regex = new RegExp(`^([\d\s\/\.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+)\s*(${unitPattern})\b\s*(.+)$`, 'i');
+
+              // Convert fractions in each line to decimals if possible
+              lines = lines.map(line => {
+                // Only match and replace a leading quantity (fraction/mixed/decimal) at the start
+                const qtyRegex = /^([\d\s\/\.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+)(?=\s*([a-zA-Z]+)\b)/;
+                const match = line.match(qtyRegex);
+                if (match) {
+                  const qty = parseFraction(match[1]);
+                  if (qty !== null) {
+                    // Replace only the matched quantity at the start
+                    return line.replace(qtyRegex, qty);
+                  }
+                }
+                return line;
+              });
+              text = lines.join('\n');
+              textArea.value = text;
+
+              // ...existing code...
+
+              // After conversion, trigger reformat ingredients (reformat API)
+              // No longer trigger global reformat here. Only process the current recipe as needed.
+                          // After conversion, trigger split-quantity for the selected recipe only
+                          const recipeId = document.getElementById('recipeSelectForText').value;
+                          if (recipeId) {
+            fetch('/api/ingredients/inventory/split-quantity', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipe_id: recipeId })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                document.getElementById('reformat-status').innerHTML = '<span style="color:green;">Quantities and food items split for this recipe!</span>';
+              }
+              fetch('/api/ingredients/inventory/save-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ingredients: lines.map(line => ({ ingredient_name: line, recipe_id: recipeId })) })
+              })
+              .catch(() => {
+                document.getElementById('reformat-status').innerHTML = '<span style="color:red;">Error contacting server.</span>';
+              });
+            })
+            .catch(() => {
+              document.getElementById('reformat-status').innerHTML = '<span style="color:red;">Error contacting server.</span>';
+            });
+          }
+        });
+  </script>
+  <script>
+    //DELETE ALL: Remove from both inventory and main ingredients table, then refresh
+    document.getElementById('deleteAllIngredientsBtn').addEventListener('click', function() {
+      if (confirm('Are you sure you want to delete ALL ingredients?')) {
+        fetch('/api/ingredients-inventory', { method: 'DELETE' })
+          .then(res => res.json())
+          .then(data => {
+            fetch('/api/ingredients', { method: 'DELETE' })
+              .then(res2 => res2.json())
+              .then(data2 => {
+                alert('All ingredients deleted.');
+                document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+              });
+          });
+      }
+    });
+  </script>
+</body>
+</html>

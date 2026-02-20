@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipe Details</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+  <div class="main-center-card" style="margin-left: 5vw; margin-right: 5vw;">
+    <h1 class="main-title">Recipe Details</h1>
+    <div style="display:flex;gap:2rem;align-items:flex-start;">
+      <div style="flex:1;">
+        <h3>INGREDIENTS</h3>
+        <div id="ingredients" style="white-space:pre-line;"></div>
+      </div>
+      <div style="flex:2;">
+        <h3>INSTRUCTIONS</h3>
+        <div id="instructions" style="white-space:pre-line;"></div>
+        <div style="margin-top:1rem;"><b>Serving Size:</b> <span id="serving_size"></span></div>
+        <div style="margin-top:1rem;"><b>URL:</b> <span id="url"></span></div>
+      </div>
+    </div>
+  </div>
+  <script src="display_recipe_details.js"></script>
+</body>
+</html>

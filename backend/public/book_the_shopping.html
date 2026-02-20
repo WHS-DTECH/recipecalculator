@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Book the Shopping</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+        </script>
+    <div class="shopping-app" style="display:block;text-align:left;margin:0;padding:0;">
+        <div style="display:block;text-align:left;margin:0;padding:0;width:100vw;max-width:100vw;overflow-x:auto;">
+        <table style="width:100%;border-collapse:separate;border-spacing:2.5rem 0;margin-top:2.5rem;margin-left:0;">
+            <tr>
+                <!-- Column 1: Schedule Calendar -->
+                <td style="vertical-align:top;width:40%;min-width:400px;">
+                    <div class="calendar-app">
+                        <h1>Schedule Calendar</h1>
+                        <div style="text-align:center;margin-bottom:1.2rem;">
+                            <div id="calendarWeekLabel" style="font-size:1.3em;font-weight:bold;margin-bottom:0.7em;">Week of ...</div>
+                            <button id="prevWeekBtn" style="margin:0 0.3em;">&larr; Previous</button>
+                            <button id="todayBtn" style="margin:0 0.3em;">Today</button>
+                            <button id="nextWeekBtn" style="margin:0 0.3em;">Next &rarr;</button>
+                        </div>
+                        <div class="calendar-wrap">
+                            <table class="calendar-table" id="scheduleCalendarTable"></table>
+                        </div>
+                    </div>
+                </td>
+                <!-- Column 2: Tabbed Shopping List -->
+                <td colspan="2" style="vertical-align:top;width:60%;min-width:560px;">
+                    <div style="max-width:700px;margin:0 auto;">
+                        <div id="shoppingListTabs" style="display:flex;gap:1em;margin-bottom:1em;">
+                            <button id="tabByTeacher" class="shopping-tab active" style="padding:0.7em 2em;font-size:1em;border:none;border-bottom:3px solid #1976d2;background:#f7f7f7;cursor:pointer;font-weight:bold;">Shopping List by Teacher</button>
+                            <button id="tabByCategory" class="shopping-tab" style="padding:0.7em 2em;font-size:1em;border:none;border-bottom:3px solid transparent;background:#f7f7f7;cursor:pointer;font-weight:bold;">Shopping List by Category</button>
+                        </div>
+                        <div id="tabContentByTeacher">
+                            <button id="printByTeacherBtn" style="float:right;margin-bottom:1em;padding:0.5em 1.2em;font-size:1em;background:#1976d2;color:#fff;border:none;border-radius:5px;">Print</button>
+                            <div id="printByTeacherArea" style="background:#fff;border-radius:10px;padding:1.2em 1.5em 1.5em 1.5em;box-shadow:0 2px 8px #0001;border:1px solid #e0e0e0; min-width:380px; max-width:480px; width:100%; word-break:break-word; white-space:normal;">
+                                <div style="font-weight:bold;font-size:1.2em;margin-bottom:0.7em;">Shopping List by Teacher</div>
+                                <div id="by-teacher-ingredients"></div>
+                            </div>
+                        </div>
+                        <div id="tabContentByCategory" style="display:none;">
+                            <button id="printByCategoryBtn" style="float:right;margin-bottom:1em;padding:0.5em 1.2em;font-size:1em;background:#388e3c;color:#fff;border:none;border-radius:5px;">Print</button>
+                            <div id="printByCategoryArea" style="background:#fff;border-radius:10px;padding:1.2em 1.5em 1.5em 1.5em;box-shadow:0 2px 8px #0001;border:1px solid #e0e0e0; min-width:380px; max-width:480px; width:100%; word-break:break-word; white-space:normal;">
+                                <div style="font-weight:bold;font-size:1.2em;margin-bottom:0.7em;">Shopping List by Category</div>
+                                <div id="by-category-ingredients"></div>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        </table>
+        </div>
+        </div>
+        <!-- Shopping List Buttons always visible (fixed bar) -->
+        <div id="shoppingListButtonBar" style="position:fixed;left:0;bottom:0;width:100vw;z-index:1000;background:rgba(255,255,255,0.97);box-shadow:0 -2px 8px #0002;padding:0.7em 0 0.7em 0;display:flex;justify-content:center;gap:1em;">
+            <button id="generateByTeacherBtn" style="width:350px;max-width:90vw;margin-bottom:0;padding:0.6em 0;font-size:1em;background:#1976d2;color:#fff;border:none;border-radius:5px;">Generate Shopping List by Teacher</button>
+            <button id="generateByCategoryBtn" style="width:350px;max-width:90vw;margin-bottom:0;padding:0.6em 0;font-size:1em;background:#388e3c;color:#fff;border:none;border-radius:5px;">Generate Shopping List by Category</button>
+        </div>
+        <script src="schedule_calendar.js"></script>
+        <script src="book_the_shopping_compare_stripfooditem.js"></script>
+    </div>
+    <style>
+    @media print {
+        body * { visibility: hidden !important; }
+        #printArea, #printArea * { visibility: visible !important; }
+        #printArea { position: absolute; left: 0; top: 0; width: 100vw; background: #fff; color: #000; z-index: 9999; }
+        #printArea h1, #printArea h2, #printArea h3 { margin: 0.5em 0; }
+        #printArea table { width: 100%; border-collapse: collapse; }
+        #printArea th, #printArea td { border: 1px solid #888; padding: 0.3em 0.7em; }
+        #printArea th { background: #e3e3e3; }
+        #printArea tr:nth-child(even) { background: #f6f8fa; }
+    }
+    </style>
+    <script src="book_the_shopping.js"></script>
+</div>
+</body>
+</html>

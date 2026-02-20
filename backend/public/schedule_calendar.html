@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Schedule Calendar</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+    <div class="calendar-app">
+        <h1>Schedule Calendar</h1>
+        <div style="text-align:center;margin-bottom:1.2rem;">
+            <div id="calendarWeekLabel" style="font-size:1.3em;font-weight:bold;margin-bottom:0.7em;">Week of 02/02/26 to 06/02/26</div>
+            <button id="prevWeekBtn" style="margin:0 0.3em;">&larr; Previous</button>
+            <button id="todayBtn" style="margin:0 0.3em;">Today</button>
+            <button id="nextWeekBtn" style="margin:0 0.3em;">Next &rarr;</button>
+        </div>
+        <div class="calendar-wrap">
+            <table class="calendar-table" id="scheduleCalendarTable"></table>
+        </div>
+    </div>
+    <script src="schedule_calendar.js"></script>
+</body>
+</html>

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Department Table</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+    <div class="container" style="max-width:900px;margin:2rem auto;background:#fff;padding:2rem;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <h1>Department Table</h1>
+                <button id="deleteAllBtn" style="margin-bottom:1rem;background:#d9534f;color:#fff;border:none;padding:0.5rem 1.2rem;border-radius:6px;cursor:pointer;">Delete All</button>
+                <div style="margin-bottom:1.5rem;">
+                    <label for="staffSelect"><b>Choose Staff:</b></label>
+                    <select id="staffSelect" style="margin-left:0.5rem;"></select>
+                    <span id="staffEmail" style="margin-left:2rem;"></span>
+                    <br><br>
+                    <label for="departmentSelect"><b>Assign Department:</b></label>
+                    <select id="departmentSelect" style="margin-left:0.5rem;">
+                        <option value="">-- Select Department --</option>
+                        <option value="Technology">Technology</option>
+                        <option value="Arts">Arts</option>
+                        <option value="Social Studies">Social Studies</option>
+                        <option value="Science">Science</option>
+                        <option value="English">English</option>
+                        <option value="Maori">Maori</option>
+                        <option value="PE and Health">PE and Health</option>
+                        <option value="Mathematics">Mathematics</option>
+                    </select>
+                    <button id="saveDepartmentBtn" style="margin-left:1rem;">Save</button>
+                </div>
+                <div id="timetableClassesContainer" style="margin-bottom:2rem;"></div>
+                <div id="departmentTableContainer" style="margin-top:2rem;"></div>
+    </div>
+    <script src="admin_department.js"></script>
+</body>
+</html>

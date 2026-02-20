@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>PDF Recipe Upload</title>
+	<link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+	<!-- Include navbar -->
+	<nav class="navbar">
+		<!-- ...existing code... -->
+	</nav>
+	<div class="setup-card">
+		<h2>PDF Recipe Upload</h2>
+		<div class="setup-section">
+			<div class="setup-section-title">Upload Recipe (PDF)</div>
+			<div class="setup-section-desc">Extract recipes from a PDF file.</div>
+			<label>Select PDF file:</label>
+			<div class="upload-area" id="pdfUploadArea">Drag & drop or click to select file</div>
+			<input type="file" id="pdfInput" accept=".pdf" style="display:none;">
+			<button class="setup-btn">Upload PDF</button>
+		</div>
+	</div>
+	<script src="upload_pdf.js"></script>
+</body>
+</html>

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculate Servings</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Navbar include -->
+  <div id="navbar-include"></div>
+  <script>
+    fetch('_navbar.html').then(r => r.text()).then(html => {
+      document.getElementById('navbar-include').outerHTML = html;
+    });
+  </script>
+  <style>
+        .servings-card {
+          background: #fff;
+          border-radius: 12px;
+          box-shadow: 0 2px 8px #0001;
+          padding: 1.5rem 2rem 2rem 2rem;
+          margin: 2rem auto;
+          max-width: 350px;
+          border: 1px solid #e0e0e0;
+        }
+        .servings-card h2 {
+          font-size: 1.3em;
+          margin-bottom: 1.2em;
+        }
+        .servings-tabs {
+          display: flex;
+          margin-bottom: 1em;
+        }
+        .servings-tab {
+          flex: 1;
+          padding: 0.5em 0.7em;
+          border: 1px solid #1976d2;
+          background: #f5faff;
+          color: #1976d2;
+          cursor: pointer;
+          text-align: center;
+          font-weight: 500;
+          border-radius: 6px 6px 0 0;
+          margin-right: 2px;
+        }
+        .servings-tab.active {
+          background: #1976d2;
+          color: #fff;
+          border-bottom: 1px solid #fff;
+        }
+        .servings-label {
+          margin-top: 1em;
+          margin-bottom: 0.3em;
+          font-size: 1em;
+        }
+        .servings-input {
+          width: 100%;
+          padding: 0.5em;
+          border-radius: 5px;
+          border: 1px solid #ccc;
+          margin-bottom: 1em;
+          font-size: 1em;
+        }
+        .servings-btn {
+          width: 100%;
+          background: #1976d2;
+          color: #fff;
+          border: none;
+          border-radius: 5px;
+          padding: 0.7em 0;
+          font-size: 1em;
+          font-weight: 600;
+          cursor: pointer;
+          margin-top: 0.5em;
+        }
+      </style>
+    </head>
+    <body>
+      <div style="display:flex;justify-content:center;align-items:flex-start;gap:2.5rem;margin-top:2.5rem;">
+        <div style="min-width:320px;max-width:340px;background:#fff;border-radius:12px;box-shadow:0 2px 8px #0001;padding:1.2rem 1.2rem 1.5rem 1.2rem;border:1px solid #e0e0e0;">
+          <div id="scheduled-bookings-dropdowns"></div>
+        </div>
+        <div style="flex:1;">
+          <div style="display:flex;gap:1.5rem;justify-content:center;align-items:flex-start;margin-bottom:2.5rem;">
+            <div style="flex:1;min-width:200px;background:#fff;border-radius:10px;padding:1rem 1rem 1.5rem 1rem;border:1px solid #e0e0e0;box-shadow:0 1px 4px #0001;">
+              <div style="font-weight:bold;font-size:1.1em;margin-bottom:1em;text-align:center;">Original Recipe Ingredients</div>
+              <div id="original-ingredients-col" style="min-height:80px;text-align:center;color:#888;">
+                <button id="show-recipe-ingredients-btn" style="margin-top:0.5em;">Show Recipe Ingredients</button>
+                <div id='serving-size-display' style='font-weight:bold;color:#1976d2;margin-top:0.7em;'>Serving Size: </div>
+              </div>
+            </div>
+            <div style="flex:1;min-width:200px;background:#fff;border-radius:10px;padding:1rem 1rem 1.5rem 1rem;border:1px solid #e0e0e0;box-shadow:0 1px 4px #0001;">
+              <div style="font-weight:bold;font-size:1.1em;margin-bottom:1em;text-align:center;">Desired Serving</div>
+              <div id="desired-serving-col" style="min-height:80px;text-align:center;color:#888;"></div>
+            </div>
+            <div style="flex:1;min-width:200px;background:#fff;border-radius:10px;padding:1rem 1rem 1.5rem 1rem;border:1px solid #e0e0e0;box-shadow:0 1px 4px #0001;">
+              <div style="font-weight:bold;font-size:1.1em;margin-bottom:1em;text-align:center;">Desired Serving Ingredients</div>
+              <button id="calculate-desired-serving-btn" class="servings-btn" style="margin-bottom:1em;">Calculate Desired Serving Ingredients</button>
+              <div id="single-serving-col" style="min-height:80px;text-align:center;color:#888;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="max-width:1100px;margin:3rem auto 2rem auto;">
+        <h2>Ingredients Inventory</h2>
+        <div id="recipe-name-display" style="font-size:1.1em;font-weight:bold;color:#1976d2;margin-bottom:0.7em;"></div>
+        <div style="display:flex;align-items:center;gap:1em;margin-bottom:1rem;">
+          <button id="show-ingredients-btn">Show Ingredients</button>
+          <label for="filter-recipe-id" style="font-weight:normal;">Filter by Recipe ID:</label>
+          <input id="filter-recipe-id" type="number" min="1" style="width:70px;">
+          <button id="filter-ingredients-btn">Filter</button>
+          <button id="show-all-btn">Show All</button>
+          <button id="clear-filter-btn">Clear</button>
+        </div>
+        <div id="ingredients-inventory-table"></div>
+        <div style="margin-top:2.5em;">
+          <div style="display:flex;align-items:center;gap:1.5em;">
+            <h2 style="margin-bottom:0.5em;">Desired Serving Ingredients</h2>
+            <button id="delete-all-desired-serving-ingredients-btn" style="background:#c62828;color:#fff;padding:0.5em 1.2em;border:none;border-radius:5px;font-size:1em;">DELETE ALL</button>
+            <label for="filter-dsi-teacher" style="margin-left:2em;">Teacher:</label>
+            <select id="filter-dsi-teacher" style="min-width:160px;"></select>
+            <label for="filter-dsi-class" style="margin-left:1em;">Class:</label>
+            <select id="filter-dsi-class" style="min-width:120px;"></select>
+          </div>
+          <div id="desired-serving-ingredients-table"></div>
+        </div>
+      </div>
+      <script src="calculate_servings_bookings.js"></script>
+      <script src="calculate_servings.js"></script>
+      <script>
+        document.addEventListener('DOMContentLoaded', function() {
+          // Scheduled Bookings Dropdowns UI
+          const schedDiv = document.getElementById('scheduled-bookings-dropdowns');
+          schedDiv.innerHTML = `
+            <div style="font-weight:bold;margin-bottom:0.5em;">Scheduled Bookings</div>
+            <div style="margin-bottom:0.7em;">
+              <label for="teacher-select" style="font-weight:normal;">Teacher:</label>
+              <select id="teacher-select" style="margin-left:0.5em;min-width:160px;"></select>
+            </div>
+            <div style="margin-bottom:0.7em;">
+              <label for="class-select" style="font-weight:normal;">Class:</label>
+              <select id="class-select" style="margin-left:0.5em;min-width:220px;"></select>
+            </div>
+          `;
+          // Fetch bookings and populate dropdowns
+          fetch('/api/bookings/all')
+            .then(res => res.json())
+            .then(data => {
+              const bookings = data.bookings || [];
+              const teacherSelect = document.getElementById('teacher-select');
+              const classSelect = document.getElementById('class-select');
+              // Group bookings by teacher
+              const grouped = {};
+              for (const b of bookings) {
+                if (!grouped[b.staff_name]) grouped[b.staff_name] = [];
+                grouped[b.staff_name].push(b);
+              }
+              // Populate teacher dropdown
+              teacherSelect.innerHTML = '<option value="">Select teacher...</option>' +
+                Object.keys(grouped).sort().map(t => `<option value="${t}">${t}</option>`).join('');
+              // When teacher changes, populate class dropdown
+              teacherSelect.addEventListener('change', function() {
+                const teacher = this.value;
+                if (!teacher) {
+                  classSelect.innerHTML = '<option value="">Select class...</option>';
+                  return;
+                }
+                const classes = grouped[teacher] || [];
+                classSelect.innerHTML = '<option value="">Select class...</option>' +
+                  classes.map(b => `<option value="${b.recipe_id}" data-booking-id="${b.id}" data-date="${b.booking_date}" data-class-name="${b.class_name}" data-staff-id="${b.staff_id}" data-class-size="${b.class_size}">${b.booking_date} | ${b.class_name} | [ID: ${b.recipe_id}] ${b.recipe}</option>`).join('');
+                // Auto-populate class size when class changes
+                classSelect.addEventListener('change', function() {
+                  const selectedOption = classSelect.options[classSelect.selectedIndex];
+                  const classSize = selectedOption ? selectedOption.getAttribute('data-class-size') : '';
+                  const classSizeInput = document.getElementById('class-size-input');
+                  if (classSizeInput && classSize) {
+                    classSizeInput.value = classSize;
+                    classSizeInput.dispatchEvent(new Event('input'));
+                  }
+                });
+              });
+              // Optionally, trigger change to clear class dropdown on load
+              teacherSelect.dispatchEvent(new Event('change'));
+            });
+          // Render Desired Serving calculation box
+          const desiredCol = document.getElementById('desired-serving-col');
+          if (desiredCol) {
+            let desiredInput = `<div id='desired-servings-row' style='margin-top:0.5em;display:flex;flex-direction:column;align-items:center;gap:0.7em;'>
+              <div><label for='class-size-input' style='font-weight:normal;color:#333;'>Class Size:</label>
+              <input id='class-size-input' type='number' min='1' style='width:80px;margin-left:0.5em;' value=''></div>
+              <div><label for='groups-input' style='font-weight:normal;color:#333;'>Groups:</label>
+              <input id='groups-input' type='number' min='1' style='width:80px;margin-left:0.5em;' value=''></div>
+              <div><label for='desired-servings-input' style='font-weight:normal;color:#333;'>Desired Servings:</label>
+              <input id='desired-servings-input' type='number' min='1' style='width:80px;margin-left:0.5em;' value='1' readonly></div>
+            </div>`;
+            desiredCol.innerHTML = '';
+            desiredCol.insertAdjacentHTML('beforeend', desiredInput);
+            // Add calculation logic
+            const classSizeInput = document.getElementById('class-size-input');
+            const groupsInput = document.getElementById('groups-input');
+            const desiredServingsInput = document.getElementById('desired-servings-input');
+            function recalcDesiredServings() {
+              const classSize = parseInt(classSizeInput.value, 10);
+              const groups = parseInt(groupsInput.value, 10);
+              if (!isNaN(classSize) && !isNaN(groups) && groups > 0) {
+                desiredServingsInput.value = Math.ceil(classSize / groups);
+              } else {
+                desiredServingsInput.value = '';
+              }
+            }
+            classSizeInput.addEventListener('input', recalcDesiredServings);
+            groupsInput.addEventListener('input', recalcDesiredServings);
+          }
+
+          // Show Recipe Ingredients button logic
+          document.getElementById('show-recipe-ingredients-btn').onclick = function() {
+            // Use the new dropdowns for selection
+            const teacherSelect = document.getElementById('teacher-select');
+            const classSelect = document.getElementById('class-select');
+            if (!teacherSelect || !classSelect) return;
+            const recipeId = classSelect.value;
+            console.log('[Show Recipe Ingredients] Clicked. Recipe ID:', recipeId);
+            if (!recipeId) {
+              alert('Please select a class from the dropdown.');
+              return;
+            }
+            // Set the filter input and trigger the filter
+            const filterInput = document.getElementById('filter-recipe-id');
+            if (filterInput) {
+              filterInput.value = recipeId;
+              console.log('[Show Recipe Ingredients] Set filter input value to:', filterInput.value);
+            } else {
+              console.warn('[Show Recipe Ingredients] filter-recipe-id input not found');
+            }
+            // Set class size input from selected class
+            const selectedOption = classSelect.options[classSelect.selectedIndex];
+            const classSize = selectedOption ? selectedOption.getAttribute('data-class-size') : '';
+            const classSizeInput = document.getElementById('class-size-input');
+            if (classSizeInput && classSize) {
+              classSizeInput.value = classSize;
+              classSizeInput.dispatchEvent(new Event('input'));
+            }
+            // Fetch recipe details and show serving size and name
+            fetch(`/api/recipes/${recipeId}`)
+              .then(res => res.json())
+              .then(recipe => {
+                // Update serving size display
+                const servingSizeDiv = document.getElementById('serving-size-display');
+                if (servingSizeDiv) {
+                  servingSizeDiv.textContent = 'Serving Size: ' + (recipe && recipe.serving_size ? recipe.serving_size : '');
+                  // Show recipe name below serving size
+                  let recipeNameDiv = document.getElementById('recipe-name-under-serving-size');
+                  if (!recipeNameDiv) {
+                    recipeNameDiv = document.createElement('div');
+                    recipeNameDiv.id = 'recipe-name-under-serving-size';
+                    recipeNameDiv.style.fontWeight = 'bold';
+                    recipeNameDiv.style.color = '#1976d2';
+                    recipeNameDiv.style.marginTop = '0.5em';
+                    servingSizeDiv.parentNode.appendChild(recipeNameDiv);
+                  }
+                  recipeNameDiv.textContent = recipe && recipe.name ? recipe.name : '';
+                }
+                // Fetch ingredients and show table
+                fetch(`/api/ingredients/inventory/all`)
+                  .then(res => res.json())
+                  .then(data => {
+                    // Use robust extraction logic for all response types
+                    const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                    const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
+                    if (typeof renderIngredientsTable === 'function') {
+                      renderIngredientsTable(filtered);
+                    }
+                    // Store filtered ingredients for calculation
+                    window.filteredIngredientsForCalculation = filtered;
+                    // Clear Desired Serving Ingredients box
+                    const fooditemsCol = document.getElementById('single-serving-col');
+                    if (fooditemsCol) {
+                      fooditemsCol.innerHTML = '';
+                    }
+                  });
+                // Calculate Desired Serving Ingredients button logic
+                document.getElementById('calculate-desired-serving-btn').onclick = function() {
+                  const fooditemsCol = document.getElementById('single-serving-col');
+                  if (!fooditemsCol) return;
+                  fooditemsCol.innerHTML = '';
+                  const ul = document.createElement('ul');
+                  ul.style.listStyle = 'none';
+                  ul.style.padding = '0';
+                  ul.style.textAlign = 'left';
+                  // Get desired serving size
+                  const desiredServingsInput = document.getElementById('desired-servings-input');
+                  let desiredServings = 1;
+                  if (desiredServingsInput && !isNaN(parseFloat(desiredServingsInput.value))) {
+                    desiredServings = parseFloat(desiredServingsInput.value);
+                  }
+                  const filtered = window.filteredIngredientsForCalculation || [];
+                  // Collect class/booking details from dropdowns
+                  const teacher = teacherSelect.value;
+                  const classOption = classSelect.options[classSelect.selectedIndex];
+                  const booking_id = classOption ? classOption.getAttribute('data-booking-id') : '';
+                  const class_name = classOption ? classOption.getAttribute('data-class-name') : '';
+                  const class_date = classOption ? classOption.getAttribute('data-date') : '';
+                  const staff_id = classOption ? classOption.getAttribute('data-staff-id') : '';
+                  const classSizeInput = document.getElementById('class-size-input');
+                  const groupsInput = document.getElementById('groups-input');
+                  const class_size = classSizeInput && !isNaN(parseInt(classSizeInput.value, 10)) ? parseInt(classSizeInput.value, 10) : '';
+                  const groups = groupsInput && !isNaN(parseInt(groupsInput.value, 10)) ? parseInt(groupsInput.value, 10) : '';
+                  // Prepare ingredients array for backend
+                  const ingredientsToSave = [];
+                  filtered.forEach(row => {
+                    const parts = [];
+                    let qty = row.measure_qty;
+                    let calculated_qty = qty;
+                    // Multiply qty by desired serving size if it's a number
+                    if (qty && !isNaN(parseFloat(qty))) {
+                      calculated_qty = (parseFloat(qty) * desiredServings).toString();
+                    }
+                    if (calculated_qty) parts.push(calculated_qty);
+                    if (row.measure_unit) parts.push(row.measure_unit);
+                    if (row.strip_fooditem || row.stripFoodItem) {
+                      parts.push(row.strip_fooditem || row.stripFoodItem);
+                    } else if (row.fooditem) {
+                      parts.push(row.fooditem);
+                    }
+                    if (parts.length > 0) {
+                      const li = document.createElement('li');
+                      li.textContent = parts.join(' ');
+                      ul.appendChild(li);
+                    }
+                    ingredientsToSave.push({
+                      ingredient_id: row.id,
+                      ingredient_name: row.ingredient_name,
+                      measure_qty: row.measure_qty,
+                      measure_unit: row.measure_unit,
+                      fooditem: row.fooditem,
+                      calculated_qty: calculated_qty,
+                      stripFoodItem: row.strip_fooditem || row.stripFoodItem || '',
+                      aisle_category_id: row.aisle_category_id || ''
+                    });
+                  });
+                  if (ul.children.length > 0) {
+                    fooditemsCol.appendChild(ul);
+                  }
+                  // Debug preview window removed
+                  // Send to backend
+                  fetch('/api/ingredients/desired_servings_ingredients/save', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      booking_id,
+                      teacher,
+                      staff_id,
+                      class_name,
+                      class_date,
+                      class_size,
+                      groups,
+                      desired_servings: desiredServings,
+                      recipe_id: classSelect.value, // Pass recipe_id from selected class
+                      ingredients: ingredientsToSave
+                    })
+                  })
+                  .then(res => res.json())
+                  .then(data => {
+                    if (data.success) {
+                      console.log('Saved desired servings ingredients:', data);
+                      if (typeof loadDesiredServingIngredientsTable === 'function') {
+                        loadDesiredServingIngredientsTable();
+                      }
+                    } else {
+                      console.error('Failed to save desired servings ingredients:', data);
+                    }
+                  })
+                  .catch(err => {
+                    console.error('Error saving desired servings ingredients:', err);
+                  });
+                };
+              });
+          };
+
+          // Other inventory table controls
+          document.getElementById('show-ingredients-btn').onclick = function() {
+            if (typeof renderIngredientsTable === 'function') {
+              renderIngredientsTable([]); // Clear first
+            }
+            if (typeof renderIngredientsInventory === 'function') {
+              renderIngredientsInventory();
+            }
+            document.getElementById('recipe-name-display').textContent = '';
+          };
+          document.getElementById('filter-ingredients-btn').onclick = function() {
+            const recipeId = document.getElementById('filter-recipe-id').value;
+            console.log('[Filter Button] Clicked. Recipe ID:', recipeId);
+            if (!recipeId) {
+              console.warn('[Filter Button] No recipeId entered');
+              return;
+            }
+            fetch(`/api/ingredients/inventory/all`)
+              .then(res => res.json())
+              .then(data => {
+                // Support array, {data: [...]}, or {ingredients: [...]}
+                const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
+                console.log('[Filter Button] Filtered ingredients:', filtered);
+                renderIngredientsTable(filtered);
+                // Fetch recipe name
+                fetch(`/api/recipes/${recipeId}`)
+                  .then(res => res.json())
+                  .then(recipe => {
+                    document.getElementById('recipe-name-display').textContent = recipe && recipe.name ? recipe.name : '';
+                  });
+              });
+          };
+          document.getElementById('show-all-btn').onclick = function() {
+            document.getElementById('filter-recipe-id').value = '';
+            if (typeof renderIngredientsInventory === 'function') {
+              renderIngredientsInventory();
+            }
+            document.getElementById('recipe-name-display').textContent = '';
+          };
+          document.getElementById('clear-filter-btn').onclick = function() {
+            document.getElementById('filter-recipe-id').value = '';
+            if (typeof renderIngredientsTable === 'function') {
+              renderIngredientsTable([]);
+            }
+            document.getElementById('recipe-name-display').textContent = '';
+          };
+        });
+      </script>
+    </body>
+    </html>

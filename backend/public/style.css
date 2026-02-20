@@ -1,0 +1,1591 @@
+/* --- Schedule Calendar Grid Styles --- */
+.calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+.calendar-table th, .calendar-table td {
+    border: 1px solid #888;
+    padding: 1.1rem 0.7rem;
+    text-align: center;
+    font-size: 1.05rem;
+    min-width: 120px;
+}
+.calendar-table th {
+    background: #f5f8fa;
+    font-weight: 600;
+}
+/* --- Base Styles --- */
+body {
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+    font-size: 1.08rem;
+    color: #23272f;
+    background: #f9f9f9;
+    margin: 0;
+    padding-top: 56px; /* Height of navbar, adjust if needed */
+    padding: 0;
+}
+h1, .main-title {
+    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+    font-size: 2.2rem;
+    font-weight: 700;
+    color: #1976d2;
+    margin-bottom: 1.2rem;
+    letter-spacing: 0.01em;
+}
+h2 {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #1976d2;
+    margin-bottom: 1rem;
+    margin-top: 0;
+}
+h3 {
+    font-size: 1.18rem;
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 0.7rem;
+    margin-top: 0;
+}
+label, .setup-section-title {
+    font-size: 1.05rem;
+    font-weight: 500;
+    color: #222;
+}
+input, select, textarea, button {
+    font-family: inherit;
+    font-size: 1.05rem;
+}
+
+/* --- Navbar Dropdown */
+.navbar-dropdown {
+    position: relative;
+    display: inline-block;
+}
+.navbar-dropbtn {
+    background: none;
+    border: none;
+    color: #0074d9;
+    font-size: 1rem;
+    cursor: pointer;
+    padding: 0;
+    margin-right: 0.5rem;
+}
+.navbar-dropdown-content {
+    display: none;
+    position: absolute;
+    background-color: #fff;
+    min-width: 160px;
+    box-shadow: 0 8px 16px rgba(0,0,0,0.08);
+    z-index: 1100;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+}
+.navbar-dropdown-content a {
+    color: #0074d9;
+    padding: 0.7rem 1.2rem;
+    text-decoration: none;
+    display: block;
+    font-size: 1rem;
+}
+.navbar-dropdown-content a:hover {
+    background-color: #f1f1f1;
+}
+.navbar-dropdown:hover .navbar-dropdown-content {
+    display: block;
+}
+.navbar-dropdown:focus-within .navbar-dropdown-content {
+    display: block;
+}
+
+/* --- Dropdowns & Menus UI/UX Improvements (Jan 2026) --- */
+.navbar-dropdown-content {
+  opacity: 0;
+  transform: translateY(10px) scale(0.98);
+  pointer-events: none;
+  transition: opacity 0.22s cubic-bezier(.4,0,.2,1), transform 0.22s cubic-bezier(.4,0,.2,1);
+}
+.navbar-dropdown:hover .navbar-dropdown-content,
+.navbar-dropdown:focus-within .navbar-dropdown-content {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.navbar-dropbtn {
+  position: relative;
+}
+.navbar-dropbtn:after {
+  content: '\25BC';
+  font-size: 0.7em;
+  margin-left: 0.4em;
+  vertical-align: middle;
+  color: #1976d2;
+  transition: transform 0.18s;
+}
+.navbar-dropdown[aria-expanded="true"] .navbar-dropbtn:after {
+  transform: rotate(-180deg);
+}
+
+.navbar-dropdown-content {
+  min-width: 180px;
+}
+
+/* Accessibility: focus ring for dropdown */
+.navbar-dropbtn:focus {
+  outline: 2px solid #1976d2;
+  outline-offset: 2px;
+}
+
+.navbar-dropdown-content a:focus {
+  background: #e3f0ff;
+  color: #1976d2;
+  outline: none;
+}
+
+/* --- Book the Shopping Main Page Styles --- */
+.shopping-app {
+    max-width: 1200px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.shopping-week {
+    font-size: 1.15rem;
+    margin-bottom: 0.7rem;
+}
+.shopping-nav {
+    margin-bottom: 2rem;
+    display: flex;
+    gap: 1rem;
+}
+.shopping-nav button {
+    padding: 0.4rem 1.2rem;
+    border: 1px solid #ccc;
+    background: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 1rem;
+}
+.shopping-top-row {
+    display: flex;
+    gap: 2.5rem;
+    margin-bottom: 2.5rem;
+    flex-wrap: wrap;
+}
+.shopping-bookings-panel, .shopping-calc-panel {
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+    min-width: 260px;
+    flex: 1 1 320px;
+    max-width: 350px;
+}
+.shopping-bookings-panel h3, .shopping-calc-panel h3 {
+    margin-top: 0;
+}
+.shopping-bookings-btns {
+    margin-top: 1rem;
+    display: flex;
+    gap: 0.7rem;
+}
+.shopping-bookings-btns button {
+    padding: 0.4rem 1.1rem;
+    border-radius: 4px;
+    border: 1px solid #1976d2;
+    background: #1976d2;
+    color: #fff;
+    font-size: 1rem;
+    cursor: pointer;
+}
+.shopping-bookings-btns button:not(:last-child) {
+    background: #e0e0e0;
+    color: #222;
+    border-color: #bdbdbd;
+}
+.shopping-calc-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+.shopping-calc-tabs button {
+    padding: 0.4rem 1.1rem;
+    border-radius: 4px 4px 0 0;
+    border: 1px solid #1976d2;
+    background: #e0e0e0;
+    color: #1976d2;
+    font-size: 1rem;
+    cursor: pointer;
+    border-bottom: none;
+}
+.shopping-calc-tabs button.active {
+    background: #1976d2;
+    color: #fff;
+}
+.shopping-calendar-wrap {
+    margin-top: 2rem;
+}
+.shopping-calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+.shopping-calendar-table th, .shopping-calendar-table td {
+    border: 1px solid #888;
+    padding: 1.1rem 0.7rem;
+    text-align: center;
+    font-size: 1.05rem;
+    min-width: 120px;
+}
+.shopping-calendar-table th {
+    background: #f5f8fa;
+    font-weight: 600;
+}
+
+/* --- Suggest a Recipe Modal Styles --- */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.18);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.modal-content {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+    padding: 1.5rem 2rem 2rem 2rem;
+    max-width: 350px;
+    width: 100%;
+    position: relative;
+}
+.modal-content h2 {
+    margin-top: 0;
+    font-size: 1.2rem;
+    margin-bottom: 1rem;
+    text-align: left;
+}
+.modal-content label {
+    display: block;
+    margin-top: 0.7rem;
+    margin-bottom: 0.2rem;
+    font-size: 1rem;
+    text-align: left;
+}
+.modal-content input[type="text"],
+.modal-content input[type="url"],
+.modal-content input[type="email"],
+.modal-content textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    margin-bottom: 0.2rem;
+    box-sizing: border-box;
+}
+.modal-content textarea {
+    resize: vertical;
+}
+.modal-close {
+    position: absolute;
+    top: 0.7rem;
+    right: 1rem;
+    font-size: 1.5rem;
+    color: #888;
+    cursor: pointer;
+    font-weight: bold;
+}
+.modal-close:hover {
+    color: #e53935;
+}
+
+/* --- Catering (Calendar Grid) Styles --- */
+.catering-app {
+    max-width: 1200px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.calendar-grid-wrap {
+    margin-bottom: 2.5rem;
+}
+.calendar-grid-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
+}
+.calendar-grid-table th, .calendar-grid-table td {
+    border: 1px solid #888;
+    padding: 1.1rem 0.7rem;
+    text-align: center;
+    font-size: 1.05rem;
+    min-width: 120px;
+}
+.calendar-grid-table th {
+    background: #f5f8fa;
+    font-weight: 600;
+}
+.catering-bottom-row {
+    display: flex;
+    gap: 2.5rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+.selected-booking-panel, .recipe-details-panel {
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+    min-width: 260px;
+    flex: 1 1 260px;
+    max-width: 350px;
+}
+.selected-booking-panel h3, .recipe-details-panel h3 {
+    margin-top: 0;
+}
+.selected-booking-panel label {
+    display: block;
+    margin-top: 1rem;
+    margin-bottom: 0.5rem;
+}
+.selected-booking-panel input[type="number"] {
+    width: 60px;
+    padding: 0.4rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    margin-right: 0.5rem;
+}
+.selected-booking-panel button {
+    padding: 0.4rem 1rem;
+    border: 1px solid #1976d2;
+    background: #1976d2;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 0.5rem;
+    margin-top: 0.5rem;
+}
+.recipe-details-panel a {
+    color: #1976d2;
+    text-decoration: underline;
+}
+
+/* --- Book a Class Page Styles --- */
+.book-class-app {
+    max-width: 1100px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.book-form-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    background: #f5f8fa;
+    padding: 1rem;
+    border-radius: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.book-form-row select, .book-form-row input[type="date"], .book-form-row input[type="number"] {
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+.book-form-row button {
+    padding: 0.5rem 1.2rem;
+    border: 1px solid #1976d2;
+    background: #1976d2;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 0.5rem;
+    margin-top: 0.5rem;
+}
+.book-form-row button#resetBtn {
+    background: #e0e0e0;
+    color: #222;
+    border-color: #bdbdbd;
+}
+.scheduled-bookings {
+    margin-top: 2.5rem;
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+}
+.scheduled-bookings h2 {
+    margin-top: 0;
+}
+.bookings-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+}
+.bookings-table th, .bookings-table td {
+    border: 1px solid #e0e0e0;
+    padding: 0.6rem 0.5rem;
+    text-align: left;
+    font-size: 1rem;
+}
+.bookings-table th {
+    background: #e9ecef;
+    font-weight: 600;
+}
+.edit-btn {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4rem 1rem;
+    cursor: pointer;
+    font-size: 1rem;
+    margin-right: 0.3rem;
+}
+.delete-btn {
+    background: #e53935;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4rem 1rem;
+    cursor: pointer;
+    font-size: 1rem;
+}
+.success-msg {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    border-radius: 5px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1.2rem;
+    font-size: 1.05rem;
+    max-width: 1100px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+/* --- Suggest a Recipe Form Styles --- */
+.suggest-form-card {
+    max-width: 400px;
+    margin: 2.5rem auto 0 auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    padding: 1.2rem 1.2rem 1.5rem 1.2rem;
+    text-align: center;
+}
+.suggest-form-card h2 {
+    margin-top: 0;
+    font-size: 1.2rem;
+}
+.suggest-btn {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 0.5rem 1.2rem;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.suggest-btn:hover {
+    background: #125ea2;
+}
+
+/* --- Recipe Upload Confirmation Page Styles --- */
+.upload-confirm-app {
+    max-width: 420px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+}
+.upload-confirm-app h1 {
+    margin-top: 0;
+    margin-bottom: 1.2rem;
+}
+.upload-confirm-app p {
+    font-size: 1.08rem;
+    margin-bottom: 1.2rem;
+}
+#recipeCheckboxes {
+    margin-bottom: 1.5rem;
+}
+.confirm-checkbox-label {
+    display: block;
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 7px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.7rem;
+    font-size: 1.08rem;
+    cursor: pointer;
+}
+.confirm-checkbox-label input[type='checkbox'] {
+    margin-right: 0.7rem;
+    transform: scale(1.2);
+}
+.confirm-btn {
+    background: #e0e0e0;
+    color: #222;
+    border: none;
+    border-radius: 5px;
+    padding: 0.7rem 2.2rem;
+    font-size: 1.08rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.confirm-btn:hover {
+    background: #bdbdbd;
+}
+
+/* --- Recipe Index List View Styles --- */
+.recipe-list-card {
+    max-width: 400px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    border-top: 4px solid #1976d2;
+    padding-bottom: 1rem;
+}
+.recipe-list-header {
+    background: #1976d2;
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 600;
+    border-radius: 7px 7px 0 0;
+    padding: 0.8rem 1.2rem;
+    margin-bottom: 0.5rem;
+}
+#recipeList {
+    padding: 0 1.2rem;
+}
+.recipe-list-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #eee;
+    padding: 0.6rem 0;
+}
+.recipe-list-row:last-child {
+    border-bottom: none;
+}
+.recipe-list-name {
+    flex: 1 1 auto;
+    font-size: 1.08rem;
+    color: #222;
+    margin-right: 0.7rem;
+}
+.recipe-list-btn {
+    border: none;
+    border-radius: 4px;
+    padding: 0.3rem 0.9rem;
+    font-size: 1rem;
+    margin-left: 0.3rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.recipe-list-btn.view {
+    background: #e0e0e0;
+    color: #333;
+}
+.recipe-list-btn.source {
+    background: #00bcd4;
+    color: #fff;
+}
+.recipe-list-btn.delete {
+    background: #e53935;
+    color: #fff;
+}
+.recipe-list-btn.view:hover {
+    background: #bdbdbd;
+}
+.recipe-list-btn.source:hover {
+    background: #008ba3;
+}
+.recipe-list-btn.delete:hover {
+    background: #b71c1c;
+}
+
+/* --- Recipe Book Setup Page Styles --- */
+.setup-card {
+    max-width: 400px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem 1.5rem;
+    border-radius: 12px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+    border-top: 4px solid #ffc107;
+}
+.setup-card h2 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 1.2rem;
+}
+.setup-section {
+    margin-bottom: 1.5rem;
+}
+.setup-section-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 0.2rem;
+}
+.setup-section-desc {
+    color: #555;
+    font-size: 0.98rem;
+    margin-bottom: 0.7rem;
+}
+.setup-btn {
+    width: 100%;
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 0.8rem 0;
+    font-size: 1.08rem;
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.setup-btn:hover {
+    background: #125ea2;
+}
+.clean-btn {
+    background: #ff9800;
+    color: #fff;
+}
+.clean-btn:hover {
+    background: #e65100;
+}
+.setup-url-input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+.setup-card hr {
+    border: none;
+    border-top: 1.5px solid #eee;
+    margin: 1.2rem 0;
+}
+
+/* --- Staff CSV Upload Page Styles --- */
+.staff-upload-app {
+    max-width: 800px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.upload-area {
+    border: 2px dashed #0074d9;
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+    color: #0074d9;
+    font-size: 1.2rem;
+    margin: 1rem 0 1.5rem 0;
+    cursor: pointer;
+    background: #f5f8fa;
+    transition: background 0.2s, border-color 0.2s;
+}
+.upload-area:hover {
+    background: #eaf4fb;
+    border-color: #005fa3;
+}
+.upload-btn {
+    width: 100%;
+    background: #0074d9;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 0.8rem 0;
+    font-size: 1.1rem;
+    margin-bottom: 2rem;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.upload-btn:hover {
+    background: #005fa3;
+}
+.table-wrap {
+    overflow-x: auto;
+}
+.staff-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+}
+.staff-table th, .staff-table td {
+    border: 1px solid #1976d2;
+    padding: 0.7rem 0.5rem;
+    text-align: left;
+    font-size: 1.05rem;
+}
+.staff-table th {
+    background: #1976d2;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* --- Admin User Roles Page Styles --- */
+.admin-user-roles-app {
+    max-width: 900px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.success-msg {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+    border-radius: 5px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1.2rem;
+    font-size: 1.05rem;
+}
+.route-btn {
+    display: inline-block;
+    background: #0074d9;
+    color: #fff;
+    padding: 0.5rem 1.2rem;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 1rem;
+    margin-left: 1rem;
+    margin-bottom: 1.5rem;
+    transition: background 0.2s;
+}
+.route-btn:hover {
+    background: #005fa3;
+}
+.add-role-box {
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+    margin-bottom: 2rem;
+}
+.add-role-box h2 {
+    margin-top: 0;
+}
+.add-role-box label {
+    font-weight: 600;
+    display: block;
+    margin-top: 1rem;
+    margin-bottom: 0.3rem;
+}
+.add-role-box select, .add-role-box input[type="email"] {
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    width: 100%;
+    max-width: 350px;
+    display: block;
+}
+.add-role-btn {
+    background: #28a745;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.6rem 2.2rem;
+    font-size: 1.1rem;
+    margin-top: 1rem;
+    cursor: pointer;
+}
+.user-roles-table-box {
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+    margin-bottom: 2rem;
+}
+.user-roles-table-box h2 {
+    margin-top: 0;
+}
+.user-roles-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+}
+.user-roles-table th, .user-roles-table td {
+    border: 1px solid #e0e0e0;
+    padding: 0.7rem 0.5rem;
+    text-align: left;
+    font-size: 1.05rem;
+}
+.user-roles-table th {
+    background: #e9ecef;
+    font-weight: 600;
+}
+.role-badge {
+    background: #0074d9;
+    color: #fff;
+    border-radius: 4px;
+    padding: 0.2rem 0.7rem;
+    margin-right: 0.3rem;
+    font-size: 0.98rem;
+    display: inline-block;
+}
+
+/* --- Admin Permissions Page Styles --- */
+.admin-permissions-app {
+    max-width: 900px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.permissions-table-wrap {
+    overflow-x: auto;
+    margin-bottom: 2rem;
+}
+.permissions-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+}
+.permissions-table th, .permissions-table td {
+    border: 1px solid #e0e0e0;
+    padding: 0.7rem 0.5rem;
+    text-align: center;
+    font-size: 1.1rem;
+}
+.permissions-table th {
+    background: #e9ecef;
+    font-weight: 600;
+}
+.info-box {
+    border-radius: 8px;
+    padding: 1rem 1.5rem;
+    margin: 1.5rem 0;
+    font-size: 1rem;
+    border-left: 6px solid #0074d9;
+    background: #f5f8fa;
+}
+.info-box.blue {
+    border-color: #0074d9;
+    background: #eaf4fb;
+}
+.info-box.yellow {
+    border-color: #ffc107;
+    background: #fffbe6;
+}
+.back-btn {
+    display: inline-block;
+    background: #6c757d;
+    color: #fff;
+    padding: 0.5rem 1.2rem;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 1rem;
+    margin: 1rem 0 1.5rem 0;
+    transition: background 0.2s;
+}
+.back-btn:hover {
+    background: #495057;
+}
+
+/* --- Class Ingredients Page Styles --- */
+.class-ingredients-app {
+    max-width: 1100px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.ci-form-row {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    background: #f5f8fa;
+    padding: 1rem;
+    border-radius: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+.ci-form-row select, .ci-form-row input[type="date"] {
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 1rem;
+}
+.ci-panels {
+    display: flex;
+    gap: 2rem;
+    margin-bottom: 2rem;
+}
+.ci-panel {
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+    flex: 1 1 350px;
+    min-width: 320px;
+}
+.ci-panel label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+.ci-panel input[type="number"] {
+    width: 80px;
+    padding: 0.4rem;
+    margin-right: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+.ci-panel button {
+    padding: 0.5rem 1.2rem;
+    border: 1px solid #0074d9;
+    background: #0074d9;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-right: 0.5rem;
+    margin-top: 0.5rem;
+}
+.ci-panel button#saveBtn {
+    background: #28a745;
+    border-color: #28a745;
+}
+.ci-ingredients h3 {
+    margin-bottom: 0.5rem;
+}
+.ci-ingredients ul {
+    margin: 0 0 1rem 1rem;
+    padding: 0;
+}
+.ci-scheduled {
+    margin-top: 2.5rem;
+    background: #f5f8fa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 1.5rem 1rem 1rem 1rem;
+}
+.ci-scheduled h2 {
+    margin-top: 0;
+}
+.ci-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+}
+.ci-table th, .ci-table td {
+    border: 1px solid #e0e0e0;
+    padding: 0.6rem 0.5rem;
+    text-align: left;
+    font-size: 1rem;
+}
+.ci-table th {
+    background: #e9ecef;
+    font-weight: 600;
+}
+.delete-btn {
+    background: #dc3545;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    padding: 0.4rem 1rem;
+    cursor: pointer;
+    font-size: 1rem;
+}
+
+/* --- Recipe Detail Page Styles --- */
+.recipe-detail {
+    max-width: 700px;
+    margin: 40px auto;
+    background: #fff;
+    padding: 2rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+}
+.recipe-detail h1 {
+    margin-top: 0;
+    color: #222;
+}
+.recipe-detail h2 {
+    margin-bottom: 0.5rem;
+    color: #333;
+}
+.ingredients-list {
+    list-style: disc inside;
+    margin-bottom: 1.5rem;
+    padding-left: 1rem;
+}
+.instructions-list {
+    list-style: decimal inside;
+    margin-bottom: 2rem;
+    padding-left: 1rem;
+}
+.back-btn {
+    display: inline-block;
+    background: #6c757d;
+    color: #fff;
+    padding: 0.5rem 1.2rem;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 1rem;
+    margin-top: 1rem;
+    transition: background 0.2s;
+}
+.back-btn:hover {
+    background: #495057;
+}
+
+/* --- Book the Shopping Page Styles --- */
+.date-nav {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 1.5rem 0 1rem 0;
+}
+.date-nav button {
+    padding: 0.3rem 1rem;
+    border: 1px solid #ccc;
+    background: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.shoplist-controls {
+    margin-bottom: 1rem;
+    display: flex;
+    gap: 1rem;
+}
+.shoplist-controls button {
+    padding: 0.5rem 1.2rem;
+    border: 1px solid #0074d9;
+    background: #0074d9;
+    color: #fff;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.calendar-legend {
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+.calendar-legend button {
+    padding: 0.3rem 1rem;
+    border: 1px solid #ccc;
+    background: #f5f5f5;
+    border-radius: 4px;
+    cursor: pointer;
+}
+.calendar-legend button.active {
+    background: #0074d9;
+    color: #fff;
+    border-color: #0074d9;
+}
+.calendar-grid {
+    overflow-x: auto;
+    margin-bottom: 2rem;
+}
+.calendar-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+}
+.calendar-table th, .calendar-table td {
+    border: 1px solid #e0e0e0;
+    padding: 0.7rem 0.5rem;
+    text-align: center;
+    min-width: 120px;
+}
+.calendar-table th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+.booking-card {
+    background: #eaffea;
+    border-radius: 6px;
+    border: 1px solid #b2e6b2;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+    padding: 0.5rem;
+    font-size: 0.97rem;
+    cursor: pointer;
+}
+.tap-select {
+    color: #0074d9;
+    font-size: 0.95rem;
+    text-decoration: underline;
+    cursor: pointer;
+}
+.shoplist-bottom {
+    display: flex;
+    gap: 2rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+}
+.selected-bookings, .shopping-list, .master-shopping-list {
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 1.5rem 1.2rem 1.5rem 1.2rem;
+    min-width: 260px;
+    flex: 1 1 320px;
+    max-width: 370px;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+#printBtn {
+    margin-top: 1rem;
+    background: #28a745;
+    border: 1px solid #28a745;
+    color: #fff;
+    border-radius: 4px;
+    padding: 0.4rem 1rem;
+    cursor: pointer;
+}
+.vp-badge {
+    background: #0074d9;
+    color: #fff;
+    border-radius: 4px;
+    padding: 0.1rem 0.5rem;
+    margin: 0 0.3rem;
+    font-size: 0.9rem;
+}
+.logout-btn {
+    color: #fff;
+    background: #dc3545;
+    border-radius: 4px;
+    padding: 0.2rem 0.7rem;
+    margin-left: 0.5rem;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+/* --- Layout & Spacing Improvements (Jan 2026) --- */
+.shopping-app, .catering-app, .book-class-app, #app {
+  max-width: 900px;
+  margin: 48px auto 48px auto;
+  background: #fff;
+  padding: 2.5rem 2rem 2.5rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+}
+
+.setup-card {
+  max-width: 440px;
+  margin: 48px auto 48px auto;
+  background: #fff;
+  padding: 2.2rem 1.7rem 2.2rem 1.7rem;
+  border-radius: 14px;
+  box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+  border-top: 4px solid #ffc107;
+}
+
+.shoplist-bottom {
+  display: flex;
+  gap: 2.5rem;
+  margin-top: 2.5rem;
+  margin-bottom: 2.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.selected-bookings, .shopping-list, .master-shopping-list {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.5rem 1.2rem 1.5rem 1.2rem;
+  min-width: 260px;
+  flex: 1 1 320px;
+  max-width: 370px;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+}
+
+.recipe-card {
+  background: #fff;
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.7rem 1.3rem 1.3rem 1.3rem;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.05);
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+/* Google Fonts: Inter */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* --- Buttons & Inputs UI/UX Improvements (Jan 2026) --- */
+button, input[type="button"], input[type="submit"] {
+  background: linear-gradient(90deg, #1976d2 0%, #2196f3 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.6rem 1.4rem;
+  font-size: 1.08rem;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+  cursor: pointer;
+  transition: background 0.18s, box-shadow 0.18s, transform 0.12s;
+  outline: none;
+  margin-bottom: 0.2rem;
+}
+button:hover, input[type="button"]:hover, input[type="submit"]:hover,
+button:focus, input[type="button"]:focus, input[type="submit"]:focus {
+  background: linear-gradient(90deg, #1565c0 0%, #1976d2 100%);
+  box-shadow: 0 4px 16px rgba(25, 118, 210, 0.13);
+  transform: translateY(-2px) scale(1.03);
+}
+button:active, input[type="button"]:active, input[type="submit"]:active {
+  background: #1565c0;
+  box-shadow: 0 1px 4px rgba(25, 118, 210, 0.10);
+  transform: none;
+}
+
+input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="date"], select, textarea {
+  border: 1.5px solid #b0c4de;
+  border-radius: 5px;
+  padding: 0.6rem 1rem;
+  font-size: 1.05rem;
+  background: #fafdff;
+  color: #23272f;
+  margin-bottom: 0.7rem;
+  transition: border 0.16s, box-shadow 0.16s;
+  box-shadow: 0 1px 4px rgba(25, 118, 210, 0.04);
+}
+input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, input[type="number"]:focus, input[type="date"]:focus, select:focus, textarea:focus {
+  border: 1.5px solid #1976d2;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.10);
+  outline: none;
+}
+
+/* --- Cards & Panels UI/UX Improvements (Jan 2026) --- */
+/* General card/panel style for all major UI blocks */
+.shopping-bookings-panel, .shopping-calc-panel, .selected-booking-panel, .recipe-details-panel, .setup-card, .suggest-form-card, .recipe-card, .booking-card, .selected-bookings, .shopping-list, .master-shopping-list, .recipe-list-card {
+  background: linear-gradient(120deg, #fafdff 0%, #f3f8fd 100%);
+  border-radius: 14px;
+  box-shadow: 0 6px 32px rgba(25, 118, 210, 0.08), 0 1.5px 6px rgba(25, 118, 210, 0.04);
+  border: 1.5px solid #e3eaf5;
+  padding: 1.7rem 1.3rem 1.3rem 1.3rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Subtle divider for card/panel sections */
+.card-divider, .panel-divider {
+  border: none;
+  border-top: 1.5px solid #e3eaf5;
+  margin: 1.2rem 0 1.2rem 0;
+}
+
+/* Panel header style */
+.card-header, .panel-header, .setup-section-title {
+  font-size: 1.13rem;
+  font-weight: 600;
+  color: #1976d2;
+  margin-bottom: 0.7rem;
+  letter-spacing: 0.01em;
+}
+
+/* --- Mobile Responsiveness (Jan 2026) --- */
+@media (max-width: 900px) {
+    .navbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        background: linear-gradient(90deg, #1976d2 0%, #2196f3 100%);
+        color: #fff;
+        padding: 0.7rem 1rem 0.7rem 1rem;
+        font-size: 1rem;
+        min-height: 48px;
+        border-radius: 0 0 12px 12px;
+        box-shadow: 0 2px 8px rgba(25, 118, 210, 0.08);
+        margin-bottom: 2.2rem;
+    }
+    .navbar a {
+        color: #fff;
+        text-decoration: none;
+        margin-right: 1.2rem;
+        font-weight: 500;
+        transition: color 0.18s;
+    }
+    .navbar a:hover, .navbar a:focus {
+        color: #ffe082;
+        text-decoration: underline;
+    }
+    .navbar-user {
+        margin-left: auto;
+        font-weight: 500;
+        color: #fff;
+    }
+    .logout-btn {
+        background: #fff;
+        color: #1976d2;
+        border-radius: 4px;
+        padding: 0.2rem 0.7rem;
+        margin-left: 0.7rem;
+        font-size: 0.98rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.18s, color 0.18s;
+    }
+    .logout-btn:hover, .logout-btn:focus {
+        background: #ffe082;
+        color: #1976d2;
+    }
+  .navbar-logo {
+    font-size: 1.05rem;
+    margin-right: 0.7rem;
+  }
+  .shopping-app, .catering-app, .book-class-app, #app {
+    max-width: 98vw;
+    padding: 1.2rem 0.5rem 1.2rem 0.5rem;
+    border-radius: 8px;
+  }
+  .shoplist-bottom, .shopping-top-row, .catering-bottom-row, .book-form-row {
+    flex-direction: column;
+    gap: 1.2rem;
+    align-items: stretch;
+  }
+  .selected-bookings, .shopping-list, .master-shopping-list, .shopping-bookings-panel, .shopping-calc-panel, .selected-booking-panel, .recipe-details-panel, .setup-card, .suggest-form-card, .recipe-card, .booking-card, .recipe-list-card {
+    max-width: 100%;
+    min-width: 0;
+    margin-bottom: 1.2rem;
+    border-radius: 8px;
+    padding: 1.1rem 0.7rem 1.1rem 0.7rem;
+  }
+  .recipe-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .view-toggle input, .view-toggle button, .search-bar input, .search-bar button {
+    font-size: 1rem;
+    padding: 0.5rem 0.7rem;
+  }
+  .navbar-hamburger {
+    display: flex !important;
+  }
+  .navbar-links {
+    display: none;
+    flex-direction: column;
+    width: 100%;
+    background: #f8fafc;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    z-index: 1200;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+  }
+  .navbar-links.open {
+    display: flex;
+  }
+}
+
+/* Hamburger icon (hidden on desktop) */
+.navbar-hamburger {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 38px;
+  height: 38px;
+  margin-left: auto;
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+.navbar-hamburger span {
+  display: block;
+  width: 26px;
+  height: 3px;
+  margin: 4px 0;
+  background: #1976d2;
+  border-radius: 2px;
+  transition: all 0.2s;
+}
+.navbar-hamburger.open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+.navbar-hamburger.open span:nth-child(2) {
+  opacity: 0;
+}
+.navbar-hamburger.open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+/* --- Visual Consistency (Jan 2026) --- */
+:root {
+  --primary: #1976d2;
+  --primary-light: #2196f3;
+  --accent: #ffc107;
+  --success: #28a745;
+  --danger: #dc3545;
+  --bg-light: #fafdff;
+  --bg-card: #f3f8fd;
+  --divider: #e3eaf5;
+  --text-main: #23272f;
+  --text-muted: #888;
+}
+
+body {
+  background: var(--bg-light);
+  color: var(--text-main);
+}
+
+hr, .divider, .card-divider, .panel-divider {
+  border: none;
+  border-top: 1.5px solid var(--divider);
+  margin: 1.2rem 0 1.2rem 0;
+}
+
+.section-header {
+  font-size: 1.18rem;
+  font-weight: 600;
+  color: var(--primary);
+  margin: 2.2rem 0 1.1rem 0;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+.section-header .icon {
+  font-size: 1.3em;
+  color: var(--primary-light);
+  vertical-align: middle;
+}
+
+/* Example icon usage: <span class="icon">🍴</span> or with SVG */
+
+/* Action icon button */
+.icon-btn {
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 1.2em;
+  cursor: pointer;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.icon-btn:hover, .icon-btn:focus {
+  background: #e3f0ff;
+  color: var(--primary-light);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+/* --- Feedback & States (Jan 2026) --- */
+/* Loading spinner */
+.loading-spinner {
+  display: inline-block;
+  width: 32px;
+  height: 32px;
+  border: 4px solid #e3eaf5;
+  border-top: 4px solid var(--primary);
+  border-radius: 50%;
+  animation: spin 0.9s linear infinite;
+  margin: 0 auto;
+}
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Toast notification */
+.toast {
+  position: fixed;
+  bottom: 2.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #23272f;
+  color: #fff;
+  padding: 1rem 2rem;
+  border-radius: 8px;
+  box-shadow: 0 4px 24px rgba(25, 118, 210, 0.13);
+  font-size: 1.08rem;
+  z-index: 2000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s, bottom 0.3s;
+}
+.toast.show {
+  opacity: 1;
+  pointer-events: auto;
+  bottom: 3.5rem;
+}
+
+button[disabled], input[type="submit"][disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(0.2);
+}
+
+/* --- Accessibility Improvements (Jan 2026) --- */
+:root {
+  --focus-outline: 2.5px solid #1976d2;
+}
+
+/* High contrast for focusable elements */
+a:focus, button:focus, input:focus, select:focus, textarea:focus, .icon-btn:focus {
+  outline: var(--focus-outline);
+  outline-offset: 2px;
+  background: #e3f0ff;
+  color: #1976d2;
+}
+
+/* Ensure sufficient color contrast for text */
+body, label, input, select, textarea, button {
+  color: #23272f;
+}
+
+/* Visually hidden utility for aria-labels */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0,0,0,0);
+  border: 0;
+}
+
+/* Keyboard navigation for forms: highlight current field */
+input:focus, select:focus, textarea:focus {
+  box-shadow: 0 0 0 3px #b3d7ff;
+  border-color: #1976d2;
+}

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin - Food Brands</title>
+  <link rel="stylesheet" href="admin_styles.css">
+</head>
+<body>
+  <!-- Include shared navigation bar -->
+  <div id="navbar-container"></div>
+  <script>
+    fetch('_navbar.html')
+      .then(res => res.text())
+      .then(html => {
+        document.getElementById('navbar-container').innerHTML = html;
+      });
+  </script>
+  <h2>Manage Food Brands</h2>
+  <div id="food-brands-table-container"></div>
+  <button id="add-brand-btn">Add Brand</button>
+  <div id="brand-form-container" style="display:none; margin-top:1rem;"></div>
+  <script src="admin_food_brands.js"></script>
+</body>
+</html>

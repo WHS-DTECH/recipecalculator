@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Role Permissions Management</title>
+    <link rel="stylesheet" href="../shared/style.css">
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+        <a href="#" class="back-btn">&larr; Back to Admin</a>
+        <div class="permissions-table-wrap">
+            <table class="permissions-table">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Recipes</th>
+                        <th>Recbk</th>
+                        <th>Class_ingredients</th>
+                        <th>Booking</th>
+                        <th>Shoplist</th>
+                        <th>Admin</th>
+                    </tr>
+                </thead>
+                <tbody id="permissionsBody"></tbody>
+            </table>
+        </div>
+        <div class="info-box blue">
+            <strong>Route Descriptions</strong>
+            <ul>
+                <li><b>recipes:</b> View and manage all recipes (full recipe management page)</li>
+                <li><b>recbk:</b> Recipe Book - Browse recipes in grid or table view</li>
+                <li><b>class_ingredients:</b> Class ingredients calculator and ingredient management</li>
+                <li><b>shoplist:</b> Shopping list generator for classes</li>
+                <li><b>admin:</b> Administrative functions (staff/class upload, recipe management, permissions)</li>
+            </ul>
+        </div>
+        <div class="info-box yellow">
+    <!-- Dynamic Navbar Include -->
+    <div id="navbar-include"></div>
+    <script src="../shared/navbar_loader.js"></script>
+    <div class="admin-permissions-app">
+        <h1>Role Permissions Management</h1>
+        <p>Control which pages each role can access. Check a box to grant access, uncheck to remove access.</p>
+        <a href="#" class="back-btn">&larr; Back to Admin</a>
+        <div class="permissions-table-wrap">
+            <table class="permissions-table">
+                <thead>
+                    <tr>
+                        <th>Role</th>
+                        <th>Recipes</th>
+                        <th>Recbk</th>
+                        <th>Class_ingredients</th>
+                        <th>Booking</th>
+                        <th>Shoplist</th>
+                        <th>Admin</th>
+                    </tr>
+                </thead>
+                <tbody id="permissionsBody"></tbody>
+            </table>
+        </div>
+        <div class="info-box blue">
+            <strong>Route Descriptions</strong>
+            <ul>
+                <li><b>recipes:</b> View and manage all recipes (full recipe management page)</li>
+                <li><b>recbk:</b> Recipe Book - Browse recipes in grid or table view</li>
+                <li><b>class_ingredients:</b> Class ingredients calculator and ingredient management</li>
+                <li><b>shoplist:</b> Shopping list generator for classes</li>
+                <li><b>admin:</b> Administrative functions (staff/class upload, recipe management, permissions)</li>
+            </ul>
+        </div>
+        <div class="info-box yellow">
+            <strong>Important Notes</strong>
+            <ul>
+                <li><b>VP role</b> should always have access to all pages including admin</li>
+                <li><b>Admin page</b> access should be restricted to trusted roles only</li>
+                <li>Changes take effect immediately</li>
+                <li>Users will see "Access Denied" if they try to access a page they don't have permission for</li>
+                <li>The <b>public</b> role applies to non-authenticated users</li>
+            </ul>
+        </div>
+    </div>
+    <script src="admin_permissions.js"></script>
+</body>
+</html>

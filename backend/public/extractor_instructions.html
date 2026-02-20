@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Instructions Extractor</title>
+  <link rel="stylesheet" href="../shared/style.css">
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+  <div class="extractor-card" style="margin-left:40px;margin-right:40px;">
+    <h2>Instructions Extraction Strategies</h2>
+    <div class="extractor-section">
+      <label for="recipeSelect">Choose Recipe URL:</label>
+      <select id="recipeSelect">
+        <option value="">-- Select a recipe --</option>
+        <!-- Populated by JS -->
+      </select>
+      <button class="extractor-btn" id="startStepBtn">Start Step-by-Step</button>
+      <div id="stepControls" style="display:none; margin-top:1rem;">
+        <div id="currentStrategyName" style="font-weight:bold;"></div>
+        <div id="currentStrategyResult" style="margin:0.5rem 0;"></div>
+        <button class="extractor-btn" id="acceptResultBtn">Accept</button>
+        <button class="extractor-btn" id="continueBtn">Continue</button>
+      </div>
+    </div>
+    <div class="extractor-section">
+      <h3>Instructions Extraction Strategies</h3>
+      <table id="strategyTable">
+        <thead>
+          <tr>
+            <th>Strategy</th>
+            <th>Applied</th>
+            <th style="min-width:340px;max-width:700px;width:40vw;">Result</th>
+            <th>Solved</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- Populated by JS -->
+        </tbody>
+      </table>
+    </div>
+    <div class="extractor-section">
+      <label for="solutionBox" style="color:purple;font-weight:bold;">Solution</label>
+      <textarea id="solutionBox" rows="2" style="width:100%;"></textarea>
+      <button class="extractor-btn" id="sendSolutionBtn" style="background:#8000b0;color:#fff;width:100%;margin-top:1rem;">SEND SOLUTION</button>
+    </div>
+    <div class="extractor-section">
+      <button id="showRawBtn" class="extractor-btn" style="margin-top:0.5rem;">Show Raw Data in New Window</button>
+    </div>
+  </div>
+  <!-- Shared navbar loading script removed -->
+  <script src="extractor_instructions.js"></script>
+</body>
+</html>

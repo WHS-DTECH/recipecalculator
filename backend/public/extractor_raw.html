@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Raw Data Extractor</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .extractor-app { max-width: 900px; margin: 2rem auto; background: #fff; border-radius: 10px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); padding: 1.5rem 2rem 2rem 2rem; }
+        .extractor-header { font-size: 1.2rem; font-weight: 600; margin-bottom: 1.2rem; }
+        .extractor-btn { background: #1976d2; color: #fff; border: none; border-radius: 5px; padding: 0.6rem 1.5rem; font-size: 1rem; cursor: pointer; margin-bottom: 1.2rem; }
+        .extractor-table { width: 100%; border-collapse: collapse; margin-top: 1rem; }
+        .extractor-table th, .extractor-table td { border: 1px solid #bbb; padding: 0.7rem 0.5rem; text-align: left; font-size: 1rem; }
+        .extractor-table th { background: #f5f8fa; font-weight: 600; }
+        .raw-data-section { margin-top: 2rem; }
+        .raw-data-title { font-weight: bold; margin-bottom: 0.5rem; }
+        .raw-data-box { background: #f5f8fa; border: 1px solid #bbb; border-radius: 6px; padding: 1rem; font-family: monospace; font-size: 0.98rem; white-space: pre-wrap; }
+        .save-btn { background: #8000b0; color: #fff; margin-top: 1rem; width: 100%; border-radius: 6px; font-size: 1.1rem; padding: 0.7rem; }
+    </style>
+</head>
+<body>
+        <div id="navbar-container"></div>
+        <div style="margin-bottom:1.2rem; text-align:right;">
+            <a href="./RawDataTXT/" target="_blank" style="display:inline-block; background:#1976d2; color:#fff; text-decoration:none; font-size:1.05em; padding:0.5em 1.2em; border-radius:6px; font-weight:500;">Open Raw Data TXT Folder</a>
+        </div>
+        <div class="extractor-app">
+        <div class="extractor-header">Raw Data Extractor</div>
+        <div style="margin-bottom:1.5rem;">
+            <label for="uploadSelect" style="font-weight:bold;">Choose Uploaded Recipe:</label>
+            <select id="uploadSelect" style="margin-left:1rem; min-width:300px;"></select>
+        </div>
+        <div class="raw-data-section">
+            <div class="raw-data-title">Raw Data (HTML/Text)</div>
+            <button class="extractor-btn" id="extractDataBtn" style="margin-bottom:1rem; background:#43a047;">Extract Data</button>
+            <textarea id="rawDataInput" style="width:100%; min-height:200px; border-radius:6px; border:1px solid #bbb; font-size:1.05rem; padding:0.7rem;"></textarea>
+            <button class="save-btn" id="saveRawDataBtn">Save Raw Data</button>
+        </div>
+    </div>
+    <script>
+    // Navbar include logic
+    fetch('_navbar.html')
+      .then(res => res.text())
+      .then(html => { document.getElementById('navbar-container').innerHTML = html; });
+    </script>
+    <script src="extractor_raw.js"></script>
+</body>
+</html>

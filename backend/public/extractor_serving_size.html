@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Serving Size Extractor</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .extractor-app {
+            max-width: 900px;
+            margin: 2rem auto;
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+            padding: 1.5rem 2rem 2rem 2rem;
+        }
+        .extractor-header {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 1.2rem;
+        }
+        .extractor-btn {
+            background: #1976d2;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            padding: 0.6rem 1.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-bottom: 1.2rem;
+        }
+        .extractor-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        .extractor-table th, .extractor-table td {
+            border: 1px solid #bbb;
+            padding: 0.7rem 0.5rem;
+            text-align: left;
+            font-size: 1rem;
+        }
+        .extractor-table th {
+            background: #f5f8fa;
+            font-weight: 600;
+        }
+        .extractor-status {
+            display: inline-block;
+            padding: 0.2rem 0.7rem;
+            border-radius: 5px;
+            font-size: 0.98rem;
+            color: #fff;
+            background: #43a047;
+            margin-left: 0.5rem;
+        }
+        .extractor-status.unsolved {
+            background: #e53935;
+        }
+        .extractor-result {
+            max-width: 350px;
+            white-space: pre-line;
+            font-size: 0.98rem;
+        }
+        .raw-data-section {
+            margin-top: 2rem;
+        }
+        .raw-data-title {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+        }
+        .raw-data-box {
+            background: #f5f8fa;
+            border: 1px solid #bbb;
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.98rem;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+    <div class="extractor-app">
+        <div style="margin-bottom:1.5rem;">
+            <label for="recipeUrlSelect" style="font-weight:bold;">Choose Recipe URL:</label>
+            <select id="recipeUrlSelect" style="margin-left:1rem; min-width:300px;"></select>
+        </div>
+        <div class="extractor-header">Serving Size Extraction Strategies</div>
+        <div id="strategy-runner-controls">
+            <button class="extractor-btn" id="startStrategyRunner">Start Step-by-Step</button>
+            <div id="stepControls" style="display:none; margin-top:1rem;">
+                <div id="currentStrategyName" style="font-weight:bold;"></div>
+                <div id="currentStrategyResult" style="margin:0.5rem 0;"></div>
+                <button class="extractor-btn" id="acceptResultBtn">Accept</button>
+                <button class="extractor-btn" id="continueBtn">Continue</button>
+            </div>
+        </div>
+        <table class="extractor-table">
+            <thead>
+                <tr><th>Strategy</th><th>Applied</th><th>Result</th><th>Solved</th></tr>
+            </thead>
+            <tbody id="servingExtractorTableBody"></tbody>
+        </table>
+        <div class="solution-section" style="margin-bottom:2rem;">
+            <div style="font-weight:bold; color:#8000b0; margin-bottom:0.3rem;">Solution</div>
+            <textarea id="solutionBox" style="width:100%; min-height:40px; resize:vertical; border-radius:6px; border:1px solid #bbb; font-size:1.1rem; padding:0.5rem;"> </textarea>
+            <button class="extractor-btn" id="sendSolutionBtn" style="background:#8000b0; color:#fff; margin-top:0.5rem; width:100%;">SEND SOLUTION</button>
+        </div>
+            <div class="raw-data-title">Raw Data (HTML/Text)</div>
+            <!-- Show in Separate Window button removed -->
+            <div class="raw-data-box" id="rawDataBox"></div>
+        </div>
+
+        <!-- Modal for Raw Data with Line Numbers -->
+        <div id="rawDataModal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center;">
+            <div style="background:#fff; border-radius:8px; max-width:900px; width:90vw; max-height:90vh; overflow:auto; padding:2rem; position:relative;">
+                <button id="closeRawDataModalBtn" style="position:absolute; top:1rem; right:1rem; font-size:1.2rem;">&times;</button>
+                <div style="font-weight:bold; margin-bottom:1rem;">Raw Data (HTML/Text) with Line Numbers</div>
+                <pre id="rawDataWithLines" style="background:#f5f8fa; border:1px solid #bbb; border-radius:6px; padding:1rem; font-family:monospace; font-size:0.98rem; white-space:pre; overflow:auto;"></pre>
+            </div>
+        </div>
+    </div>
+    <script src="extractor_serving_size.js"></script>
+    <script>
+        // --- Recipe URL Dropdown Logic ---
+        const recipeUrlSelect = document.getElementById('recipeUrlSelect');
+        // Fetch recipes and populate dropdown
+        fetch('/api/recipes')
+            .then(res => res.json())
+            .then(recipes => {
+                recipeUrlSelect.innerHTML = '<option value="">-- Select a recipe --</option>' +
+                    recipes.map(r => `<option value="${r.id}" data-url="${r.url || ''}">${r.name || r.url || 'Untitled Recipe'}</option>`).join('');
+            });
+
+
+        // When a recipe is chosen, fetch its raw data using uploaded_recipe_id if present
+        recipeUrlSelect.addEventListener('change', function() {
+            const selectedId = this.value;
+            if (!selectedId) {
+                document.getElementById('rawDataBox').textContent = '';
+                window.rawData = '';
+                return;
+            }
+            // Find the selected recipe's uploaded_recipe_id
+            fetch('/api/recipes')
+                .then(res => res.json())
+                .then(recipes => {
+                    const recipe = recipes.find(r => r.id == selectedId);
+                    const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : selectedId;
+                    fetch(`/RawDataTXT/${fileId}.txt`)
+                        .then(res => res.ok ? res.text() : '')
+                        .then(raw => {
+                            document.getElementById('rawDataBox').textContent = raw;
+                            window.rawData = raw;
+                        });
+                });
+        });
+
+        // Patch: ensure window.rawData is set for modal logic
+        window.rawData = typeof rawData !== 'undefined' ? rawData : '';
+    let currentStep = 0;
+    let accepted = false;
+    const stepControls = document.getElementById('stepControls');
+    const startBtn = document.getElementById('startStrategyRunner');
+    const acceptBtn = document.getElementById('acceptResultBtn');
+    const continueBtn = document.getElementById('continueBtn');
+    const currentStrategyName = document.getElementById('currentStrategyName');
+    const currentStrategyResult = document.getElementById('currentStrategyResult');
+
+
+    // Helper: run all strategies on the current raw data
+    function runStrategiesOnRawData(raw) {
+        return strategies.map((s, i) => {
+            const result = s.fn(raw);
+            return {
+                name: s.name,
+                applied: false,
+                result: result,
+                solved: !!result && result !== 'N/A'
+            };
+        });
+    }
+
+    function showStep(idx) {
+        if (idx >= strategies.length) {
+            stepControls.style.display = 'none';
+            startBtn.disabled = false;
+            return;
+        }
+        // Always use current raw data
+        const raw = window.rawData || '';
+        const results = runStrategiesOnRawData(raw);
+        // Mark current step as applied
+        results.forEach((r, i) => {
+            r.applied = (i === idx);
+        });
+        const s = results[idx];
+        currentStrategyName.textContent = s.name;
+        currentStrategyResult.textContent = 'Result: ' + (s.result || '(none)');
+        stepControls.style.display = '';
+        startBtn.disabled = true;
+        renderServingExtractorTable(results);
+    }
+
+    startBtn.addEventListener('click', function() {
+        currentStep = 0;
+        accepted = false;
+        showStep(currentStep);
+    });
+
+    acceptBtn.addEventListener('click', function() {
+        accepted = true;
+        // Always use current raw data and re-run strategies
+        const raw = window.rawData || '';
+        const results = strategies.map((s) => {
+            const result = s.fn(raw);
+            return { name: s.name, result };
+        });
+        // Set solution box to the result of the accepted strategy
+        document.getElementById('solutionBox').value = results[currentStep].result;
+        // Mark this strategy as applied and solved (for table)
+        const tableResults = results.map((r, i) => ({
+            name: strategies[i].name,
+            applied: (i === currentStep),
+            result: r.result,
+            solved: !!r.result && r.result !== 'N/A'
+        }));
+        renderServingExtractorTable(tableResults);
+        stepControls.style.display = 'none';
+        startBtn.disabled = false;
+    });
+    // SEND SOLUTION button logic
+    document.getElementById('sendSolutionBtn').addEventListener('click', function() {
+        const solution = document.getElementById('solutionBox').value.trim();
+        if (!solution) {
+            alert('Please enter a solution before sending.');
+            return;
+        }
+        // Send both recipeId and solution
+        const recipeId = recipeUrlSelect.value;
+        fetch('/api/serving-size/solution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipeId, solution })
+        })
+        .then(res => res.ok ? res.json() : Promise.reject(res))
+        .then(data => {
+            alert('Solution sent and record amended!');
+        })
+        .catch(() => {
+            alert('Failed to send solution.');
+        });
+    });
+
+    continueBtn.addEventListener('click', function() {
+        // Mark this strategy as applied but not solved
+        strategies[currentStep].applied = true;
+        strategies[currentStep].solved = false;
+        currentStep++;
+        if (currentStep < strategies.length) {
+            showStep(currentStep);
+        } else {
+            stepControls.style.display = 'none';
+            startBtn.disabled = false;
+        }
+        renderServingExtractorTable();
+    });
+        // Navbar include logic
+        fetch('/_navbar.html')
+            .then(res => res.text())
+            .then(html => {
+                document.getElementById('navbar-container').innerHTML = html;
+            });
+
+        // Modal logic for Raw Data with Line Numbers
+    const showRawDataModalBtn = document.getElementById('showRawDataModalBtn');
+    const rawDataModal = document.getElementById('rawDataModal');
+    const closeRawDataModalBtn = document.getElementById('closeRawDataModalBtn');
+    const rawDataWithLines = document.getElementById('rawDataWithLines');
+
+    showRawDataModalBtn.addEventListener('click', function() {
+        // Split window.rawData into lines and add line numbers
+        const lines = (window.rawData || '').split('\n');
+        rawDataWithLines.innerHTML = lines.map((line, idx) => {
+            const ln = String(idx+1).padStart(3, ' ');
+            return `<span style=\"color:#888;\">${ln} |</span> ${line}`;
+        }).join('\n');
+        rawDataModal.style.display = 'flex';
+    });
+    closeRawDataModalBtn.addEventListener('click', function() {
+        rawDataModal.style.display = 'none';
+    });
+    // Optional: close modal on outside click
+    rawDataModal.addEventListener('click', function(e) {
+        if (e.target === rawDataModal) rawDataModal.style.display = 'none';
+    });
+    </script>
+</body>
+</html>

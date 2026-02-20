@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff CSV Upload</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+    <div class="container" style="max-width:600px;margin:2rem auto;background:#fff;padding:2rem;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
+        <h1>Staff Upload</h1>
+        <form id="uploadForm">
+            <label for="csvFile">Upload Staff CSV File:</label>
+            <input type="file" id="csvFile" accept=".csv" required />
+            <button type="submit">Upload</button>
+        </form>
+        <div id="uploadResult" style="margin-top:1.5rem;"></div>
+        <div id="staffTableContainer" style="margin-top:2rem;"></div>
+        <div id="departmentTableContainer" style="margin-top:2rem;"></div>
+    </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="staff_upload.js"></script>
+</body>
+</html>
