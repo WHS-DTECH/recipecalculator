@@ -369,30 +369,24 @@ app.get('/api/timetable/all', async (req, res) => {
 
 
         // --- Sync Uploaded Recipes to Recipes Table ---
-    app.post('/api/recipes/sync-from-uploads', (req, res) => {
-      db.all('SELECT * FROM uploads', [], (err, uploads) => {
-        if (err) return res.status(500).json({ success: false, error: err.message });
-        let inserted = 0, done = 0;
+    app.post('/api/recipes/sync-from-uploads', async (req, res) => {
+      try {
+        const uploadsResult = await pool.query('SELECT * FROM uploads');
+        const uploads = uploadsResult.rows;
+        let inserted = 0;
         if (!uploads.length) return res.json({ success: true, inserted: 0 });
-        uploads.forEach(upload => {
-          db.get('SELECT * FROM recipes WHERE uploaded_recipe_id = ?', [upload.id], (err2, recipe) => {
-            if (!recipe) {
-              db.run('INSERT INTO recipes (uploaded_recipe_id, name, url) VALUES (?, ?, ?)', [upload.id, upload.recipe_title, upload.source_url], function(err3) {
-                inserted++;
-                done++;
-                if (done === uploads.length) {
-                  res.json({ success: true, inserted });
-                }
-              });
-            } else {
-              done++;
-              if (done === uploads.length) {
-                res.json({ success: true, inserted });
-              }
-            }
-          });
-        });
-      });
+        for (const upload of uploads) {
+          const recipeResult = await pool.query('SELECT * FROM recipes WHERE uploaded_recipe_id = $1', [upload.id]);
+          if (recipeResult.rows.length === 0) {
+            await pool.query('INSERT INTO recipes (uploaded_recipe_id, name, url) VALUES ($1, $2, $3)', [upload.id, upload.recipe_title, upload.source_url]);
+            inserted++;
+          }
+        }
+        res.json({ success: true, inserted });
+      } catch (err) {
+        console.error('[DEBUG /api/recipes/sync-from-uploads] Error:', err);
+        res.status(500).json({ success: false, error: err.message });
+      }
     });
 
 
@@ -524,12 +518,15 @@ app.get('/api/timetable/all', async (req, res) => {
     });
 
     // Get a single upload by ID
-    app.get('/api/uploads/:id', (req, res) => {
+    app.get('/api/uploads/:id', async (req, res) => {
       const { id } = req.params;
-      db.get('SELECT * FROM uploads WHERE id = ?', [id], (err, row) => {
-        if (err || !row) return res.status(404).json({ error: 'Upload not found.' });
-        res.json(row);
-      });
+      try {
+        const result = await pool.query('SELECT * FROM uploads WHERE id = $1', [id]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Upload not found.' });
+        res.json(result.rows[0]);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
 
@@ -897,44 +894,44 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     });
 
     // --- Uploads ---
-    app.get('/api/uploads', async (req, res) => {
+    app.put('/api/uploads/:id/raw', async (req, res) => {
+      const { id } = req.params;
+      const { recipe_id, raw_data } = req.body;
+      console.log('[DEBUG /api/uploads/:id/raw] Called with:', { id, recipe_id, raw_data_length: raw_data ? raw_data.length : undefined });
+      if (!recipe_id) {
+        console.log('[DEBUG /api/uploads/:id/raw] Missing recipe_id');
+        return res.json({ success: false, error: 'Missing recipe_id' });
+      }
+      if (!raw_data) {
+        console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
+        return res.json({ success: false, error: 'Missing raw_data' });
+      }
+      const fs = require('fs');
+      const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
+      // Ensure directory exists
+      if (!fs.existsSync(rawDataDir)) {
+        fs.mkdirSync(rawDataDir, { recursive: true });
+      }
+      const filePath = path.join(rawDataDir, `${id}.txt`);
+      console.log('[DEBUG /api/uploads/:id/raw] Attempting to write file to:', filePath);
       try {
-        const result = await pool.query('SELECT * FROM uploads');
-        res.json(result.rows);
+        await pool.query('UPDATE uploads SET raw_data = $1 WHERE id = $2', [raw_data, id]);
+        // Save raw data to file
+        fs.writeFile(filePath, raw_data, (fileErr) => {
+          if (fileErr) {
+            console.log('[DEBUG /api/uploads/:id/raw] Failed to write raw data file:', fileErr.message);
+            console.log('[DEBUG /api/uploads/:id/raw] Tried to write to:', filePath);
+            return res.status(500).json({ success: false, error: 'Failed to write raw data file', details: fileErr.message });
+          }
+          console.log('[DEBUG /api/uploads/:id/raw] Successfully updated uploads table and wrote file for id:', id);
+          console.log('[DEBUG /api/uploads/:id/raw] File written to:', filePath);
+          res.json({ success: true });
+        });
       } catch (err) {
-        console.error('[DEBUG /api/uploads] Error:', err);
-        res.status(500).json({ error: err.message });
+        console.log('[DEBUG /api/uploads/:id/raw] Failed to update uploads table:', err.message);
+        return res.status(500).json({ success: false, error: 'Failed to update uploads table', details: err.message });
       }
     });
-
-    // --- Uploads: Create new upload ---
-    app.post('/api/uploads', async (req, res) => {
-      const { recipe_id, recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data } = req.body;
-      try {
-        const result = await pool.query(
-          'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-          [recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data || null]
-        );
-        res.json({ upload_id: result.rows[0].id });
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    });
-
-    // --- Timetable Upload Endpoint ---
-    app.post('/api/upload_timetable', (req, res) => {
-      const { timetable, headers } = req.body;
-      if (!Array.isArray(timetable) || !Array.isArray(headers) || timetable.length === 0) {
-        return res.status(400).json({ success: false, error: 'No timetable data provided.' });
-      }
-
-      // Map headers to DB columns (handle duplicate/blank columns)
-      // The table was created with unique names for duplicate/blank columns, so we must match them
-      const dbColumns = [
-        "Teacher","Teacher_Name","Form_Class",
-        "D1_P1_1","D1_P1_2","D1_P2","D1_I","D1_P3","D1_P4","D1_L","D1_P5","D1_blank_1","D1_blank_2",
-        "D2_P1_1","D2_P1_2","D2_P2","D2_I","D2_P3","D2_P4","D2_L","D2_P5","D2_blank_1","D2_blank_2",
-        "D3_P1_1","D3_P1_2","D3_P2","D3_I","D3_P3","D3_P4","D3_L","D3_P5","D3_blank_1","D3_blank_2",
         "D4_P1_1","D4_P1_2","D4_P2","D4_I","D4_P3","D4_P4","D4_L","D4_P5","D4_blank_1","D4_blank_2",
         "D5_P1_1","D5_P1_2","D5_P2","D5_I","D5_P3","D5_P4","D5_L","D5_P5","D5_blank_1","D5_blank_2"
       ];
