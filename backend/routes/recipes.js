@@ -3,25 +3,29 @@
 
 const express = require('express');
 const router = express.Router();
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const dbPath = path.join(__dirname, '../database.sqlite');
-const db = new sqlite3.Database(dbPath);
+const { Pool } = require('pg');
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+const PG_CONNECTION_STRING = process.env.PG_CONNECTION_STRING || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
+const pool = new Pool({ connectionString: PG_CONNECTION_STRING, ssl: { rejectUnauthorized: false } });
 
 // GET /api/recipes/display-dropdown - Get all recipes from recipe_display for dropdown
-router.get('/display-dropdown', (req, res) => {
-  db.all('SELECT recipeID as id, name FROM recipe_display ORDER BY name', [], (err, rows) => {
-    if (err) return res.status(500).json({ success: false, error: err.message });
-    res.json({ recipes: rows });
-  });
+router.get('/display-dropdown', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT "recipeID" as id, name FROM recipe_display ORDER BY name');
+    res.json({ recipes: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET /api/recipes/display-table - Get all rows from recipe_display
-router.get('/display-table', (req, res) => {
-  db.all('SELECT * FROM recipe_display', [], (err, rows) => {
-    if (err) return res.status(500).json({ success: false, error: err.message });
-    res.json(rows);
-  });
+router.get('/display-table', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM recipe_display');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 
@@ -267,52 +271,61 @@ router.post('/cleanup-instructions', (req, res) => {
 });
 
 // Get all recipes (with upload raw_data)
-router.get('/recipes', (req, res) => {
+router.get('/recipes', async (req, res) => {
   const sql = `
     SELECT recipes.*, uploads.raw_data as upload_raw_data
     FROM recipes
     LEFT JOIN uploads ON recipes.uploaded_recipe_id = uploads.id
   `;
-  db.all(sql, [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+  try {
+    const result = await pool.query(sql);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('[DEBUG /api/recipes] Error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Create a new recipe
-router.post('/recipes', (req, res) => {
+router.post('/recipes', async (req, res) => {
   const { name, description } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Recipe name is required.' });
   }
-  db.run('INSERT INTO recipes (name, description) VALUES (?, ?)', [name, description], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, name, description });
-  });
+  try {
+    const result = await pool.query('INSERT INTO recipes (name, description) VALUES ($1, $2) RETURNING id', [name, description]);
+    res.json({ id: result.rows[0].id, name, description });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Update recipe
-router.put('/recipes/:id', (req, res) => {
+router.put('/recipes/:id', async (req, res) => {
   const { id } = req.params;
   const { name, description } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Recipe name is required.' });
   }
-  db.run('UPDATE recipes SET name = ?, description = ? WHERE id = ?', [name, description, id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Recipe not found.' });
+  try {
+    const result = await pool.query('UPDATE recipes SET name = $1, description = $2 WHERE id = $3 RETURNING id', [name, description, id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Recipe not found.' });
     res.json({ id, name, description });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Delete recipe
-router.delete('/recipes/:id', (req, res) => {
+router.delete('/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  db.run('DELETE FROM recipes WHERE id = ?', [id], function(err) {
-    if (err) return res.status(500).json({ error: err.message });
-    if (this.changes === 0) return res.status(404).json({ error: 'Recipe not found.' });
+  try {
+    const result = await pool.query('DELETE FROM recipes WHERE id = $1', [id]);
+    if (result.rowCount === 0) return res.status(404).json({ error: 'Recipe not found.' });
     res.json({ success: true });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 

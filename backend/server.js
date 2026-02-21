@@ -4,10 +4,10 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const DB_PATH = process.env.DATABASE_PATH || 'database.sqlite';
-const db = new sqlite3.Database(DB_PATH);
+const PG_CONNECTION_STRING = process.env.PG_CONNECTION_STRING || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
+const pool = new Pool({ connectionString: PG_CONNECTION_STRING, ssl: { rejectUnauthorized: false } });
 
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
@@ -23,30 +23,34 @@ app.get('/api/extracted-ingredients/:id/load', (req, res) => {
 });
 
 // --- Suggestions API ---
-app.get('/api/suggestions', (req, res) => {
-  db.all('SELECT * FROM suggestions ORDER BY date DESC, id DESC', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json(rows);
-  });
+app.get('/api/suggestions', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM suggestions ORDER BY date DESC, id DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
-app.post('/api/suggestions', (req, res) => {
+app.post('/api/suggestions', async (req, res) => {
   const { date, recipe_name, suggested_by, email, url, reason } = req.body;
-  db.run('INSERT INTO suggestions (date, recipe_name, suggested_by, email, url, reason) VALUES (?, ?, ?, ?, ?, ?)',
-    [date, recipe_name, suggested_by, email, url, reason],
-    function(err) {
-      if (err) return res.status(500).json({ error: err.message });
-      res.json({ success: true, id: this.lastID });
-    }
-  );
+  try {
+    const result = await pool.query(
+      'INSERT INTO suggestions (date, recipe_name, suggested_by, email, url, reason) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [date, recipe_name, suggested_by, email, url, reason]
+    );
+    res.json({ success: true, id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Cleanup Instructions API ---
-app.post('/api/recipes/cleanup-instructions', (req, res) => {
-  db.all('SELECT id, instructions FROM recipes', [], (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
+app.post('/api/recipes/cleanup-instructions', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, instructions FROM recipes');
     let updated = 0;
-    rows.forEach(row => {
-      if (!row.instructions) return;
+    for (const row of result.rows) {
+      if (!row.instructions) continue;
       // Remove <p>, </p>, <br>, <br/>, <br /> and all HTML tags
       let cleaned = row.instructions
         .replace(/<\/?p>/gi, ' ')
@@ -54,12 +58,13 @@ app.post('/api/recipes/cleanup-instructions', (req, res) => {
         .replace(/<[^>]+>/g, '')
         .replace(/\s+/g, ' ') // collapse whitespace
         .trim();
-      db.run('UPDATE recipes SET instructions = ? WHERE id = ?', [cleaned, row.id], function(err2) {
-        if (!err2) updated++;
-      });
-    });
+      await pool.query('UPDATE recipes SET instructions = $1 WHERE id = $2', [cleaned, row.id]);
+      updated++;
+    }
     res.json({ success: true, updated });
-  });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 
@@ -113,7 +118,6 @@ app.use('/api/aisle_category', aisleCategoryRoutes);
 const aisleKeywordsRoutes = require('./routes/aisleKeywords');
 app.use('/api/aisle_keywords', aisleKeywordsRoutes);
 const foodBrandsRoutes = require('./routes/food_brands');
-app.locals.db = db;
 app.use('/api/department', departmentRoutes);
 app.use('/api/staff_upload', staffUploadRoutes);
 app.use('/api/classes', classRoutes);
@@ -122,22 +126,8 @@ app.use('/api/bookings', bookingsRoutes);
 app.use('/api/ingredients', ingredientsRoutes);
 app.use('/api/food_brands', foodBrandsRoutes);
 
-// Centralized DB schema setup (after db is defined)
-const initializeDatabase = require('./db_schema');
-initializeDatabase(db);
-
-// Ensure bookings table exists
-db.run(`CREATE TABLE IF NOT EXISTS bookings (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  staff_id TEXT,
-  staff_name TEXT,
-  class_name TEXT,
-  booking_date TEXT,
-  period TEXT,
-  recipe TEXT,
-  recipe_id INTEGER,
-  class_size INTEGER
-)`);
+// TODO: Migrate all other endpoints to use Postgres (pg) instead of sqlite3.
+// Remove sqlite3-specific code after migration is complete.
 
 // Debug log endpoint for frontend JS
 app.post('/api/debug-log', (req, res) => {
@@ -281,105 +271,79 @@ app.get('/api/search/recipes', (req, res) => {
 });
 // --- Staff Search Endpoint ---
 // Returns staff/teachers matching a query (by name or code)
-app.get('/api/search/staff', (req, res) => {
+app.get('/api/search/staff', async (req, res) => {
   const q = (req.query.q || '').trim();
-  // Try to match in both Teacher and Teacher_Name columns (case-insensitive)
-  let sql = 'SELECT DISTINCT Teacher, [Teacher Name] as TeacherName FROM kamar_timetable';
+  let sql = 'SELECT DISTINCT "Teacher", "Teacher Name" as "TeacherName" FROM kamar_timetable';
   let params = [];
   if (q) {
-    sql += ' WHERE Teacher LIKE ? OR [Teacher Name] LIKE ?';
+    sql += ' WHERE "Teacher" ILIKE $1 OR "Teacher Name" ILIKE $2';
     params = [`%${q}%`, `%${q}%`];
   }
-  sql += ' ORDER BY TeacherName COLLATE NOCASE';
-  db.all(sql, params, (err, rows) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ staff: rows });
-  });
+  sql += ' ORDER BY "TeacherName"';
+  try {
+    const result = await pool.query(sql, params);
+    res.json({ staff: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Class Upload Endpoints ---
 
 // POST /api/class-upload: Upload class CSV data
-app.post('/api/class-upload', (req, res) => {
+app.post('/api/class-upload', async (req, res) => {
   const { classes } = req.body;
   if (!Array.isArray(classes) || classes.length === 0) {
     return res.status(400).json({ success: false, error: 'No class data provided.' });
   }
-  // columns: ttcode, level, name, qualification, department, sub_department, teacher_in_charge, description, star
-  const stmt = db.prepare('INSERT INTO class_upload (ttcode, level, name, qualification, department, sub_department, teacher_in_charge, description, star) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
   let inserted = 0;
-  classes.forEach(row => {
-    if (row.length >= 9) {
-      stmt.run(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], err => {
-        if (!err) inserted++;
-      });
+  try {
+    for (const row of classes) {
+      if (row.length >= 9) {
+        await pool.query(
+          'INSERT INTO class_upload (ttcode, level, name, qualification, department, sub_department, teacher_in_charge, description, star) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+          [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]]
+        );
+        inserted++;
+      }
     }
-  });
-  stmt.finalize(() => {
     res.json({ success: true, inserted });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // GET /api/class_upload/all: Fetch all class records
-app.get('/api/class_upload/all', (req, res) => {
-  db.all('SELECT * FROM class_upload', [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: 'Failed to fetch class upload data.' });
-    } else {
-      res.json({ classes: rows });
-    }
-  });
+app.get('/api/class_upload/all', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM class_upload');
+    res.json({ classes: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch class upload data.' });
+  }
 });
 
 // DELETE /api/class-upload/all: Delete all class records
-app.delete('/api/class-upload/all', (req, res) => {
-  db.run('DELETE FROM class_upload', [], function(err) {
-    if (err) {
-      res.status(500).json({ success: false, error: 'Failed to delete class records.' });
-    } else {
-      res.json({ success: true });
-    }
-  });
+app.delete('/api/class-upload/all', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM class_upload');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to delete class records.' });
+  }
 });
 
 
 // --- Timetable Table Fetch Endpoint ---
-app.get('/api/timetable/all', (req, res) => {
-  db.all('SELECT * FROM kamar_timetable', [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: 'Failed to fetch timetable data.' });
-    } else {
-      res.json({ timetable: rows });
-    }
-  });
+app.get('/api/timetable/all', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM kamar_timetable');
+    res.json({ timetable: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch timetable data.' });
+  }
 });
     // ...existing code...
-    db.all("PRAGMA table_info(recipes);", (err, columns) => {
-      if (err) {
-        console.error('Failed to check recipes table columns:', err.message);
-      } else {
-        const hasServingSize = columns.some(col => col.name === 'serving_size');
-        if (!hasServingSize) {
-          db.run("ALTER TABLE recipes ADD COLUMN serving_size TEXT;", (err) => {
-            if (err) {
-              console.error('Failed to add serving_size column to recipes:', err.message);
-            } else {
-              console.log('Added serving_size column to recipes table.');
-            }
-          });
-        }
-        const hasInstructionsExtracted = columns.some(col => col.name === 'instructions_extracted');
-        if (!hasInstructionsExtracted) {
-          db.run("ALTER TABLE recipes ADD COLUMN instructions_extracted TEXT;", (err) => {
-            if (err) {
-              console.error('Failed to add instructions_extracted column to recipes:', err.message);
-            } else {
-              console.log('Added instructions_extracted column to recipes table.');
-            }
-          });
-        }
-      }
-    });
     // --- Instructions Solution Endpoint (saves to DB) ---
     app.post('/api/instructions-extractor/solution', (req, res) => {
       const { recipeId, solution } = req.body;
@@ -494,11 +458,13 @@ app.get('/api/timetable/all', (req, res) => {
       });
     });
     // GET all ingredients inventory
-    app.get('/api/ingredients-inventory', (req, res) => {
-      db.all('SELECT * FROM ingredients_inventory', [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-      });
+    app.get('/api/ingredients-inventory', async (req, res) => {
+      try {
+        const result = await pool.query('SELECT * FROM ingredients_inventory');
+        res.json(result.rows);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // DELETE all ingredients inventory
@@ -704,30 +670,25 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     }
 
     // When a recipe is loaded by ID, auto-parse and insert ingredients
-    app.get('/api/recipes/:id', (req, res) => {
+    app.get('/api/recipes/:id', async (req, res) => {
       const { id } = req.params;
-      db.get('SELECT * FROM recipes WHERE id = ?', [id], (err, recipe) => {
-        if (err || !recipe) return res.status(404).json({ error: 'Recipe not found.' });
-        // Try to get the raw ingredients from the recipe.ingredients field
+      try {
+        const recipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [id]);
+        if (recipeResult.rows.length === 0) return res.status(404).json({ error: 'Recipe not found.' });
+        const recipe = recipeResult.rows[0];
         let rawIngredients = recipe.ingredients;
         if (!rawIngredients) return res.json(recipe); // nothing to parse
-        // Parse and insert into ingredients table
         const parsed = parseIngredients(rawIngredients);
-        // Remove old ingredients for this recipe
-        db.run('DELETE FROM ingredients WHERE recipe_id = ?', [id], function() {
-          // Insert new ones
-          let done = 0;
-          if (parsed.length === 0) return res.json(recipe);
-          parsed.forEach(ing => {
-            db.run('INSERT INTO ingredients (recipe_id, name, quantity, unit) VALUES (?, ?, ?, ?)', [id, ing.name, ing.quantity, ing.unit], function() {
-              done++;
-              if (done === parsed.length) {
-                res.json(recipe);
-              }
-            });
-          });
-        });
-      });
+        await pool.query('DELETE FROM ingredients WHERE recipe_id = $1', [id]);
+        if (parsed.length === 0) return res.json(recipe);
+        // Insert new ones
+        for (const ing of parsed) {
+          await pool.query('INSERT INTO ingredients (recipe_id, name, quantity, unit) VALUES ($1, $2, $3, $4)', [id, ing.name, ing.quantity, ing.unit]);
+        }
+        res.json(recipe);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // ...all other route definitions (recipes, ingredients, classes, uploads, shopping lists, etc.) go here...
@@ -738,17 +699,19 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     });
 
     // --- Recipes ---
-    app.get('/api/recipes', (req, res) => {
-        // Join recipes with uploads to get raw_data preview
-        const sql = `
-          SELECT recipes.*, uploads.raw_data as upload_raw_data
-          FROM recipes
-          LEFT JOIN uploads ON recipes.uploaded_recipe_id = uploads.id
-        `;
-        db.all(sql, [], (err, rows) => {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json(rows);
-        });
+    app.get('/api/recipes', async (req, res) => {
+      // Join recipes with uploads to get raw_data preview
+      const sql = `
+        SELECT recipes.*, uploads.raw_data as upload_raw_data
+        FROM recipes
+        LEFT JOIN uploads ON recipes.uploaded_recipe_id = uploads.id
+      `;
+      try {
+        const result = await pool.query(sql);
+        res.json(result.rows);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     app.post('/api/recipes', (req, res) => {
@@ -934,24 +897,28 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     });
 
     // --- Uploads ---
-    app.get('/api/uploads', (req, res) => {
-      db.all('SELECT * FROM uploads', [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows);
-      });
+    app.get('/api/uploads', async (req, res) => {
+      try {
+        const result = await pool.query('SELECT * FROM uploads');
+        res.json(result.rows);
+      } catch (err) {
+        console.error('[DEBUG /api/uploads] Error:', err);
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // --- Uploads: Create new upload ---
-    app.post('/api/uploads', (req, res) => {
+    app.post('/api/uploads', async (req, res) => {
       const { recipe_id, recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data } = req.body;
-      db.run(
-        'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES (?, ?, ?, ?, ?, ?)',
-        [recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data || null],
-        function(err) {
-          if (err) return res.status(500).json({ error: err.message });
-          res.json({ upload_id: this.lastID });
-        }
-      );
+      try {
+        const result = await pool.query(
+          'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+          [recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data || null]
+        );
+        res.json({ upload_id: result.rows[0].id });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // --- Timetable Upload Endpoint ---
