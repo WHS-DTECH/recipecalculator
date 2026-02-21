@@ -107,6 +107,7 @@
             <textarea id="solutionBox" style="width:100%; min-height:40px; resize:vertical; border-radius:6px; border:1px solid #bbb; font-size:1.1rem; padding:0.5rem;"> </textarea>
             <button class="extractor-btn" id="sendSolutionBtn" style="background:#8000b0; color:#fff; margin-top:0.5rem; width:100%;">SEND SOLUTION</button>
         </div>
+        <div class="raw-data-section">
             <div class="raw-data-title">Raw Data (HTML/Text)</div>
             <!-- Show in Separate Window button removed -->
             <div class="raw-data-box" id="rawDataBox"></div>
@@ -123,6 +124,7 @@
     </div>
     <script src="extractor_serving_size.js"></script>
     <script>
+    document.addEventListener('DOMContentLoaded', function() {
         // --- Recipe URL Dropdown Logic ---
         const recipeUrlSelect = document.getElementById('recipeUrlSelect');
         // Fetch recipes and populate dropdown
@@ -130,9 +132,8 @@
             .then(res => res.json())
             .then(recipes => {
                 recipeUrlSelect.innerHTML = '<option value="">-- Select a recipe --</option>' +
-                    recipes.map(r => `<option value="${r.id}" data-url="${r.url || ''}">${r.name || r.url || 'Untitled Recipe'}</option>`).join('');
+                    recipes.map(r => `<option value="${r.id}" data-url="${r.url || ''}">${r.url || r.name || 'Untitled Recipe'}</option>`).join('');
             });
-
 
         // When a recipe is chosen, fetch its raw data using uploaded_recipe_id if present
         recipeUrlSelect.addEventListener('change', function() {
@@ -159,15 +160,66 @@
 
         // Patch: ensure window.rawData is set for modal logic
         window.rawData = typeof rawData !== 'undefined' ? rawData : '';
-    let currentStep = 0;
-    let accepted = false;
-    const stepControls = document.getElementById('stepControls');
-    const startBtn = document.getElementById('startStrategyRunner');
-    const acceptBtn = document.getElementById('acceptResultBtn');
-    const continueBtn = document.getElementById('continueBtn');
-    const currentStrategyName = document.getElementById('currentStrategyName');
-    const currentStrategyResult = document.getElementById('currentStrategyResult');
+        let currentStep = 0;
+        let accepted = false;
+        const stepControls = document.getElementById('stepControls');
+        const startBtn = document.getElementById('startStrategyRunner');
+        const acceptBtn = document.getElementById('acceptResultBtn');
+        const continueBtn = document.getElementById('continueBtn');
+        const currentStrategyName = document.getElementById('currentStrategyName');
+        const currentStrategyResult = document.getElementById('currentStrategyResult');
 
+        // Safely add event listeners only if elements exist
+        if (startBtn) {
+            startBtn.addEventListener('click', function() {
+                currentStep = 0;
+                accepted = false;
+                showStep(currentStep);
+            });
+        }
+        if (acceptBtn) {
+            acceptBtn.addEventListener('click', function() {
+                accepted = true;
+                // Always use current raw data and re-run strategies
+                const raw = window.rawData || '';
+                const results = strategies.map((s) => {
+                    const result = s.fn(raw);
+                    return { name: s.name, result };
+                });
+                // Set solution box to the result of the accepted strategy
+                document.getElementById('solutionBox').value = results[currentStep].result;
+                // Mark this strategy as applied and solved (for table)
+                const tableResults = results.map((r, i) => ({
+                    name: strategies[i].name,
+                    applied: (i === currentStep),
+                    result: r.result,
+                    solved: !!r.result && r.result !== 'N/A'
+                }));
+                renderServingExtractorTable(tableResults);
+                stepControls.style.display = 'none';
+                startBtn.disabled = false;
+            });
+        }
+        if (continueBtn) {
+            continueBtn.addEventListener('click', function() {
+                if (currentStep < strategies.length - 1) {
+                    currentStep++;
+                    showStep(currentStep);
+                }
+            });
+        }
+        const sendSolutionBtn = document.getElementById('sendSolutionBtn');
+        if (sendSolutionBtn) {
+            sendSolutionBtn.addEventListener('click', function() {
+                const solution = document.getElementById('solutionBox').value.trim();
+                if (!solution) {
+                    alert('Please enter a solution before sending.');
+                    return;
+                }
+                // Send both recipeId and solution
+                // ...existing code for sending solution...
+            });
+        }
 
     // Helper: run all strategies on the current raw data
     function runStrategiesOnRawData(raw) {
@@ -294,6 +346,7 @@
     // Optional: close modal on outside click
     rawDataModal.addEventListener('click', function(e) {
         if (e.target === rawDataModal) rawDataModal.style.display = 'none';
+    });
     });
     </script>
 </body>

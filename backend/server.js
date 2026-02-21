@@ -22,6 +22,20 @@ app.get('/api/extracted-ingredients/:id/load', (req, res) => {
   });
 });
 
+
+// ...existing code...
+
+// Get all uploads (for recipe selector)
+app.get('/api/uploads', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM uploads ORDER BY id DESC');
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 // --- Suggestions API ---
 app.get('/api/suggestions', async (req, res) => {
   try {
@@ -74,90 +88,84 @@ const PORT = process.env.PORT || 4000;
 // RawDataTXT HTML Preview Route (must come BEFORE express.static)
 const path = require('path');
 // const fs = require('fs'); // Already declared above
-app.get('/RawDataTXT/:file', (req, res, next) => {
-  const fileName = req.params.file;
-  const filePath = path.join(__dirname, 'public', 'RawDataTXT', fileName);
-  fs.readFile(filePath, 'utf8', (err, data) => {
-    if (err) return next(); // Pass to 404 handler if not found
-    res.send(`<!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Raw Data Preview - ${fileName}</title>
-        <style>
-          body { background: #222; color: #f8f8f2; font-family: 'Fira Mono', 'Consolas', monospace; margin: 0; padding: 0; }
-          .container { max-width: 900px; margin: 2rem auto; background: #282a36; border-radius: 8px; box-shadow: 0 2px 12px #0004; padding: 2rem; }
-          h2 { color: #50fa7b; margin-top: 0; }
-          pre { white-space: pre-wrap; word-break: break-word; font-size: 1.1em; line-height: 1.5; background: #23242b; padding: 1.2em; border-radius: 6px; overflow-x: auto; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h2>Raw Data Preview: ${fileName}</h2>
-          <pre>${data.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>
-        </div>
-      </body>
-      </html>`);
-  });
-});
 
-// Serve static files from the public directory
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Modular routes setup
-const departmentRoutes = require('./routes/department');
-const staffUploadRoutes = require('./routes/staff_upload');
-const classRoutes = require('./routes/classes');
-const recipeRoutes = require('./routes/recipes');
-const bookingsRoutes = require('./routes/bookings');
-const ingredientsRoutes = require('./routes/ingredients');
-const aisleCategoryRoutes = require('./routes/aisle_category');
-app.use('/api/aisle_category', aisleCategoryRoutes);
-
-// Mount aisleKeywords router
-const aisleKeywordsRoutes = require('./routes/aisleKeywords');
-app.use('/api/aisle_keywords', aisleKeywordsRoutes);
-const foodBrandsRoutes = require('./routes/food_brands');
-app.use('/api/department', departmentRoutes);
-app.use('/api/staff_upload', staffUploadRoutes);
-app.use('/api/classes', classRoutes);
-app.use('/api/recipes', recipeRoutes);
-app.use('/api/bookings', bookingsRoutes);
-app.use('/api/ingredients', ingredientsRoutes);
-app.use('/api/food_brands', foodBrandsRoutes);
-
-// TODO: Migrate all other endpoints to use Postgres (pg) instead of sqlite3.
-// Remove sqlite3-specific code after migration is complete.
-
-// Debug log endpoint for frontend JS
-app.post('/api/debug-log', (req, res) => {
-  const { msg } = req.body;
-  console.log('[FRONTEND DEBUG]', msg);
-  res.json({ success: true });
-});
-
-// --- Title Solution Endpoint (saves to DB) ---
-app.post('/api/title-extractor/solution', (req, res) => {
-  const { recipeId, solution } = req.body;
-  console.log('[DEBUG /api/title-extractor/solution] Called with:', { recipeId, solution });
-  if (!recipeId || !solution) {
-    console.log('[DEBUG /api/title-extractor/solution] Missing recipeId or solution');
-    return res.status(400).json({ error: 'Recipe ID and solution are required.' });
+app.put('/api/uploads/:id/raw', async (req, res) => {
+  const { id } = req.params;
+  let { recipe_id, raw_data } = req.body;
+  console.log('[DEBUG /api/uploads/:id/raw] Called with:', { id, recipe_id, raw_data_length: raw_data ? raw_data.length : undefined });
+  // Fallback: if recipe_id is not provided, use id
+  if (!recipe_id) {
+    recipe_id = id;
+    console.log('[DEBUG /api/uploads/:id/raw] recipe_id missing, falling back to id:', id);
   }
-  db.run('UPDATE recipes SET name = ? WHERE id = ?', [solution, recipeId], function(err) {
-    if (err) {
-      console.error('[DEBUG /api/title-extractor/solution] Failed to save title solution:', err.message);
-      return res.status(500).json({ error: err.message });
+  if (!raw_data) {
+    console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
+    return res.json({ success: false, error: 'Missing raw_data' });
+  }
+  const fs = require('fs');
+  const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
+  // Ensure directory exists
+  if (!fs.existsSync(rawDataDir)) {
+    fs.mkdirSync(rawDataDir, { recursive: true });
+  }
+  // Always use recipe_id for file naming if possible
+  const fileName = `${recipe_id}.txt`;
+  const filePath = path.join(rawDataDir, fileName);
+  console.log('[DEBUG /api/uploads/:id/raw] Attempting to write file to:', filePath);
+  try {
+    await pool.query('UPDATE uploads SET raw_data = $1 WHERE id = $2', [raw_data, id]);
+  } catch (err) {
+    console.log('[DEBUG /api/uploads/:id/raw] Failed to update uploads table:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update uploads table', details: err.message });
+  }
+  // Save raw data to file
+  fs.writeFile(filePath, raw_data, async (fileErr) => {
+    if (fileErr) {
+      console.log('[DEBUG /api/uploads/:id/raw] Failed to write raw data file:', fileErr.message);
+      console.log('[DEBUG /api/uploads/:id/raw] Tried to write to:', filePath);
+      return res.json({ success: true, file: false, fileError: fileErr.message, filePath });
     }
-    if (this.changes === 0) {
-      console.log('[DEBUG /api/title-extractor/solution] No recipe found for id:', recipeId);
-      return res.status(404).json({ error: 'Recipe not found.' });
+    console.log('[DEBUG /api/uploads/:id/raw] Successfully updated uploads table and wrote file for recipe_id:', recipe_id, 'id:', id);
+    console.log('[DEBUG /api/uploads/:id/raw] File written to:', filePath);
+    // Now split ingredient quantities (existing logic)
+    let rows;
+    try {
+      const result = await pool.query('SELECT id, ingredient_name FROM ingredients_inventory WHERE recipe_id = $1', [recipe_id]);
+      rows = result.rows;
+    } catch (err) {
+      console.log('[Split Quantity] DB error selecting:', err);
+      return res.json({ success: false, error: err.message });
     }
-    console.log('[DEBUG /api/title-extractor/solution] Successfully updated title for recipe id:', recipeId);
-    res.json({ success: true });
+    if (!rows.length) {
+      // console.log('[Split Quantity] No ingredients found for recipe_id:', recipe_id);
+      return res.json({ success: true, file: true, updated: 0, failed: 0, note: 'No ingredients found.' });
+    }
+    let done = 0, failed = 0;
+    for (const row of rows) {
+      let quantity = '', fooditem = '';
+      console.log(`[Split Quantity] Processing row id=${row.id}, ingredient_name='${row.ingredient_name}'`);
+      const match = row.ingredient_name.match(/^([\d\s\/.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+\s*(?:cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|g|gram|grams|kg|kilogram|kilograms|ml|l|litre|litres|liter|liters|oz|ounce|ounces|lb|pound|pounds|pinch|dash|clove|cloves|can|cans|slice|slices|stick|sticks|packet|packets|piece|pieces|egg|eggs|drop|drops|block|blocks|sheet|sheets|bunch|bunches|sprig|sprigs|head|heads|filet|filets|fillet|fillets|bag|bags|jar|jars|bottle|bottles|container|containers|box|boxes|bar|bars|roll|rolls|strip|strips|cm|mm|inch|inches|pinches|handful|handfuls|dozen|leaves|stalks|ribs|segments|cubes|sprinkles|splashes|litre|litres|millilitre|millilitres|quart|quarts|pint|pints|gallon|gallons)\b)\s*(.*)$/i);
+      if (match) {
+        quantity = match[1].trim();
+        fooditem = match[2].trim();
+        console.log(`[Split Quantity] Regex matched. quantity='${quantity}', fooditem='${fooditem}'`);
+      } else {
+        fooditem = row.ingredient_name.trim();
+        console.log(`[Split Quantity] Regex did not match. fooditem='${fooditem}'`);
+      }
+      try {
+        await pool.query('UPDATE ingredients_inventory SET quantity = $1, fooditem = $2 WHERE id = $3', [quantity, fooditem, row.id]);
+        done++;
+      } catch (err2) {
+        failed++;
+        console.log(`[Split Quantity] Failed to update row id=${row.id}:`, err2.message);
+      }
+    }
+    // All updates attempted
+    console.log(`[Split Quantity] Finished. Updated: ${done}, Failed: ${failed}`);
+    res.json({ success: failed === 0, file: true, updated: done, failed });
   });
 });
-
 
 // --- Transfer Instructions Extracted to Instructions ---
 app.post('/api/recipes/:id/transfer-instructions', (req, res) => {
@@ -697,11 +705,11 @@ app.put('/api/uploads/:id/raw', (req, res) => {
 
     // --- Recipes ---
     app.get('/api/recipes', async (req, res) => {
-      // Join recipes with uploads to get raw_data preview
+      // Return all main fields including uploaded_recipe_id for table display
       const sql = `
-        SELECT recipes.*, uploads.raw_data as upload_raw_data
+        SELECT id, uploaded_recipe_id, name, url
         FROM recipes
-        LEFT JOIN uploads ON recipes.uploaded_recipe_id = uploads.id
+        ORDER BY id DESC
       `;
       try {
         const result = await pool.query(sql);
@@ -890,76 +898,45 @@ app.put('/api/uploads/:id/raw', (req, res) => {
           return res.status(404).json({ error: 'Recipe not found.' });
         }
         res.json({ success: true });
-      });
+// --- Uploads ---
+app.put('/api/uploads/:id/raw', async (req, res) => {
+  const { id } = req.params;
+  const { recipe_id, raw_data } = req.body;
+  console.log('[DEBUG /api/uploads/:id/raw] Called with:', { id, recipe_id, raw_data_length: raw_data ? raw_data.length : undefined });
+  if (!recipe_id) {
+    console.log('[DEBUG /api/uploads/:id/raw] Missing recipe_id');
+    return res.json({ success: false, error: 'Missing recipe_id' });
+  }
+  if (!raw_data) {
+    console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
+    return res.json({ success: false, error: 'Missing raw_data' });
+  }
+  const fs = require('fs');
+  const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
+  // Ensure directory exists
+  if (!fs.existsSync(rawDataDir)) {
+    fs.mkdirSync(rawDataDir, { recursive: true });
+  }
+  const filePath = path.join(rawDataDir, `${id}.txt`);
+  console.log('[DEBUG /api/uploads/:id/raw] Attempting to write file to:', filePath);
+  try {
+    await pool.query('UPDATE uploads SET raw_data = $1 WHERE id = $2', [raw_data, id]);
+    // Save raw data to file
+    fs.writeFile(filePath, raw_data, (fileErr) => {
+      if (fileErr) {
+        console.log('[DEBUG /api/uploads/:id/raw] Failed to write raw data file:', fileErr.message);
+        console.log('[DEBUG /api/uploads/:id/raw] Tried to write to:', filePath);
+        return res.status(500).json({ success: false, error: 'Failed to write raw data file', details: fileErr.message });
+      }
+      console.log('[DEBUG /api/uploads/:id/raw] Successfully updated uploads table and wrote file for id:', id);
+      console.log('[DEBUG /api/uploads/:id/raw] File written to:', filePath);
+      res.json({ success: true });
     });
-
-    // --- Uploads ---
-    app.put('/api/uploads/:id/raw', async (req, res) => {
-      const { id } = req.params;
-      const { recipe_id, raw_data } = req.body;
-      console.log('[DEBUG /api/uploads/:id/raw] Called with:', { id, recipe_id, raw_data_length: raw_data ? raw_data.length : undefined });
-      if (!recipe_id) {
-        console.log('[DEBUG /api/uploads/:id/raw] Missing recipe_id');
-        return res.json({ success: false, error: 'Missing recipe_id' });
-      }
-      if (!raw_data) {
-        console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
-        return res.json({ success: false, error: 'Missing raw_data' });
-      }
-      const fs = require('fs');
-      const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
-      // Ensure directory exists
-      if (!fs.existsSync(rawDataDir)) {
-        fs.mkdirSync(rawDataDir, { recursive: true });
-      }
-      const filePath = path.join(rawDataDir, `${id}.txt`);
-      console.log('[DEBUG /api/uploads/:id/raw] Attempting to write file to:', filePath);
-      try {
-        await pool.query('UPDATE uploads SET raw_data = $1 WHERE id = $2', [raw_data, id]);
-        // Save raw data to file
-        fs.writeFile(filePath, raw_data, (fileErr) => {
-          if (fileErr) {
-            console.log('[DEBUG /api/uploads/:id/raw] Failed to write raw data file:', fileErr.message);
-            console.log('[DEBUG /api/uploads/:id/raw] Tried to write to:', filePath);
-            return res.status(500).json({ success: false, error: 'Failed to write raw data file', details: fileErr.message });
-          }
-          console.log('[DEBUG /api/uploads/:id/raw] Successfully updated uploads table and wrote file for id:', id);
-          console.log('[DEBUG /api/uploads/:id/raw] File written to:', filePath);
-          res.json({ success: true });
-        });
-      } catch (err) {
-        console.log('[DEBUG /api/uploads/:id/raw] Failed to update uploads table:', err.message);
-        return res.status(500).json({ success: false, error: 'Failed to update uploads table', details: err.message });
-      }
-    });
-        "D4_P1_1","D4_P1_2","D4_P2","D4_I","D4_P3","D4_P4","D4_L","D4_P5","D4_blank_1","D4_blank_2",
-        "D5_P1_1","D5_P1_2","D5_P2","D5_I","D5_P3","D5_P4","D5_L","D5_P5","D5_blank_1","D5_blank_2"
-      ];
-
-      // Prepare insert statement
-      const placeholders = dbColumns.map(() => '?').join(',');
-      const insertSQL = `INSERT INTO kamar_timetable (${dbColumns.join(',')}) VALUES (${placeholders})`;
-
-      // Insert each row
-      let inserted = 0, failed = 0;
-      for (const row of timetable) {
-        // Pad or trim row to match dbColumns length
-        const values = row.slice(0, dbColumns.length);
-        while (values.length < dbColumns.length) values.push("");
-        try {
-          db.run(insertSQL, values, function(err) {
-            if (err) {
-              failed++;
-            } else {
-              inserted++;
-            }
-          });
-        } catch (e) {
-          failed++;
-        }
-      }
-      // Wait a moment for all inserts to finish (since db.run is async)
-      setTimeout(() => {
+  } catch (err) {
+    console.log('[DEBUG /api/uploads/:id/raw] Failed to update uploads table:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to update uploads table', details: err.message });
+  }
+});
         res.json({ success: true, inserted, failed });
       }, 500);
     });
@@ -1007,6 +984,10 @@ app.get('/RawDataTXT/:file', (req, res, next) => {
       </html>`);
   });
 });
+
+
+// Serve static files from backend/public
+app.use(express.static(path.join(__dirname, 'public')));
 
 // 404 Handler (should be last middleware)
 app.use((req, res) => {

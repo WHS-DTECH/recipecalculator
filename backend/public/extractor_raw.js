@@ -42,38 +42,34 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Populate uploadSelect with uploaded recipes
     // (Debug log removed)
-    fetch('/api/uploads')
-        .then(res => res.json())
-        .then(uploads => {
-            // (Debug log removed)
-            // Clear existing options
-            uploadSelect.innerHTML = '';
-            // Add a default option
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = 'Select a recipe...';
-            uploadSelect.appendChild(defaultOption);
-            // Add upload options
-            uploads.forEach((upload, idx) => {
-                // (Debug log removed)
-                const option = document.createElement('option');
-                option.value = upload.id;
-                option.textContent = upload.source_url || `Upload #${upload.id}`;
-                uploadSelect.appendChild(option);
-            });
-            // Select the first upload if available
-            if (uploads.length > 0) {
-                uploadSelect.selectedIndex = 1;
-                // (Debug log removed)
+    // Fetch uploads and recipes to build selector with URL & recipeID
+    Promise.all([
+        fetch('/api/uploads').then(res => res.json()),
+        fetch('/api/recipes').then(res => res.json())
+    ]).then(([uploads, recipes]) => {
+        uploadSelect.innerHTML = '';
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = 'Select a recipe...';
+        uploadSelect.appendChild(defaultOption);
+        uploads.forEach(upload => {
+            // Find recipe with uploaded_recipe_id = upload.id
+            const recipe = recipes.find(r => r.uploaded_recipe_id == upload.id);
+            let label = '';
+            if (recipe) {
+                label = `[${recipe.id}] ${recipe.url || upload.source_url || 'No URL'}`;
             } else {
-                // (Debug log removed)
+                label = `[No Recipe] ${upload.source_url || 'No URL'} (Upload #${upload.id})`;
             }
-            // (Debug log removed)
-            // (Debug log removed)
-        })
-        .catch(err => {
-            // (Debug log removed)
+            const option = document.createElement('option');
+            option.value = upload.id;
+            option.textContent = label;
+            uploadSelect.appendChild(option);
         });
+        if (uploads.length > 0) {
+            uploadSelect.selectedIndex = 1;
+        }
+    }).catch(() => {});
 
     saveBtn.addEventListener('click', function() {
         const id = uploadSelect.value;
@@ -81,11 +77,12 @@ document.addEventListener('DOMContentLoaded', function () {
         const rawData = rawDataInput.value;
         saveBtn.disabled = true;
         saveBtn.textContent = 'Saving...';
-        fetch(`/api/uploads/${id}`)
+        // Fetch recipes to find the recipeID for this upload
+        fetch('/api/recipes')
             .then(res => res.json())
-            .then(upload => {
-                // Use upload.recipe_id if present, otherwise fallback to upload.id
-                const recipeId = upload.recipe_id || upload.id;
+            .then(recipes => {
+                const recipe = recipes.find(r => r.uploaded_recipe_id == id);
+                const recipeId = recipe ? recipe.id : id;
                 fetch(`/api/uploads/${id}/raw`, {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
@@ -101,15 +98,14 @@ document.addEventListener('DOMContentLoaded', function () {
                             const blob = new Blob([rawData], { type: 'text/plain' });
                             const a = document.createElement('a');
                             a.href = URL.createObjectURL(blob);
-                            a.download = `${id}.txt`;
+                            a.download = `${recipeId}.txt`;
                             document.body.appendChild(a);
                             a.click();
                             setTimeout(() => {
                                 document.body.removeChild(a);
                                 URL.revokeObjectURL(a.href);
                             }, 100);
-                            // Only success debug message left:
-                            alert(`Raw data saved successfully! File: ${id}.txt`);
+                            alert(`Raw data saved successfully! File: ${recipeId}.txt`);
                         }
                         saveBtn.textContent = 'Saved!';
                         setTimeout(() => { saveBtn.textContent = 'Save Raw Data'; saveBtn.disabled = false; }, 1200);
