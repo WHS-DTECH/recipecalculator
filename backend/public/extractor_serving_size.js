@@ -66,8 +66,13 @@ const strategies = [
 
 function renderServingExtractorTable(results) {
   const tbody = document.getElementById('servingExtractorTableBody');
-  tbody.innerHTML = results.map(s => `
+  if (!Array.isArray(results)) {
+    tbody.innerHTML = '';
+    return;
+  }
+  tbody.innerHTML = results.map((s, i) => `
     <tr>
+      <td>${i + 1}</td>
       <td>${s.name}</td>
       <td>${s.applied ? '\u2713' : '\u2014'}</td>
       <td class='extractor-result'>${s.result}</td>

@@ -187,10 +187,21 @@ document.addEventListener('DOMContentLoaded', () => {
 				   body: JSON.stringify(uploadDetails)
 			   })
 			   .then(res => res.json())
-				   .then(result => { 
+			   .then(async result => {
 				   if (result.upload_id) {
-					   alert('Recipe URL uploaded successfully!');
-					   fetchAndRenderUploads();
+					   // Now send the raw HTML to /api/uploads/:id/raw to guarantee file save
+					   const putRes = await fetch(`/api/uploads/${result.upload_id}/raw`, {
+						   method: 'PUT',
+						   headers: { 'Content-Type': 'application/json' },
+						   body: JSON.stringify({ recipe_id: result.upload_id, raw_data })
+					   });
+					   const putResult = await putRes.json();
+					   if (putResult.success !== false) {
+						   alert('Recipe URL uploaded and raw HTML saved successfully!');
+						   fetchAndRenderUploads();
+					   } else {
+						   alert('Upload succeeded, but failed to save raw HTML file: ' + (putResult.error || 'Unknown error'));
+					   }
 				   } else {
 					   alert('Failed to upload recipe URL.');
 				   }
@@ -203,8 +214,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function fetchAndRenderRecipes() {
 	fetch('/api/recipes')
-		.then(res => res.json())
+		.then(res => {
+			if (!res.ok) throw new Error('Failed to fetch recipes: ' + res.status);
+			return res.json();
+		})
 		.then(data => {
+			if (!Array.isArray(data)) {
+				console.error('Recipes data is not an array:', data);
+				return;
+			}
 			// Sort: recipes with raw data first, then by name
 			data.sort((a, b) => {
 				const aHasRaw = !!(a.upload_raw_data && a.upload_raw_data.trim());
@@ -245,18 +263,8 @@ function fetchAndRenderRecipes() {
 					e.preventDefault();
 					const recipeId = this.getAttribute('data-id');
 					if (!recipeId) return;
-					// Find the row's uploaded_recipe_id if present
-					const row = btn.closest('tr');
-					let uploadedRecipeId = '';
-					if (row) {
-						const uploadedRecipeIdCell = row.querySelector('td:nth-child(2)');
-						if (uploadedRecipeIdCell) {
-							uploadedRecipeId = uploadedRecipeIdCell.textContent.trim();
-						}
-					}
-					const fileId = uploadedRecipeId || recipeId;
-					// Open the raw data file in a new blank page
-					window.open(`RawDataTXT/${fileId}.txt`, '_blank');
+					// Always use recipeID for file path
+					window.open(`RawDataTXT/${recipeId}.txt`, '_blank');
 				});
 			});
 			document.querySelectorAll('.delete-recipe-btn').forEach(btn => {
@@ -294,6 +302,11 @@ function fetchAndRenderRecipes() {
 						.catch(() => alert('Error contacting server.'));
 				});
 			});
+		})
+		.catch(err => {
+			console.error('Error fetching recipes:', err);
+			const tbody = document.querySelector('#mainRecipesTable tbody');
+			if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="color:red;">Failed to load recipes: ' + err.message + '</td></tr>';
 		});
 }
 

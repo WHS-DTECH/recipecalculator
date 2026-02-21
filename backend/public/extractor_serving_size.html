@@ -98,7 +98,7 @@
         </div>
         <table class="extractor-table">
             <thead>
-                <tr><th>Strategy</th><th>Applied</th><th>Result</th><th>Solved</th></tr>
+                <tr><th>#</th><th>Strategy</th><th>Applied</th><th>Result</th><th>Solved</th></tr>
             </thead>
             <tbody id="servingExtractorTableBody"></tbody>
         </table>
@@ -143,18 +143,12 @@
                 window.rawData = '';
                 return;
             }
-            // Find the selected recipe's uploaded_recipe_id
-            fetch('/api/recipes')
-                .then(res => res.json())
-                .then(recipes => {
-                    const recipe = recipes.find(r => r.id == selectedId);
-                    const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : selectedId;
-                    fetch(`/RawDataTXT/${fileId}.txt`)
-                        .then(res => res.ok ? res.text() : '')
-                        .then(raw => {
-                            document.getElementById('rawDataBox').textContent = raw;
-                            window.rawData = raw;
-                        });
+            // Always use recipeID for raw data file
+            fetch(`/RawDataTXT/${selectedId}.txt`)
+                .then(res => res.ok ? res.text() : '')
+                .then(raw => {
+                    document.getElementById('rawDataBox').textContent = raw;
+                    window.rawData = raw;
                 });
         });
 
@@ -201,12 +195,7 @@
             });
         }
         if (continueBtn) {
-            continueBtn.addEventListener('click', function() {
-                if (currentStep < strategies.length - 1) {
-                    currentStep++;
-                    showStep(currentStep);
-                }
-            });
+            // (Removed duplicate event handler here to prevent double increment)
         }
         const sendSolutionBtn = document.getElementById('sendSolutionBtn');
         if (sendSolutionBtn) {
@@ -235,7 +224,9 @@
     }
 
     function showStep(idx) {
+        console.log('[showStep] idx:', idx);
         if (idx >= strategies.length) {
+            console.log('[showStep] idx >= strategies.length, hiding controls');
             stepControls.style.display = 'none';
             startBtn.disabled = false;
             return;
@@ -248,6 +239,7 @@
             r.applied = (i === idx);
         });
         const s = results[idx];
+        console.log('[showStep] Showing strategy:', s.name, 'Result:', s.result);
         currentStrategyName.textContent = s.name;
         currentStrategyResult.textContent = 'Result: ' + (s.result || '(none)');
         stepControls.style.display = '';
@@ -306,17 +298,19 @@
     });
 
     continueBtn.addEventListener('click', function() {
-        // Mark this strategy as applied but not solved
-        strategies[currentStep].applied = true;
-        strategies[currentStep].solved = false;
-        currentStep++;
-        if (currentStep < strategies.length) {
+        // Only increment and show next step ONCE per click
+        if (currentStep < strategies.length - 1) {
+            currentStep++;
             showStep(currentStep);
         } else {
+            // At the end, show all strategies with none marked as applied
+            const raw = window.rawData || '';
+            const results = runStrategiesOnRawData(raw);
+            results.forEach((r) => { r.applied = false; });
             stepControls.style.display = 'none';
             startBtn.disabled = false;
+            renderServingExtractorTable(results);
         }
-        renderServingExtractorTable();
     });
         // Navbar include logic
         fetch('/_navbar.html')

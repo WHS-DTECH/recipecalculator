@@ -7,6 +7,52 @@ document.addEventListener('DOMContentLoaded', function () {
     // Assign DOM elements after DOM is loaded
     const uploadSelect = document.getElementById('uploadSelect');
     const extractBtn = document.getElementById('extractDataBtn');
+    const extractRenderedBtn = document.getElementById('extractRenderedBtn');
+        // Puppeteer-based extraction handler
+        extractRenderedBtn.addEventListener('click', function() {
+            const id = uploadSelect.value;
+            if (!id) {
+                alert('Please select an upload to extract data from.');
+                return;
+            }
+            extractRenderedBtn.disabled = true;
+            extractRenderedBtn.textContent = 'Extracting...';
+            // Fetch recipes to find the recipeID and URL for this upload
+            fetch('/api/recipes')
+                .then(res => res.json())
+                .then(recipes => {
+                    const recipe = recipes.find(r => r.uploaded_recipe_id == id);
+                    const recipeId = recipe ? recipe.id : id;
+                    const url = recipe && recipe.url ? recipe.url : null;
+                    if (!url) {
+                        alert('No URL found for this recipe.');
+                        extractRenderedBtn.disabled = false;
+                        extractRenderedBtn.textContent = 'Extract Rendered HTML (Puppeteer)';
+                        return;
+                    }
+                    // Call backend endpoint to run Puppeteer extractor
+                    fetch(`/api/extract-rendered-html?url=${encodeURIComponent(url)}`)
+                        .then(res => {
+                            if (!res.ok) throw new Error('Failed to fetch rendered HTML');
+                            return res.text();
+                        })
+                        .then(data => {
+                            rawDataInput.value = data;
+                            extractRenderedBtn.disabled = false;
+                            extractRenderedBtn.textContent = 'Extract Rendered HTML (Puppeteer)';
+                        })
+                        .catch(() => {
+                            alert('Failed to extract rendered HTML.');
+                            extractRenderedBtn.disabled = false;
+                            extractRenderedBtn.textContent = 'Extract Rendered HTML (Puppeteer)';
+                        });
+                })
+                .catch(() => {
+                    alert('Failed to extract rendered HTML.');
+                    extractRenderedBtn.disabled = false;
+                    extractRenderedBtn.textContent = 'Extract Rendered HTML (Puppeteer)';
+                });
+        });
     const rawDataInput = document.getElementById('rawDataInput');
     const saveBtn = document.getElementById('saveRawDataBtn');
 
@@ -19,20 +65,31 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         extractBtn.disabled = true;
         extractBtn.textContent = 'Extracting...';
-        // Fetch raw data for the selected upload
-        fetch(`/api/uploads/${id}`)
+        // Fetch recipes to find the recipeID for this upload
+        fetch('/api/recipes')
             .then(res => res.json())
-            .then(upload => {
-                if (upload && upload.raw_data) {
-                    rawDataInput.value = upload.raw_data;
-                } else {
-                    rawDataInput.value = '';
-                    alert('No raw data found for this upload.');
-                }
-                extractBtn.disabled = false;
-                extractBtn.textContent = 'Extract Data';
+            .then(recipes => {
+                const recipe = recipes.find(r => r.uploaded_recipe_id == id);
+                const recipeId = recipe ? recipe.id : id;
+                // Fetch raw HTML from the file endpoint
+                fetch(`/RawDataTXT/${recipeId}.txt`)
+                    .then(res => {
+                        if (!res.ok) throw new Error('File not found');
+                        return res.text();
+                    })
+                    .then(data => {
+                        rawDataInput.value = data;
+                        extractBtn.disabled = false;
+                        extractBtn.textContent = 'Extract Data';
+                    })
+                    .catch(() => {
+                        rawDataInput.value = '';
+                        alert('No raw data file found for this recipe.');
+                        extractBtn.disabled = false;
+                        extractBtn.textContent = 'Extract Data';
+                    });
             })
-            .catch(err => {
+            .catch(() => {
                 alert('Failed to extract raw data.');
                 extractBtn.disabled = false;
                 extractBtn.textContent = 'Extract Data';

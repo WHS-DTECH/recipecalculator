@@ -22,6 +22,21 @@ app.get('/api/extracted-ingredients/:id/load', (req, res) => {
   });
 });
 
+const { execFile } = require('child_process');
+// --- Puppeteer Rendered HTML Extraction Endpoint ---
+app.get('/api/extract-rendered-html', (req, res) => {
+  const url = req.query.url;
+  if (!url) return res.status(400).send('Missing url parameter');
+  const scriptPath = path.join(__dirname, 'public', 'extractor_raw_puppeteer.js');
+  execFile('node', [scriptPath, url], { timeout: 30000, maxBuffer: 5 * 1024 * 1024 }, (err, stdout, stderr) => {
+    if (err) {
+      console.error('[Puppeteer Extract Error]', err, stderr);
+      return res.status(500).send('Failed to extract rendered HTML.');
+    }
+    res.type('text/html').send(stdout);
+  });
+});
+
 
 // ...existing code...
 
@@ -707,14 +722,18 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     app.get('/api/recipes', async (req, res) => {
       // Return all main fields including uploaded_recipe_id for table display
       const sql = `
-        SELECT id, uploaded_recipe_id, name, url
+        SELECT id, uploaded_recipe_id, name, url, serving_size, ingredients, instructions, instructions_extracted, description,
+        COALESCE("Ingredients_display", ingredients) AS Ingredients_display
         FROM recipes
         ORDER BY id DESC
       `;
+      console.log('[DEBUG /api/recipes] SQL:', sql);
       try {
         const result = await pool.query(sql);
+        console.log('[DEBUG /api/recipes] Result:', result.rows);
         res.json(result.rows);
       } catch (err) {
+        console.error('[DEBUG /api/recipes] Error:', err);
         res.status(500).json({ error: err.message });
       }
     });
@@ -883,21 +902,25 @@ app.put('/api/uploads/:id/raw', (req, res) => {
       });
     });
 
-    // --- Serving Size Solution Endpoint (saves to DB) ---
-    app.post('/api/serving-size/solution', (req, res) => {
-      const { recipeId, solution } = req.body;
-      if (!recipeId || !solution) {
-        return res.status(400).json({ error: 'Recipe ID and solution are required.' });
+// --- Serving Size Solution Endpoint (saves to DB) ---
+app.post('/api/serving-size/solution', (req, res) => {
+  const { recipeId, solution } = req.body;
+  if (!recipeId || !solution) {
+    return res.status(400).json({ error: 'Recipe ID and solution are required.' });
+  }
+  pool.query('UPDATE recipes SET serving_size = $1 WHERE id = $2', [solution, recipeId])
+    .then(result => {
+      if (result.rowCount === 0) {
+        return res.status(404).json({ error: 'Recipe not found.' });
       }
-      db.run('UPDATE recipes SET serving_size = ? WHERE id = ?', [solution, recipeId], function(err) {
-        if (err) {
-          console.error('Failed to save serving size solution:', err.message);
-          return res.status(500).json({ error: err.message });
-        }
-        if (this.changes === 0) {
-          return res.status(404).json({ error: 'Recipe not found.' });
-        }
-        res.json({ success: true });
+      res.json({ success: true });
+    })
+    .catch(err => {
+      console.error('Failed to save serving size solution:', err.message);
+      return res.status(500).json({ error: err.message });
+    });
+});
+
 // --- Uploads ---
 app.put('/api/uploads/:id/raw', async (req, res) => {
   const { id } = req.params;
@@ -937,9 +960,6 @@ app.put('/api/uploads/:id/raw', async (req, res) => {
     return res.status(500).json({ success: false, error: 'Failed to update uploads table', details: err.message });
   }
 });
-        res.json({ success: true, inserted, failed });
-      }, 500);
-    });
 
     // Start server only after DB is ready
     // =========================
@@ -958,30 +978,14 @@ app.put('/api/uploads/:id/raw', async (req, res) => {
 // RawDataTXT HTML Preview Route
 // =========================
 const fs = require('fs');
+
+// Serve raw HTML file as text/plain (no preview wrapper)
 app.get('/RawDataTXT/:file', (req, res, next) => {
   const fileName = req.params.file;
   const filePath = path.join(__dirname, 'public', 'RawDataTXT', fileName);
   fs.readFile(filePath, 'utf8', (err, data) => {
     if (err) return next(); // Pass to 404 handler if not found
-    res.send(`<!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <title>Raw Data Preview - ${fileName}</title>
-        <style>
-          body { background: #222; color: #f8f8f2; font-family: 'Fira Mono', 'Consolas', monospace; margin: 0; padding: 0; }
-          .container { max-width: 900px; margin: 2rem auto; background: #282a36; border-radius: 8px; box-shadow: 0 2px 12px #0004; padding: 2rem; }
-          h2 { color: #50fa7b; margin-top: 0; }
-          pre { white-space: pre-wrap; word-break: break-word; font-size: 1.1em; line-height: 1.5; background: #23242b; padding: 1.2em; border-radius: 6px; overflow-x: auto; }
-        </style>
-      </head>
-      <body>
-        <div class="container">
-          <h2>Raw Data Preview: ${fileName}</h2>
-          <pre>${data.replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>
-        </div>
-      </body>
-      </html>`);
+    res.type('text/plain').send(data);
   });
 });
 
