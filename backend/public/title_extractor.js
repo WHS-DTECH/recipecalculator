@@ -19,12 +19,15 @@ document.addEventListener('DOMContentLoaded', function () {
   fetch('/api/recipes')
     .then(res => res.json())
     .then(recipes => {
+      console.log('[DEBUG][Dropdown] Recipes loaded:', recipes);
       recipes.forEach(recipe => {
         const opt = document.createElement('option');
         opt.value = recipe.id;
-        opt.textContent = recipe.name;
+        opt.setAttribute('data-recipeid', recipe.id);
+        opt.textContent = recipe.name + ' [ID: ' + recipe.id + ']';
         recipeSelect.appendChild(opt);
       });
+      console.log('[DEBUG][Dropdown] Options:', Array.from(recipeSelect.options).map(o => ({value: o.value, text: o.textContent, dataRecipeId: o.getAttribute('data-recipeid')})));
     });
 
   function updateRawDataBox(val) {
@@ -52,6 +55,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   recipeSelect.addEventListener('change', function () {
     currentRecipeId = recipeSelect.value;
+    const selectedOption = recipeSelect.options[recipeSelect.selectedIndex];
+    console.log('[DEBUG][Dropdown] Changed. Selected option:', selectedOption ? selectedOption.textContent : '(none)', 'RecipeID:', currentRecipeId);
     if (!currentRecipeId) {
       rawData = '';
       updateRawDataBox(rawData);
@@ -64,9 +69,10 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch('/api/recipes')
       .then(res => res.json())
       .then(recipes => {
-        const recipe = recipes.find(r => r.id == currentRecipeId);
-        const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : currentRecipeId;
-        fetch(`/RawDataTXT/${fileId}.txt`)
+        // Always use the selected RecipeID for the file name
+        const fetchUrl = `/RawDataTXT/${currentRecipeId}.txt`;
+        console.log('[DEBUG][LoadRawData] Fetching URL:', fetchUrl, 'for RecipeID:', currentRecipeId);
+        fetch(fetchUrl)
           .then(res => res.ok ? res.text() : '')
           .then(text => {
             rawData = text || '';
@@ -79,12 +85,16 @@ document.addEventListener('DOMContentLoaded', function () {
   // On page load, if a recipe is already selected, load its data and run strategies
   if (recipeSelect.value) {
     currentRecipeId = recipeSelect.value;
+    const selectedOption = recipeSelect.options[recipeSelect.selectedIndex];
+    console.log('[DEBUG][Dropdown] On page load. Selected option:', selectedOption ? selectedOption.textContent : '(none)', 'RecipeID:', currentRecipeId);
     fetch('/api/recipes')
       .then(res => res.json())
       .then(recipes => {
         const recipe = recipes.find(r => r.id == currentRecipeId);
         const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : currentRecipeId;
-        fetch(`/RawDataTXT/${fileId}.txt`)
+        const fetchUrl = `/RawDataTXT/${fileId}.txt`;
+        console.log('[DEBUG][LoadRawData] Fetching URL:', fetchUrl, 'for RecipeID:', currentRecipeId);
+        fetch(fetchUrl)
           .then(res => res.ok ? res.text() : '')
           .then(text => {
             rawData = text || '';
@@ -99,14 +109,14 @@ document.addEventListener('DOMContentLoaded', function () {
   // Define strategies for extracting the recipe name
   const strategies = [
     {
-      name: 'Look for <title> tag',
+      name: 'Look for title tag',
       fn: raw => {
         const match = raw.match(/<title[^>]*>([^<]*)<\/title>/i);
         return match ? match[1].trim() : '';
       }
     },
     {
-      name: 'Look for <h1> tag',
+      name: 'Look for h1 tag',
       fn: raw => {
         const match = raw.match(/<h1[^>]*>([^<]*)<\/h1>/i);
         return match ? match[1].trim() : '';
@@ -261,8 +271,16 @@ function showStep(index) {
 
 // Hook up SEND SOLUTION button
 sendSolutionBtn.addEventListener('click', function () {
-    if (!currentRecipeId) {
-      alert('Please select a recipe.');
+    console.log('[SEND SOLUTION] currentRecipeId:', typeof currentRecipeId, currentRecipeId);
+    console.log('[SEND SOLUTION] recipeSelect:', recipeSelect ? recipeSelect.value : '(no select)');
+    let recipeIdToSend = null;
+    if (typeof currentRecipeId !== 'undefined' && currentRecipeId) {
+      recipeIdToSend = currentRecipeId;
+    } else if (recipeSelect && recipeSelect.value) {
+      recipeIdToSend = recipeSelect.value;
+    }
+    if (!recipeIdToSend) {
+      alert('Please select a recipe. [Debug: recipeIdToSend not found]');
       return;
     }
     const solution = solutionBox.value.trim();
@@ -270,10 +288,11 @@ sendSolutionBtn.addEventListener('click', function () {
       alert('No solution to save.');
       return;
     }
+    console.log('[SEND SOLUTION] recipeIdToSend:', recipeIdToSend, 'solution:', solution);
     fetch('/api/title-extractor/solution', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipeId: currentRecipeId, solution })
+      body: JSON.stringify({ recipeId: recipeIdToSend, solution })
     })
       .then(res => res.json())
       .then(data => {

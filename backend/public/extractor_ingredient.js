@@ -2,14 +2,58 @@
 // JS for Ingredients Extractor, modeled after Instructions Extractor
 
 document.addEventListener('DOMContentLoaded', function () {
+    // Populate recipe dropdown
+    fetch('/api/recipes')
+      .then(res => res.json())
+      .then(recipes => {
+        console.log('[DEBUG][Dropdown] Recipes loaded:', recipes);
+        recipes.forEach(recipe => {
+          const opt = document.createElement('option');
+          opt.value = recipe.id;
+          opt.setAttribute('data-recipeid', recipe.id);
+          // Show both URL and RecipeID in the dropdown
+          opt.textContent = `${recipe.url || recipe.name} [ID: ${recipe.id}]`;
+          recipeSelect.appendChild(opt);
+        });
+        console.log('[DEBUG][Dropdown] Options:', Array.from(recipeSelect.options).map(o => ({value: o.value, text: o.textContent, dataRecipeId: o.getAttribute('data-recipeid')})));
+      });
   console.log('[DEBUG][GLOBAL] extractor_ingredient.js script loaded and DOMContentLoaded fired');
   const recipeSelect = document.getElementById('recipeSelect');
   const startStepBtn = document.getElementById('startStepBtn');
 
-  // --- Move Start Step-by-Step button next to recipe URL input visually ---
+  // --- Show Extraction Strategies List under Title ---
+  const strategiesList = [
+    'Hard-coded: Step 1',
+    'Find <li> tags',
+    'Find <ul> tags (all in file)',
+    'Find "ingredients" (LIKE/wildcard) near HTML ul or ol list',
+    'Extract recipeIngredient array from JSON',
+    'Find line with "recipeIngredient" (LIKE/wildcard)',
+    'Find "ingredients" (LIKE/wildcard) near comma-separated list',
+    'Look for label',
+    'Extract it from ingredient-list--content-wysiwyg',
+    'Fallback Any line',
+    'If none, returns "N/A"'
+  ];
+  const titleHeading = document.querySelector('h2');
+  if (titleHeading) {
+    const ul = document.createElement('ul');
+    ul.style.marginTop = '8px';
+    ul.style.marginBottom = '16px';
+    strategiesList.forEach(str => {
+      const li = document.createElement('li');
+      li.textContent = str;
+      ul.appendChild(li);
+    });
+    titleHeading.parentElement.insertBefore(ul, titleHeading.nextSibling);
+  }
   // Create a flex container for the select and button
   let flexDiv = null;
   let loadRawBtn = null;
+  let rawData = '';
+  const rawDataBox = document.querySelector('textarea[placeholder="Raw Data (HTML/Text)"]') || document.querySelector('textarea');
+  // Ensure currentRecipeId is always in scope for all handlers
+  let currentRecipeId = null;
   if (recipeSelect && startStepBtn) {
     flexDiv = document.createElement('div');
     flexDiv.style.display = 'flex';
@@ -26,359 +70,202 @@ document.addEventListener('DOMContentLoaded', function () {
     flexDiv.appendChild(startStepBtn);
     // Disable Start Step-by-Step until raw data is loaded
     startStepBtn.disabled = true;
-    // Attach event listener for Start Step-by-Step
-    console.log('[DEBUG] Attaching event listener to', startStepBtn);
-    startStepBtn.addEventListener('click', function () {
-      if (startStepBtn.disabled) return;
-      console.log('[DEBUG] Start Step-by-Step button clicked');
-      stepperContainer.style.display = 'block';
-      stepIndex = 0;
-      renderStepTable();
-      showStepControls();
-      showCurrentStep();
-      console.log('[DEBUG] Stepper should now be visible. stepIndex:', stepIndex);
-    });
-  }
-  const strategyTable = document.getElementById('strategyTable').getElementsByTagName('tbody')[0];
-  const solutionBox = document.getElementById('solutionBox');
-  const sendSolutionBtn = document.getElementById('sendSolutionBtn');
-  // const showRawBtn = document.getElementById('showRawBtn');
-  const rawDataBox = document.getElementById('rawDataBox');
 
-  // --- Add always-visible strategy list ---
-  const strategyListDiv = document.createElement('div');
-  strategyListDiv.id = 'strategyListDiv';
-  strategyListDiv.style.margin = '16px 0 8px 0';
-  strategyListDiv.style.padding = '10px 16px';
-  strategyListDiv.style.background = '#f8f8f8';
-  strategyListDiv.style.border = '1px solid #ddd';
-  strategyListDiv.style.borderRadius = '6px';
-  strategyListDiv.style.fontSize = '1em';
-  strategyListDiv.innerHTML =
-    '<b>Ingredient Extraction Strategies (in order):</b>' +
-    '<ol style="margin:8px 0 0 20px; padding:0;">' +
-      '<li>Hard-coded: Step 1</li>' +
-      '<li>Find li tags</li>' +
-      '<li>Find ul unordered list</li>' +
-      '<li>Find "ingredients" (LIKE/wildcard) near HTML &lt;ul&gt;/&lt;ol&gt; list</li>' +
-      '<li>Extract recipeIngredient array from JSON</li>' +
-      '<li>Find line with "recipeingredient" (LIKE/wildcard)</li>' +
-      '<li>Find "ingredients" (LIKE/wildcard) near comma-separated list</li>' +
-      '<li>Look for table</li>' +
-      '<li>Extract li from .ingredient-list--content.wysiwyg</li>' +
-      '<li>Fallback: Any line</li>' +
-      '<li>If none, returns "N/A"</li>' +
-    '</ol>';
-  // Stepper controls (created once, reused)
-  console.log('[DEBUG] DOMContentLoaded: Initializing stepper controls');
-  const stepperContainer = document.createElement('div');
-  stepperContainer.id = 'stepperContainer';
-  stepperContainer.style.margin = '16px 0 0 0';
-  stepperContainer.style.display = 'none';
-  // Stepper UI elements
-  const currentStrategyName = document.createElement('div');
-  currentStrategyName.style.fontWeight = 'bold';
-  currentStrategyName.style.margin = '8px 0 4px 0';
-  const currentStrategyResult = document.createElement('div');
-  currentStrategyResult.style.margin = '4px 0 8px 0';
-  // Use the Accept Result and Continue buttons from the top of the page
-  const acceptResultBtn = document.getElementById('acceptResultBtn');
-  const continueBtn = document.getElementById('continueBtn');
-  const stepControls = document.createElement('div');
-  stepControls.style.margin = '8px 0 0 0';
-  // Compose stepper UI
-  console.log('[DEBUG] Creating stepperContainer and UI elements');
-  stepperContainer.appendChild(currentStrategyName);
-  stepperContainer.appendChild(currentStrategyResult);
-  stepperContainer.appendChild(stepControls);
-  // Insert strategy list and stepper UI after the flex container (input + button)
-  // This ensures the input and button are together, then the strategy list, then the stepper UI
-  console.log('[DEBUG] Inserting strategyListDiv and stepperContainer into DOM');
-  if (flexDiv) {
-    flexDiv.parentElement.insertBefore(strategyListDiv, flexDiv.nextSibling);
-    strategyListDiv.parentElement.insertBefore(stepperContainer, strategyListDiv.nextSibling);
-  } else {
-    // fallback: insert after recipeSelect if flexDiv not found
-    recipeSelect.parentElement.insertBefore(strategyListDiv, recipeSelect.nextSibling);
-    strategyListDiv.parentElement.insertBefore(stepperContainer, strategyListDiv.nextSibling);
-  }
-
-  let currentRecipeId = null;
-  let rawData = '';
-
-  // Fetch recipes for dropdown
-  fetch('/api/recipes')
-    .then(res => res.json())
-    .then(recipes => {
-      recipes.forEach(recipe => {
-        const opt = document.createElement('option');
-        opt.value = recipe.id;
-        opt.textContent = recipe.name;
-        recipeSelect.appendChild(opt);
-      });
-    });
-
-  function updateRawDataBox(val) {
-    rawDataBox.value = val || '';
-  }
-
-  recipeSelect.addEventListener('change', function () {
-    currentRecipeId = recipeSelect.value;
-    rawData = '';
-    updateRawDataBox(rawData);
-    startStepBtn.disabled = true;
-  });
-
-  if (loadRawBtn) {
-    loadRawBtn.addEventListener('click', function () {
-      if (!recipeSelect.value) {
+    // Load Raw Data button event handler
+    loadRawBtn.addEventListener('click', async function () {
+      // Use RecipeID for file naming and access
+      const selectedOption = recipeSelect.options[recipeSelect.selectedIndex];
+      const recipeId = selectedOption && (selectedOption.getAttribute('data-recipeid') || selectedOption.value);
+      console.log('[DEBUG][LoadRawData] Clicked. Selected option:', selectedOption ? selectedOption.textContent : '(none)', 'RecipeID:', recipeId);
+      if (!recipeId) {
         alert('Please select a recipe.');
         return;
       }
-      // Find the selected recipe's uploaded_recipe_id
-      fetch('/api/recipes')
-        .then(res => res.json())
-        .then(recipes => {
-          const recipe = recipes.find(r => r.id == recipeSelect.value);
-          const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : recipeSelect.value;
-          fetch(`/RawDataTXT/${fileId}.txt`)
-            .then(res => res.text())
-            .then(data => {
-              rawData = data;
-              updateRawDataBox(rawData);
-              startStepBtn.disabled = false;
-            });
-        });
+      const fetchUrl = `/RawDataTXT/${recipeId}.txt`;
+      console.log('[DEBUG][LoadRawData] Fetching URL:', fetchUrl);
+      try {
+        const res = await fetch(fetchUrl);
+        console.log('[DEBUG][LoadRawData] Response status:', res.status);
+        if (!res.ok) {
+          const text = await res.text();
+          console.log('[DEBUG][LoadRawData] Response not OK. Status:', res.status, 'Body:', text);
+          throw new Error('Failed to fetch raw data');
+        }
+        rawData = await res.text();
+        console.log('[DEBUG][LoadRawData] Raw data loaded:', rawData.slice(0, 200));
+        // Ensure raw data goes to the correct textarea
+        // Find the Raw Data textarea by its label or placeholder
+        const rawDataTextarea = document.querySelector('textarea[placeholder="Raw Data (HTML/Text)"]') || document.querySelectorAll('textarea')[1];
+        if (rawDataTextarea) rawDataTextarea.value = rawData;
+        startStepBtn.disabled = false;
+      } catch (e) {
+        console.error('[DEBUG][LoadRawData] Error:', e);
+        alert('Failed to load raw data.');
+        startStepBtn.disabled = true;
+      }
     });
-  }
 
-  let stepIndex = 0;
-  let stepStrategies = [
-    // 1. Hardcoded (leave as is for now)
-    { name: 'Hard-coded: Step 1', applied: false, result: '["Cupcakes", "150g butter, softened (or Olivani Spread)", "1 ½ cups Chelsea Caster Sugar (338g)", "2 eggs ", "2 ½ cups Edmonds Self Raising Flour (375g)", "1 ¼ cups Meadow Fresh Milk (310ml)", "2 tsp vanilla extract ", "Buttercream Icing", "150g butter, softened (or Olivani Spread)", "2 ¼ cups Chelsea Icing Sugar (338g)", "2 Tbsp Meadow Fresh Milk ", "1 ½ tsp vanilla extract", "Raspberries, sugar flowers or sprinkles to decorate"]', solved: false },
-    // 2. Find <li> tags (async)
-    {
-      name: 'Find <li> tags',
-      applied: false,
-      result: '',
-      solved: false,
-      run: async function(recipeId) {
-        console.log('[DEBUG][Strategy 2] run method invoked with recipeId:', recipeId);
-        const res = await fetch(`/api/recipes`);
-        const recipes = await res.json();
-        const recipe = recipes.find(r => r.id == recipeId);
-        const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : recipeId;
-        const fetchUrl = `/RawDataTXT/${fileId}.txt`;
-        console.log('[DEBUG][Strategy 2] Fetching URL:', fetchUrl);
-        const rawRes = await fetch(fetchUrl);
-        console.log('[DEBUG][Strategy 2] Response status:', rawRes.status, rawRes.statusText);
-        const rawData = await rawRes.text();
-        console.log('[DEBUG][Strategy 2] First 500 chars of rawData:', rawData.slice(0, 500));
-        // Unescape HTML entities in rawData
-        function htmlUnescape(str) {
-          const temp = document.createElement('textarea');
-          temp.innerHTML = str;
-          return temp.value;
-        }
-        const unescapedData = htmlUnescape(rawData);
-        let items = [];
-        try {
-          // Search for all <li> tags in the entire unescaped file
-          const liMatches = [...unescapedData.matchAll(/<li[\s\S]*?>[\s\S]*?<\/li>/gi)];
-          items = liMatches.map(m => m[0].trim());
-          console.log('[DEBUG][Strategy 2] <li> tags found in entire file:', items.length);
-        } catch (e) {
-          console.error('[DEBUG][Strategy 2] regex search error:', e);
-        }
-        return items.length ? JSON.stringify(items) : '';
+    // Attach event listener for Start Step-by-Step
+    const stepControls = document.getElementById('stepControls');
+    const strategyTable = document.getElementById('strategyTable');
+    const currentStrategyName = document.getElementById('currentStrategyName');
+    const currentStrategyResult = document.getElementById('currentStrategyResult');
+    const acceptResultBtn = document.getElementById('acceptResultBtn');
+    const continueBtn = document.getElementById('continueBtn');
+    const solutionBox = document.getElementById('solutionBox');
+    const sendSolutionBtn = document.getElementById('sendSolutionBtn');
+    let currentRecipeId = null;
+
+    // Start Step-by-Step button handler
+    startStepBtn.addEventListener('click', function () {
+      currentRecipeId = recipeSelect.value;
+      if (!currentRecipeId) {
+        alert('Please select a recipe.');
+        return;
       }
-    },
-    // 2a. Find <ul> tags (async)
-    {
-      name: 'Find <ul> tags',
-      applied: false,
-      result: '',
-      solved: false,
-      run: async function(recipeId) {
-        console.log('[DEBUG][Strategy 2a] run method invoked with recipeId:', recipeId);
-        const res = await fetch(`/api/recipes`);
-        const recipes = await res.json();
-        const recipe = recipes.find(r => r.id == recipeId);
-        const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : recipeId;
-        const fetchUrl = `/RawDataTXT/${fileId}.txt`;
-        console.log('[DEBUG][Strategy 2a] Fetching URL:', fetchUrl);
-        const rawRes = await fetch(fetchUrl);
-        console.log('[DEBUG][Strategy 2a] Response status:', rawRes.status, rawRes.statusText);
-        const rawData = await rawRes.text();
-        console.log('[DEBUG][Strategy 2a] First 500 chars of rawData:', rawData.slice(0, 500));
-        // Unescape HTML entities in rawData
-        function htmlUnescape(str) {
-          const temp = document.createElement('textarea');
-          temp.innerHTML = str;
-          return temp.value;
-        }
-        const unescapedData = htmlUnescape(rawData);
-        let items = [];
-        try {
-          const ulMatches = [...unescapedData.matchAll(/<ul[^>]*>([\s\S]*?)<\/ul>/gi)];
-          items = ulMatches.map(m => m[1].trim());
-          console.log('[DEBUG][Strategy 2a] <ul> tags found in entire file:', items.length);
-        } catch (e) {
-          console.error('[DEBUG][Strategy 2a] regex search error:', e);
-        }
-        return items.length ? JSON.stringify(items) : '';
-      }
-    },
-        // 3. Find <li> tags (async, all in file)
-        {
-          name: 'Find <li> tags (all in file)',
-          applied: false,
-          result: '',
-          solved: false,
-          async run(recipeId) {
-            console.log('[DEBUG][Strategy 2] run method invoked with recipeId:', recipeId);
-            const res = await fetch(`/api/recipes`);
-            const recipes = await res.json();
-            const recipe = recipes.find(r => r.id == recipeId);
-            const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : recipeId;
-            const rawRes = await fetch(`/RawDataTXT/${fileId}.txt`);
-            const rawData = await rawRes.text();
-            // Unescape HTML entities in rawData
-            function htmlUnescape(str) {
-              const temp = document.createElement('textarea');
-              temp.innerHTML = str;
-              return temp.value;
-            }
-            const unescapedData = htmlUnescape(rawData);
-            const items = [...unescapedData.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean);
-            console.log(`[DEBUG][Strategy 2] <li> matches found:`, items.length);
-            return items.length ? JSON.stringify(items) : '';
-          }
-        },
-        // 4. Find 'ingredients' word near HTML list
-        {
-          name: 'Find "ingredients" (LIKE/wildcard) near HTML ul or ol list',
-          applied: false,
-          result: (() => {
-            if (!rawData) return '';
-            const lines = rawData.split(/\n|<br\s*\/?\s*>/i);
-            let foundIdx = lines.findIndex(line => /ingredients/i.test(line));
-            if (foundIdx === -1) {
-              foundIdx = lines.findIndex(line => /\w*ingredients\w*/i.test(line));
-            }
-            if (foundIdx !== -1) {
-              // Look for <ul> or <ol> in the next 8 lines
-              for (let i = foundIdx + 1; i < Math.min(lines.length, foundIdx + 9); i++) {
-                if (/<ul|<ol/i.test(lines[i])) {
-                  const listMatch = rawData.slice(rawData.indexOf(lines[i])).match(/<(ul|ol)[^>]*>([\s\S]*?)<\/\1>/i);
-                  if (listMatch) {
-                    const items = [...listMatch[2].matchAll(/<li[^>]*>(.*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim());
-                    return items.length ? JSON.stringify(items) : listMatch[2].replace(/<[^>]+>/g, '').trim();
-                  }
-                }
-              }
-            }
-            return '';
-          })(),
-          solved: false
-        },
-        // 5. Find recipeIngredient
-        {
-          name: 'Extract recipeIngredient array from JSON',
-          applied: false,
-          result: (() => {
-            if (!rawData) return '';
-            try {
-              const firstBrace = rawData.indexOf('{');
-              const lastBrace = rawData.lastIndexOf('}');
-              if (firstBrace !== -1 && lastBrace > firstBrace) {
-                const jsonStr = rawData.slice(firstBrace, lastBrace + 1);
-                const obj = JSON.parse(jsonStr);
-                if (obj.recipeIngredient && Array.isArray(obj.recipeIngredient)) {
-                  return JSON.stringify(obj.recipeIngredient);
-                }
-              }
-            } catch (e) {}
-            const match = rawData.match(/"recipeIngredient"\s*:\s*(\[[^\]]*\])/i);
-            if (match) {
-              try {
-                const arr = JSON.parse(match[1]);
-                if (Array.isArray(arr)) return JSON.stringify(arr);
-              } catch {}
-            }
-            return '';
-          })(),
-          solved: false
-        },
-        // 6. Find line with 'recipeingredient' (LIKE/wildcard)
-        {
-          name: 'Find line with "recipeingredient" (LIKE/wildcard)',
-          applied: false,
-          result: (() => {
-            if (!rawData) return '';
-            const lines = rawData.split(/\n|<br\s*\/?\s*>/i);
-            const foundLine = lines.find(line => /recipeingredient/i.test(line));
-            return foundLine ? foundLine.trim() : '';
-          })(),
-          solved: false
-        },
-        // 7. Find 'ingredients' (LIKE/wildcard) near comma-separated list
-        {
-          name: 'Find "ingredients" (LIKE/wildcard) near comma-separated list',
-          applied: false,
-          result: (() => {
-            if (!rawData) return '';
-            const lines = rawData.split(/\n|<br\s*\/?\s*>/i);
-            let foundIdx = lines.findIndex(line => /ingredients/i.test(line));
-            if (foundIdx === -1) {
-              foundIdx = lines.findIndex(line => /\w*ingredients\w*/i.test(line));
-            }
-            if (foundIdx !== -1) {
-              for (let i = foundIdx + 1; i < Math.min(lines.length, foundIdx + 9); i++) {
-                const jsonMatch = lines[i].match(/\[.*?\]/);
-                if (jsonMatch) {
-                  try {
-                    const arr = JSON.parse(jsonMatch[0]);
-                    if (Array.isArray(arr)) return JSON.stringify(arr);
-                  } catch {}
-                }
-                if (lines[i].split(',').length > 2) {
-                  const items = lines[i].split(',').map(s => s.replace(/^[\s"']+|[\s"']+$/g, ''));
-                  if (items.length > 2) return JSON.stringify(items);
-                }
-              }
-            }
-            return '';
-          })(),
-          solved: false
-        },
-        // 8. Look for table
-        { name: 'Look for table', applied: false, result: '', solved: false },
-        // 9. Extract <li> from .ingredient-list--content.wysiwyg
-        {
-          name: 'Extract <li> from .ingredient-list--content.wysiwyg',
-          fn: raw => {
-            const divMatch = raw.match(/<div[^>]*class=["'][^"']*ingredient-list--content wysiwyg[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-            let html = divMatch ? divMatch[1] : raw;
-            const items = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean);
-            return items.length ? items : '';
-          }
-        },
-        // 10. Fallback: Any line
-        { name: 'Fallback: Any line', applied: false, result: '', solved: false },
-        // 11. If none, returns "N/A"
-      { name: 'If none, returns "N/A"', applied: false, result: '', solved: false },
+      stepIndex = 0;
+      // Show step controls and render table
+      if (stepControls) stepControls.style.display = 'block';
+      if (strategyTable) strategyTable.style.display = '';
+      renderStepTable();
+      showCurrentStep();
+    });
+
+    stepStrategies = [
+      { name: 'Hard-coded: Step 1', applied: false, result: '["Cupcakes", "150g butter, softened (or Olivani Spread)", "1 ½ cups Chelsea Caster Sugar (338g)", "2 eggs ", "2 ½ cups Edmonds Self Raising Flour (375g)", "1 ¼ cups Meadow Fresh Milk (310ml)", "2 tsp vanilla extract ", "Buttercream Icing", "150g butter, softened (or Olivani Spread)", "2 ¼ cups Chelsea Icing Sugar (338g)", "2 Tbsp Meadow Fresh Milk ", "1 ½ tsp vanilla extract", "Raspberries, sugar flowers or sprinkles to decorate"]', solved: false },
       {
-        name: 'Extract li from .ingredient-list--content.wysiwyg',
+        name: 'Find li tags',
         applied: false,
-        result: (() => {
-          if (!rawData) return '';
-          const divMatch = rawData.match(/<div[^>]*class=["'][^"']*ingredient-list--content wysiwyg[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-          let html = divMatch ? divMatch[1] : rawData;
-          const items = [...html.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean);
-          return items.length ? JSON.stringify(items) : '';
-        })(),
-        solved: false
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          const matches = [...fileText.matchAll(/<li[^>]*>(.*?)<\/li>/gi)];
+          this.result = matches.map(m => m[1].trim()).filter(Boolean);
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Find ul tags (all in file)',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          const matches = [...fileText.matchAll(/<ul[^>]*>([\s\S]*?)<\/ul>/gi)];
+          this.result = matches.map(m => m[1].trim()).filter(Boolean);
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Find "ingredients" (LIKE/wildcard) near HTML ul or ol list',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          this.result = fileText.includes('ingredients') ? ['Found ingredients'] : [];
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Extract recipeIngredient array from JSON',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          const match = fileText.match(/"recipeIngredient"\s*:\s*(\[[\s\S]*?\])/);
+          this.result = match ? [match[1]] : [];
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Find line with "recipeIngredient" (LIKE/wildcard)',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          const lines = fileText.split('\n');
+          this.result = lines.filter(line => line.includes('recipeIngredient'));
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Find "ingredients" (LIKE/wildcard) near comma-separated list',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          this.result = fileText.includes('ingredients') ? ['Found comma-separated ingredients'] : [];
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Look for label',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          this.result = fileText.includes('label') ? ['Found label'] : [];
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Extract it from ingredient-list--content-wysiwyg',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          this.result = fileText.includes('ingredient-list--content-wysiwyg') ? ['Found wysiwyg'] : [];
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Fallback Any line',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = rawData;
+          const lines = fileText.split('\n');
+          this.result = lines;
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'If none, returns "N/A"',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          this.result = ['N/A'];
+          this.applied = true;
+          this.solved = true;
+          return this.result;
+        }
       }
     ];
 
@@ -443,13 +330,24 @@ document.addEventListener('DOMContentLoaded', function () {
       showCurrentStep();
     }
   });
+  }
 
   sendSolutionBtn.addEventListener('click', function () {
-    if (!currentRecipeId) {
-      alert('Please select a recipe.');
+    // Debugging: Log currentRecipeId and recipeSelect
+    console.log('[SEND SOLUTION] currentRecipeId:', typeof currentRecipeId, currentRecipeId);
+    console.log('[SEND SOLUTION] recipeSelect:', recipeSelect ? recipeSelect.value : '(no select)');
+    let recipeIdToSend = null;
+    if (typeof currentRecipeId !== 'undefined' && currentRecipeId) {
+      recipeIdToSend = currentRecipeId;
+    } else if (recipeSelect && recipeSelect.value) {
+      recipeIdToSend = recipeSelect.value;
+    }
+    if (!recipeIdToSend) {
+      alert('Please select a recipe. [Debug: recipeIdToSend not found]');
       return;
     }
     let solution = solutionBox.value.trim();
+    console.log('[SEND SOLUTION] recipeIdToSend:', recipeIdToSend, 'solution:', solution);
     // Clean up: remove bullet points, text boxes, and borders
     // Remove common bullet characters and leading whitespace
     solution = solution.replace(/^\s*[-•*\u2022\u25CF\u25A0]+\s*/gm, '');
@@ -468,16 +366,19 @@ document.addEventListener('DOMContentLoaded', function () {
     fetch('/api/ingredients-extractor/solution', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipeId: currentRecipeId, solution })
+      body: JSON.stringify({ recipeId: recipeIdToSend, solution })
     })
       .then(res => res.json())
       .then(data => {
         if (data.success) {
-          alert('Solution sent and record amended!');
+          alert('✅ Solution sent and record amended!');
         } else {
-          alert('Failed to send solution.');
+          alert('❌ Failed to send solution.');
         }
       })
-      .catch(() => alert('Failed to send solution.'));
+      .catch((err) => {
+        alert('❌ Failed to send solution.');
+        console.error('[SendSolution] Error:', err);
+      });
   });
 });

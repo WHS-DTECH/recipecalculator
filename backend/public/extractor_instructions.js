@@ -50,17 +50,11 @@ document.addEventListener('DOMContentLoaded', function () {
       rawData = '';
       return;
     }
-    // Find the selected recipe's uploaded_recipe_id
-    fetch('/api/recipes')
-      .then(res => res.json())
-      .then(recipes => {
-        const recipe = recipes.find(r => r.id == currentRecipeId);
-        const fileId = (recipe && recipe.uploaded_recipe_id) ? recipe.uploaded_recipe_id : currentRecipeId;
-        fetch(`/RawDataTXT/${fileId}.txt`)
-          .then(res => res.ok ? res.text() : '')
-          .then(text => {
-            rawData = text || '';
-          });
+    // Always use recipeID for file path
+    fetch(`/RawDataTXT/${currentRecipeId}.txt`)
+      .then(res => res.ok ? res.text() : '')
+      .then(text => {
+        rawData = text || '';
       });
   });
 
@@ -134,11 +128,13 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     },
     {
-      name: 'Look for "recipeInstructions" JSON',
+      name: 'Look for "recipeInstructions" and show the array',
       fn: raw => {
-        const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
-        const match = unescapedData.match(/"recipeInstructions"\s*:\s*"([^"]+)"/i);
-        return match ? match[1] : '';
+        // Extract all <p itemprop="recipeInstructions">...</p> elements from the HTML
+        const matches = [...raw.matchAll(/<p[^>]*itemprop=["']recipeInstructions["'][^>]*>([\s\S]*?)<\/p>/gi)];
+        if (!matches.length) return '';
+        // Join all matched instructions
+        return matches.map(m => m[0]).join('\n');
       }
     },
     {
@@ -150,8 +146,8 @@ document.addEventListener('DOMContentLoaded', function () {
           return match[1] + match[2];
         }
         const lines = unescapedData.split(/\n|<br\s*\/\?\s*>/i);
-        const found = lines.find(line => /instructions/i.test(line));
-        return found ? found.trim() : '';
+        const matches = lines.filter(line => /instructions/i.test(line));
+        return matches.length ? matches.map(line => line.trim()).join('\n') : '';
       }
     },
     {
@@ -194,9 +190,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function renderStepTable() {
     strategyTable.innerHTML = '';
-    stepStrategies.forEach((s) => {
+    stepStrategies.forEach((s, i) => {
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td>${i + 1}</td>
         <td>${s.name}</td>
         <td>${s.applied ? '\u2713' : '\u2014'}</td>
         <td class='extractor-result' style='color:#333;background:#f8f8ff;min-width:340px;max-width:700px;width:40vw;overflow-x:auto;white-space:pre-wrap;word-break:break-all;'>${s.result ? s.result : '<span style="color:#bbb">(no result)</span>'}</td>

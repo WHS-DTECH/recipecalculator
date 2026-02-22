@@ -38,7 +38,98 @@ app.get('/api/extract-rendered-html', (req, res) => {
 });
 
 
-// ...existing code...
+
+// --- Stepwise Cleanup Progress State ---
+let cleanupInstructionsProgress = { progress: 0, total: 0 };
+let cleanupIngredientsProgress = { progress: 0, total: 0 };
+
+// --- Stepwise Cleanup Instructions ---
+app.post('/api/recipes/cleanup-instructions-stepwise', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, instructions FROM recipes');
+    cleanupInstructionsProgress.total = result.rows.length;
+    cleanupInstructionsProgress.progress = 0;
+    for (const row of result.rows) {
+      let cleaned = row.instructions;
+      if (cleaned) {
+        cleaned = cleaned
+          .replace(/<\/p>/gi, ' ')
+          .replace(/<p>/gi, ' ')
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        await pool.query('UPDATE recipes SET instructions = $1 WHERE id = $2', [cleaned, row.id]);
+      }
+      cleanupInstructionsProgress.progress++;
+    }
+    res.json({ success: true, updated: cleanupInstructionsProgress.total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/recipes/cleanup-instructions-progress', (req, res) => {
+  res.json(cleanupInstructionsProgress);
+});
+
+// --- Stepwise Cleanup Ingredients ---
+app.post('/api/recipes/cleanup-ingredients-stepwise', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, ingredients FROM recipes');
+    cleanupIngredientsProgress.total = result.rows.length;
+    cleanupIngredientsProgress.progress = 0;
+    for (const row of result.rows) {
+      let cleaned = row.ingredients;
+      if (cleaned) {
+        cleaned = cleaned
+          .replace(/<\/p>/gi, ' ')
+          .replace(/<p>/gi, ' ')
+          .replace(/<br\s*\/?>/gi, ' ')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        await pool.query('UPDATE recipes SET ingredients_display = $1 WHERE id = $2', [cleaned, row.id]);
+      }
+      cleanupIngredientsProgress.progress++;
+    }
+    res.json({ success: true, updated: cleanupIngredientsProgress.total });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/recipes/cleanup-ingredients-progress', (req, res) => {
+  res.json(cleanupIngredientsProgress);
+});
+
+
+// --- Title Solution Endpoint (saves to DB) ---
+app.post('/api/title-extractor/solution', async (req, res) => {
+  const { recipeId, solution } = req.body;
+  console.log('[DEBUG /api/title-extractor/solution] Called with:', { recipeId, solution });
+  if (!recipeId || !solution) {
+    console.log('[DEBUG /api/title-extractor/solution] Missing recipeId or solution');
+    return res.status(400).json({ error: 'Recipe ID and solution are required.' });
+  }
+  try {
+    // Save to the "title_extracted" column (create if not exists) or fallback to "name"
+    // If you have a title_extracted column:
+    // const result = await pool.query('UPDATE recipes SET title_extracted = $1 WHERE id = $2', [solution, recipeId]);
+    // If not, fallback to updating the name:
+    const result = await pool.query('UPDATE recipes SET name = $1 WHERE id = $2', [solution, recipeId]);
+    if (result.rowCount === 0) {
+      console.log('[DEBUG /api/title-extractor/solution] No recipe found for id:', recipeId);
+      return res.status(404).json({ error: 'Recipe not found.' });
+    }
+    console.log('[DEBUG /api/title-extractor/solution] Successfully updated title for recipe id:', recipeId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[DEBUG /api/title-extractor/solution] Failed to save title solution:', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 
 // Get all uploads (for recipe selector)
 app.get('/api/uploads', async (req, res) => {
@@ -207,12 +298,13 @@ app.post('/api/ingredients-extractor/solution', (req, res) => {
     console.log('[DEBUG /api/ingredients-extractor/solution] Missing recipeId or solution');
     return res.status(400).json({ error: 'Recipe ID and solution are required.' });
   }
-  db.run('UPDATE recipes SET ingredients = ? WHERE id = ?', [solution, recipeId], function(err) {
+  // Use Postgres pool.query
+  pool.query('UPDATE recipes SET extracted_ingredients = $1 WHERE id = $2', [solution, recipeId], (err, result) => {
     if (err) {
       console.error('[DEBUG /api/ingredients-extractor/solution] Failed to save ingredients solution:', err.message);
       return res.status(500).json({ error: err.message });
     }
-    if (this.changes === 0) {
+    if (result.rowCount === 0) {
       console.log('[DEBUG /api/ingredients-extractor/solution] No recipe found for id:', recipeId);
       return res.status(404).json({ error: 'Recipe not found.' });
     }
@@ -368,21 +460,21 @@ app.get('/api/timetable/all', async (req, res) => {
 });
     // ...existing code...
     // --- Instructions Solution Endpoint (saves to DB) ---
-    app.post('/api/instructions-extractor/solution', (req, res) => {
+    app.post('/api/instructions-extractor/solution', async (req, res) => {
       const { recipeId, solution } = req.body;
       if (!recipeId || !solution) {
         return res.status(400).json({ error: 'Recipe ID and solution are required.' });
       }
-      db.run('UPDATE recipes SET instructions_extracted = ?, instructions = ? WHERE id = ?', [solution, solution, recipeId], function(err) {
-        if (err) {
-          console.error('Failed to save instructions solution:', err.message);
-          return res.status(500).json({ error: err.message });
-        }
-        if (this.changes === 0) {
+      try {
+        const result = await pool.query('UPDATE recipes SET instructions_extracted = $1, instructions = $2 WHERE id = $3', [solution, solution, recipeId]);
+        if (result.rowCount === 0) {
           return res.status(404).json({ error: 'Recipe not found.' });
         }
         res.json({ success: true });
-      });
+      } catch (err) {
+        console.error('Failed to save instructions solution:', err.message);
+        return res.status(500).json({ error: err.message });
+      }
     });
 
 
@@ -557,18 +649,7 @@ app.get('/api/timetable/all', async (req, res) => {
 app.put('/api/uploads/:id/raw', (req, res) => {
   const { id } = req.params;
   const { recipe_id, raw_data } = req.body;
-  console.log('[DEBUG /api/uploads/:id/raw] Called with:', { id, recipe_id, raw_data_length: raw_data ? raw_data.length : undefined });
-  if (!recipe_id) {
-    console.log('[DEBUG /api/uploads/:id/raw] Missing recipe_id');
-    return res.json({ success: false, error: 'Missing recipe_id' });
-  }
-  if (!raw_data) {
-    console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
-    return res.json({ success: false, error: 'Missing raw_data' });
-  }
-  const fs = require('fs');
-  const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
-  // Ensure directory exists
+  // (Removed old db.run call, now using pool.query above)
   if (!fs.existsSync(rawDataDir)) {
     fs.mkdirSync(rawDataDir, { recursive: true });
   }
@@ -722,8 +803,8 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     app.get('/api/recipes', async (req, res) => {
       // Return all main fields including uploaded_recipe_id for table display
       const sql = `
-        SELECT id, uploaded_recipe_id, name, url, serving_size, ingredients, instructions, instructions_extracted, description,
-        COALESCE("Ingredients_display", ingredients) AS Ingredients_display
+        SELECT id, uploaded_recipe_id, name, description, ingredients, serving_size, url,
+        instructions, instructions_extracted, Ingredients_display, extracted_ingredients, extracted_serving_size, extracted_instructions
         FROM recipes
         ORDER BY id DESC
       `;
