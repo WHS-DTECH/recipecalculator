@@ -127,30 +127,34 @@
     document.addEventListener('DOMContentLoaded', function() {
         // --- Recipe URL Dropdown Logic ---
         const recipeUrlSelect = document.getElementById('recipeUrlSelect');
-        // Fetch recipes and populate dropdown
-        fetch('/api/recipes')
-            .then(res => res.json())
-            .then(recipes => {
-                recipeUrlSelect.innerHTML = '<option value="">-- Select a recipe --</option>' +
-                    recipes.map(r => `<option value="${r.id}" data-url="${r.url || ''}">${r.url || r.name || 'Untitled Recipe'}</option>`).join('');
-            });
-
-        // When a recipe is chosen, fetch its raw data using uploaded_recipe_id if present
-        recipeUrlSelect.addEventListener('change', function() {
-            const selectedId = this.value;
-            if (!selectedId) {
-                document.getElementById('rawDataBox').textContent = '';
-                window.rawData = '';
-                return;
-            }
-            // Always use recipeID for raw data file
-            fetch(`/RawDataTXT/${selectedId}.txt`)
-                .then(res => res.ok ? res.text() : '')
-                .then(raw => {
-                    document.getElementById('rawDataBox').textContent = raw;
-                    window.rawData = raw;
+        if (recipeUrlSelect) {
+            // Fetch recipes and populate dropdown
+            fetch('/api/recipes')
+                .then(res => res.json())
+                .then(recipes => {
+                    recipeUrlSelect.innerHTML = '<option value="">-- Select a recipe --</option>' +
+                        recipes.map(r => `<option value="${r.id}" data-url="${r.url || ''}">${r.url || r.name || 'Untitled Recipe'}</option>`).join('');
                 });
-        });
+
+            // When a recipe is chosen, fetch its raw data using uploaded_recipe_id if present
+            recipeUrlSelect.addEventListener('change', function() {
+                const selectedId = this.value;
+                if (!selectedId) {
+                    const rawDataBox = document.getElementById('rawDataBox');
+                    if (rawDataBox) rawDataBox.textContent = '';
+                    window.rawData = '';
+                    return;
+                }
+                // Always use recipeID for raw data file
+                fetch(`/RawDataTXT/${selectedId}.txt`)
+                    .then(res => res.ok ? res.text() : '')
+                    .then(raw => {
+                        const rawDataBox = document.getElementById('rawDataBox');
+                        if (rawDataBox) rawDataBox.textContent = raw;
+                        window.rawData = raw;
+                    });
+            });
+        }
 
         // Patch: ensure window.rawData is set for modal logic
         window.rawData = typeof rawData !== 'undefined' ? rawData : '';
@@ -181,7 +185,8 @@
                     return { name: s.name, result };
                 });
                 // Set solution box to the result of the accepted strategy
-                document.getElementById('solutionBox').value = results[currentStep].result;
+                const solutionBox = document.getElementById('solutionBox');
+                if (solutionBox) solutionBox.value = results[currentStep].result;
                 // Mark this strategy as applied and solved (for table)
                 const tableResults = results.map((r, i) => ({
                     name: strategies[i].name,
@@ -190,17 +195,16 @@
                     solved: !!r.result && r.result !== 'N/A'
                 }));
                 renderServingExtractorTable(tableResults);
-                stepControls.style.display = 'none';
-                startBtn.disabled = false;
+                if (stepControls) stepControls.style.display = 'none';
+                if (startBtn) startBtn.disabled = false;
             });
         }
-        if (continueBtn) {
-            // (Removed duplicate event handler here to prevent double increment)
-        }
+        // (No continueBtn handler)
         const sendSolutionBtn = document.getElementById('sendSolutionBtn');
         if (sendSolutionBtn) {
             sendSolutionBtn.addEventListener('click', function() {
-                const solution = document.getElementById('solutionBox').value.trim();
+                const solutionBox = document.getElementById('solutionBox');
+                const solution = solutionBox ? solutionBox.value.trim() : '';
                 if (!solution) {
                     alert('Please enter a solution before sending.');
                     return;

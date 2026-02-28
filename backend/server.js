@@ -6,8 +6,8 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const PG_CONNECTION_STRING = process.env.PG_CONNECTION_STRING || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
-const pool = new Pool({ connectionString: PG_CONNECTION_STRING, ssl: { rejectUnauthorized: false } });
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
+const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
@@ -144,6 +144,20 @@ app.post('/api/title-extractor/solution', async (req, res) => {
   }
 });
 
+// --- Upload Recipe by URL ---
+app.post('/api/uploads', async (req, res) => {
+  const { recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data } = req.body;
+  try {
+    const result = await pool.query(
+      'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+      [recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data]
+    );
+    res.json({ success: true, upload_id: result.rows[0].id });
+  } catch (err) {
+    console.error('[DEBUG /api/uploads] Failed to insert upload:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Get all uploads (for recipe selector)
 app.get('/api/uploads', async (req, res) => {

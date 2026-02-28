@@ -8,6 +8,49 @@ document.addEventListener('DOMContentLoaded', function () {
     const uploadSelect = document.getElementById('uploadSelect');
     const extractBtn = document.getElementById('extractDataBtn');
     const extractRenderedBtn = document.getElementById('extractRenderedBtn');
+    const smartExtractBtn = document.getElementById('smartExtractBtn');
+                // Smart Extract button handler
+                if (smartExtractBtn) {
+                    smartExtractBtn.addEventListener('click', async function() {
+                        const id = uploadSelect.value;
+                        if (!id) {
+                            alert('Please select an upload to extract data from.');
+                            return;
+                        }
+                        smartExtractBtn.disabled = true;
+                        smartExtractBtn.textContent = 'Extracting...';
+                        // Try Extract Data logic first
+                        try {
+                            const recipes = await fetch('/api/recipes').then(res => res.json());
+                            const recipe = recipes.find(r => r.uploaded_recipe_id == id);
+                            const recipeId = recipe ? recipe.id : id;
+                            const rawRes = await fetch(`/RawDataTXT/${recipeId}.txt`);
+                            if (!rawRes.ok) throw new Error('File not found');
+                            const data = await rawRes.text();
+                            rawDataInput.value = data;
+                            smartExtractBtn.disabled = false;
+                            smartExtractBtn.textContent = 'Smart Extract';
+                            return; // Success, do not continue
+                        } catch (err) {
+                            // If failed, try Extract Rendered HTML logic
+                            try {
+                                const recipes = await fetch('/api/recipes').then(res => res.json());
+                                const recipe = recipes.find(r => r.uploaded_recipe_id == id);
+                                const url = recipe && recipe.url ? recipe.url : null;
+                                if (!url) throw new Error('No URL found for this recipe.');
+                                const htmlRes = await fetch(`/api/extract-rendered-html?url=${encodeURIComponent(url)}`);
+                                if (!htmlRes.ok) throw new Error('Failed to fetch rendered HTML');
+                                const htmlData = await htmlRes.text();
+                                rawDataInput.value = htmlData;
+                            } catch (err2) {
+                                alert('Failed to extract raw data and rendered HTML.');
+                            } finally {
+                                smartExtractBtn.disabled = false;
+                                smartExtractBtn.textContent = 'Smart Extract';
+                            }
+                        }
+                    });
+                }
         // Puppeteer-based extraction handler
         extractRenderedBtn.addEventListener('click', function() {
             const id = uploadSelect.value;

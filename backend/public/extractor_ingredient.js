@@ -2,6 +2,8 @@
 // JS for Ingredients Extractor, modeled after Instructions Extractor
 
 document.addEventListener('DOMContentLoaded', function () {
+      // Fix: Declare stepIndex at the top for global access
+      let stepIndex = 0;
     // Populate recipe dropdown
     fetch('/api/recipes')
       .then(res => res.json())
@@ -47,33 +49,25 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     titleHeading.parentElement.insertBefore(ul, titleHeading.nextSibling);
   }
-  // Create a flex container for the select and button
-  let flexDiv = null;
-  let loadRawBtn = null;
   let rawData = '';
   const rawDataBox = document.querySelector('textarea[placeholder="Raw Data (HTML/Text)"]') || document.querySelector('textarea');
-  // Ensure currentRecipeId is always in scope for all handlers
   let currentRecipeId = null;
-  if (recipeSelect && startStepBtn) {
-    flexDiv = document.createElement('div');
-    flexDiv.style.display = 'flex';
-    flexDiv.style.alignItems = 'center';
-    flexDiv.style.gap = '12px';
-    // Create Load Raw Data button
-    loadRawBtn = document.createElement('button');
-    loadRawBtn.textContent = 'Load Raw Data';
-    loadRawBtn.id = 'loadRawBtn';
-    // Insert the select and buttons into the flex container
-    recipeSelect.parentElement.insertBefore(flexDiv, recipeSelect);
-    flexDiv.appendChild(recipeSelect);
-    flexDiv.appendChild(loadRawBtn);
-    flexDiv.appendChild(startStepBtn);
-    // Disable Start Step-by-Step until raw data is loaded
-    startStepBtn.disabled = true;
+  // Use static buttons from HTML
+  const loadRawBtn = document.getElementById('loadRawBtn');
+  const stepControls = document.getElementById('stepControls');
+  const strategyTable = document.getElementById('strategyTable');
+  const currentStrategyName = document.getElementById('currentStrategyName');
+  const currentStrategyResult = document.getElementById('currentStrategyResult');
+  const acceptResultBtn = document.getElementById('acceptResultBtn');
+  const continueBtn = document.getElementById('continueBtn');
+  const solutionBox = document.getElementById('solutionBox');
+  const sendSolutionBtn = document.getElementById('sendSolutionBtn');
+  // Disable Start Step-by-Step until raw data is loaded
+  if (startStepBtn) startStepBtn.disabled = true;
 
-    // Load Raw Data button event handler
+  // Load Raw Data button event handler
+  if (loadRawBtn) {
     loadRawBtn.addEventListener('click', async function () {
-      // Use RecipeID for file naming and access
       const selectedOption = recipeSelect.options[recipeSelect.selectedIndex];
       const recipeId = selectedOption && (selectedOption.getAttribute('data-recipeid') || selectedOption.value);
       console.log('[DEBUG][LoadRawData] Clicked. Selected option:', selectedOption ? selectedOption.textContent : '(none)', 'RecipeID:', recipeId);
@@ -93,28 +87,16 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         rawData = await res.text();
         console.log('[DEBUG][LoadRawData] Raw data loaded:', rawData.slice(0, 200));
-        // Ensure raw data goes to the correct textarea
-        // Find the Raw Data textarea by its label or placeholder
         const rawDataTextarea = document.querySelector('textarea[placeholder="Raw Data (HTML/Text)"]') || document.querySelectorAll('textarea')[1];
         if (rawDataTextarea) rawDataTextarea.value = rawData;
-        startStepBtn.disabled = false;
+        if (startStepBtn) startStepBtn.disabled = false;
       } catch (e) {
         console.error('[DEBUG][LoadRawData] Error:', e);
         alert('Failed to load raw data.');
-        startStepBtn.disabled = true;
+        if (startStepBtn) startStepBtn.disabled = true;
       }
     });
-
-    // Attach event listener for Start Step-by-Step
-    const stepControls = document.getElementById('stepControls');
-    const strategyTable = document.getElementById('strategyTable');
-    const currentStrategyName = document.getElementById('currentStrategyName');
-    const currentStrategyResult = document.getElementById('currentStrategyResult');
-    const acceptResultBtn = document.getElementById('acceptResultBtn');
-    const continueBtn = document.getElementById('continueBtn');
-    const solutionBox = document.getElementById('solutionBox');
-    const sendSolutionBtn = document.getElementById('sendSolutionBtn');
-    let currentRecipeId = null;
+  }
 
     // Start Step-by-Step button handler
     startStepBtn.addEventListener('click', function () {
