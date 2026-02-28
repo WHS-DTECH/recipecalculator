@@ -37,6 +37,40 @@ app.get('/api/extract-rendered-html', (req, res) => {
   });
 });
 
+// --- Sync All Recipes to Display Table ---
+app.post('/api/recipes/sync-all-to-display', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM recipes');
+    let count = 0;
+    for (const recipe of result.rows) {
+      const upsertSql = `
+        INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (recipeid) DO UPDATE SET
+          name = EXCLUDED.name,
+          description = EXCLUDED.description,
+          ingredients = EXCLUDED.ingredients,
+          serving_size = EXCLUDED.serving_size,
+          url = EXCLUDED.url,
+          instructions = EXCLUDED.instructions
+      `;
+      await pool.query(upsertSql, [
+        recipe.name,
+        recipe.description,
+        recipe.ingredients_display,
+        recipe.serving_size,
+        recipe.url,
+        recipe.instructions,
+        recipe.id
+      ]);
+      count++;
+    }
+    res.json({ success: true, count });
+  } catch (err) {
+    console.error('[SYNC ALL TO DISPLAY][ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 
 // --- Stepwise Cleanup Progress State ---
@@ -76,17 +110,17 @@ app.get('/api/recipes/cleanup-instructions-progress', (req, res) => {
 // --- Stepwise Cleanup Ingredients ---
 app.post('/api/recipes/cleanup-ingredients-stepwise', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, ingredients FROM recipes');
+    const result = await pool.query('SELECT id, ingredients, extracted_ingredients FROM recipes');
     cleanupIngredientsProgress.total = result.rows.length;
     cleanupIngredientsProgress.progress = 0;
     for (const row of result.rows) {
-      let cleaned = row.ingredients;
-      console.log(`[CLEANUP][ROW] id=${row.id}, original ingredients=`, row.ingredients);
+      let cleaned = row.extracted_ingredients && row.extracted_ingredients.trim() ? row.extracted_ingredients : row.ingredients;
+      console.log(`[CLEANUP][ROW] id=${row.id}, original to clean=`, cleaned);
       if (cleaned) {
         // Remove HTML tags
         cleaned = cleaned.replace(/<[^>]+>/g, '');
         // Remove bullet points (•, *, -, etc.) at line start
-        cleaned = cleaned.replace(/^\s*[-•*\u2022\u25CF\u25A0]+\s*/gm, '');
+        cleaned = cleaned.replace(/^[\s]*[-•*\u2022\u25CF\u25A0]+[\s]*/gm, '');
         // Remove all brackets []
         cleaned = cleaned.replace(/[\[\]]/g, '');
         // Remove all double quotes
@@ -850,10 +884,19 @@ app.put('/api/uploads/:id/raw', (req, res) => {
         const recipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [id]);
         if (recipeResult.rows.length === 0) return res.status(404).json({ error: 'Recipe not found.' });
         const recipe = recipeResult.rows[0];
-        // Insert into recipe_display table (only required fields)
-        const insertSql = `INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
-          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`;
-        const insertResult = await pool.query(insertSql, [
+        // Upsert into recipe_display table (update if exists, insert if not)
+        const upsertSql = `
+          INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (recipeid) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            ingredients = EXCLUDED.ingredients,
+            serving_size = EXCLUDED.serving_size,
+            url = EXCLUDED.url,
+            instructions = EXCLUDED.instructions
+          RETURNING id`;
+        const upsertResult = await pool.query(upsertSql, [
           recipe.name,
           recipe.description,
           recipe.ingredients_display, // ingredients = ingredients_display
@@ -862,7 +905,7 @@ app.put('/api/uploads/:id/raw', (req, res) => {
           recipe.instructions,
           recipe.id // recipeID
         ]);
-        res.json({ success: true, display_id: insertResult.rows[0].id });
+        res.json({ success: true, display_id: upsertResult.rows[0].id });
       } catch (err) {
         console.error('[DISPLAY][ERROR]', err);
         res.status(500).json({ error: err.message });

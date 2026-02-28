@@ -1,3 +1,26 @@
+// --- Sync All Recipes to Display ---
+document.addEventListener('DOMContentLoaded', () => {
+	const syncBtn = document.getElementById('syncAllToDisplayBtn');
+	if (syncBtn) {
+		syncBtn.addEventListener('click', async () => {
+			if (!confirm('Sync ALL recipes to the display table? This will overwrite existing display records. Continue?')) return;
+			syncBtn.disabled = true;
+			try {
+				const resp = await fetch('/api/recipes/sync-all-to-display', { method: 'POST' });
+				const data = await resp.json();
+				if (data.success) {
+					alert(`Synced ${data.count} recipes to display table!`);
+					fetchAndRenderRecipes();
+				} else {
+					alert('Failed to sync recipes: ' + (data.error || 'Unknown error'));
+				}
+			} catch (err) {
+				alert('Error syncing recipes: ' + err.message);
+			}
+			syncBtn.disabled = false;
+		});
+	}
+});
 // Add event listener for Display button (put recipe into recipe_display table)
 document.addEventListener('DOMContentLoaded', () => {
 	document.body.addEventListener('click', async function(e) {
@@ -241,7 +264,7 @@ function fetchAndRenderRecipes() {
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.uploaded_recipe_id || ''}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.name || (recipe.url ? `<a href='${recipe.url}' target='_blank'>${recipe.url}</a>` : '')}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.description || ''}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.ingredients || ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.extracted_ingredients || ''}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 1.5rem; min-width:220px; color:#1976d2; white-space:normal; word-break:break-word;' class='ingredients-display-cell'></td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.serving_size || ''}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.instructions || ''}</td>

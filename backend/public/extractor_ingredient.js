@@ -2,26 +2,27 @@
 // JS for Ingredients Extractor, modeled after Instructions Extractor
 
 document.addEventListener('DOMContentLoaded', function () {
-      // Fix: Declare stepIndex at the top for global access
-      let stepIndex = 0;
-    // Populate recipe dropdown
-    fetch('/api/recipes')
-      .then(res => res.json())
-      .then(recipes => {
-        console.log('[DEBUG][Dropdown] Recipes loaded:', recipes);
-        recipes.forEach(recipe => {
-          const opt = document.createElement('option');
-          opt.value = recipe.id;
-          opt.setAttribute('data-recipeid', recipe.id);
-          // Show both URL and RecipeID in the dropdown
-          opt.textContent = `${recipe.url || recipe.name} [ID: ${recipe.id}]`;
-          recipeSelect.appendChild(opt);
-        });
-        console.log('[DEBUG][Dropdown] Options:', Array.from(recipeSelect.options).map(o => ({value: o.value, text: o.textContent, dataRecipeId: o.getAttribute('data-recipeid')})));
-      });
-  console.log('[DEBUG][GLOBAL] extractor_ingredient.js script loaded and DOMContentLoaded fired');
+  // Fix: Declare stepIndex and recipeSelect at the top for global access
+  let stepIndex = 0;
   const recipeSelect = document.getElementById('recipeSelect');
   const startStepBtn = document.getElementById('startStepBtn');
+  const smartBtn = document.getElementById('smartBtn');
+  // Populate recipe dropdown
+  fetch('/api/recipes')
+    .then(res => res.json())
+    .then(recipes => {
+      console.log('[DEBUG][Dropdown] Recipes loaded:', recipes);
+      recipes.forEach(recipe => {
+        const opt = document.createElement('option');
+        opt.value = recipe.id;
+        opt.setAttribute('data-recipeid', recipe.id);
+        // Show both URL and RecipeID in the dropdown
+        opt.textContent = `${recipe.url || recipe.name} [ID: ${recipe.id}]`;
+        recipeSelect.appendChild(opt);
+      });
+      console.log('[DEBUG][Dropdown] Options:', Array.from(recipeSelect.options).map(o => ({value: o.value, text: o.textContent, dataRecipeId: o.getAttribute('data-recipeid')})));
+    });
+  console.log('[DEBUG][GLOBAL] extractor_ingredient.js script loaded and DOMContentLoaded fired');
 
   // --- Show Extraction Strategies List under Title ---
   const strategiesList = [
@@ -98,6 +99,59 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+    // Check if loadRawDataForRecipe is defined before calling it
+    if (smartBtn) {
+      smartBtn.addEventListener('click', function () {
+        const selectedId = recipeSelect.value;
+        if (!selectedId) {
+          alert('Please select a recipe.');
+          return;
+        }
+        smartBtn.disabled = true;
+        if (typeof loadRawDataForRecipe === 'function') {
+          loadRawDataForRecipe(selectedId, function(success) {
+            if (success) {
+              if (startStepBtn) startStepBtn.disabled = false;
+              startStepBtn.click();
+            } else {
+              alert('Failed to load raw data.');
+            }
+            smartBtn.disabled = false;
+          });
+        } else {
+          console.error('loadRawDataForRecipe is not defined. Please define the function or check the function name.');
+          alert('Error: loadRawDataForRecipe is not defined. Please contact the developer.');
+          smartBtn.disabled = false;
+        }
+      });
+    }
+  // Refactor loadRawDataForRecipe to accept callback
+  function loadRawDataForRecipe(recipeId, callback) {
+    if (!recipeId) { if (callback) callback(false); return; }
+    const rawDataBox = document.getElementById('rawDataBox');
+    const url = `/RawDataTXT/${recipeId}.txt`;
+    if (startStepBtn) startStepBtn.disabled = true;
+    fetch(url)
+      .then(res => {
+        if (!res.ok) throw new Error('Failed to fetch raw data');
+        return res.text();
+      })
+      .then(data => {
+        rawDataBox.value = data;
+        rawData = data;
+        if (startStepBtn) startStepBtn.disabled = false;
+        console.log('[DEBUG][AutoLoadRawData] Raw data loaded for recipeId:', recipeId);
+        if (callback) callback(true);
+      })
+      .catch(err => {
+        rawDataBox.value = '[Error loading raw data]';
+        rawData = '';
+        if (startStepBtn) startStepBtn.disabled = true;
+        console.error('[AutoLoadRawData] Error loading raw data:', err);
+        if (callback) callback(false);
+      });
+  }
+
     // Start Step-by-Step button handler
     startStepBtn.addEventListener('click', function () {
       currentRecipeId = recipeSelect.value;
@@ -113,7 +167,7 @@ document.addEventListener('DOMContentLoaded', function () {
       showCurrentStep();
     });
 
-    stepStrategies = [
+    const stepStrategies = [
       { name: 'Hard-coded: Step 1', applied: false, result: '["Cupcakes", "150g butter, softened (or Olivani Spread)", "1 ½ cups Chelsea Caster Sugar (338g)", "2 eggs ", "2 ½ cups Edmonds Self Raising Flour (375g)", "1 ¼ cups Meadow Fresh Milk (310ml)", "2 tsp vanilla extract ", "Buttercream Icing", "150g butter, softened (or Olivani Spread)", "2 ¼ cups Chelsea Icing Sugar (338g)", "2 Tbsp Meadow Fresh Milk ", "1 ½ tsp vanilla extract", "Raspberries, sugar flowers or sprinkles to decorate"]', solved: false },
       {
         name: 'Find li tags',
@@ -312,55 +366,74 @@ document.addEventListener('DOMContentLoaded', function () {
       showCurrentStep();
     }
   });
-  }
 
-  sendSolutionBtn.addEventListener('click', function () {
-    // Debugging: Log currentRecipeId and recipeSelect
-    console.log('[SEND SOLUTION] currentRecipeId:', typeof currentRecipeId, currentRecipeId);
-    console.log('[SEND SOLUTION] recipeSelect:', recipeSelect ? recipeSelect.value : '(no select)');
-    let recipeIdToSend = null;
-    if (typeof currentRecipeId !== 'undefined' && currentRecipeId) {
-      recipeIdToSend = currentRecipeId;
-    } else if (recipeSelect && recipeSelect.value) {
-      recipeIdToSend = recipeSelect.value;
-    }
-    if (!recipeIdToSend) {
-      alert('Please select a recipe. [Debug: recipeIdToSend not found]');
-      return;
-    }
-    let solution = solutionBox.value.trim();
-    console.log('[SEND SOLUTION] recipeIdToSend:', recipeIdToSend, 'solution:', solution);
-    // Clean up: remove bullet points, text boxes, and borders
-    // Remove common bullet characters and leading whitespace
-    solution = solution.replace(/^\s*[-•*\u2022\u25CF\u25A0]+\s*/gm, '');
-    // Remove any input boxes (if HTML remains)
-    solution = solution.replace(/<input[^>]*>/gi, '');
-    // Remove visible box drawing characters (rare, but for safety)
-    solution = solution.replace(/[\u2500-\u257F]/g, '');
-    // Remove extra borders (if any left as text)
-    solution = solution.replace(/border(:|=)[^;\n]+[;\n]?/gi, '');
-    // Remove any remaining empty lines
-    solution = solution.replace(/^\s*\n/gm, '');
-    if (!solution) {
-      alert('Please enter a solution.');
-      return;
-    }
-    fetch('/api/ingredients-extractor/solution', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipeId: recipeIdToSend, solution })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.success) {
-          alert('✅ Solution sent and record amended!');
-        } else {
-          alert('❌ Failed to send solution.');
-        }
+    sendSolutionBtn.addEventListener('click', function () {
+      // Debugging: Log currentRecipeId and recipeSelect
+      console.log('[SEND SOLUTION] currentRecipeId:', typeof currentRecipeId, currentRecipeId);
+      console.log('[SEND SOLUTION] recipeSelect:', recipeSelect ? recipeSelect.value : '(no select)');
+      let recipeIdToSend = null;
+      if (typeof currentRecipeId !== 'undefined' && currentRecipeId) {
+        recipeIdToSend = currentRecipeId;
+      } else if (recipeSelect && recipeSelect.value) {
+        recipeIdToSend = recipeSelect.value;
+      }
+      if (!recipeIdToSend) {
+        alert('Please select a recipe. [Debug: recipeIdToSend not found]');
+        return;
+      }
+      let solution = solutionBox.value.trim();
+      console.log('[SEND SOLUTION] recipeIdToSend:', recipeIdToSend, 'solution:', solution);
+      // Clean up: remove bullet points, text boxes, and borders
+      // Remove common bullet characters and leading whitespace
+      solution = solution.replace(/^\s*[-•*\u2022\u25CF\u25A0]+\s*/gm, '');
+      // Remove any input boxes (if HTML remains)
+      solution = solution.replace(/<input[^>]*>/gi, '');
+      // Remove visible box drawing characters (rare, but for safety)
+      solution = solution.replace(/[\u2500-\u257F]/g, '');
+      // Remove extra borders (if any left as text)
+      solution = solution.replace(/border(:|=)[^;\n]+[;\n]?/gi, '');
+      // Remove any remaining empty lines
+      solution = solution.replace(/^\s*\n/gm, '');
+      if (!solution) {
+        alert('Please enter a solution.');
+        return;
+      }
+      fetch('/api/ingredients-extractor/solution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId: recipeIdToSend, solution })
       })
-      .catch((err) => {
-        alert('❌ Failed to send solution.');
-        console.error('[SendSolution] Error:', err);
-      });
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            alert('✅ Solution sent and record amended!');
+          } else {
+            alert('❌ Failed to send solution.');
+          }
+        })
+        .catch((err) => {
+          alert('❌ Failed to send solution.');
+          console.error('[SendSolution] Error:', err);
+        });
+    });
   });
-});
+
+  if (smartBtn) {
+    smartBtn.addEventListener('click', function () {
+      const selectedId = recipeSelect.value;
+      if (!selectedId) {
+        alert('Please select a recipe.');
+        return;
+      }
+      smartBtn.disabled = true;
+      loadRawDataForRecipe(selectedId, function(success) {
+        if (success) {
+          if (startStepBtn) startStepBtn.disabled = false;
+          startStepBtn.click();
+        } else {
+          alert('Failed to load raw data.');
+        }
+        smartBtn.disabled = false;
+      });
+    });
+  }

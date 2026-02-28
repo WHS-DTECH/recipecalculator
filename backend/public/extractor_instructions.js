@@ -128,6 +128,17 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     },
     {
+      name: 'Look for "recipeInstructions" as plain string',
+      fn: raw => {
+        // Find "recipeInstructions": "..." (across newlines, up to next quote)
+        const match = raw.match(/"recipeInstructions"\s*:\s*"([\s\S]*?)"/i);
+        if (match) {
+          return match[1].trim();
+        }
+        return '';
+      }
+    },
+    {
       name: 'Look for "recipeInstructions" and show the array',
       fn: raw => {
         // Extract all <p itemprop="recipeInstructions">...</p> elements from the HTML
