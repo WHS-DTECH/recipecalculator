@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   let currentRecipeId = null;
   let rawData = '';
+  // Disable Start Step-by-step until rawData is loaded
+  startStepBtn.disabled = true;
 
   // Fetch recipes for dropdown
   fetch('/api/recipes')
@@ -46,8 +48,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
   recipeSelect.addEventListener('change', function () {
     currentRecipeId = recipeSelect.value;
+    rawData = '';
+    startStepBtn.disabled = true;
     if (!currentRecipeId) {
-      rawData = '';
       return;
     }
     // Always use recipeID for file path
@@ -55,6 +58,8 @@ document.addEventListener('DOMContentLoaded', function () {
       .then(res => res.ok ? res.text() : '')
       .then(text => {
         rawData = text || '';
+        console.log('[DEBUG] rawData loaded. Length:', rawData.length, 'Preview:', rawData.slice(0, 300));
+        startStepBtn.disabled = false;
       });
   });
 
@@ -130,10 +135,77 @@ document.addEventListener('DOMContentLoaded', function () {
     {
       name: 'Look for "recipeInstructions" as plain string',
       fn: raw => {
-        // Find "recipeInstructions": "..." (across newlines, up to next quote)
-        const match = raw.match(/"recipeInstructions"\s*:\s*"([\s\S]*?)"/i);
-        if (match) {
-          return match[1].trim();
+        // Robustly find all <script type="application/ld+json"> blocks regardless of whitespace, newlines, or attribute order
+        // Make script tag splitting and detection case-insensitive
+        // Replace all </script> (any case) with a unique marker, then split on <script (any case)
+        const RAW_SCRIPT_END = '___SCRIPT_END___';
+        const rawNorm = raw.replace(/<\/script>/gi, RAW_SCRIPT_END);
+        const blocks = rawNorm.split(/<script/i).slice(1); // skip first split part (before first <script)
+        console.log('[DEBUG] Number of <script> blocks found:', blocks.length);
+        let found = false;
+        let blockNum = 0;
+        for (const block of blocks) {
+          blockNum++;
+          const endIdx = block.indexOf(RAW_SCRIPT_END);
+          if (endIdx === -1) {
+            console.log(`[DEBUG] Block ${blockNum}: No </script> found, skipping.`);
+            continue;
+          }
+          const tagAndContent = block.slice(0, endIdx);
+          console.log(`[DEBUG] Block ${blockNum}: First 300 chars:`, tagAndContent.slice(0, 300));
+          // Check for type="application/ld+json" (allow whitespace, single/double quotes, any attribute order, case-insensitive)
+          if (/type\s*=\s*['"]application\/ld\+json['"]/i.test(tagAndContent)) {
+            found = true;
+            console.log(`[DEBUG] Block ${blockNum}: Matched type="application/ld+json"`);
+            // Remove everything before the first > (end of opening tag)
+            const gtIdx = tagAndContent.indexOf('>');
+            if (gtIdx === -1) {
+              console.log(`[DEBUG] Block ${blockNum}: No > found in opening tag, skipping.`);
+              continue;
+            }
+            const jsonText = tagAndContent.slice(gtIdx + 1);
+            // Try regex first
+            const regex = /"recipeInstructions"\s*:\s*"([\s\S]*?)"/i;
+            let match = jsonText.match(regex);
+            console.log('[DEBUG] Searching JSON-LD block for recipeInstructions:', jsonText.slice(0, 300));
+            if (match) {
+              let value = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '\r');
+              console.log('[DEBUG] extracted value (regex):', value);
+              return value.trim();
+            }
+            // Fallback: plain string search
+            const idx = jsonText.indexOf('recipeInstructions');
+            if (idx !== -1) {
+              // Try to extract the value manually
+              const after = jsonText.slice(idx);
+              // Find the first colon after 'recipeInstructions'
+              const colonIdx = after.indexOf(':');
+              if (colonIdx !== -1) {
+                // Find the first quote after the colon
+                const quoteIdx = after.indexOf('"', colonIdx);
+                if (quoteIdx !== -1) {
+                  // Find the closing quote (not escaped)
+                  let endIdx = quoteIdx + 1;
+                  let value = '';
+                  while (endIdx < after.length) {
+                    if (after[endIdx] === '"' && after[endIdx - 1] !== '\\') {
+                      value = after.slice(quoteIdx + 1, endIdx);
+                      break;
+                    }
+                    endIdx++;
+                  }
+                  value = value.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '\r');
+                  console.log('[DEBUG] extracted value (plain search):', value);
+                  return value.trim();
+                }
+              }
+            }
+          } else {
+            console.log(`[DEBUG] Block ${blockNum}: type="application/ld+json" NOT found.`);
+          }
+        }
+        if (!found) {
+          console.log('[DEBUG] No JSON-LD script blocks found.');
         }
         return '';
       }
@@ -172,12 +244,17 @@ document.addEventListener('DOMContentLoaded', function () {
       alert('Please select a recipe first.');
       return;
     }
+    if (!rawData || rawData.length < 100) {
+      alert('Raw data not loaded yet. Please wait and try again.');
+      console.log('[DEBUG] Attempted to run strategies with rawData length:', rawData.length, 'Preview:', rawData.slice(0, 300));
+      return;
+    }
     // Run all strategies on the current rawData
-      // Remove common HTML banners/headers/navs before running strategies
-      let cleanedRawData = rawData;
-      cleanedRawData = cleanedRawData.replace(/<header[\s\S]*?<\/header>/gi, '');
-      cleanedRawData = cleanedRawData.replace(/<nav[\s\S]*?<\/nav>/gi, '');
-      cleanedRawData = cleanedRawData.replace(/<footer[\s\S]*?<\/footer>/gi, '');
+    // Remove common HTML banners/headers/navs before running strategies
+    let cleanedRawData = rawData;
+    cleanedRawData = cleanedRawData.replace(/<header[\s\S]*?<\/header>/gi, '');
+    cleanedRawData = cleanedRawData.replace(/<nav[\s\S]*?<\/nav>/gi, '');
+    cleanedRawData = cleanedRawData.replace(/<footer[\s\S]*?<\/footer>/gi, '');
       cleanedRawData = cleanedRawData.replace(/<div[^>]*(class|id)=["'][^"']*(banner|header|nav)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
       cleanedRawData = cleanedRawData.replace(/<section[^>]*(class|id)=["'][^"']*(banner|header|nav)[^"']*["'][^>]*>[\s\S]*?<\/section>/gi, '');
       cleanedRawData = cleanedRawData.replace(/<style[\s\S]*?<\/style>/gi, '');

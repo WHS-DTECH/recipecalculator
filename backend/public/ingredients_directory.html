@@ -553,7 +553,6 @@
             }
           });
         </script>
-                </script>
     <div id="reformat-status" style="margin-bottom:1.5rem;"></div>
     <!-- Duplicate removed: ingredients-inventory-table -->
       <div id="ingredients-inventory-debug-table"></div>
@@ -725,10 +724,13 @@
         .catch(() => { if (!auto) alert('Error contacting server.'); });
     }
   </script>
-  <script>      <!-- All main scripts moved to end of body for reliability -->
-          const textArea = document.getElementById('textConvertArea');
-          if (convertFragmentBtn && textArea) {
-            convertFragmentBtn.addEventListener('click', function() {
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      <!-- All main scripts moved to end of body for reliability -->
+      const convertFragmentBtn = document.getElementById('convertFragmentBtn');
+      const textArea = document.getElementById('textConvertArea');
+      if (convertFragmentBtn && textArea) {
+        convertFragmentBtn.addEventListener('click', function() {
               let text = textArea.value.trim();
               // Remove any 'recipeIngredient' label and extract the array if present
               let arrayMatch = text.match(/"recipeIngredient"\s*:\s*(\[.*?\])/s);
@@ -810,37 +812,35 @@
               text = lines.join('\n');
               textArea.value = text;
 
-              // ...existing code...
-
-              // After conversion, trigger reformat ingredients (reformat API)
-              // No longer trigger global reformat here. Only process the current recipe as needed.
-                          // After conversion, trigger split-quantity for the selected recipe only
-                          const recipeId = document.getElementById('recipeSelectForText').value;
-                          if (recipeId) {
-            fetch('/api/ingredients/inventory/split-quantity', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ recipe_id: recipeId })
-            })
-            .then(res => res.json())
-            .then(data => {
-              if (data.success) {
-                document.getElementById('reformat-status').innerHTML = '<span style="color:green;">Quantities and food items split for this recipe!</span>';
+              // After conversion, trigger split-quantity for the selected recipe only
+              const recipeId = document.getElementById('recipeSelectForText').value;
+              if (recipeId) {
+                fetch('/api/ingredients/inventory/split-quantity', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ recipe_id: recipeId })
+                })
+                .then(res => res.json())
+                .then(data => {
+                  if (data.success) {
+                    document.getElementById('reformat-status').innerHTML = '<span style="color:green;">Quantities and food items split for this recipe!</span>';
+                  }
+                  fetch('/api/ingredients/inventory/save-bulk', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ingredients: lines.map(line => ({ ingredient_name: line, recipe_id: recipeId })) })
+                  })
+                  .catch(() => {
+                    document.getElementById('reformat-status').innerHTML = '<span style="color:red;">Error contacting server.</span>';
+                  });
+                })
+                .catch(() => {
+                  document.getElementById('reformat-status').innerHTML = '<span style="color:red;">Error contacting server.</span>';
+                });
               }
-              fetch('/api/ingredients/inventory/save-bulk', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ingredients: lines.map(line => ({ ingredient_name: line, recipe_id: recipeId })) })
-              })
-              .catch(() => {
-                document.getElementById('reformat-status').innerHTML = '<span style="color:red;">Error contacting server.</span>';
-              });
-            })
-            .catch(() => {
-              document.getElementById('reformat-status').innerHTML = '<span style="color:red;">Error contacting server.</span>';
             });
           }
-        });
+    });
   </script>
   <script>
     //DELETE ALL: Remove from both inventory and main ingredients table, then refresh
