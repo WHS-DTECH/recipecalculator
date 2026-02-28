@@ -81,20 +81,34 @@ app.post('/api/recipes/cleanup-ingredients-stepwise', async (req, res) => {
     cleanupIngredientsProgress.progress = 0;
     for (const row of result.rows) {
       let cleaned = row.ingredients;
+      console.log(`[CLEANUP][ROW] id=${row.id}, original ingredients=`, row.ingredients);
       if (cleaned) {
-        cleaned = cleaned
-          .replace(/<\/p>/gi, ' ')
-          .replace(/<p>/gi, ' ')
-          .replace(/<br\s*\/?>/gi, ' ')
-          .replace(/<[^>]+>/g, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-        await pool.query('UPDATE recipes SET ingredients_display = $1 WHERE id = $2', [cleaned, row.id]);
+        // Remove HTML tags
+        cleaned = cleaned.replace(/<[^>]+>/g, '');
+        // Remove bullet points (•, *, -, etc.) at line start
+        cleaned = cleaned.replace(/^\s*[-•*\u2022\u25CF\u25A0]+\s*/gm, '');
+        // Remove all brackets []
+        cleaned = cleaned.replace(/[\[\]]/g, '');
+        // Remove all double quotes
+        cleaned = cleaned.replace(/"/g, '');
+        // Remove ranking system like '5 Star', '4 Star', etc. (case-insensitive)
+        cleaned = cleaned.replace(/([1-5]\s*Star)/gi, '');
+        // Replace commas with <br>
+        cleaned = cleaned.replace(/\s*,\s*/g, '<br>');
+        // Split into lines, trim, remove empty, join with <br>
+        cleaned = cleaned.split(/\r?\n|<br>/).map(line => line.trim()).filter(line => line.length > 0).join('<br>');
+        cleaned = cleaned.trim();
+        console.log(`[CLEANUP][ROW] id=${row.id}, cleaned ingredients=`, cleaned);
+        const updateResult = await pool.query('UPDATE recipes SET ingredients_display = $1 WHERE id = $2 RETURNING ingredients_display', [cleaned, row.id]);
+        console.log(`[CLEANUP][ROW] id=${row.id}, DB updated ingredients_display=`, updateResult.rows[0]?.ingredients_display);
+      } else {
+        console.log(`[CLEANUP][ROW] id=${row.id}, no ingredients to clean.`);
       }
       cleanupIngredientsProgress.progress++;
     }
     res.json({ success: true, updated: cleanupIngredientsProgress.total });
   } catch (err) {
+    console.error('[CLEANUP][ERROR]', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -800,11 +814,51 @@ app.put('/api/uploads/:id/raw', (req, res) => {
     });
 
     // --- Recipes ---
+    // Return all recipes in recipe_display table for frontend
+    app.get('/api/recipes/display-table', async (req, res) => {
+      const sql = `SELECT id, name, description, ingredients, serving_size, url, instructions, recipeid FROM recipe_display ORDER BY id DESC`;
+      console.log('[DISPLAY_TABLE][HIT] /api/recipes/display-table endpoint called');
+      console.log('[DISPLAY_TABLE][SQL]', sql);
+      try {
+        const result = await pool.query(sql);
+        res.json(result.rows);
+      } catch (err) {
+        console.error('[DISPLAY_TABLE][ERROR]', err);
+        if (err.stack) console.error('[DISPLAY_TABLE][STACK]', err.stack);
+        res.status(500).json({ error: err.message, stack: err.stack });
+      }
+    });
+    // Display recipe: copy to recipe_display table
+    app.post('/api/recipes/:id/display', async (req, res) => {
+      const { id } = req.params;
+      try {
+        // Fetch recipe by ID
+        const recipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [id]);
+        if (recipeResult.rows.length === 0) return res.status(404).json({ error: 'Recipe not found.' });
+        const recipe = recipeResult.rows[0];
+        // Insert into recipe_display table (only required fields)
+        const insertSql = `INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
+          VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`;
+        const insertResult = await pool.query(insertSql, [
+          recipe.name,
+          recipe.description,
+          recipe.ingredients_display, // ingredients = ingredients_display
+          recipe.serving_size,
+          recipe.url,
+          recipe.instructions,
+          recipe.id // recipeID
+        ]);
+        res.json({ success: true, display_id: insertResult.rows[0].id });
+      } catch (err) {
+        console.error('[DISPLAY][ERROR]', err);
+        res.status(500).json({ error: err.message });
+      }
+    });
     app.get('/api/recipes', async (req, res) => {
       // Return all main fields including uploaded_recipe_id for table display
       const sql = `
         SELECT id, uploaded_recipe_id, name, description, ingredients, serving_size, url,
-        instructions, instructions_extracted, Ingredients_display, extracted_ingredients, extracted_serving_size, extracted_instructions
+        instructions, instructions_extracted, ingredients_display, extracted_ingredients, extracted_serving_size, extracted_instructions
         FROM recipes
         ORDER BY id DESC
       `;

@@ -118,7 +118,7 @@ module.exports = function initializeDatabase(db) {
     name TEXT,
     description TEXT,
     ingredients TEXT,
-    Ingredients_display TEXT,
+    ingredients_display TEXT,
     serving_size INTEGER,
     url TEXT,
     instructions_extracted TEXT,
@@ -128,9 +128,9 @@ module.exports = function initializeDatabase(db) {
   // Add url, instructions_extracted, and instructions columns if they don't exist (for existing DBs)
   db.all("PRAGMA table_info(recipes);", (err, columns) => {
     if (!err && columns) {
-      if (!columns.some(col => col.name === 'Ingredients_display')) {
-        db.run("ALTER TABLE recipes ADD COLUMN Ingredients_display TEXT;");
-        db.run("UPDATE recipes SET Ingredients_display = ingredients;");
+      if (!columns.some(col => col.name === 'ingredients_display')) {
+        db.run("ALTER TABLE recipes ADD COLUMN ingredients_display TEXT;");
+        db.run("UPDATE recipes SET ingredients_display = ingredients;");
       }
       if (!columns.some(col => col.name === 'url')) {
         db.run("ALTER TABLE recipes ADD COLUMN url TEXT;");

@@ -242,7 +242,7 @@ function fetchAndRenderRecipes() {
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.name || (recipe.url ? `<a href='${recipe.url}' target='_blank'>${recipe.url}</a>` : '')}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.description || ''}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.ingredients || ''}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 1.5rem; min-width:220px; color:#1976d2; white-space:normal; word-break:break-word;'>${(recipe.Ingredients_display || '').replace(/\n/g, '<br>').replace(/\]+/g, '')}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 1.5rem; min-width:220px; color:#1976d2; white-space:normal; word-break:break-word;' class='ingredients-display-cell'></td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.serving_size || ''}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.instructions || ''}</td>
 					<td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:purple;'>${recipe.instructions_extracted || ''}</td>
@@ -257,6 +257,10 @@ function fetchAndRenderRecipes() {
 					</td>
 				`;
 				tbody.appendChild(tr);
+				// Render ingredients_display as HTML so <br> tags are line breaks
+				const cell = tr.querySelector('.ingredients-display-cell');
+				let val = recipe.ingredients_display || recipe.Ingredients_display || '';
+				cell.innerHTML = val;
 			});
 			document.querySelectorAll('.view-raw-btn').forEach(btn => {
 				btn.addEventListener('click', function(e) {

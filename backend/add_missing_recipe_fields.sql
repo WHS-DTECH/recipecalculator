@@ -2,7 +2,7 @@
 ALTER TABLE recipes
   ADD COLUMN instructions TEXT,
   ADD COLUMN instructions_extracted TEXT,
-  ADD COLUMN Ingredients_display TEXT,
+  ADD COLUMN ingredients_display TEXT,
   ADD COLUMN extracted_ingredients TEXT,
   ADD COLUMN extracted_serving_size TEXT,
   ADD COLUMN extracted_instructions TEXT;
