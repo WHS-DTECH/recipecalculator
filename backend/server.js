@@ -15,13 +15,17 @@ const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorize
 
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
-// Mount aisleKeywords router
+// Mount aisleKeywords router (Postgres)
 const aisleKeywordsRouter = require('./routes/aisleKeywords');
 app.use('/api/aisle_keywords', aisleKeywordsRouter);
 
-// Mount aisle_category router (for admin aisle category management)
-const aisleCategoryRouter = require('./routes/aisle_category');
+// Mount aisle_category router (Postgres)
+const aisleCategoryRouter = require('./routes/aisleCategory');
 app.use('/api/aisle_category', aisleCategoryRouter);
+
+// Mount foodBrands router (for admin food brands management, Postgres)
+const foodBrandsRouter = require('./routes/foodBrands');
+app.use('/api/food_brands', foodBrandsRouter);
 // --- API: Load ExtractedIngredients file for a recipe ---
 app.get('/api/extracted-ingredients/:id/load', (req, res) => {
   const recipeId = req.params.id;

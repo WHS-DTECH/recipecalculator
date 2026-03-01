@@ -8,7 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function fetchBrands() {
     fetch('/api/food_brands')
       .then(res => res.json())
-      .then(data => renderTable(data))
+      .then(data => {
+        if (!data.success || !Array.isArray(data.brands)) {
+          tableContainer.innerHTML = '<div style="color:red;">Failed to load brands.</div>';
+        } else {
+          renderTable(data.brands);
+        }
+      })
       .catch(() => {
         tableContainer.innerHTML = '<div style="color:red;">Failed to load brands.</div>';
       });

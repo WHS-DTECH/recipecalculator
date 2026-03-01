@@ -8,7 +8,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function fetchCategories() {
     fetch('/api/aisle_category')
       .then(res => res.json())
-      .then(data => renderTable(data))
+      .then(data => {
+        if (!data.success || !Array.isArray(data.categories)) {
+          tableContainer.innerHTML = '<div style="color:red;">Failed to load categories.</div>';
+        } else {
+          renderTable(data.categories);
+        }
+      })
       .catch(() => {
         tableContainer.innerHTML = '<div style="color:red;">Failed to load categories.</div>';
       });

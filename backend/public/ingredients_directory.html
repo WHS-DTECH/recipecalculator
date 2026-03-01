@@ -1,4 +1,4 @@
-                        // DEBUG: Show API response above navbar
+                        <!--// DEBUG: Show API response above navbar
                         const debugDiv = document.createElement('div');
                         debugDiv.style.background = '#fffbe6';
                         debugDiv.style.color = '#b36b00';
@@ -52,7 +52,7 @@
                         debugDiv.innerText = '[DEBUG] Error loading inventory data: ' + (err && err.message ? err.message : err);
                         document.body.insertBefore(debugDiv, document.body.firstChild);
       // Ensure our inventory table render function is always used
-        window.renderIngredientsTable = window.renderIngredientsInventoryTable;
+        window.renderIngredientsTable = window.renderIngredientsInventoryTable;-->
         <script>
           // Helper: set Recipe ID filter and trigger filter
       function setRecipeIdAndFilter(recipeId) {
@@ -111,7 +111,12 @@
               });
             }
               function filterAndShowByRecipeId(forceShowAll = false) {
-                const recipeId = document.getElementById('filter-recipe-id').value;
+                const filterInput = document.getElementById('filter-recipe-id');
+                if (!filterInput) {
+                  console.warn("filter-recipe-id input not found");
+                  return;
+                }
+                const recipeId = filterInput.value;
                 console.log('[filterAndShowByRecipeId] Called. Recipe ID:', recipeId, 'forceShowAll:', forceShowAll);
                 if (recipeId && !forceShowAll) {
                   fetch(`/api/ingredients/inventory/all`)
@@ -129,8 +134,10 @@
                   console.warn('[filterAndShowByRecipeId] renderIngredientsInventory is not a function');
                 }
               }
-              document.getElementById('show-ingredients-btn').onclick = function() { filterAndShowByRecipeId(); };
-              document.getElementById('filter-ingredients-btn').onclick = function() {
+              const showBtn = document.getElementById('show-ingredients-btn');
+              if (showBtn) showBtn.onclick = function() { filterAndShowByRecipeId(); };
+              const filterBtn = document.getElementById('filter-ingredients-btn');
+              if (filterBtn) filterBtn.onclick = function() {
                 const recipeId = document.getElementById('filter-recipe-id').value;
                 if (!recipeId) return;
                 fetch(`/api/ingredients/inventory/all`)
@@ -267,6 +274,7 @@
                     });
                     // Add DELETE button logic
                     table.querySelectorAll('.delete-ingredient-btn').forEach(btn => {
+                      if (!btn) return;
                       btn.onclick = function() {
                         const ingredientId = this.getAttribute('data-id');
                         if (!confirm('Are you sure you want to delete this ingredient?')) return;
@@ -288,11 +296,13 @@
                   });
                 });
               };
-              document.getElementById('show-all-btn').onclick = function() {
+              const showAllBtn = document.getElementById('show-all-btn');
+              if (showAllBtn) showAllBtn.onclick = function() {
                 document.getElementById('filter-recipe-id').value = '';
                 filterAndShowByRecipeId(true);
               };
-              document.getElementById('clear-filter-btn').onclick = function() {
+              const clearFilterBtn = document.getElementById('clear-filter-btn');
+              if (clearFilterBtn) clearFilterBtn.onclick = function() {
                 document.getElementById('filter-recipe-id').value = '';
                 if (typeof renderIngredientsTable === 'function') {
                   renderIngredientsTable([]);
@@ -355,6 +365,7 @@
   <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
 </head>
 <body>
+  <input type="hidden" id="recipe-id" value="">
   <div id="navbar-include"></div>
   <div class="ingredients-directory-card" style="margin:40px;">
     <h2>Ingredients Directory</h2>
@@ -378,7 +389,7 @@
     </div>
 
     <!-- Table container for dynamic rendering -->
-    <div id="ingredients-inventory-table" style="margin-top:2rem;"></div>
+    <div id="ingredients-inventory-table" style="margin-top:2rem; margin-left:2rem; overflow-x:auto;"></div>
 
     <!-- Move all main scripts to end of body for reliability -->
     </div>

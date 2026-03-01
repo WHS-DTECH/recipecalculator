@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', function() {
   const addCategorySelect = document.getElementById('add-category-select');
 
   function loadKeywords() {
-    fetch('/api/ingredients/aisle_keywords/all')
+    fetch('/api/aisle_keywords/all')
       .then(res => res.json())
       .then(data => {
         tbody.innerHTML = '';
@@ -56,7 +56,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const keyword = addKeywordInput.value.trim();
     const aisle_category_id = addCategorySelect.value;
     if (!keyword || !aisle_category_id) return;
-    fetch('/api/ingredients/aisle_keywords/add', {
+    fetch('/api/aisle_keywords/add', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keyword, aisle_category_id })
@@ -78,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     if (e.target.classList.contains('delete-btn')) {
       const id = e.target.getAttribute('data-id');
       if (confirm('Delete this keyword?')) {
-        fetch('/api/ingredients/aisle_keywords/delete', {
+        fetch('/api/aisle_keywords/delete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id })
@@ -100,7 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const newKeyword = prompt('Edit keyword:', oldKeyword);
       if (newKeyword !== null && newKeyword.trim() !== '') {
         // For category, could add a select, but for now keep same
-        fetch('/api/ingredients/aisle_keywords/edit', {
+        fetch('/api/aisle_keywords/edit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, keyword: newKeyword.trim() })

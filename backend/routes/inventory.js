@@ -1,3 +1,12 @@
+  // DELETE /api/ingredients/inventory/:id
+  router.delete('/:id', (req, res) => {
+    const id = req.params.id;
+    if (!id) return res.status(400).json({ success: false, error: 'Missing id' });
+    db.run('DELETE FROM ingredients_inventory WHERE id = ?', [id], function(err) {
+      if (err) return res.status(500).json({ success: false, error: err.message });
+      res.json({ success: true, deleted: this.changes });
+    });
+  });
 
   // ================================
   // Imports and Setup
