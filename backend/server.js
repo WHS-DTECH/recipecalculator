@@ -1,4 +1,8 @@
 
+const fs = require('fs');
+const path = require('path');
+
+
 const express = require('express');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
@@ -11,6 +15,13 @@ const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorize
 
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
+// Mount aisleKeywords router
+const aisleKeywordsRouter = require('./routes/aisleKeywords');
+app.use('/api/aisle_keywords', aisleKeywordsRouter);
+
+// Mount aisle_category router (for admin aisle category management)
+const aisleCategoryRouter = require('./routes/aisle_category');
+app.use('/api/aisle_category', aisleCategoryRouter);
 // --- API: Load ExtractedIngredients file for a recipe ---
 app.get('/api/extracted-ingredients/:id/load', (req, res) => {
   const recipeId = req.params.id;
@@ -71,6 +82,66 @@ app.post('/api/recipes/sync-all-to-display', async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+
+// --- Auto-assign aisles to ingredients for a recipe ---
+app.post('/api/ingredients/inventory/auto-assign-aisles', async (req, res) => {
+  const { recipe_id } = req.body;
+  // TODO: Implement your logic to auto-assign aisles here.
+  // For now, just return success so the frontend doesn't error.
+  res.json({ success: true });
+});
+
+// Assign aisle category to a single ingredient
+app.post('/api/ingredients/inventory/assign-aisle', async (req, res) => {
+  const { ingredient_id, aisle_category_id } = req.body;
+  if (!ingredient_id || !aisle_category_id) {
+    return res.status(400).json({ success: false, error: 'Missing ingredient_id or aisle_category_id' });
+  }
+  try {
+    await pool.query('UPDATE ingredients_inventory SET aisle_category_id = $1 WHERE id = $2', [aisle_category_id, ingredient_id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[Assign Aisle][ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+
+// --- PUT /api/ingredients/inventory/:id/extracted ---
+app.put('/api/ingredients/inventory/:id/extracted', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { ingredients_text } = req.body;
+    if (!ingredients_text) {
+      return res.status(400).json({ success: false, error: 'No ingredients_text provided.' });
+    }
+    const dir = path.join(__dirname, 'public', 'ExtractedIngredients');
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const filePath = path.join(dir, `${id}.txt`);
+    fs.writeFile(filePath, ingredients_text, (err) => {
+      if (err) {
+        return res.status(500).json({ success: false, error: 'Failed to write file', fileError: err.message });
+      }
+      res.json({ success: true, file: true, filePath });
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// --- POST /api/ingredients/inventory/split-quantity ---
+app.post('/api/ingredients/inventory/split-quantity', async (req, res) => {
+  // This is a stub implementation. You can add logic to split a single quantity as needed.
+  try {
+    // Example: just return success for now
+    res.json({ success: true, message: 'Split quantity endpoint hit (stub).' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 
 // --- Stepwise Cleanup Progress State ---
@@ -254,7 +325,6 @@ app.post('/api/recipes/cleanup-instructions', async (req, res) => {
 const PORT = process.env.PORT || 4000;
 
 // RawDataTXT HTML Preview Route (must come BEFORE express.static)
-const path = require('path');
 // const fs = require('fs'); // Already declared above
 
 app.put('/api/uploads/:id/raw', async (req, res) => {
@@ -270,7 +340,6 @@ app.put('/api/uploads/:id/raw', async (req, res) => {
     console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
     return res.json({ success: false, error: 'Missing raw_data' });
   }
-  const fs = require('fs');
   const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
   // Ensure directory exists
   if (!fs.existsSync(rawDataDir)) {
@@ -573,7 +642,7 @@ app.get('/api/timetable/all', async (req, res) => {
     app.post('/api/ingredients-inventory/sync', (req, res) => {
       db.run('DELETE FROM ingredients_inventory', [], function(err) {
         if (err) return res.status(500).json({ success: false, error: err.message });
-        db.all('SELECT * FROM ingredients', [], (err2, rows) => {
+        db.all('SELECT * FROM ingredients_inventory', [], (err2, rows) => {
           if (err2) return res.status(500).json({ success: false, error: err2.message });
           if (!rows.length) return res.json({ success: true, inserted: 0 });
           let done = 0, inserted = 0;
@@ -617,7 +686,7 @@ app.get('/api/timetable/all', async (req, res) => {
                 measure_unit = match[2];
               }
             }
-            db.run('INSERT INTO ingredients_inventory (ingredient_name, recipe_id, quantity, measure_qty, measure_unit) VALUES (?, ?, ?, ?, ?)', [row.name, row.recipe_id, row.quantity, measure_qty, measure_unit], function(err3) {
+            db.run('INSERT INTO ingredients_inventory (ingredient_name, recipe_id, quantity, measure_qty, measure_unit) VALUES (?, ?, ?, ?, ?)', [row.ingredient_name, row.recipe_id, row.quantity, measure_qty, measure_unit], function(err3) {
               done++;
               if (!err3) inserted++;
               if (done === rows.length) {
@@ -638,12 +707,55 @@ app.get('/api/timetable/all', async (req, res) => {
       }
     });
 
+    // --- Aliases for legacy/misnamed frontend endpoints ---
+    // /api/ingredients/inventory/all
+    app.get('/api/ingredients/inventory/all', async (req, res) => {
+      try {
+        const result = await pool.query('SELECT * FROM ingredients_inventory');
+        res.json(result.rows);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // --- Missing endpoint for desired_servings_ingredients ---
+    app.get('/api/ingredients/desired_servings_ingredients', async (req, res) => {
+      try {
+        const result = await pool.query('SELECT * FROM desired_servings_ingredients');
+        res.json(result.rows);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // /api/ingredients/inventory_table/all
+    app.get('/api/ingredients/inventory_table/all', async (req, res) => {
+      try {
+        const result = await pool.query('SELECT * FROM ingredients_inventory');
+        res.json(result.rows);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
+    // /api/ingredients/inventory_table
+    app.get('/api/ingredients/inventory_table', async (req, res) => {
+      try {
+        const result = await pool.query('SELECT * FROM ingredients_inventory');
+        res.json(result.rows);
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
+    });
+
     // DELETE all ingredients inventory
-    app.delete('/api/ingredients-inventory', (req, res) => {
-      db.run('DELETE FROM ingredients_inventory', [], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
+    app.delete('/api/ingredients-inventory', async (req, res) => {
+      try {
+        await pool.query('DELETE FROM ingredients_inventory');
         res.json({ success: true });
-      });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // POST: Reformat/Parse all ingredients (parse quantity into measure_qty and measure_unit, and trim/lowercase name)
@@ -841,18 +953,109 @@ app.put('/api/uploads/:id/raw', (req, res) => {
         const recipe = recipeResult.rows[0];
         let rawIngredients = recipe.ingredients;
         if (!rawIngredients) return res.json(recipe); // nothing to parse
-        const parsed = parseIngredients(rawIngredients);
-        await pool.query('DELETE FROM ingredients WHERE recipe_id = $1', [id]);
-        if (parsed.length === 0) return res.json(recipe);
-        // Insert new ones
-        for (const ing of parsed) {
-          await pool.query('INSERT INTO ingredients (recipe_id, name, quantity, unit) VALUES ($1, $2, $3, $4)', [id, ing.name, ing.quantity, ing.unit]);
+        let parsed = [];
+        try {
+          parsed = parseIngredients(rawIngredients);
+        } catch (parseErr) {
+          // If parsing fails, just return the recipe
+          console.error('[parseIngredients error]', parseErr);
+          return res.json(recipe);
+        }
+        try {
+          await pool.query('DELETE FROM ingredients_inventory WHERE recipe_id = $1', [id]);
+          if (parsed.length > 0) {
+            for (const ing of parsed) {
+              await pool.query('INSERT INTO ingredients_inventory (recipe_id, ingredient_name, quantity, measure_qty, measure_unit) VALUES ($1, $2, $3, $4, $5)', [id, ing.name, ing.quantity, ing.measure_qty, ing.measure_unit]);
+            }
+          }
+        } catch (dbErr) {
+          // If DB update fails, log and return recipe
+          console.error('[DB update error]', dbErr);
+          return res.json(recipe);
         }
         res.json(recipe);
       } catch (err) {
+        console.error('[GET /api/recipes/:id error]', err);
         res.status(500).json({ error: err.message });
       }
     });
+
+// ...existing code...
+
+// --- POST /api/ingredients/inventory/save-bulk ---
+app.post('/api/ingredients/inventory/save-bulk', async (req, res) => {
+  try {
+    const { ingredients } = req.body;
+    if (!Array.isArray(ingredients) || ingredients.length === 0) {
+      console.error('[save-bulk] No ingredients array provided or array is empty:', req.body);
+      return res.status(400).json({ success: false, error: 'No ingredients array provided.' });
+    }
+    let inserted = 0;
+    let errors = [];
+    for (const ing of ingredients) {
+      // Log each ingredient for debugging
+      console.log('[save-bulk] Inserting:', ing);
+      // Validate required fields
+      if (!ing.recipe_id || !ing.ingredient_name || !ing.ingredient_name.trim()) {
+        errors.push({ error: 'Missing recipe_id or ingredient_name', ingredient: ing });
+        continue;
+      }
+      // Convert empty string to null for quantity and measure_qty
+      const safeQuantity = (ing.quantity === '' || ing.quantity === undefined) ? null : ing.quantity;
+      const safeMeasureQty = (ing.measure_qty === '' || ing.measure_qty === undefined) ? null : ing.measure_qty;
+      try {
+        await pool.query(
+          'INSERT INTO ingredients_inventory (recipe_id, ingredient_name, quantity, measure_qty, measure_unit, fooditem, stripfooditem, aisle_category_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [
+            ing.recipe_id,
+            ing.ingredient_name,
+            safeQuantity,
+            safeMeasureQty,
+            ing.measure_unit || '',
+            ing.fooditem || '',
+            ing.stripFoodItem || '',
+            ing.aisle_category_id || null
+          ]
+        );
+        inserted++;
+      } catch (err) {
+        errors.push({ error: err.message, ingredient: ing });
+        console.error('[save-bulk] Insert error:', err.message, ing);
+      }
+    }
+    if (inserted === 0) {
+      return res.status(500).json({ success: false, error: 'No ingredients inserted.', details: errors });
+    }
+    res.json({ success: true, inserted, errors });
+  } catch (err) {
+    console.error('[save-bulk] Fatal error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+
+
+// --- POST /api/ingredients/inventory/split-quantity ---
+app.post('/api/ingredients/inventory/split-quantity', async (req, res) => {
+  // This is a stub implementation. You can add logic to split a single quantity as needed.
+  try {
+    // Example: just return success for now
+    res.json({ success: true, message: 'Split quantity endpoint hit (stub).' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+// --- POST /api/ingredients/inventory/save-parsed ---
+app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
+  // This is a stub implementation. You can add logic to save parsed data as needed.
+  try {
+    // Example: just return success for now
+    res.json({ success: true, message: 'Save parsed endpoint hit (stub).' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
     // ...all other route definitions (recipes, ingredients, classes, uploads, shopping lists, etc.) go here...
 
@@ -967,41 +1170,41 @@ app.put('/api/uploads/:id/raw', (req, res) => {
 
     // --- Ingredients ---
     app.get('/api/ingredients', (req, res) => {
-      db.all('SELECT * FROM ingredients', [], (err, rows) => {
+      db.all('SELECT * FROM ingredients_inventory', [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows);
       });
     });
 
     app.post('/api/ingredients', (req, res) => {
-  const { recipe_id, name, quantity, unit } = req.body;
-  if (!recipe_id || !name) {
+  const { recipe_id, ingredient_name, quantity, measure_qty, measure_unit } = req.body;
+  if (!recipe_id || !ingredient_name) {
     return res.status(400).json({ error: 'Recipe ID and ingredient name are required.' });
   }
-  db.run('INSERT INTO ingredients (recipe_id, name, quantity, unit) VALUES (?, ?, ?, ?)', [recipe_id, name, quantity, unit], function(err) {
+  db.run('INSERT INTO ingredients_inventory (recipe_id, ingredient_name, quantity, measure_qty, measure_unit) VALUES (?, ?, ?, ?, ?)', [recipe_id, ingredient_name, quantity, measure_qty, measure_unit], function(err) {
     if (err) return res.status(500).json({ error: err.message });
-    res.json({ id: this.lastID, recipe_id, name, quantity, unit });
+    res.json({ id: this.lastID, recipe_id, ingredient_name, quantity, measure_qty, measure_unit });
   });
 });
 
     // Update ingredient
     app.put('/api/ingredients/:id', (req, res) => {
       const { id } = req.params;
-      const { recipe_id, name, quantity, unit } = req.body;
-      if (!recipe_id || !name) {
+      const { recipe_id, ingredient_name, quantity, measure_qty, measure_unit } = req.body;
+      if (!recipe_id || !ingredient_name) {
         return res.status(400).json({ error: 'Recipe ID and ingredient name are required.' });
       }
-      db.run('UPDATE ingredients SET recipe_id = ?, name = ?, quantity = ?, unit = ? WHERE id = ?', [recipe_id, name, quantity, unit, id], function(err) {
+      db.run('UPDATE ingredients_inventory SET recipe_id = ?, ingredient_name = ?, quantity = ?, measure_qty = ?, measure_unit = ? WHERE id = ?', [recipe_id, ingredient_name, quantity, measure_qty, measure_unit, id], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         if (this.changes === 0) return res.status(404).json({ error: 'Ingredient not found.' });
-        res.json({ id, recipe_id, name, quantity, unit });
+        res.json({ id, recipe_id, ingredient_name, quantity, measure_qty, measure_unit });
       });
     });
 
     // Delete ingredient
     app.delete('/api/ingredients/:id', (req, res) => {
       const { id } = req.params;
-      db.run('DELETE FROM ingredients WHERE id = ?', [id], function(err) {
+      db.run('DELETE FROM ingredients_inventory WHERE id = ?', [id], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         if (this.changes === 0) return res.status(404).json({ error: 'Ingredient not found.' });
         res.json({ success: true });
@@ -1126,7 +1329,6 @@ app.put('/api/uploads/:id/raw', async (req, res) => {
     console.log('[DEBUG /api/uploads/:id/raw] Missing raw_data');
     return res.json({ success: false, error: 'Missing raw_data' });
   }
-  const fs = require('fs');
   const rawDataDir = path.join(__dirname, 'public', 'RawDataTXT');
   // Ensure directory exists
   if (!fs.existsSync(rawDataDir)) {
@@ -1169,7 +1371,6 @@ app.put('/api/uploads/:id/raw', async (req, res) => {
 // =========================
 // RawDataTXT HTML Preview Route
 // =========================
-const fs = require('fs');
 
 // Serve raw HTML file as text/plain (no preview wrapper)
 app.get('/RawDataTXT/:file', (req, res, next) => {

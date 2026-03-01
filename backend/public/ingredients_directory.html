@@ -1,5 +1,58 @@
-      
-      <!-- Load Extracted Ingredients button removed -->
+                        // DEBUG: Show API response above navbar
+                        const debugDiv = document.createElement('div');
+                        debugDiv.style.background = '#fffbe6';
+                        debugDiv.style.color = '#b36b00';
+                        debugDiv.style.padding = '0.5rem';
+                        debugDiv.style.margin = '1rem 0';
+                        debugDiv.style.fontSize = '1rem';
+                        debugDiv.innerText = '[DEBUG] /api/ingredients/inventory/all response: ' + JSON.stringify(data);
+                        document.body.insertBefore(debugDiv, document.body.firstChild);
+                        // DEBUG: Show if table container exists
+                        const containerDebug = document.createElement('div');
+                        containerDebug.style.background = '#e6f7ff';
+                        containerDebug.style.color = '#0050b3';
+                        containerDebug.style.padding = '0.5rem';
+                        containerDebug.style.margin = '1rem 0';
+                        containerDebug.style.fontSize = '1rem';
+                        if (container) {
+                          containerDebug.innerText = '[DEBUG] ingredients-inventory-table element found.';
+                        } else {
+                          containerDebug.innerText = '[DEBUG] ERROR: ingredients-inventory-table element NOT found!';
+                        }
+                        document.body.insertBefore(containerDebug, document.body.firstChild);
+                        // DEBUG: Show if renderIngredientsInventoryTable is defined
+                        const funcDebug = document.createElement('div');
+                        funcDebug.style.background = '#fff0f6';
+                        funcDebug.style.color = '#c41d7f';
+                        funcDebug.style.padding = '0.5rem';
+                        funcDebug.style.margin = '1rem 0';
+                        funcDebug.style.fontSize = '1rem';
+                        if (typeof window.renderIngredientsInventoryTable === 'function') {
+                          funcDebug.innerText = '[DEBUG] renderIngredientsInventoryTable function is defined.';
+                        } else {
+                          funcDebug.innerText = '[DEBUG] ERROR: renderIngredientsInventoryTable function is NOT defined!';
+                        }
+                        document.body.insertBefore(funcDebug, document.body.firstChild);
+                          // DEBUG: Show when function is called
+                          const callDebug = document.createElement('div');
+                          callDebug.style.background = '#f6ffed';
+                          callDebug.style.color = '#389e0d';
+                          callDebug.style.padding = '0.5rem';
+                          callDebug.style.margin = '1rem 0';
+                          callDebug.style.fontSize = '1rem';
+                          callDebug.innerText = '[DEBUG] renderIngredientsInventoryTable CALLED.';
+                          document.body.insertBefore(callDebug, document.body.firstChild);
+                        // DEBUG: Show error loading inventory data
+                        const debugDiv = document.createElement('div');
+                        debugDiv.style.background = '#fffbe6';
+                        debugDiv.style.color = '#b36b00';
+                        debugDiv.style.padding = '0.5rem';
+                        debugDiv.style.margin = '1rem 0';
+                        debugDiv.style.fontSize = '1rem';
+                        debugDiv.innerText = '[DEBUG] Error loading inventory data: ' + (err && err.message ? err.message : err);
+                        document.body.insertBefore(debugDiv, document.body.firstChild);
+      // Ensure our inventory table render function is always used
+        window.renderIngredientsTable = window.renderIngredientsInventoryTable;
         <script>
           // Helper: set Recipe ID filter and trigger filter
       function setRecipeIdAndFilter(recipeId) {
@@ -19,73 +72,44 @@
         }
       }
           // Load Extracted Ingredients button logic
-          document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener('DOMContentLoaded', function() {
+              // Always render the inventory table on page load
+              fetch('/api/ingredients/inventory/all')
+                .then(res => res.json())
+                .then(data => {
+                  // Debug output removed
+                  const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                  const container = document.getElementById('ingredients-inventory-table');
+                  // Debug output removed
+                  // Debug output removed
+                  // Call function if possible
+                  if (typeof window.renderIngredientsInventoryTable === 'function') {
+                    if (container) container.innerHTML = '<div style="color:green;font-weight:bold;">[DEBUG] Calling renderIngredientsInventoryTable with ' + ingredients.length + ' ingredients.</div>';
+                    // Debug output removed
+                    window.renderIngredientsInventoryTable(ingredients);
+                  } else {
+                    if (container) container.innerHTML = '<div style="color:red;font-weight:bold;">Error: renderIngredientsInventoryTable is not defined.</div>';
+                    console.error('renderIngredientsInventoryTable is not defined');
+                  }
+                })
+                .catch(err => {
+                  const container = document.getElementById('ingredients-inventory-table');
+                  // Debug output removed
+                  if (container) container.innerHTML = '<div style="color:red;font-weight:bold;">Error loading inventory data: ' + (err && err.message ? err.message : err) + '</div>';
+                  console.error('Error loading inventory data:', err);
+                });
             const loadExtractedBtn = document.getElementById('loadExtractedIngredientsBtn');
-            if (loadExtractedBtn) {
+                if (loadExtractedBtn) {
               loadExtractedBtn.addEventListener('click', function() {
                 const recipeId = document.getElementById('recipeSelectForText').value;
-                if (!recipeId) {
-                  alert('Select a recipe first.');
-                  return;
+                console.log('[Show Recipe Ingredients] Clicked. Recipe ID:', recipeId);
+                if (recipeId) {
+                  setRecipeIdAndFilter(recipeId);
+                } else {
+                  console.warn('[Show Recipe Ingredients] No recipeId found');
                 }
-                fetch(`/ExtractedIngredients/${recipeId}.txt`)
-                  .then(res => {
-                    if (!res.ok) throw new Error('File not found');
-                    return res.text();
-                  })
-                  .then(text => {
-                    document.getElementById('textConvertArea').value = text;
-                    alert('Extracted ingredients loaded into the box. You can now Save Ingredients.');
-                  })
-                  .catch(err => {
-                    alert('Failed to load extracted ingredients file: ' + err);
-                  });
               });
             }
-          });
-        </script>
-          <!-- Exact copy of Ingredients Inventory table and filtering from Calculate Servings page -->
-          <div style="max-width:1100px;margin:3rem auto 2rem auto;">
-            <h2>Ingredients Inventory</h2>
-            <div style="display:flex;align-items:center;gap:1em;margin-bottom:1rem;">
-              <button id="show-ingredients-btn">Show Ingredients</button>
-              <label for="filter-recipe-id" style="font-weight:normal;">Filter by Recipe ID:</label>
-              <input id="filter-recipe-id" type="number" min="1" style="width:70px;">
-              <button id="filter-ingredients-btn">Filter</button>
-              <button id="show-all-btn">Show All</button>
-              <button id="clear-filter-btn">Clear</button>
-            </div>
-            <div id="ingredients-inventory-table"></div>
-          </div>
-          <script src="calculate_servings.js"></script>
-          <script>
-            document.addEventListener('DOMContentLoaded', function() {
-                            // Attach to Show Recipe Ingredients button if present
-                            const showRecipeIngredientsBtn = document.getElementById('show-recipe-ingredients-btn');
-                            if (showRecipeIngredientsBtn) {
-                              showRecipeIngredientsBtn.addEventListener('click', function() {
-                                // Try to get the current recipe ID from the page context
-                                let recipeId = '';
-                                // Try dropdowns or visible elements
-                                const recipeSelect = document.getElementById('recipeSelectForText');
-                                if (recipeSelect && recipeSelect.value) {
-                                  recipeId = recipeSelect.value;
-                                } else {
-                                  // Try to parse from the recipe name display if possible
-                                  const recipeNameDisplay = document.getElementById('recipe-name-display');
-                                  if (recipeNameDisplay) {
-                                    const match = recipeNameDisplay.textContent.match(/ID:?\s*(\d+)/i);
-                                    if (match) recipeId = match[1];
-                                  }
-                                }
-                                console.log('[Show Recipe Ingredients] Clicked. Recipe ID:', recipeId);
-                                if (recipeId) {
-                                  setRecipeIdAndFilter(recipeId);
-                                } else {
-                                  console.warn('[Show Recipe Ingredients] No recipeId found');
-                                }
-                              });
-                            }
               function filterAndShowByRecipeId(forceShowAll = false) {
                 const recipeId = document.getElementById('filter-recipe-id').value;
                 console.log('[filterAndShowByRecipeId] Called. Recipe ID:', recipeId, 'forceShowAll:', forceShowAll);
@@ -170,19 +194,24 @@
                     table.style.width = '100%';
                     table.style.marginTop = '2rem';
                     table.style.borderCollapse = 'collapse';
+                    // Debug: log categories and ingredients
+                    console.log('[DEBUG] Categories:', categories);
+                    console.log('[DEBUG] Ingredients:', ingredients);
+                    // Build table HTML
                     table.innerHTML = `
                       <thead>
                         <tr style="background:#f5f5f5;">
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Quantity</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Qty</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Unit</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1FoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1StripFoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Aisle Category</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Assign</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -212,10 +241,15 @@
                                   ${categories.map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
                                 </select>
                               </td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem; text-align:center;">
+                                <button class="delete-ingredient-btn" data-id="${row.id}" title="Delete this ingredient" style="color:#fff;background:#c00;border:none;padding:0.3rem 0.7rem;border-radius:3px;cursor:pointer;">Delete</button>
+                              </td>
                             </tr>`;
                           }).join('')}
                       </tbody>
                     `;
+                    // Debug: log generated table HTML
+                    console.log('[DEBUG] Table HTML:', table.innerHTML);
                     container.innerHTML = '';
                     container.appendChild(table);
                     table.querySelectorAll('.aisle-category-select').forEach(select => {
@@ -229,6 +263,26 @@
                         }).then(() => {
                           window.renderIngredientsInventoryTable(ingredients);
                         });
+                      };
+                    });
+                    // Add DELETE button logic
+                    table.querySelectorAll('.delete-ingredient-btn').forEach(btn => {
+                      btn.onclick = function() {
+                        const ingredientId = this.getAttribute('data-id');
+                        if (!confirm('Are you sure you want to delete this ingredient?')) return;
+                        fetch(`/api/ingredients/${ingredientId}`, {
+                          method: 'DELETE'
+                        })
+                        .then(res => res.json())
+                        .then(result => {
+                          if (result.success) {
+                            // Remove the row from the table in the UI
+                            window.renderIngredientsInventoryTable(ingredients.filter(row => row.id != ingredientId));
+                          } else {
+                            alert('Failed to delete ingredient.');
+                          }
+                        })
+                        .catch(() => alert('Failed to delete ingredient.'));
                       };
                     });
                   });
@@ -305,33 +359,163 @@
   <div class="ingredients-directory-card" style="margin:40px;">
     <h2>Ingredients Directory</h2>
     <p>This page will list all ingredients used in recipes, with search and filter options.</p>
+
     <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
       <button id="deleteAllIngredientsBtn" style="background:#e53935;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">DELETE ALL</button>
       <select id="recipeSelectForText" style="min-width:180px;"></select>
-      <button id="convertFragmentBtn" style="background:#ff9800;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Convert Fragment</button>
-      <button id="saveExtractedIngredientsBtn" style="background:#1976d2;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Save Extracted Ingredients</button>
-      <button id="loadExtractedIngredientsBtn" style="background:#388e3c;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Load Extracted Ingredients</button>
       <button id="insertIngredientsBtn" style="background:#6a1b9a;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Insert ingredients</button>
-        <button id="splitQuantityBtn" style="background:#00897b;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;display:none;">Split Quantity</button>
-          <!-- Scripts moved to end of body for reliability -->
-      <!-- Save ingredients button removed -->
+      <button id="splitQuantityBtn" style="background:#00897b;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;display:none;">Split Quantity</button>
       <span id="selectedRecipeIdLabel" style="font-weight:bold;color:#333;"></span>
       <span id="save-status" style="margin-left:1rem;color:#009688;font-weight:bold;"></span>
     </div>
 
-      <!-- Move all main scripts to end of body for reliability -->
-      </div>
+    <!-- Move preview/textarea UI here -->
+    <div style="margin-bottom:1.5rem;">
+      <label for="textConvertArea" style="font-weight:bold;">Paste or enter ingredients here:</label><br>
+      <textarea id="textConvertArea" rows="4" style="width:100%;max-width:600px;min-width:300px;display:block;margin-bottom:0.5rem;" placeholder="e.g. 2 cups flour\n1 tsp salt\n..."></textarea>
+      <label for="ingredientsPreviewBox" style="font-weight:bold;">Recipe Ingredients Preview:</label><br>
+      <textarea id="ingredientsPreviewBox" readonly style="width:100%;max-width:600px;min-width:300px;background:#f6f0ff;border:1px solid #e0d7fa;padding:0.5rem;display:block;"></textarea>
+    </div>
+
+    <!-- Table container for dynamic rendering -->
+    <div id="ingredients-inventory-table" style="margin-top:2rem;"></div>
+
+    <!-- Move all main scripts to end of body for reliability -->
+    </div>
       <script>
+      // --- MOVE TABLE RENDER FUNCTION DEFINITION TO TOP ---
+      window.renderIngredientsInventoryTable = function(ingredients) {
+        const container = document.getElementById('ingredients-inventory-table');
+        if (!container) return;
+        fetch('food_brands.json').then(res => res.json()).then(brands => {
+          fetch('/api/aisle_keywords/all').then(res => res.json()).then(keywordsData => {
+            const keywords = keywordsData.keywords || [];
+            const categories = Array.from(new Set(keywords.map(k => k.aisle_category))).filter(Boolean).map((name, i) => ({ id: i + 1, name }));
+            function safe(val) { return val === null || val === undefined ? '' : val; }
+            function stripFoodItemDynamic(name) {
+              let stripped = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
+              brands.forEach(brand => {
+                const re = new RegExp('^' + brand.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
+                stripped = stripped.replace(re, '');
+              });
+              const match = stripped.match(/^(\d+)?\s*([a-zA-Z ]+)/);
+              if (match && match[2]) {
+                let item = match[2].trim();
+                if (/marshmallow/i.test(item)) {
+                  return 'marshmallows';
+                }
+                return item;
+              }
+              if (/marshmallow/i.test(stripped)) {
+                return 'marshmallows';
+              }
+              return stripped.trim();
+            }
+            function findCategoryByKeyword(ingredient) {
+              const lower = (ingredient || '').toLowerCase();
+              const match = keywords.find(k => lower.includes((k.keyword || '').toLowerCase()));
+              return match ? match.aisle_category : '';
+            }
+            const table = document.createElement('table');
+            table.style.width = '100%';
+            table.style.marginTop = '2rem';
+            table.style.borderCollapse = 'collapse';
+            table.innerHTML = `
+              <thead>
+                <tr style="background:#f5f5f5;">
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Quantity</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Qty</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Unit</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1FoodItem</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1StripFoodItem</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Aisle Category</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Assign</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${ingredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
+                  ingredients.map(row => {
+                    let stripFood = stripFoodItemDynamic(row.fooditem || '');
+                    let assignedCategory = '';
+                    if (row.aisle_category_id) {
+                      const catObj = categories.find(c => c.id === row.aisle_category_id);
+                      assignedCategory = catObj ? catObj.name : '';
+                    } else {
+                      assignedCategory = findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
+                    }
+                    return `<tr>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.id)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.recipe_id)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.quantity)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_qty)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_unit)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.fooditem) || safe(row.measure_unit)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem; color:green;">${stripFood || safe(row.measure_unit)}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${assignedCategory}</td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">
+                        <select data-id="${row.id}" class="aisle-category-select">
+                          <option value="">--Assign--</option>
+                          ${categories.map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
+                        </select>
+                      </td>
+                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem; text-align:center;">
+                        <button class="delete-ingredient-btn" data-id="${row.id}" title="Delete this ingredient" style="color:#fff;background:#c00;border:none;padding:0.3rem 0.7rem;border-radius:3px;cursor:pointer;">Delete</button>
+                      </td>
+                    </tr>`;
+                  }).join('')}
+              </tbody>
+            `;
+            container.innerHTML = '';
+            container.appendChild(table);
+            table.querySelectorAll('.aisle-category-select').forEach(select => {
+              select.onchange = function() {
+                const ingredientId = this.getAttribute('data-id');
+                const aisleId = this.value;
+                fetch(`/api/ingredients/inventory/assign-aisle`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ingredient_id: ingredientId, aisle_category_id: aisleId })
+                }).then(() => {
+                  window.renderIngredientsInventoryTable(ingredients);
+                });
+              };
+            });
+            table.querySelectorAll('.delete-ingredient-btn').forEach(btn => {
+              btn.onclick = function() {
+                const ingredientId = this.getAttribute('data-id');
+                if (confirm('Delete this ingredient?')) {
+                  fetch(`/api/ingredients/inventory/${ingredientId}`, { method: 'DELETE' })
+                    .then(() => {
+                      window.renderIngredientsInventoryTable(ingredients.filter(row => row.id != ingredientId));
+                    });
+                }
+              };
+            });
+          });
+        });
+      };
+
+      // --- END TABLE RENDER FUNCTION DEFINITION ---
+
       document.addEventListener('DOMContentLoaded', function() {
         // Convert Fragment button logic
         const convertFragmentBtn = document.getElementById('convertFragmentBtn');
         const textArea = document.getElementById('textConvertArea');
         if (convertFragmentBtn && textArea) {
           convertFragmentBtn.addEventListener('click', function() {
+            const recipeId = document.getElementById('recipeSelectForText')?.value;
             let text = textArea.value.trim();
+            console.log('[ConvertFragment] RecipeID:', recipeId);
+            console.log('[ConvertFragment] Raw text:', text);
             // Remove any 'recipeIngredient' label and extract the array if present
             let arrayMatch = text.match(/"recipeIngredient"\s*:\s*(\[.*?\])/s);
             if (arrayMatch) {
+              console.log('[ConvertFragment] Found recipeIngredient array:', arrayMatch[1]);
               text = arrayMatch[1];
             }
             // Remove any object wrapper (e.g. { ... })
@@ -339,9 +523,11 @@
               try {
                 let obj = JSON.parse(text);
                 if (obj.recipeIngredient && Array.isArray(obj.recipeIngredient)) {
+                  console.log('[ConvertFragment] Parsed object.recipeIngredient:', obj.recipeIngredient);
                   text = obj.recipeIngredient.join('\n');
                 }
               } catch (e) {
+                console.warn('[ConvertFragment] JSON.parse failed for object wrapper:', e);
                 // fallback: remove outer braces
                 text = text.replace(/^\{/, '').replace(/\}$/,'');
               }
@@ -351,13 +537,17 @@
               try {
                 const arr = JSON.parse(text);
                 if (Array.isArray(arr)) {
+                  console.log('[ConvertFragment] Parsed JSON array:', arr);
                   text = arr.join('\n');
                 }
-              } catch (e) {}
+              } catch (e) {
+                console.warn('[ConvertFragment] JSON.parse failed for array:', e);
+              }
             }
             // Remove any remaining brackets, braces, or quotes, and flatten to lines
             text = text.replace(/^[\[\]\{\}"]+/g, '').replace(/[\[\]\{\}"]+$/g, '');
             let lines = text.split(/\r?\n|,/).map(l => l.replace(/^"|"$/g, '').trim()).filter(Boolean);
+            console.log('[ConvertFragment] Lines after split:', lines);
             // Helper to convert unicode and vulgar fractions to float
             function parseFraction(str) {
               const vulgarMap = {
@@ -403,6 +593,7 @@
               }
               return line;
             });
+            console.log('[ConvertFragment] Lines after quantity conversion:', lines);
             text = lines.join('\n');
             textArea.value = text;
           });
@@ -446,6 +637,23 @@
       <label style="font-weight:bold;">Preview: Extracted Ingredients File</label>
       <pre id="insert-ingredients-preview" style="background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;max-width:600px;overflow-x:auto;"></pre>
     </div>
+      <label for="ingredientsPreviewBox" style="font-weight:bold;">Recipe Ingredients Preview:</label>
+      <pre id="ingredientsPreviewBox" style="width:100%;max-width:600px;margin:1rem 0;display:block;background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;overflow-x:auto;min-height:60px;"></pre>
+      <script>
+        // Synchronize preview box with textarea live
+        document.addEventListener('DOMContentLoaded', function() {
+          const textArea = document.getElementById('textConvertArea');
+          const previewBox = document.getElementById('ingredientsPreviewBox');
+          if (textArea && previewBox) {
+            // Initial sync
+            previewBox.textContent = textArea.value;
+            // On input
+            textArea.addEventListener('input', function() {
+              previewBox.textContent = textArea.value;
+            });
+          }
+        });
+      </script>
         <script>
           // Insert Ingredients button logic
           document.addEventListener('DOMContentLoaded', function() {
@@ -460,95 +668,101 @@
                   alert('Select a recipe first.');
                   return;
                 }
-                fetch(`/ExtractedIngredients/${recipeId}.txt`)
-                  .then(res => {
-                    if (!res.ok) throw new Error('File not found');
-                    return res.text();
-                  })
-                  .then(text => {
-                    previewBox.textContent = text;
-                    previewContainer.style.display = 'block';
-                    // Split lines and filter out empty lines
-                    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-                    if (lines.length === 0) {
-                      saveStatus.innerHTML = '<span style="color:#e53935;">No ingredients found in file.</span>';
-                      return;
-                    }
-                    // Use parseIngredient from ingredients_parse.js for each line
-                    if (typeof parseIngredient !== 'function') {
-                      alert('Ingredient parser not loaded.');
-                      return;
-                    }
-                    const parsedIngredients = lines.map(line => {
-                      const parsed = parseIngredient(line);
-                      return {
-                        ingredient_name: parsed.name || line,
-                        quantity: parsed.quantity || '',
-                        measure_qty: parsed.quantity || '',
-                        measure_unit: parsed.unit || '',
-                        fooditem: parsed.name || line,
-                        stripFoodItem: (typeof stripFoodItem === 'function') ? stripFoodItem(parsed.name || line) : '',
-                        aisle_category_id: null,
-                        recipe_id: recipeId
-                      };
-                    });
-                    fetch('/api/ingredients/inventory/save-bulk', {
+                // Use the preview box value (ingredients_display) for insertion
+                console.log('[InsertIngredients] Button clicked for RecipeID:', recipeId);
+                let text = document.getElementById('ingredientsPreviewBox').textContent;
+                console.log('[InsertIngredients] Text from preview box:', text);
+                // Convert <br>, <br/>, <br /> to newlines (shouldn't be needed, but for safety)
+                text = text.replace(/<br\s*\/?>/gi, '\n');
+                console.log('[InsertIngredients] Text after <br> to newline:', text);
+                // Split lines and filter out empty lines and star ratings
+                let lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+                console.log('[InsertIngredients] Lines after split:', lines);
+                // Remove lines that are just star ratings (e.g. '5 Star', '4 Star', etc.)
+                lines = lines.filter(line => !/^([1-5]\s*Star)$/i.test(line));
+                console.log('[InsertIngredients] Lines after filtering star ratings:', lines);
+                if (lines.length === 0) {
+                  saveStatus.innerHTML = '<span style="color:#e53935;">No ingredients found in preview.</span>';
+                  return;
+                }
+                // Use parseIngredient from ingredients_parse.js for each line
+                if (typeof parseIngredient !== 'function') {
+                  alert('Ingredient parser not loaded.');
+                  return;
+                }
+                const parsedIngredients = lines.map(line => {
+                  const parsed = parseIngredient(line);
+                  console.log('[InsertIngredients] Parsed ingredient:', parsed, 'from line:', line);
+                  return {
+                    ingredient_name: parsed.name || line,
+                    quantity: parsed.quantity || '',
+                    measure_qty: parsed.quantity || '',
+                    measure_unit: parsed.unit || '',
+                    fooditem: parsed.name || line,
+                    stripFoodItem: (typeof stripFoodItem === 'function') ? stripFoodItem(parsed.name || line) : '',
+                    aisle_category_id: null,
+                    recipe_id: recipeId
+                  };
+                });
+                console.log('[InsertIngredients] Parsed ingredients array:', parsedIngredients);
+                fetch('/api/ingredients/inventory/save-bulk', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ ingredients: parsedIngredients })
+                })
+                .then(res => res.json())
+                .then(data => {
+                  console.log('[InsertIngredients] save-bulk response:', data);
+                  if (data.success) {
+                    // Now trigger split-quantity for this recipe
+                    fetch('/api/ingredients/inventory/split-quantity', {
                       method: 'POST',
                       headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ ingredients: parsedIngredients })
+                      body: JSON.stringify({ id: recipeId, splitQty: 1 })
                     })
-                    .then(res => res.json())
-                    .then(data => {
-                      if (data.success) {
-                        // Now trigger split-quantity for this recipe
-                        fetch('/api/ingredients/inventory/split-quantity', {
+                    .then(res2 => res2.json())
+                    .then(data2 => {
+                      console.log('[InsertIngredients] split-quantity response:', data2);
+                      if (data2.success) {
+                        // Now trigger auto-assign aisles
+                        fetch('/api/ingredients/inventory/auto-assign-aisles', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ id: recipeId, splitQty: 1 })
+                          body: JSON.stringify({ recipe_id: recipeId })
                         })
-                        .then(res2 => res2.json())
-                        .then(data2 => {
-                          if (data2.success) {
-                            // Now trigger auto-assign aisles
-                            fetch('/api/ingredients/inventory/auto-assign-aisles', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ recipe_id: recipeId })
-                            })
-                            .then(res3 => res3.json())
-                            .then(data3 => {
-                              if (data3.success) {
-                                saveStatus.innerHTML = '<span style="color:#009688;">Ingredients inserted, split, and aisles assigned!</span>';
-                              } else {
-                                saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted and split, but failed to assign aisles.</span>';
-                              }
-                              document.dispatchEvent(new Event('ingredients-inventory-refresh'));
-                            })
-                            .catch(() => {
-                              saveStatus.innerHTML = '<span style="color:#e53935;">Error assigning aisles after split.</span>';
-                              document.dispatchEvent(new Event('ingredients-inventory-refresh'));
-                            });
+                        .then(res3 => res3.json())
+                        .then(data3 => {
+                          console.log('[InsertIngredients] auto-assign-aisles response:', data3);
+                          if (data3.success) {
+                            saveStatus.innerHTML = '<span style="color:#009688;">Ingredients inserted, split, and aisles assigned!</span>';
                           } else {
-                            saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted, but failed to split quantities.</span>';
-                            document.dispatchEvent(new Event('ingredients-inventory-refresh'));
+                            saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted and split, but failed to assign aisles.</span>';
                           }
+                          document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                         })
-                        .catch(() => {
-                          saveStatus.innerHTML = '<span style="color:#e53935;">Error splitting quantities after insert.</span>';
+                        .catch((err) => {
+                          console.error('[InsertIngredients] auto-assign-aisles error:', err);
+                          saveStatus.innerHTML = '<span style="color:#e53935;">Error assigning aisles after split.</span>';
                           document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                         });
                       } else {
-                        saveStatus.innerHTML = '<span style="color:#e53935;">Failed to insert ingredients from file.</span>';
+                        saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted, but failed to split quantities.</span>';
+                        document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                       }
                     })
-                    .catch(() => {
-                      saveStatus.innerHTML = '<span style="color:#e53935;">Error contacting server.</span>';
+                    .catch((err) => {
+                      console.error('[InsertIngredients] split-quantity error:', err);
+                      saveStatus.innerHTML = '<span style="color:#e53935;">Error splitting quantities after insert.</span>';
+                      document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                     });
-                  })
-                  .catch(err => {
-                    previewBox.textContent = 'Failed to load extracted ingredients file: ' + err;
-                    previewContainer.style.display = 'block';
-                  });
+                  } else {
+                    saveStatus.innerHTML = '<span style="color:#e53935;">Failed to insert ingredients from preview.</span>';
+                  }
+                })
+                .catch((err) => {
+                  console.error('[InsertIngredients] save-bulk error:', err);
+                  saveStatus.innerHTML = '<span style="color:#e53935;">Error contacting server.</span>';
+                });
               });
             }
           });
@@ -673,7 +887,7 @@
           const select = document.getElementById('recipeSelectForText');
           if (select) {
             select.innerHTML = '<option value="">-- Select Recipe --</option>' +
-              data.map(r => `<option value="${r.id}">${r.name || r.recipe_title || 'Recipe ' + r.id}</option>`).join('');
+              data.map(r => `<option value="${r.id}">${r.id} | ${r.name || r.recipe_title || 'Recipe ' + r.id}</option>`).join('');
           }
         });
       const select = document.getElementById('recipeSelectForText');
@@ -686,14 +900,24 @@
           fetch(`/api/recipes/${recipeId}`)
             .then(res => res.json())
             .then(recipe => {
-              // Try to get ingredients as text
+              // Use ONLY ingredients_display from the recipe table
               let text = '';
-              if (Array.isArray(recipe.ingredients)) {
-                text = recipe.ingredients.join('\n');
-              } else if (typeof recipe.ingredients === 'string') {
-                text = recipe.ingredients;
+              if (typeof recipe.ingredients_display === 'string' && recipe.ingredients_display.trim()) {
+                text = recipe.ingredients_display;
+              } else {
+                text = '';
               }
-              document.getElementById('textConvertArea').value = text;
+              // Split on <br>, <br/>, <br /> to get each ingredient on its own line
+              let cleanedText = text
+                .replace(/<br\s*\/?>(?=\s|$)/gi, '\n')
+                .split(/\r?\n/)
+                .map(l => l.trim())
+                .filter(l => l && !/^([1-5]\s*Star)$/i.test(l))
+                .join('\n');
+              document.getElementById('textConvertArea').value = cleanedText;
+              // Also update preview box
+              const previewBox = document.getElementById('ingredientsPreviewBox');
+              if (previewBox) previewBox.textContent = cleanedText;
               // Automatically trigger Convert Fragment logic
               const convertFragmentBtn = document.getElementById('convertFragmentBtn');
               const textArea = document.getElementById('textConvertArea');
