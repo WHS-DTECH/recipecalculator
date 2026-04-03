@@ -38,8 +38,8 @@ document.addEventListener('DOMContentLoaded', function() {
       .then(res => res.json())
       .then(data => {
         selectEl.innerHTML = '';
-        if (Array.isArray(data) && data.length) {
-          data.forEach(cat => {
+        if (data && Array.isArray(data.categories) && data.categories.length) {
+          data.categories.forEach(cat => {
             const opt = document.createElement('option');
             opt.value = cat.id;
             opt.textContent = cat.name;

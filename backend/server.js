@@ -1206,13 +1206,17 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
     });
 
     // Delete ingredient
-    app.delete('/api/ingredients/:id', (req, res) => {
+    app.delete('/api/ingredients/:id', async (req, res) => {
       const { id } = req.params;
-      db.run('DELETE FROM ingredients_inventory WHERE id = ?', [id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: 'Ingredient not found.' });
+      try {
+        const result = await pool.query('DELETE FROM ingredients_inventory WHERE id = $1', [id]);
+        if (result.rowCount === 0) {
+          return res.status(404).json({ error: 'Ingredient not found.' });
+        }
         res.json({ success: true });
-      });
+      } catch (err) {
+        res.status(500).json({ error: err.message });
+      }
     });
 
     // --- Classes ---
