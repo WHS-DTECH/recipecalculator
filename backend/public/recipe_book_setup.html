@@ -95,6 +95,29 @@
                 </tbody>
             </table>
         </div>
+
+    <!-- Published Recipes Table (recipe_display) -->
+    <div class="setup-section">
+        <div class="setup-section-title">Published Recipes</div>
+        <div class="setup-section-desc">These recipes are published to the Recipe Book (from recipe_display table).</div>
+        <table id="publishedRecipesTable" style="width:100%;margin-top:1rem;border-collapse:collapse;">
+            <thead>
+                <tr style="background:#f5f5f5;">
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">ID</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Name</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Description</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Ingredients</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Serving Size</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">URL</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Instructions</th>
+                    <th style="padding:0.5rem 0.7rem;border:1px solid #eee;">RecipeID</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Populated by JS -->
+            </tbody>
+        </table>
+    </div>
     </div>
     <script src="recipe_book_setup.js"></script>
 </body>

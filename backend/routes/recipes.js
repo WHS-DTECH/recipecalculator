@@ -1,12 +1,9 @@
-
-
-
 const express = require('express');
 const router = express.Router();
 const { Pool } = require('pg');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const PG_CONNECTION_STRING = process.env.PG_CONNECTION_STRING || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
-const pool = new Pool({ connectionString: PG_CONNECTION_STRING, ssl: { rejectUnauthorized: false } });
+const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
+const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 // GET /api/recipes/display-dropdown - Get all recipes from recipe_display for dropdown
 router.get('/display-dropdown', async (req, res) => {
@@ -24,27 +21,80 @@ router.get('/display-table', async (req, res) => {
     const result = await pool.query('SELECT * FROM recipe_display');
     res.json(result.rows);
   } catch (err) {
+    console.error('[ERROR][GET /api/recipes/display-table]', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-
 // POST /api/recipes/:id/display - Copy recipe to recipe_display table
 router.post('/:id/display', async (req, res) => {
   const recipeId = req.params.id;
-  db.get('SELECT * FROM recipes WHERE id = ?', [recipeId], (err, row) => {
-    if (err) return res.status(500).json({ success: false, error: err.message });
-    if (!row) return res.status(404).json({ success: false, error: 'Recipe not found' });
-    // Insert into recipe_display (fields: name, description, ingredients, serving_size, url, instructions, recipeID)
-    db.run(
-      'INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeID) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [row.name, row.description, row.Ingredients_display || row.ingredients, row.serving_size, row.url, row.instructions, row.id],
-      function(err2) {
-        if (err2) return res.status(500).json({ success: false, error: err2.message });
-        return res.json({ success: true });
-      }
-    );
-  });
+  try {
+    // Fetch the recipe from Postgres
+    const recipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [recipeId]);
+    if (recipeResult.rows.length === 0) {
+      console.error(`[DISPLAY][ERROR] Recipe not found for id=${recipeId}`);
+      return res.status(404).json({ success: false, error: 'Recipe not found' });
+    }
+    const row = recipeResult.rows[0];
+    // Use ingredients_display if present, else fallback to ingredients
+    const ingredients = row.ingredients_display || row.ingredients;
+    // Debug log the data being upserted
+    console.log('[DISPLAY][DEBUG] Upserting to recipe_display:', {
+      name: row.name,
+      description: row.description,
+      ingredients,
+      serving_size: row.serving_size,
+      url: row.url,
+      instructions: row.instructions,
+      recipeid: row.id
+    });
+    // Insert or update into recipe_display
+    const upsertSql = `
+      INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
+      VALUES ($1, $2, $3, $4, $5, $6, $7)
+      ON CONFLICT (recipeid) DO UPDATE SET
+        name = EXCLUDED.name,
+        description = EXCLUDED.description,
+        ingredients = EXCLUDED.ingredients,
+        serving_size = EXCLUDED.serving_size,
+        url = EXCLUDED.url,
+        instructions = EXCLUDED.instructions
+    `;
+    const upsertResult = await pool.query(upsertSql, [
+      row.name,
+      row.description,
+      ingredients,
+      row.serving_size,
+      row.url,
+      row.instructions,
+      row.id
+    ]);
+    console.log('[DISPLAY][DEBUG] Upsert result:', upsertResult.command, upsertResult.rowCount);
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[DISPLAY][ERROR] Exception during upsert:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /api/recipes/display-table/:id - Unpublish a recipe from recipe_display (by id)
+router.delete('/display-table/:id', async (req, res) => {
+  let displayId = req.params.id;
+  displayId = parseInt(displayId, 10);
+  console.log('[UNPUBLISH][DEBUG] Attempting to delete from recipe_display with id:', displayId, 'Type:', typeof displayId);
+  try {
+    const result = await pool.query('DELETE FROM recipe_display WHERE id = $1', [displayId]);
+    console.log('[UNPUBLISH][DEBUG] Delete result:', result.command, 'rowCount:', result.rowCount);
+    if (result.rowCount > 0) {
+      res.json({ success: true });
+    } else {
+      res.status(404).json({ success: false, error: 'Recipe not found in display table.' });
+    }
+  } catch (err) {
+    console.error('[UNPUBLISH][ERROR]', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
 });
 
 // --- Stepwise Cleanup Ingredients API with Progress ---
@@ -102,7 +152,6 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
 
 router.get('/cleanup-ingredients-progress', (req, res) => {
   res.json(cleanupIngredientsProgress);
@@ -328,30 +377,32 @@ router.delete('/recipes/:id', async (req, res) => {
   }
 });
 
-
 // Get recipe options for dropdown
-router.get('/dropdown', (req, res) => {
-  console.log('[DEBUG] /api/recipes/dropdown called');
-  db.all('SELECT id, name FROM recipes ORDER BY name COLLATE NOCASE', [], (err, rows) => {
-    if (err) {
-      console.error('[DEBUG] Error fetching recipes:', err);
-      res.status(500).json({ error: 'Failed to fetch recipes.' });
-    } else {
-      console.log('[DEBUG] Recipe rows:', rows);
-      // Always return an array, even if empty
-      res.json({ recipes: rows || [] });
-    }
-  });
+router.get('/dropdown', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT id, name FROM recipes ORDER BY name');
+    res.json({ recipes: result.rows || [] });
+  } catch (err) {
+    console.error('[DEBUG] Error fetching recipes:', err);
+    res.status(500).json({ error: 'Failed to fetch recipes.' });
+  }
 });
 
-// Get a single recipe by ID (for Recipe Details page)
-router.get('/recipes/:id', (req, res) => {
+// Get a single recipe by ID (for Recipe Details page) - THIS ROUTE MUST BE LAST
+router.get('/recipes/:id', async (req, res) => {
   const { id } = req.params;
-  db.get('SELECT *, CASE WHEN instructions IS NULL OR instructions = "" THEN instructions_extracted ELSE instructions END as instructions FROM recipes WHERE id = ?', [id], (err, row) => {
-    if (err) return res.status(500).json({ error: 'Failed to fetch recipe.' });
-    if (!row) return res.status(404).json({ error: 'Recipe not found.' });
-    res.json(row);
-  });
+  try {
+    const result = await pool.query(
+      `SELECT *,
+        CASE WHEN instructions IS NULL OR instructions = '' THEN instructions_extracted ELSE instructions END as instructions
+       FROM recipes WHERE id = $1`,
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Recipe not found.' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch recipe.' });
+  }
 });
 
 module.exports = router;

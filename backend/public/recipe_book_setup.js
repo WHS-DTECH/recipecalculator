@@ -80,10 +80,36 @@ function fetchAndRenderRecipes() {
 		});
 }
 
+
+// Fetch and render published recipes from recipe_display table
+function fetchAndRenderPublishedRecipes() {
+	fetch('/api/recipes/display-table')
+		.then(res => res.json())
+		.then(data => {
+			const tbody = document.querySelector('#publishedRecipesTable tbody');
+			tbody.innerHTML = '';
+			data.forEach(row => {
+				const tr = document.createElement('tr');
+				tr.innerHTML = `
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.id}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.name || ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.description || ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.ingredients || ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.serving_size || ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.url ? `<a href='${row.url}' target='_blank'>Link</a>` : ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.instructions || ''}</td>
+					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.recipeid || ''}</td>
+				`;
+				tbody.appendChild(tr);
+			});
+		});
+}
+
 // Initial render
 document.addEventListener('DOMContentLoaded', () => {
 	fetchAndRenderRecipes();
 	fetchAndRenderUploads();
+	fetchAndRenderPublishedRecipes();
 });
 
 // Fetch and render uploads in the uploaded recipes table
