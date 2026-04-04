@@ -58,29 +58,84 @@
 
 
   // POST /api/ingredients/inventory/save-bulk
-  router.post('/save-bulk', (req, res) => {
-    const ingredients = req.body.ingredients;
-    if (!Array.isArray(ingredients) || ingredients.length === 0) {
-      return res.status(400).json({ success: false, error: 'No ingredients provided.' });
-    }
-    const placeholders = '(?, ?, ?, ?, ?, ?, ?, ?)';
-    const sql = `INSERT INTO ingredients_inventory (ingredient_name, recipe_id, quantity, measure_qty, measure_unit, fooditem, stripFoodItem, aisle_category_id) VALUES ${ingredients.map(() => placeholders).join(',')}`;
-    const values = ingredients.flatMap(ing => [
-      ing.ingredient_name || '',
-      ing.recipe_id || null,
-      ing.quantity || '',
-      ing.measure_qty || '',
-      ing.measure_unit || '',
-      ing.fooditem || '',
-      ing.stripFoodItem || '',
-      ing.aisle_category_id || null
-    ]);
-    db.run(sql, values, function(err) {
-      if (err) {
+  // Updated: Use recipe_display for calculations if recipe_id is provided
+  router.post('/save-bulk', async (req, res) => {
+    const { recipe_id, ingredients } = req.body;
+    // If recipe_id is provided, fetch from recipe_display (Postgres)
+    if (recipe_id) {
+      // Connect to Postgres for recipe_display
+      const { Pool } = require('pg');
+      require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
+      const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
+      const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+      try {
+        const result = await pool.query('SELECT * FROM recipe_display WHERE recipeid = $1', [recipe_id]);
+        if (!result.rows.length) {
+          return res.status(404).json({ success: false, error: 'Recipe not found in recipe_display.' });
+        }
+        const recipe = result.rows[0];
+        // Assume ingredients are stored as a string (one per line or <br> separated)
+        let ingredientsText = recipe.ingredients || '';
+        ingredientsText = ingredientsText.replace(/<br\s*\/?>/gi, '\n');
+        const lines = ingredientsText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        if (!lines.length) {
+          return res.status(400).json({ success: false, error: 'No ingredients found in recipe_display.' });
+        }
+        // Simple parse: treat each line as ingredient_name, assign recipe_id
+        const parsedIngredients = lines.map(line => ({
+          ingredient_name: line,
+          recipe_id: recipe_id,
+          quantity: '',
+          measure_qty: '',
+          measure_unit: '',
+          fooditem: line,
+          stripFoodItem: '',
+          aisle_category_id: null
+        }));
+        const placeholders = '(?, ?, ?, ?, ?, ?, ?, ?)';
+        const sql = `INSERT INTO ingredients_inventory (ingredient_name, recipe_id, quantity, measure_qty, measure_unit, fooditem, stripFoodItem, aisle_category_id) VALUES ${parsedIngredients.map(() => placeholders).join(',')}`;
+        const values = parsedIngredients.flatMap(ing => [
+          ing.ingredient_name || '',
+          ing.recipe_id || null,
+          ing.quantity || '',
+          ing.measure_qty || '',
+          ing.measure_unit || '',
+          ing.fooditem || '',
+          ing.stripFoodItem || '',
+          ing.aisle_category_id || null
+        ]);
+        db.run(sql, values, function(err) {
+          if (err) {
+            return res.status(500).json({ success: false, error: err.message });
+          }
+          res.json({ success: true, inserted: this.changes });
+        });
+      } catch (err) {
         return res.status(500).json({ success: false, error: err.message });
       }
-      res.json({ success: true, inserted: this.changes });
-    });
+    } else if (Array.isArray(ingredients) && ingredients.length > 0) {
+      // Fallback: legacy mode, insert provided ingredients array
+      const placeholders = '(?, ?, ?, ?, ?, ?, ?, ?)';
+      const sql = `INSERT INTO ingredients_inventory (ingredient_name, recipe_id, quantity, measure_qty, measure_unit, fooditem, stripFoodItem, aisle_category_id) VALUES ${ingredients.map(() => placeholders).join(',')}`;
+      const values = ingredients.flatMap(ing => [
+        ing.ingredient_name || '',
+        ing.recipe_id || null,
+        ing.quantity || '',
+        ing.measure_qty || '',
+        ing.measure_unit || '',
+        ing.fooditem || '',
+        ing.stripFoodItem || '',
+        ing.aisle_category_id || null
+      ]);
+      db.run(sql, values, function(err) {
+        if (err) {
+          return res.status(500).json({ success: false, error: err.message });
+        }
+        res.json({ success: true, inserted: this.changes });
+      });
+    } else {
+      return res.status(400).json({ success: false, error: 'No ingredients or recipe_id provided.' });
+    }
   });
 
   // POST /api/ingredients/inventory/split-quantity

@@ -93,6 +93,11 @@ document.addEventListener('DOMContentLoaded', function () {
       fn: raw => {
         const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
         const match = unescapedData.match(/<ol[^>]*>([\s\S]*?)<\/ol>/i);
+        if (match) {
+          console.debug('[DEBUG][ordered list] Found <ol> block:', match[1].slice(0, 100));
+        } else {
+          console.debug('[DEBUG][ordered list] No <ol> found');
+        }
         return match ? match[1].replace(/<li[^>]*>/g, '').replace(/<\/li>/g, '\n').trim() : '';
       }
     },
@@ -100,8 +105,13 @@ document.addEventListener('DOMContentLoaded', function () {
       name: 'Look for numbered steps',
       fn: raw => {
         const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
-        const lines = unescapedData.split(/\n|<br\s*\/\?\s*>/i);
+        const lines = unescapedData.split(/\n|<br\s*\/?\s*>/i);
         const steps = lines.filter(line => /^\d+\./.test(line.trim()));
+        if (steps.length) {
+          console.debug('[DEBUG][numbered steps] Found steps:', steps.slice(0, 3));
+        } else {
+          console.debug('[DEBUG][numbered steps] No numbered steps found');
+        }
         return steps.length ? steps.join('\n') : '';
       }
     },
@@ -110,12 +120,15 @@ document.addEventListener('DOMContentLoaded', function () {
       fn: raw => {
         const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
         const methodIndex = unescapedData.toLowerCase().indexOf('method');
-        if (methodIndex === -1) return '';
+        if (methodIndex === -1) {
+          console.debug("[DEBUG][method+list] No 'method' found");
+          return '';
+        }
         const after = unescapedData.substring(methodIndex);
         // Search for the nearest <ol> or <ul> anywhere after 'method'
         let listMatch = after.match(/<(ol|ul)[^>]*>([\s\S]*?)<\/\1>/i);
         if (!listMatch) {
-          // Fallback: search for <div class="wysiwyg"> containing a list anywhere in the raw HTML
+          // Fallback: search for <div class=\"wysiwyg\"> containing a list anywhere in the raw HTML
           const wysiwygBlocks = [...unescapedData.matchAll(/<div[^>]*class=["'][^"']*wysiwyg[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)];
           for (const block of wysiwygBlocks) {
             const list = block[1].match(/<(ol|ul)[^>]*>([\s\S]*?)<\/\1>/i);
@@ -127,85 +140,75 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (listMatch) {
           const items = [...listMatch[2].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+          console.debug('[DEBUG][method+list] Found items:', items.slice(0, 3));
           return items.length ? items : '';
         }
+        console.debug('[DEBUG][method+list] No list found after method');
         return '';
       }
     },
     {
-      name: 'Look for "recipeInstructions" as plain string',
+      name: 'Extract recipeInstructions array from JSON',
       fn: raw => {
-        // Robustly find all <script type="application/ld+json"> blocks regardless of whitespace, newlines, or attribute order
-        // Make script tag splitting and detection case-insensitive
-        // Replace all </script> (any case) with a unique marker, then split on <script (any case)
-        const RAW_SCRIPT_END = '___SCRIPT_END___';
-        const rawNorm = raw.replace(/<\/script>/gi, RAW_SCRIPT_END);
-        const blocks = rawNorm.split(/<script/i).slice(1); // skip first split part (before first <script)
-        console.log('[DEBUG] Number of <script> blocks found:', blocks.length);
-        let found = false;
-        let blockNum = 0;
-        for (const block of blocks) {
-          blockNum++;
-          const endIdx = block.indexOf(RAW_SCRIPT_END);
-          if (endIdx === -1) {
-            console.log(`[DEBUG] Block ${blockNum}: No </script> found, skipping.`);
+        // Regex to find the recipeInstructions array in the raw text (like ingredients extractor)
+        const match = raw.match(/"recipeInstructions"\s*:\s*(\[[\s\S]*?\])/);
+        if (match) {
+          console.debug('[DEBUG][regex array] Found recipeInstructions array:', match[1].slice(0, 120));
+        } else {
+          console.debug('[DEBUG][regex array] No recipeInstructions array found');
+        }
+        return match ? match[1] : '';
+      }
+    },
+    {
+      name: 'Find recipeInstructions in JSON-LD (string or array)',
+      fn: raw => {
+        // Use DOMParser to create a document from the raw HTML
+        let doc;
+        try {
+          doc = new window.DOMParser().parseFromString(raw, 'text/html');
+        } catch (e) {
+          console.debug('[DEBUG][jsonld] DOMParser failed');
+          return '';
+        }
+        const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
+        if (!scripts.length) {
+          console.debug('[DEBUG][jsonld] No <script type="application/ld+json"> found');
+        }
+        for (const script of scripts) {
+          let json;
+          try {
+            json = JSON.parse(script.textContent);
+          } catch (e) {
+            console.debug('[DEBUG][jsonld] JSON parse error:', e);
             continue;
           }
-          const tagAndContent = block.slice(0, endIdx);
-          console.log(`[DEBUG] Block ${blockNum}: First 300 chars:`, tagAndContent.slice(0, 300));
-          // Check for type="application/ld+json" (allow whitespace, single/double quotes, any attribute order, case-insensitive)
-          if (/type\s*=\s*['"]application\/ld\+json['"]/i.test(tagAndContent)) {
-            found = true;
-            console.log(`[DEBUG] Block ${blockNum}: Matched type="application/ld+json"`);
-            // Remove everything before the first > (end of opening tag)
-            const gtIdx = tagAndContent.indexOf('>');
-            if (gtIdx === -1) {
-              console.log(`[DEBUG] Block ${blockNum}: No > found in opening tag, skipping.`);
-              continue;
-            }
-            const jsonText = tagAndContent.slice(gtIdx + 1);
-            // Try regex first
-            const regex = /"recipeInstructions"\s*:\s*"([\s\S]*?)"/i;
-            let match = jsonText.match(regex);
-            console.log('[DEBUG] Searching JSON-LD block for recipeInstructions:', jsonText.slice(0, 300));
-            if (match) {
-              let value = match[1].replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '\r');
-              console.log('[DEBUG] extracted value (regex):', value);
-              return value.trim();
-            }
-            // Fallback: plain string search
-            const idx = jsonText.indexOf('recipeInstructions');
-            if (idx !== -1) {
-              // Try to extract the value manually
-              const after = jsonText.slice(idx);
-              // Find the first colon after 'recipeInstructions'
-              const colonIdx = after.indexOf(':');
-              if (colonIdx !== -1) {
-                // Find the first quote after the colon
-                const quoteIdx = after.indexOf('"', colonIdx);
-                if (quoteIdx !== -1) {
-                  // Find the closing quote (not escaped)
-                  let endIdx = quoteIdx + 1;
-                  let value = '';
-                  while (endIdx < after.length) {
-                    if (after[endIdx] === '"' && after[endIdx - 1] !== '\\') {
-                      value = after.slice(quoteIdx + 1, endIdx);
-                      break;
-                    }
-                    endIdx++;
-                  }
-                  value = value.replace(/\\"/g, '"').replace(/\\n/g, '\n').replace(/\\r/g, '\r');
-                  console.log('[DEBUG] extracted value (plain search):', value);
-                  return value.trim();
-                }
+          // JSON-LD can be an array, object, or graph
+          let candidates = [];
+          if (Array.isArray(json)) {
+            candidates = json;
+          } else if (json['@graph']) {
+            candidates = json['@graph'];
+          } else {
+            candidates = [json];
+          }
+          for (const item of candidates) {
+            if (item && item['@type'] && (item['@type'] === 'Recipe' || (Array.isArray(item['@type']) && item['@type'].includes('Recipe')))) {
+              if (item.recipeInstructions) {
+                console.debug('[DEBUG][jsonld] Found recipeInstructions:', typeof item.recipeInstructions, item.recipeInstructions);
+              } else {
+                console.debug('[DEBUG][jsonld] No recipeInstructions in Recipe object:', item);
+              }
+              if (typeof item.recipeInstructions === 'string') {
+                return item.recipeInstructions;
+              } else if (Array.isArray(item.recipeInstructions)) {
+                // Sometimes it's an array of steps (strings or objects)
+                return item.recipeInstructions.map(step =>
+                  typeof step === 'string' ? step : (step.text || step['@value'] || '')
+                ).join('\n');
               }
             }
-          } else {
-            console.log(`[DEBUG] Block ${blockNum}: type="application/ld+json" NOT found.`);
           }
-        }
-        if (!found) {
-          console.log('[DEBUG] No JSON-LD script blocks found.');
         }
         return '';
       }
@@ -249,26 +252,16 @@ document.addEventListener('DOMContentLoaded', function () {
       console.log('[DEBUG] Attempted to run strategies with rawData length:', rawData.length, 'Preview:', rawData.slice(0, 300));
       return;
     }
-    // Run all strategies on the current rawData
-    // Remove common HTML banners/headers/navs before running strategies
-    let cleanedRawData = rawData;
-    cleanedRawData = cleanedRawData.replace(/<header[\s\S]*?<\/header>/gi, '');
-    cleanedRawData = cleanedRawData.replace(/<nav[\s\S]*?<\/nav>/gi, '');
-    cleanedRawData = cleanedRawData.replace(/<footer[\s\S]*?<\/footer>/gi, '');
-      cleanedRawData = cleanedRawData.replace(/<div[^>]*(class|id)=["'][^"']*(banner|header|nav)[^"']*["'][^>]*>[\s\S]*?<\/div>/gi, '');
-      cleanedRawData = cleanedRawData.replace(/<section[^>]*(class|id)=["'][^"']*(banner|header|nav)[^"']*["'][^>]*>[\s\S]*?<\/section>/gi, '');
-      cleanedRawData = cleanedRawData.replace(/<style[\s\S]*?<\/style>/gi, '');
-      cleanedRawData = cleanedRawData.replace(/<script[\s\S]*?<\/script>/gi, '');
-      // Run all strategies on the cleaned rawData
-      stepStrategies = strategies.map(s => {
-        const result = s.fn(cleanedRawData);
-        return {
-          name: s.name,
-          applied: false,
-          result: result,
-          solved: !!result && result !== 'N/A'
-        };
-      });
+    // Always run all strategies on the original, uncleaned rawData
+    stepStrategies = strategies.map(s => {
+      const result = s.fn(rawData);
+      return {
+        name: s.name,
+        applied: false,
+        result: result,
+        solved: !!result && result !== 'N/A'
+      };
+    });
     stepIndex = 0;
     renderStepTable();
     showStepControls();

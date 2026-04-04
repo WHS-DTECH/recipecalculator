@@ -9,6 +9,37 @@ function sortRecipes(data) {
 
 document.addEventListener('DOMContentLoaded', () => {
 
+	// Add event listener for Upload URL button
+	const uploadUrlBtn = document.getElementById('uploadUrlBtn');
+	const uploadUrlInput = document.getElementById('uploadUrlInput') || document.querySelector('input[type="text"]');
+	if (uploadUrlBtn && uploadUrlInput) {
+		uploadUrlBtn.addEventListener('click', async () => {
+			const url = uploadUrlInput.value.trim();
+			if (!url) {
+				alert('Please enter a Recipe URL.');
+				return;
+			}
+			uploadUrlBtn.disabled = true;
+			try {
+				const resp = await fetch('/api/recipes/upload-url', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ url })
+				});
+				const data = await resp.json();
+				if (data.success) {
+					alert('Recipe uploaded successfully!');
+					fetchAndRenderRecipes();
+				} else {
+					alert('Failed to upload recipe: ' + (data.error || 'Unknown error'));
+				}
+			} catch (err) {
+				alert('Error uploading recipe: ' + err.message);
+			}
+			uploadUrlBtn.disabled = false;
+		});
+	}
+
 	// Add event listener for Cleanup Instructions button (stepwise with progress bar)
 	const cleanupInstructionsBtn = Array.from(document.querySelectorAll('button')).find(btn => btn.textContent.trim() === 'Cleanup Instructions');
 	if (cleanupInstructionsBtn) {
@@ -159,12 +190,11 @@ document.addEventListener('DOMContentLoaded', () => {
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.id}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.uploaded_recipe_id || ''}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.name || ''}</td>
-						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.description || ''}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:indigo;'>${recipe.extracted_ingredients || ''}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 1.5rem; min-width:220px; color:#1976d2; white-space:normal; word-break:break-word;'>${recipe.ingredients_display || ''}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:indigo;'>${recipe.instructions_extracted || ''}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.serving_size !== undefined && recipe.serving_size !== null ? recipe.serving_size : ''}</td>
-						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:purple;'>${recipe.instructions || ''}</td>
+						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:purple;'>${recipe.instructions_display || ''}</td>
 						   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:#009688; max-width:120px; text-align:center; background:#f8f8ff;'>
 							   <button class="view-raw-btn" data-id="${recipe.id}" style="background:#1976d2;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">View</button>
 						   </td>

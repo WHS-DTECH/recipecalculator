@@ -1,3 +1,4 @@
+// Mount foodBrands router (Postgres)
 
 const fs = require('fs');
 const path = require('path');
@@ -8,19 +9,35 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-const { Pool } = require('pg');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
-const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const pool = require('./db');
 
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
 // Mount aisleKeywords router (Postgres)
 const aisleKeywordsRouter = require('./routes/aisleKeywords');
+app.use('/api/aisle_keywords', aisleKeywordsRouter);
+// Mount aisleCategory router (Postgres)
+const aisleCategoryRouter = require('./routes/aisleCategory');
+app.use('/api/aisle_category', aisleCategoryRouter);
+
+const foodBrandsRouter = require('./routes/foodBrands');
+app.use('/api/food_brands', foodBrandsRouter);
+
+// Mount extract_rendered_html router for /api/extract-rendered-html
+
+// ...existing code...
+// Mount extract_rendered_html router for /api/extract-rendered-html (must be after app is defined)
+const extractRenderedHtmlRouter = require('./routes/extract_rendered_html');
+app.use('/api', extractRenderedHtmlRouter);
+
 
 // Mount recipes router for all /api/recipes endpoints
 const recipesRouter = require('./routes/recipes');
 app.use('/api/recipes', recipesRouter);
+
+// Mount upload_url router for /api/recipes/upload-url
+const uploadUrlRouter = require('./routes/upload_url');
+app.use('/api/recipes', uploadUrlRouter);
 
 // --- Title Solution Endpoint (saves to DB) ---
 app.post('/api/title-extractor/solution', async (req, res) => {
@@ -283,17 +300,17 @@ app.post('/api/fetch-html', async (req, res) => {
 
 
 // Delete an upload record by ID
-app.delete('/api/uploads/:id', (req, res) => {
+app.delete('/api/uploads/:id', async (req, res) => {
   const { id } = req.params;
-  db.run('DELETE FROM uploads WHERE id = ?', [id], function(err) {
-    if (err) {
-      return res.status(500).json({ success: false, error: 'Failed to delete upload record.' });
-    }
-    if (this.changes === 0) {
+  try {
+    const result = await pool.query('DELETE FROM uploads WHERE id = $1', [id]);
+    if (result.rowCount === 0) {
       return res.status(404).json({ success: false, error: 'Upload record not found.' });
     }
     res.json({ success: true });
-  });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: 'Failed to delete upload record.' });
+  }
 });
 
 
@@ -388,7 +405,6 @@ app.get('/api/timetable/all', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch timetable data.' });
   }
 });
-    // ...existing code...
     // --- Instructions Solution Endpoint (saves to DB) ---
     app.post('/api/instructions-extractor/solution', async (req, res) => {
       const { recipeId, solution } = req.body;
@@ -656,7 +672,7 @@ app.put('/api/uploads/:id/raw', (req, res) => {
         rows.forEach(row => {
           let quantity = '', fooditem = '';
           console.log(`[Split Quantity] Processing row id=${row.id}, ingredient_name='${row.ingredient_name}'`);
-          const match = row.ingredient_name.match(/^([\d\s\/\.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+\s*(?:cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|g|gram|grams|kg|kilogram|kilograms|ml|l|litre|litres|liter|liters|oz|ounce|ounces|lb|pound|pounds|pinch|dash|clove|cloves|can|cans|slice|slices|stick|sticks|packet|packets|piece|pieces|egg|eggs|drop|drops|block|blocks|sheet|sheets|bunch|bunches|sprig|sprigs|head|heads|filet|filets|fillet|fillets|bag|bags|jar|jars|bottle|bottles|container|containers|box|boxes|bar|bars|roll|rolls|strip|strips|cm|mm|inch|inches|pinches|handful|handfuls|dozen|leaves|stalks|ribs|segments|cubes|sprinkles|splashes|litre|litres|millilitre|millilitres|quart|quarts|pint|pints|gallon|gallons)\b)\s*(.*)$/i);
+          const match = row.ingredient_name.match(/^([\d\s\/.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+\s*(?:cup|cups|tbsp|tablespoon|tablespoons|tsp|teaspoon|teaspoons|g|gram|grams|kg|kilogram|kilograms|ml|l|litre|litres|liter|liters|oz|ounce|ounces|lb|pound|pounds|pinch|dash|clove|cloves|can|cans|slice|slices|stick|sticks|packet|packets|piece|pieces|egg|eggs|drop|drops|block|blocks|sheet|sheets|bunch|bunches|sprig|sprigs|head|heads|filet|filets|fillet|fillets|bag|bags|jar|jars|bottle|bottles|container|containers|box|boxes|bar|bars|roll|rolls|strip|strips|cm|mm|inch|inches|pinches|handful|handfuls|dozen|leaves|stalks|ribs|segments|cubes|sprinkles|splashes|litre|litres|millilitre|millilitres|quart|quarts|pint|pints|gallon|gallons)\b)\s*(.*)$/i);
           if (match) {
             quantity = match[1].trim();
             fooditem = match[2].trim();
@@ -960,11 +976,14 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
     // Delete recipe
     app.delete('/api/recipes/:id', (req, res) => {
       const { id } = req.params;
-      db.run('DELETE FROM recipes WHERE id = ?', [id], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (this.changes === 0) return res.status(404).json({ error: 'Recipe not found.' });
-        res.json({ success: true });
-      });
+      pool.query('DELETE FROM recipes WHERE id = $1', [id])
+        .then(result => {
+          if (result.rowCount === 0) return res.status(404).json({ error: 'Recipe not found.' });
+          res.json({ success: true });
+        })
+        .catch(err => {
+          res.status(500).json({ error: err.message });
+        });
     });
 
     // --- Ingredients ---

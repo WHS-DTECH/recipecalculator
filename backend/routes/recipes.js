@@ -26,6 +26,84 @@ router.get('/display-table', async (req, res) => {
   }
 });
 
+// --- Stepwise Cleanup Instructions API with Progress ---
+// let cleanupProgress = { total: 0, current: 0, running: false }; // Removed duplicate declaration
+router.post('/cleanup-instructions-stepwise', async (req, res) => {
+  if (cleanupProgress.running) return res.status(429).json({ error: 'Cleanup already running' });
+  console.log('[CLEANUP] Starting stepwise cleanup of instructions...');
+  cleanupProgress.running = true;
+  try {
+    const result = await pool.query('SELECT id, instructions, instructions_extracted FROM recipes');
+    const rows = result.rows;
+    cleanupProgress.total = rows.length;
+    cleanupProgress.current = 0;
+    for (const row of rows) {
+      let cleanedExtracted = row.instructions_extracted;
+      let rawExtracted = row.instructions_extracted;
+      if (typeof cleanedExtracted === 'string') {
+        // Directly strip HowToStep and text markup, leaving only instructions
+        cleanedExtracted = cleanedExtracted
+          .replace(/"@type"\s*:\s*"HowToStep",?/g, '')
+          .replace(/"text"\s*:\s*"/g, '')
+          .replace(/[\[\]{}]/g, '')
+          .replace(/"/g, '')
+          .replace(/,/g, '\n')
+          .replace(/\\n/g, '\n')
+          .replace(/<\/?p>/gi, ' ')
+          .replace(/<br\s*\/?\s*>/gi, ' ')
+          .replace(/<[^>]+>/g, '')
+          .replace(/[Â]/g, '')
+          .replace(/\s+/g, ' ')
+          .replace(/\n+/g, '\n')
+          .trim();
+      }
+      // Debug output for extracted instructions
+      console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtracted=`, rawExtracted);
+      console.log(`[CLEANUP] Recipe ID ${row.id}: cleanedExtracted=`, cleanedExtracted);
+      // Always write to instructions_display, never overwrite instructions
+      if (cleanedExtracted && cleanedExtracted.length > 0) {
+        try {
+          const updateResult = await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleanedExtracted, row.id]);
+          console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned extracted_instructions and copied to instructions_display. Updated rows: ${updateResult.rowCount}`);
+        } catch (err) {
+          console.error(`[CLEANUP][ERROR] Recipe ID ${row.id}: Failed to update instructions_display.`, err);
+        }
+      } else if (row.instructions) {
+        let cleaned = row.instructions
+          .replace(/"recipeInstructions"\s*:\s*\[.*?\]/gs, '')
+          .replace(/\{\s*"@type"\s*:\s*"HowToStep".*?\}/gs, '')
+          .replace(/<\/?p>/gi, ' ')
+          .replace(/<br\s*\/?\s*>/gi, ' ')
+          .replace(/<[^>]+>/g, '')
+          .replace(/[Â]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (cleaned !== row.instructions.trim()) {
+          try {
+            const updateResult = await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleaned, row.id]);
+            console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned instructions and copied to instructions_display. Updated rows: ${updateResult.rowCount}`);
+          } catch (err) {
+            console.error(`[CLEANUP][ERROR] Recipe ID ${row.id}: Failed to update instructions_display.`, err);
+          }
+        } else {
+          console.log(`[CLEANUP] Recipe ID ${row.id}: No change needed.`);
+        }
+      } else {
+        console.log(`[CLEANUP] Recipe ID ${row.id}: No instructions, skipping.`);
+      }
+      cleanupProgress.current++;
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    cleanupProgress.running = false;
+    console.log(`[CLEANUP] Stepwise cleanup complete. Updated ${cleanupProgress.current} recipes.`);
+    res.json({ success: true, message: 'Stepwise cleanup complete.' });
+  } catch (e) {
+    cleanupProgress.running = false;
+    console.error('[CLEANUP] Error during cleanup:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/recipes/:id/display - Copy recipe to recipe_display table
 router.post('/:id/display', async (req, res) => {
   const recipeId = req.params.id;
@@ -98,18 +176,16 @@ router.delete('/display-table/:id', async (req, res) => {
 });
 
 // --- Stepwise Cleanup Ingredients API with Progress ---
+
 let cleanupIngredientsProgress = { total: 0, current: 0, running: false };
 router.post('/cleanup-ingredients-stepwise', async (req, res) => {
   if (cleanupIngredientsProgress.running) return res.status(429).json({ error: 'Cleanup already running' });
   console.log('[CLEANUP] Starting stepwise cleanup of ingredients...');
   cleanupIngredientsProgress.running = true;
   try {
-    const rows = await new Promise((resolve, reject) => {
-      db.all('SELECT id, ingredients FROM recipes', [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    // Use Postgres
+    const result = await pool.query('SELECT id, ingredients FROM recipes');
+    const rows = result.rows;
     cleanupIngredientsProgress.total = rows.length;
     cleanupIngredientsProgress.current = 0;
     for (const row of rows) {
@@ -119,7 +195,7 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
           .replace(/<li>/gi, '')
           .replace(/<\/li>/gi, '\n')
           .replace(/<ul>|<\/ul>/gi, '')
-          .replace(/<br\s*\/?\s*>/gi, '\n')
+          .replace(/<br\s*\/??\s*>/gi, '\n')
           .replace(/<[^>]+>/g, '')
           .replace(/[Â]/g, '')
           .replace(/"?recipeIngredient"?\s*:\s*/gi, '') // Remove recipeIngredient keys
@@ -138,7 +214,7 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
           .replace(/,?\s*5 Star 4 Star 3 Star 2 Star 1 Star/i, '') // Remove trailing '5 Star 4 Star 3 Star 2 Star 1 Star'
           .trim();
       }
-      await new Promise(resolve => db.run('UPDATE recipes SET Ingredients_display = ? WHERE id = ?', [cleaned, row.id], resolve));
+      await pool.query('UPDATE recipes SET Ingredients_display = $1 WHERE id = $2', [cleaned, row.id]);
       console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned ingredients and copied to Ingredients_display.`);
       cleanupIngredientsProgress.current++;
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -164,12 +240,8 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
   console.log('[CLEANUP] Starting stepwise cleanup of instructions...');
   cleanupProgress.running = true;
   try {
-    const rows = await new Promise((resolve, reject) => {
-      db.all('SELECT id, instructions, instructions_extracted FROM recipes', [], (err, rows) => {
-        if (err) reject(err);
-        else resolve(rows);
-      });
-    });
+    const result = await pool.query('SELECT id, instructions, instructions_extracted FROM recipes');
+    const rows = result.rows;
     cleanupProgress.total = rows.length;
     cleanupProgress.current = 0;
     for (const row of rows) {
@@ -188,7 +260,18 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
               .replace(/([,{])\s*([a-zA-Z0-9_@]+)\s*:/g, '$1"$2":') // ensure keys are quoted
             );
             if (Array.isArray(arr)) {
-              cleanedExtracted = arr.map(step => step.text).filter(Boolean).join(' ');
+              // Only keep the instruction text, remove all keys like '@type'.
+              cleanedExtracted = arr.map(step => {
+                if (typeof step === 'string') {
+                  // Remove any leading/trailing quotes or whitespace
+                  return step.trim().replace(/^"|"$/g, '');
+                }
+                if (step && typeof step.text === 'string') {
+                  // Remove leading/trailing whitespace from text
+                  return step.text.trim();
+                }
+                return '';
+              }).filter(Boolean).join('\n');
               cleanedExtracted = cleanedExtracted.replace(/[Â]/g, '');
             }
           } catch (e) {
@@ -218,12 +301,10 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
       // Debug output for extracted instructions
       console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtracted=`, rawExtracted);
       console.log(`[CLEANUP] Recipe ID ${row.id}: cleanedExtracted=`, cleanedExtracted);
-      if ((!row.instructions || row.instructions.trim() === '') && cleanedExtracted && cleanedExtracted.length > 0) {
-        await new Promise(resolve => db.run('UPDATE recipes SET instructions = ? WHERE id = ?', [cleanedExtracted, row.id], resolve));
-        console.log(`[CLEANUP] Recipe ID ${row.id}: Copied cleaned extracted_instructions to empty instructions.`);
-      } else if (cleanedExtracted && cleanedExtracted.length > 0) {
-        await new Promise(resolve => db.run('UPDATE recipes SET instructions = ? WHERE id = ?', [cleanedExtracted, row.id], resolve));
-        console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned extracted_instructions and copied to instructions.`);
+      // Always write to instructions_display, never overwrite instructions
+      if (cleanedExtracted && cleanedExtracted.length > 0) {
+        await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleanedExtracted, row.id]);
+        console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned extracted_instructions and copied to instructions_display.`);
       } else if (row.instructions) {
         let cleaned = row.instructions
           .replace(/"recipeInstructions"\s*:\s*\[.*?\]/gs, '')
@@ -235,8 +316,8 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
           .replace(/\s+/g, ' ')
           .trim();
         if (cleaned !== row.instructions.trim()) {
-          await new Promise(resolve => db.run('UPDATE recipes SET instructions = ? WHERE id = ?', [cleaned, row.id], resolve));
-          console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned and updated.`);
+          await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleaned, row.id]);
+          console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned instructions and copied to instructions_display.`);
         } else {
           console.log(`[CLEANUP] Recipe ID ${row.id}: No change needed.`);
         }
@@ -322,7 +403,7 @@ router.post('/cleanup-instructions', (req, res) => {
 // Get all recipes (with upload raw_data)
 router.get('/recipes', async (req, res) => {
   const sql = `
-    SELECT recipes.*, uploads.raw_data as upload_raw_data
+    SELECT recipes.*, recipes.instructions_display, recipes.ingredients_display, uploads.raw_data as upload_raw_data
     FROM recipes
     LEFT JOIN uploads ON recipes.uploaded_recipe_id = uploads.id
   `;

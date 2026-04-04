@@ -211,14 +211,14 @@
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Quantity</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Qty</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Unit</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1FoodItem</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1StripFoodItem</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Aisle Category</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Assign</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Actions</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -245,7 +245,7 @@
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">
                                 <select data-id="${row.id}" class="aisle-category-select">
                                   <option value="">--Assign--</option>
-                                  ${categories.map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
+                                  ${categories.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
                                 </select>
                               </td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem; text-align:center;">
@@ -701,25 +701,11 @@
                   alert('Ingredient parser not loaded.');
                   return;
                 }
-                const parsedIngredients = lines.map(line => {
-                  const parsed = parseIngredient(line);
-                  console.log('[InsertIngredients] Parsed ingredient:', parsed, 'from line:', line);
-                  return {
-                    ingredient_name: parsed.name || line,
-                    quantity: parsed.quantity || '',
-                    measure_qty: parsed.quantity || '',
-                    measure_unit: parsed.unit || '',
-                    fooditem: parsed.name || line,
-                    stripFoodItem: (typeof stripFoodItem === 'function') ? stripFoodItem(parsed.name || line) : '',
-                    aisle_category_id: null,
-                    recipe_id: recipeId
-                  };
-                });
-                console.log('[InsertIngredients] Parsed ingredients array:', parsedIngredients);
+                // Send only recipe_id to backend, which will fetch from recipe_display
                 fetch('/api/ingredients/inventory/save-bulk', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ ingredients: parsedIngredients })
+                  body: JSON.stringify({ recipe_id: recipeId })
                 })
                 .then(res => res.json())
                 .then(data => {
@@ -781,8 +767,59 @@
     <div id="reformat-status" style="margin-bottom:1.5rem;"></div>
     <!-- Duplicate removed: ingredients-inventory-table -->
       <div id="ingredients-inventory-debug-table"></div>
-    <h3 style="margin-top:3rem;">All Recipes</h3>
-    <div id="recipes-table-container"></div>
+    
+      <h3 style="margin-top:3rem;">Published Recipes</h3>
+      <div id="published-recipes-table-container"></div>
+      <script>
+        // Render Published Recipes Table from recipe_display
+        function renderPublishedRecipesTable() {
+          fetch('/api/recipes/display-table')
+            .then(res => res.json())
+            .then(data => {
+              const container = document.getElementById('published-recipes-table-container');
+              if (!container) return;
+              if (!Array.isArray(data) || data.length === 0) {
+                container.innerHTML = '<div style="color:#888;padding:1rem;">No published recipes found.</div>';
+                return;
+              }
+              // Sort by ID descending (newest first)
+              data.sort((a, b) => (b.id ?? 0) - (a.id ?? 0));
+              let html = `<table style="width:100%;margin-top:1rem;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:#f5f5f5;">
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Name</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Description</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredients</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Serving Size</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">URL</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Instructions</th>
+                    <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">RecipeID</th>
+                  </tr>
+                </thead>
+                <tbody>`;
+              html += data.map(row => `
+                <tr>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.id ?? ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.name ?? ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.description ?? ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.ingredients ?? ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.serving_size ?? ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.url ? `<a href='${row.url}' target='_blank'>Link</a>` : ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.instructions ?? ''}</td>
+                  <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${row.recipeid ?? ''}</td>
+                </tr>
+              `).join('');
+              html += '</tbody></table>';
+              container.innerHTML = html;
+            })
+            .catch(() => {
+              const container = document.getElementById('published-recipes-table-container');
+              if (container) container.innerHTML = '<div style="color:#e53935;padding:1rem;">Failed to load published recipes.</div>';
+            });
+        }
+        document.addEventListener('DOMContentLoaded', renderPublishedRecipesTable);
+      </script>
     <script>
       // Always render ingredients table on page load
       document.addEventListener('DOMContentLoaded', function() {
