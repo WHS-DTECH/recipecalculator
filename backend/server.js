@@ -1,13 +1,16 @@
-// Mount foodBrands router (Postgres)
-
-const fs = require('fs');
-const path = require('path');
 
 
 const express = require('express');
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+const fs = require('fs');
+const path = require('path');
+// --- DEBUG: Log all requests to /api/ingredients/inventory/* ---
+app.use('/api/ingredients/inventory', (req, res, next) => {
+  console.log(`[SERVER] ${req.method} ${req.originalUrl}`);
+  next();
+});
 
 const pool = require('./db');
 
@@ -23,12 +26,22 @@ app.use('/api/aisle_category', aisleCategoryRouter);
 const foodBrandsRouter = require('./routes/foodBrands');
 app.use('/api/food_brands', foodBrandsRouter);
 
-// Mount extract_rendered_html router for /api/extract-rendered-html
 
-// ...existing code...
 // Mount extract_rendered_html router for /api/extract-rendered-html (must be after app is defined)
 const extractRenderedHtmlRouter = require('./routes/extract_rendered_html');
 app.use('/api', extractRenderedHtmlRouter);
+
+
+
+// Mount ingredients router for all /api/ingredients endpoints
+const ingredientsRouter = require('./routes/ingredients.routes');
+app.use('/api/ingredients', ingredientsRouter);
+
+// Global error handler for uncaught errors (should be after routers)
+app.use((err, req, res, next) => {
+  console.error('[GLOBAL ERROR HANDLER]', err);
+  res.status(500).json({ success: false, error: err.message, details: err.stack });
+});
 
 
 // Mount recipes router for all /api/recipes endpoints
@@ -65,30 +78,11 @@ app.post('/api/title-extractor/solution', async (req, res) => {
   }
 });
 
-// --- Upload Recipe by URL ---
-app.post('/api/uploads', async (req, res) => {
-  const { recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data } = req.body;
-  try {
-    const result = await pool.query(
-      'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data]
-    );
-    res.json({ success: true, upload_id: result.rows[0].id });
-  } catch (err) {
-    console.error('[DEBUG /api/uploads] Failed to insert upload:', err.message);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
 
-// Get all uploads (for recipe selector)
-app.get('/api/uploads', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM uploads ORDER BY id DESC');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+
+// Modular uploads router
+const uploadsRouter = require('./routes/api/uploads');
+app.use('/api/uploads', uploadsRouter);
 
 
 // --- Suggestions API ---
@@ -940,7 +934,7 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       console.log('[DEBUG /api/recipes] SQL:', sql);
       try {
         const result = await pool.query(sql);
-        console.log('[DEBUG /api/recipes] Result:', result.rows);
+       //console.log('[DEBUG /api/recipes] Result:', result.rows);
         res.json(result.rows);
       } catch (err) {
         console.error('[DEBUG /api/recipes] Error:', err);
@@ -1213,6 +1207,12 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
+
+// Catch-all logger for unhandled requests (for debugging routing issues)
+app.use((req, res, next) => {
+  console.log('[UNHANDLED REQUEST]', req.method, req.originalUrl);
+  next();
+});
 
 // =========================
 // Start Server

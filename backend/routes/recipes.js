@@ -1,14 +1,37 @@
+
 const express = require('express');
 const router = express.Router();
 const { Pool } = require('pg');
+const fs = require('fs');
+const path = require('path');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
+// PUT /api/recipes/:id/raw - Save raw data for a recipe (file only)
+router.put('/recipes/:id/raw', async (req, res) => {
+  const { id } = req.params;
+  const { raw_data } = req.body;
+  if (!raw_data) return res.status(400).json({ success: false, error: 'Missing raw_data' });
+  const rawDataDir = path.join(__dirname, '../public/RawDataTXT');
+  if (!fs.existsSync(rawDataDir)) {
+    fs.mkdirSync(rawDataDir, { recursive: true });
+  }
+  const filePath = path.join(rawDataDir, `${id}.txt`);
+  fs.writeFile(filePath, raw_data, (fileErr) => {
+    if (fileErr) {
+      return res.status(500).json({ success: false, error: 'Failed to write raw data file', details: fileErr.message });
+    }
+    res.json({ success: true });
+  });
+});
+
+
 // GET /api/recipes/display-dropdown - Get all recipes from recipe_display for dropdown
+// Updated: Return both id (primary key), recipeID, and name
 router.get('/display-dropdown', async (req, res) => {
   try {
-    const result = await pool.query('SELECT "recipeID" as id, name FROM recipe_display ORDER BY name');
+    const result = await pool.query('SELECT id, recipeid, name FROM recipe_display ORDER BY name');
     res.json({ recipes: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

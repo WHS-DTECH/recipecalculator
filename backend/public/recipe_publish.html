@@ -3,7 +3,7 @@
 <head>
 	<meta charset="UTF-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<title>Upload Recipes - URL</title>
+	<title>Publish Recipes</title>
 	<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
 	<link rel="stylesheet" href="admin_styles.css">
 </head>
@@ -20,7 +20,7 @@
 	<div id="navbar-include"></div>
 	<script src="../shared/navbar_loader.js"></script>
 	<div class="setup-card main-content-margins">
-		<h2>Upload Recipes - URL</h2>
+		<h2>Publish Recipes</h2>
 		<div class="setup-section">
 			<div class="setup-section-title">Load Recipe (URL)</div>
 			<div class="setup-section-desc">Import recipe from a website URL.</div>
@@ -28,9 +28,27 @@
 			<input type="text" class="setup-url-input wide-url-input super-wide-url-input" placeholder="e.g., https://www.chelsea.co.nz/browse-recipes/...">
 			<button class="setup-btn upload-url-btn standout-btn" id="uploadUrlBtn">Upload URL</button>
 			<button id="syncUploadedToRecipesBtn" style="margin-left:1rem;background:#388e3c;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Sync Uploaded Recipes to Recipes Table</button>
-			<!-- Removed Extract Recipe Information and Clean up for Display sections as requested -->
+			<hr style="margin:1.2rem 0 1.2rem 0;">
+			<div style="font-size:1.25rem;font-weight:bold;color:#1976d2;margin-bottom:0.7rem;">Extract Recipe Information</div>
+			<!-- Extractor buttons removed as requested -->
+			<hr style="margin:1.2rem 0 1.2rem 0;">
+			<div style="font-size:1.25rem;font-weight:bold;color:#1976d2;margin-bottom:0.7rem;">Clean up for Display</div>
+			<div style="margin-bottom:1.2rem; display: flex; gap: 1rem; align-items: center;">
+				<button class="setup-btn" style="background:#008080;color:#fff;">Cleanup Instructions</button>
+				<button class="setup-btn" style="background:#4B0082;color:#fff;">Cleanup Ingredients</button>
+				<button id="syncAllToDisplayBtn" style="background:#1976d2;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Sync All Recipes to Display</button>
+			</div>
 		</div>
-		<!-- Removed Raw Data Preview section as requested -->
+		<hr>
+		<!-- Move Raw Data Preview next to Raw Data Extractor button -->
+		<div style="display:flex; align-items:center; margin-bottom:1rem;">
+			<button id="transferInstructionsMainBtn" class="setup-btn" style="background:#a020f0; color:#fff; margin-right:1rem; display:none;">Transfer Instructions</button>
+			<div id="rawDataPreviewWindow" style="width:420px; min-height:90px; height:110px; max-height:160px; background:#f8f8ff; border:1.5px solid #bdbdbd; border-radius:8px; box-shadow:0 2px 8px #0001; padding:0.7rem 1rem; overflow:auto; font-size:0.97em; color:#333; display:flex; flex-direction:column; align-items:flex-start; justify-content:flex-start; z-index:2; display:none;">
+				<div style="font-weight:bold; color:#8000b0; font-size:1em; margin-bottom:0.3em;">Raw Data Preview</div>
+				<pre id="rawDataPreviewText" style="margin:0; padding:0; background:none; border:none; font-size:0.97em; max-width:100%; max-height:120px; overflow:auto; white-space:pre-wrap;"></pre>
+			</div>
+		</div>
+		<hr>
 		
 		<!-- Direct Linked Recipes Table (all fields) -->
 		<div class="setup-section">

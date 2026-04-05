@@ -1,58 +1,3 @@
-                        <!--// DEBUG: Show API response above navbar
-                        const debugDiv = document.createElement('div');
-                        debugDiv.style.background = '#fffbe6';
-                        debugDiv.style.color = '#b36b00';
-                        debugDiv.style.padding = '0.5rem';
-                        debugDiv.style.margin = '1rem 0';
-                        debugDiv.style.fontSize = '1rem';
-                        debugDiv.innerText = '[DEBUG] /api/ingredients/inventory/all response: ' + JSON.stringify(data);
-                        document.body.insertBefore(debugDiv, document.body.firstChild);
-                        // DEBUG: Show if table container exists
-                        const containerDebug = document.createElement('div');
-                        containerDebug.style.background = '#e6f7ff';
-                        containerDebug.style.color = '#0050b3';
-                        containerDebug.style.padding = '0.5rem';
-                        containerDebug.style.margin = '1rem 0';
-                        containerDebug.style.fontSize = '1rem';
-                        if (container) {
-                          containerDebug.innerText = '[DEBUG] ingredients-inventory-table element found.';
-                        } else {
-                          containerDebug.innerText = '[DEBUG] ERROR: ingredients-inventory-table element NOT found!';
-                        }
-                        document.body.insertBefore(containerDebug, document.body.firstChild);
-                        // DEBUG: Show if renderIngredientsInventoryTable is defined
-                        const funcDebug = document.createElement('div');
-                        funcDebug.style.background = '#fff0f6';
-                        funcDebug.style.color = '#c41d7f';
-                        funcDebug.style.padding = '0.5rem';
-                        funcDebug.style.margin = '1rem 0';
-                        funcDebug.style.fontSize = '1rem';
-                        if (typeof window.renderIngredientsInventoryTable === 'function') {
-                          funcDebug.innerText = '[DEBUG] renderIngredientsInventoryTable function is defined.';
-                        } else {
-                          funcDebug.innerText = '[DEBUG] ERROR: renderIngredientsInventoryTable function is NOT defined!';
-                        }
-                        document.body.insertBefore(funcDebug, document.body.firstChild);
-                          // DEBUG: Show when function is called
-                          const callDebug = document.createElement('div');
-                          callDebug.style.background = '#f6ffed';
-                          callDebug.style.color = '#389e0d';
-                          callDebug.style.padding = '0.5rem';
-                          callDebug.style.margin = '1rem 0';
-                          callDebug.style.fontSize = '1rem';
-                          callDebug.innerText = '[DEBUG] renderIngredientsInventoryTable CALLED.';
-                          document.body.insertBefore(callDebug, document.body.firstChild);
-                        // DEBUG: Show error loading inventory data
-                        const debugDiv = document.createElement('div');
-                        debugDiv.style.background = '#fffbe6';
-                        debugDiv.style.color = '#b36b00';
-                        debugDiv.style.padding = '0.5rem';
-                        debugDiv.style.margin = '1rem 0';
-                        debugDiv.style.fontSize = '1rem';
-                        debugDiv.innerText = '[DEBUG] Error loading inventory data: ' + (err && err.message ? err.message : err);
-                        document.body.insertBefore(debugDiv, document.body.firstChild);
-      // Ensure our inventory table render function is always used
-        window.renderIngredientsTable = window.renderIngredientsInventoryTable;-->
         <script>
           // Helper: set Recipe ID filter and trigger filter
       function setRecipeIdAndFilter(recipeId) {
@@ -84,7 +29,7 @@
                   // Debug output removed
                   // Call function if possible
                   if (typeof window.renderIngredientsInventoryTable === 'function') {
-                    if (container) container.innerHTML = '<div style="color:green;font-weight:bold;">[DEBUG] Calling renderIngredientsInventoryTable with ' + ingredients.length + ' ingredients.</div>';
+                    //if (container) container.innerHTML = '<div style="color:green;font-weight:bold;">[DEBUG] Calling renderIngredientsInventoryTable with ' + ingredients.length + ' ingredients.</div>';
                     // Debug output removed
                     window.renderIngredientsInventoryTable(ingredients);
                   } else {
@@ -197,13 +142,33 @@
                       const match = keywords.find(k => lower.includes((k.keyword || '').toLowerCase()));
                       return match ? match.aisle_category : '';
                     }
+
+                    // Sort so that rows with no assigned category ("--Assign--") are at the top
+                    const sortedIngredients = ingredients.slice().sort((a, b) => {
+                      // Determine if a row is unassigned
+                      function isUnassigned(row) {
+                        // If aisle_category_id is missing or 0 or null, or keyword match fails
+                        if (!row.aisle_category_id) {
+                          // Try keyword match
+                          const cat = findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
+                          return !cat;
+                        }
+                        return false;
+                      }
+                      const aUnassigned = isUnassigned(a);
+                      const bUnassigned = isUnassigned(b);
+                      if (aUnassigned && !bUnassigned) return -1;
+                      if (!aUnassigned && bUnassigned) return 1;
+                      return 0;
+                    });
+
                     const table = document.createElement('table');
                     table.style.width = '100%';
                     table.style.marginTop = '2rem';
                     table.style.borderCollapse = 'collapse';
                     // Debug: log categories and ingredients
-                    console.log('[DEBUG] Categories:', categories);
-                    console.log('[DEBUG] Ingredients:', ingredients);
+                    //console.log('[DEBUG] Categories:', categories);
+                    //console.log('[DEBUG] Ingredients:', sortedIngredients);
                     // Build table HTML
                     table.innerHTML = `
                       <thead>
@@ -211,10 +176,10 @@
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Unit</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
+                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
@@ -222,8 +187,8 @@
                         </tr>
                       </thead>
                       <tbody>
-                        ${ingredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
-                          ingredients.map(row => {
+                        ${sortedIngredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
+                          sortedIngredients.map(row => {
                             let stripFood = stripFoodItemDynamic(row.fooditem || '');
                             let assignedCategory = '';
                             if (row.aisle_category_id) {
@@ -236,16 +201,20 @@
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.id)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.recipe_id)}</td>
+                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.fooditem) || safe(row.measure_unit)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.quantity)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_qty)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_unit)}</td>
-                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.fooditem) || safe(row.measure_unit)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem; color:green;">${stripFood || safe(row.measure_unit)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${assignedCategory}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">
                                 <select data-id="${row.id}" class="aisle-category-select">
                                   <option value="">--Assign--</option>
-                                  ${categories.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
+                                  ${categories.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => {
+                                    // Compare aisle_category_id as string to c.id as string
+                                    const isSelected = String(row.aisle_category_id) === String(c.id);
+                                    return `<option value="${c.id}"${isSelected ? ' selected' : ''}>${c.name}</option>`;
+                                  }).join('')}
                                 </select>
                               </td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem; text-align:center;">
@@ -256,22 +225,12 @@
                       </tbody>
                     `;
                     // Debug: log generated table HTML
-                    console.log('[DEBUG] Table HTML:', table.innerHTML);
+                    // console.log('[DEBUG] Table HTML:', table.innerHTML);
                     container.innerHTML = '';
                     container.appendChild(table);
-                    table.querySelectorAll('.aisle-category-select').forEach(select => {
-                      select.onchange = function() {
-                        const ingredientId = this.getAttribute('data-id');
-                        const aisleId = this.value;
-                        fetch(`/api/ingredients/inventory/assign-aisle`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ ingredient_id: ingredientId, aisle_category_id: aisleId })
-                        }).then(() => {
-                          window.renderIngredientsInventoryTable(ingredients);
-                        });
-                      };
-                    });
+                    // Do NOT send to backend on change. Only update local state (the dropdown value is already changed in the DOM).
+                    // Backend update will be triggered by Save All Assignments button only.
+                    // No code needed here for onchange.
                     // Add DELETE button logic
                     table.querySelectorAll('.delete-ingredient-btn').forEach(btn => {
                       if (!btn) return;
@@ -380,16 +339,140 @@
       <span id="save-status" style="margin-left:1rem;color:#009688;font-weight:bold;"></span>
     </div>
 
-    <!-- Move preview/textarea UI here -->
-    <div style="margin-bottom:1.5rem;">
-      <label for="textConvertArea" style="font-weight:bold;">Paste or enter ingredients here:</label><br>
-      <textarea id="textConvertArea" rows="4" style="width:100%;max-width:600px;min-width:300px;display:block;margin-bottom:0.5rem;" placeholder="e.g. 2 cups flour\n1 tsp salt\n..."></textarea>
-      <label for="ingredientsPreviewBox" style="font-weight:bold;">Recipe Ingredients Preview:</label><br>
-      <textarea id="ingredientsPreviewBox" readonly style="width:100%;max-width:600px;min-width:300px;background:#f6f0ff;border:1px solid #e0d7fa;padding:0.5rem;display:block;"></textarea>
+    <!-- Paste and Preview UI moved up here -->
+    <div style="margin-bottom:1.5rem;max-width:650px;">
+      <label for="textConvertArea" style="font-weight:bold;">Paste or enter ingredients here:</label>
+      <textarea id="textConvertArea" rows="4" style="width:100%;max-width:600px;margin:1rem 0;display:block;" placeholder="e.g. 2 cups flour\n1 tsp salt\n..."></textarea>
+      <div style="margin-bottom:1rem;"></div>
+      <div id="insert-ingredients-preview-container" style="display:none;margin-bottom:1.5rem;">
+        <label style="font-weight:bold;">Preview: Extracted Ingredients File</label>
+        <pre id="insert-ingredients-preview" style="background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;max-width:600px;overflow-x:auto;"></pre>
+      </div>
+      <label for="ingredientsPreviewBox" style="font-weight:bold;">Recipe Ingredients Preview:</label>
+      <pre id="ingredientsPreviewBox" style="width:100%;max-width:600px;margin:1rem 0;display:block;background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;overflow-x:auto;min-height:60px;"></pre>
     </div>
+    <!-- Table Title for Ingredients Directory -->
+    <h3 style="margin-top:2rem;margin-bottom:0.5rem;">Ingredients Directory</h3>
 
+
+    <!-- Recipe Filter Dropdown -->
+    <div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;">
+      <label for="filter-recipe-select" style="font-weight:bold;">Filter by Recipe:</label>
+      <select id="filter-recipe-select" style="min-width:180px;"></select>
+      <button id="trigger-recipe-filter-btn" style="background:#1976d2;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Filter</button>
+      <span id="filter-status" style="margin-left:1rem;color:#1976d2;font-weight:bold;"></span>
+    </div>
+    <!-- Hidden input for filtering by recipe ID (required by JS) -->
+    <input type="hidden" id="filter-recipe-id" value="">
+    <!-- Save Assignments Button -->
+    <div style="margin-bottom:1rem;">
+      <button id="save-assignments-btn" style="background:#388e3c;color:#fff;border:none;padding:0.5rem 1.2rem;border-radius:4px;cursor:pointer;font-weight:bold;">Save All Assignments</button>
+      <span id="save-assignments-status" style="margin-left:1rem;color:#388e3c;font-weight:bold;"></span>
+    </div>
     <!-- Table container for dynamic rendering -->
+      <script>
+        // Save all assignments button logic
+        document.addEventListener('DOMContentLoaded', function() {
+          const saveBtn = document.getElementById('save-assignments-btn');
+          if (saveBtn) {
+            saveBtn.addEventListener('click', function() {
+              saveBtn.disabled = true;
+              saveBtn.textContent = 'Saving...';
+              document.getElementById('save-assignments-status').textContent = '';
+              // Collect all dropdowns and their values
+              const selects = document.querySelectorAll('.aisle-category-select');
+              const updates = [];
+              selects.forEach(sel => {
+                const ingredientId = sel.getAttribute('data-id');
+                const aisleId = sel.value;
+                if (aisleId) {
+                  updates.push({ ingredient_id: ingredientId, aisle_category_id: aisleId });
+                }
+              });
+              if (updates.length === 0) {
+                document.getElementById('save-assignments-status').textContent = 'No assignments to save.';
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save All Assignments';
+                return;
+              }
+              // Send all updates in parallel
+              Promise.all(updates.map(u =>
+                fetch('/api/ingredients/inventory/assign-aisle', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(u)
+                })
+              ))
+              .then(() => {
+                document.getElementById('save-assignments-status').textContent = 'Assignments saved!';
+                // Refresh table with latest data
+                fetch('/api/ingredients/inventory/all')
+                  .then(res => res.json())
+                  .then(data => {
+                    const updatedIngredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                    window.renderIngredientsInventoryTable(updatedIngredients);
+                  });
+              })
+              .catch(() => {
+                document.getElementById('save-assignments-status').textContent = 'Error saving assignments.';
+              })
+              .finally(() => {
+                saveBtn.disabled = false;
+                saveBtn.textContent = 'Save All Assignments';
+              });
+            });
+          }
+        });
+      </script>
     <div id="ingredients-inventory-table" style="margin-top:2rem; margin-left:2rem; overflow-x:auto;"></div>
+  <script>
+    // Populate filter dropdown and wire up filtering
+    document.addEventListener('DOMContentLoaded', function() {
+      fetch('/api/recipes/display-table')
+        .then(res => res.json())
+        .then(data => {
+          const filterSelect = document.getElementById('filter-recipe-select');
+          if (filterSelect) {
+            filterSelect.innerHTML = '<option value="">-- Show All Recipes --</option>' +
+              data.map(r => `<option value="${r.recipeid}">${r.recipeid} | ${r.name || r.recipe_title || 'Recipe ' + r.recipeid}</option>`).join('');
+          }
+        });
+      const filterSelect = document.getElementById('filter-recipe-select');
+      const filterBtn = document.getElementById('trigger-recipe-filter-btn');
+      if (filterBtn && filterSelect) {
+        filterBtn.addEventListener('click', function() {
+          const recipeId = filterSelect.value;
+          document.getElementById('filter-recipe-id').value = recipeId;
+          filterBtn.disabled = true;
+          filterBtn.textContent = 'Filtering...';
+          document.getElementById('filter-status').textContent = '';
+          // Custom filter logic with feedback
+          fetch('/api/ingredients/inventory/all')
+            .then(res => res.json())
+            .then(data => {
+              const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+              let filtered = ingredients;
+              if (recipeId) {
+                filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
+              }
+              if (typeof window.renderIngredientsInventoryTable === 'function') {
+                window.renderIngredientsInventoryTable(filtered);
+              }
+              if (filtered.length === 0) {
+                document.getElementById('filter-status').textContent = 'No ingredients found for this recipe.';
+              }
+            })
+            .catch(() => {
+              document.getElementById('filter-status').textContent = 'Error filtering ingredients.';
+            })
+            .finally(() => {
+              filterBtn.disabled = false;
+              filterBtn.textContent = 'Filter';
+            });
+        });
+      }
+    });
+  </script>
 
     <!-- Move all main scripts to end of body for reliability -->
     </div>
@@ -437,14 +520,14 @@
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Quantity</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Qty</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Measure Unit</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1FoodItem</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1StripFoodItem</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Aisle Category</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Assign</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">1Actions</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
+                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -471,7 +554,7 @@
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">
                         <select data-id="${row.id}" class="aisle-category-select">
                           <option value="">--Assign--</option>
-                          ${categories.map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
+                          ${categories.slice().sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}"${assignedCategory === c.name ? ' selected' : ''}>${c.name}</option>`).join('')}
                         </select>
                       </td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem; text-align:center;">
@@ -640,31 +723,7 @@
         }
       });
       </script>
-    <br/>
-    <label for="textConvertArea" style="font-weight:bold;">Paste or enter ingredients here:</label>
-    <textarea id="textConvertArea" rows="4" style="width:100%;max-width:600px;margin:1rem 0;display:block;" placeholder="e.g. 2 cups flour\n1 tsp salt\n..."></textarea>
-    <div style="margin-bottom:1rem;"></div>
-    <div id="insert-ingredients-preview-container" style="display:none;margin-bottom:1.5rem;">
-      <label style="font-weight:bold;">Preview: Extracted Ingredients File</label>
-      <pre id="insert-ingredients-preview" style="background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;max-width:600px;overflow-x:auto;"></pre>
-    </div>
-      <label for="ingredientsPreviewBox" style="font-weight:bold;">Recipe Ingredients Preview:</label>
-      <pre id="ingredientsPreviewBox" style="width:100%;max-width:600px;margin:1rem 0;display:block;background:#f3eaff;border:1px solid #b39ddb;padding:1rem;border-radius:4px;overflow-x:auto;min-height:60px;"></pre>
-      <script>
-        // Synchronize preview box with textarea live
-        document.addEventListener('DOMContentLoaded', function() {
-          const textArea = document.getElementById('textConvertArea');
-          const previewBox = document.getElementById('ingredientsPreviewBox');
-          if (textArea && previewBox) {
-            // Initial sync
-            previewBox.textContent = textArea.value;
-            // On input
-            textArea.addEventListener('input', function() {
-              previewBox.textContent = textArea.value;
-            });
-          }
-        });
-      </script>
+    <!-- Duplicate paste and preview boxes removed -->
         <script>
           // Insert Ingredients button logic
           document.addEventListener('DOMContentLoaded', function() {
@@ -765,8 +824,8 @@
           });
         </script>
     <div id="reformat-status" style="margin-bottom:1.5rem;"></div>
-    <!-- Duplicate removed: ingredients-inventory-table -->
-      <div id="ingredients-inventory-debug-table"></div>
+    <!-- Duplicate removed: ingredients-inventory-table
+      <div id="ingredients-inventory-debug-table"></div> -->
     
       <h3 style="margin-top:3rem;">Published Recipes</h3>
       <div id="published-recipes-table-container"></div>
@@ -827,7 +886,15 @@
       });
       // Also refresh after inventory actions
       document.addEventListener('ingredients-inventory-refresh', function() {
-        if (window.renderIngredientsInventory) renderIngredientsInventory();
+        // Always fetch the latest data from the backend and re-render
+        fetch('/api/ingredients/inventory/all')
+          .then(res => res.json())
+          .then(data => {
+            const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+            if (typeof window.renderIngredientsInventoryTable === 'function') {
+              window.renderIngredientsInventoryTable(ingredients);
+            }
+          });
       });
 
       // Save Ingredients to Recipe button logic
@@ -929,13 +996,13 @@
   <script>
     // Populate recipe dropdown
     document.addEventListener('DOMContentLoaded', function() {
-      fetch('/api/recipes')
+      fetch('/api/recipes/display-table')
         .then(res => res.json())
         .then(data => {
           const select = document.getElementById('recipeSelectForText');
           if (select) {
             select.innerHTML = '<option value="">-- Select Recipe --</option>' +
-              data.map(r => `<option value="${r.id}">${r.id} | ${r.name || r.recipe_title || 'Recipe ' + r.id}</option>`).join('');
+              data.map(r => `<option value="${r.recipeid}">${r.recipeid} | ${r.name || r.recipe_title || 'Recipe ' + r.recipeid}</option>`).join('');
           }
         });
       const select = document.getElementById('recipeSelectForText');
@@ -1118,15 +1185,11 @@
     //DELETE ALL: Remove from both inventory and main ingredients table, then refresh
     document.getElementById('deleteAllIngredientsBtn').addEventListener('click', function() {
       if (confirm('Are you sure you want to delete ALL ingredients?')) {
-        fetch('/api/ingredients-inventory', { method: 'DELETE' })
+        fetch('/api/ingredients/inventory/all', { method: 'DELETE' })
           .then(res => res.json())
           .then(data => {
-            fetch('/api/ingredients', { method: 'DELETE' })
-              .then(res2 => res2.json())
-              .then(data2 => {
-                alert('All ingredients deleted.');
-                document.dispatchEvent(new Event('ingredients-inventory-refresh'));
-              });
+            alert('All ingredients deleted.');
+            document.dispatchEvent(new Event('ingredients-inventory-refresh'));
           });
       }
     });
