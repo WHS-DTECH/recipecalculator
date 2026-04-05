@@ -31,7 +31,7 @@
 					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Ingredients</th>
 					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Serving Size</th>
 					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;">URL</th>
-					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Instructions</th>
+					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;min-width:320px;width:34%;">Instructions</th>
 					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;">RecipeID</th>
 					<th style="padding:0.5rem 0.7rem;border:1px solid #eee;">Actions</th>
 				</tr>
@@ -51,7 +51,13 @@
 				const tbody = document.querySelector('#publishedRecipesTable tbody');
 				if (!tbody) return;
 				tbody.innerHTML = '';
-				data.forEach(row => {
+				const sortedRows = [...data].sort((a, b) => {
+					const aRecipeId = Number(a.recipeid) || 0;
+					const bRecipeId = Number(b.recipeid) || 0;
+					if (bRecipeId !== aRecipeId) return bRecipeId - aRecipeId;
+					return (Number(b.id) || 0) - (Number(a.id) || 0);
+				});
+				sortedRows.forEach(row => {
 					const tr = document.createElement('tr');
 					tr.innerHTML = `
 						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.id}</td>
@@ -60,7 +66,7 @@
 						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.ingredients || ''}</td>
 						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.serving_size || ''}</td>
 						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.url ? `<a href='${row.url}' target='_blank'>Link</a>` : ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.instructions || ''}</td>
+						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;min-width:320px;width:34%;'>${row.instructions || ''}</td>
 						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.recipeid || ''}</td>
 						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;text-align:center;'>
 							<button class='unpublish-recipe-btn' data-id='${row.id}' style='background:#e53935;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;'>Unpublish</button>

@@ -5,13 +5,26 @@ document.addEventListener('DOMContentLoaded', function() {
   const syncBtn = document.getElementById('sync-quantity-btn');
   if (syncBtn) {
     syncBtn.onclick = function() {
+      const defaultRecipeId = (document.getElementById('filter-recipe-id')?.value || '').trim();
+      const recipeIdInput = prompt('Which RecipeID do you want to sync?', defaultRecipeId);
+      if (recipeIdInput === null) return;
+      const recipeId = recipeIdInput.trim();
+      if (!recipeId) {
+        alert('Please enter a RecipeID to sync.');
+        return;
+      }
+
       syncBtn.disabled = true;
       syncBtn.textContent = 'Syncing...';
-      fetch('/api/ingredients/inventory/sync', { method: 'POST' })
+      fetch('/api/ingredients/inventory/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId })
+      })
         .then(res => res.json())
         .then(data => {
           if (data.success) {
-            alert('Quantity sync complete! Updated: ' + data.updated);
+            alert('Quantity sync complete for RecipeID ' + recipeId + '! Updated: ' + data.updated);
             location.reload();
           } else {
             alert('Sync failed: ' + (data.error || 'Unknown error'));

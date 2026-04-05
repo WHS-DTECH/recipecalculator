@@ -8,6 +8,175 @@ require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') }
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
+function normalizeInstructionLine(line) {
+  return (line || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/[Â]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanInstructionsForDisplay(raw) {
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  const source = raw.trim();
+
+  // Preferred path: extract every JSON-like "text" field from HowToStep blobs.
+  const textMatches = [...source.matchAll(/"text"\s*:\s*"((?:\\.|[^"\\])*)"/g)];
+  if (textMatches.length > 0) {
+    const lines = textMatches
+      .map((match) => {
+        try {
+          return normalizeInstructionLine(JSON.parse(`"${match[1]}"`));
+        } catch {
+          return normalizeInstructionLine(match[1].replace(/\\n/g, ' '));
+        }
+      })
+      .filter(Boolean);
+    if (lines.length > 0) return lines.join('\n');
+  }
+
+  // Fallback: aggressively remove structural JSON/schema markers, keep readable text.
+  return source
+    .replace(/"@type"\s*:\s*"HowToStep",?/gi, '')
+    .replace(/"name"\s*:\s*"((?:\\.|[^"\\])*)",?/gi, '')
+    .replace(/"text"\s*:\s*/gi, '')
+    .replace(/[\[\]{}]/g, ' ')
+    .replace(/"/g, '')
+    .replace(/\\n/g, '\n')
+    .replace(/\s*,\s*/g, '\n')
+    .split('\n')
+    .map(normalizeInstructionLine)
+    .filter(Boolean)
+    .join('\n');
+}
+
+function normalizeIngredientLine(line) {
+  return (line || '')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&rsquo;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/[Â]/g, '')
+    .replace(/^\s*[,;:\-]+\s*/g, '')
+    .replace(/\s*[,;:\-]+\s*$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function isMeaningfulIngredientLine(line) {
+  if (!line) return false;
+  const normalized = String(line).trim();
+  if (!normalized) return false;
+  if (normalized === '...') return false;
+  if (/^[,.;:\-]+$/.test(normalized)) return false;
+  if (/^(noopener|noreferrer|_blank)$/i.test(normalized)) return false;
+  if (/^\/products\//i.test(normalized)) return false;
+  return true;
+}
+
+function isLikelyInstructionToken(line) {
+  const token = String(line || '').trim();
+  if (!token) return false;
+  if (/[.!?]/.test(token)) return true;
+  if (/^for\s+the\s+doughboys\b/i.test(token)) return true;
+  if (/\b(bring|add|boil|simmer|cook|serve|mix|top up|form|divide|mould|continue cooking)\b/i.test(token)) return true;
+  return false;
+}
+
+function cleanIngredientsForDisplay(raw) {
+  if (Array.isArray(raw)) {
+    return raw
+      .map((item) => normalizeIngredientLine(String(item || '')))
+      .filter(isMeaningfulIngredientLine)
+      .join('\n');
+  }
+
+  if (raw && typeof raw === 'object') {
+    raw = JSON.stringify(raw);
+  }
+
+  if (typeof raw !== 'string' || !raw.trim()) return '';
+  const source = raw.trim();
+
+  // HTML/anchor path: keep visible link text, never link attributes.
+  if (/<a\b/i.test(source) || /<[^>]+>/.test(source)) {
+    const htmlToText = source
+      .replace(/<a[^>]*>([\s\S]*?)<\/a>/gi, '$1')
+      .replace(/<br\s*\/?>/gi, ',')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&rsquo;/gi, "'")
+      .replace(/&quot;/gi, '"');
+
+    const htmlTokens = htmlToText
+      .split(/\s*,\s*/)
+      .map(normalizeIngredientLine)
+      .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
+
+    if (htmlTokens.length > 0) {
+      return htmlTokens.join('\n');
+    }
+  }
+
+  // JSON-array path: many extracted ingredients are stored as JSON text.
+  if (source.startsWith('[') && source.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(source);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => normalizeIngredientLine(String(item || '')))
+          .filter(isMeaningfulIngredientLine)
+          .join('\n');
+      }
+    } catch {
+      // Continue to the regex/text fallbacks below.
+    }
+  }
+
+  // HTML path: Extract only visible ingredient text from recipeIngredient paragraph nodes.
+  if (/<p[^>]*itemprop=["']recipeIngredient["']/i.test(source)) {
+    const htmlLines = [...source.matchAll(/<p[^>]*itemprop=["']recipeIngredient["'][^>]*>([\s\S]*?)<\/p>/gi)]
+      .map((match) => normalizeIngredientLine(match[1].replace(/<[^>]+>/g, ' ')))
+      .filter(isMeaningfulIngredientLine);
+    if (htmlLines.length > 0) {
+      return htmlLines.join('\n');
+    }
+  }
+
+  // Preferred path: extract quoted ingredient entries from JSON-like arrays.
+  const quotedItems = [...source.matchAll(/"((?:\\.|[^"\\])+)"/g)]
+    .map((match) => {
+      try {
+        return normalizeIngredientLine(JSON.parse(`"${match[1]}"`));
+      } catch {
+        return normalizeIngredientLine(match[1].replace(/\\n/g, ' '));
+      }
+    })
+    .filter((item) => isMeaningfulIngredientLine(item) && !isLikelyInstructionToken(item) && !/^(@type|name|text|recipeIngredient)$/i.test(item));
+
+  if (quotedItems.length > 0) {
+    return quotedItems.join('\n');
+  }
+
+  // Fallback cleanup for mixed text/HTML blobs.
+  return source
+    .replace(/"?recipeIngredient"?\s*:\s*/gi, '')
+    .replace(/[\[\]{}]/g, ' ')
+    .replace(/"/g, '')
+    .replace(/\\n/g, '\n')
+    .replace(/\s*,\s*/g, '\n')
+    .split('\n')
+    .map(normalizeIngredientLine)
+    .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line))
+    .join('\n');
+}
+
 // PUT /api/recipes/:id/raw - Save raw data for a recipe (file only)
 router.put('/recipes/:id/raw', async (req, res) => {
   const { id } = req.params;
@@ -56,29 +225,22 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
   console.log('[CLEANUP] Starting stepwise cleanup of instructions...');
   cleanupProgress.running = true;
   try {
-    const result = await pool.query('SELECT id, instructions, instructions_extracted FROM recipes');
+    const requestedRecipeId = Number(req.body?.recipeId);
+    if (req.body?.recipeId !== undefined && (!Number.isInteger(requestedRecipeId) || requestedRecipeId <= 0)) {
+      cleanupProgress.running = false;
+      return res.status(400).json({ error: 'Invalid recipeId' });
+    }
+    const result = req.body?.recipeId !== undefined
+      ? await pool.query('SELECT id, instructions, instructions_extracted FROM recipes WHERE id = $1', [requestedRecipeId])
+      : await pool.query('SELECT id, instructions, instructions_extracted FROM recipes');
     const rows = result.rows;
     cleanupProgress.total = rows.length;
     cleanupProgress.current = 0;
     for (const row of rows) {
-      let cleanedExtracted = row.instructions_extracted;
-      let rawExtracted = row.instructions_extracted;
-      if (typeof cleanedExtracted === 'string') {
-        // Directly strip HowToStep and text markup, leaving only instructions
-        cleanedExtracted = cleanedExtracted
-          .replace(/"@type"\s*:\s*"HowToStep",?/g, '')
-          .replace(/"text"\s*:\s*"/g, '')
-          .replace(/[\[\]{}]/g, '')
-          .replace(/"/g, '')
-          .replace(/,/g, '\n')
-          .replace(/\\n/g, '\n')
-          .replace(/<\/?p>/gi, ' ')
-          .replace(/<br\s*\/?\s*>/gi, ' ')
-          .replace(/<[^>]+>/g, '')
-          .replace(/[Â]/g, '')
-          .replace(/\s+/g, ' ')
-          .replace(/\n+/g, '\n')
-          .trim();
+      const rawExtracted = row.instructions_extracted;
+      let cleanedExtracted = cleanInstructionsForDisplay(row.instructions_extracted);
+      if (!cleanedExtracted) {
+        cleanedExtracted = cleanInstructionsForDisplay(row.instructions);
       }
       // Debug output for extracted instructions
       console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtracted=`, rawExtracted);
@@ -138,8 +300,9 @@ router.post('/:id/display', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Recipe not found' });
     }
     const row = recipeResult.rows[0];
-    // Use ingredients_display if present, else fallback to ingredients
+    // Use display columns when publishing, with fallback to original fields.
     const ingredients = row.ingredients_display || row.ingredients;
+    const instructions = row.instructions_display || row.instructions;
     // Debug log the data being upserted
     console.log('[DISPLAY][DEBUG] Upserting to recipe_display:', {
       name: row.name,
@@ -147,7 +310,7 @@ router.post('/:id/display', async (req, res) => {
       ingredients,
       serving_size: row.serving_size,
       url: row.url,
-      instructions: row.instructions,
+      instructions,
       recipeid: row.id
     });
     // Insert or update into recipe_display
@@ -168,7 +331,7 @@ router.post('/:id/display', async (req, res) => {
       ingredients,
       row.serving_size,
       row.url,
-      row.instructions,
+      instructions,
       row.id
     ]);
     console.log('[DISPLAY][DEBUG] Upsert result:', upsertResult.command, upsertResult.rowCount);
@@ -206,39 +369,36 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
   console.log('[CLEANUP] Starting stepwise cleanup of ingredients...');
   cleanupIngredientsProgress.running = true;
   try {
+    const requestedRecipeId = Number(req.body?.recipeId);
+    if (req.body?.recipeId !== undefined && (!Number.isInteger(requestedRecipeId) || requestedRecipeId <= 0)) {
+      cleanupIngredientsProgress.running = false;
+      return res.status(400).json({ error: 'Invalid recipeId' });
+    }
     // Use Postgres
-    const result = await pool.query('SELECT id, ingredients FROM recipes');
+    const result = req.body?.recipeId !== undefined
+      ? await pool.query('SELECT id, extracted_ingredients, ingredients FROM recipes WHERE id = $1', [requestedRecipeId])
+      : await pool.query('SELECT id, extracted_ingredients, ingredients FROM recipes');
     const rows = result.rows;
     cleanupIngredientsProgress.total = rows.length;
     cleanupIngredientsProgress.current = 0;
     for (const row of rows) {
-      let cleaned = row.ingredients;
-      if (typeof cleaned === 'string') {
-        cleaned = cleaned
-          .replace(/<li>/gi, '')
-          .replace(/<\/li>/gi, '\n')
-          .replace(/<ul>|<\/ul>/gi, '')
-          .replace(/<br\s*\/??\s*>/gi, '\n')
-          .replace(/<[^>]+>/g, '')
-          .replace(/[Â]/g, '')
-          .replace(/"?recipeIngredient"?\s*:\s*/gi, '') // Remove recipeIngredient keys
-          .replace(/\"/g, '') // Remove all double quotes
-          .replace(/^\[|\]$/g, '') // Remove leading/trailing brackets
-          .replace(/^\s*\[\s*\]/g, '') // Remove empty array brackets
-          .replace(/,\s*/g, '<br>') // Replace commas with <br> tags
-          .replace(/\\[tnr]/g, ' ') // Remove \t, \n, \r
-          .replace(/\s+/g, ' ')
-          .replace(/\n+/g, '\n')
-          .split('\n')
-          .map(line => line.trim())
-          .filter(line => line && !/^\d+\s*Star$/i.test(line) && !/^Star$/i.test(line) && !/^\d+$/.test(line))
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .replace(/,?\s*5 Star 4 Star 3 Star 2 Star 1 Star/i, '') // Remove trailing '5 Star 4 Star 3 Star 2 Star 1 Star'
-          .trim();
+      const rawExtractedIngredients = row.extracted_ingredients;
+      const rawIngredients = row.ingredients;
+      const rawSource = rawExtractedIngredients || rawIngredients || '';
+      const cleaned = cleanIngredientsForDisplay(rawSource);
+
+      console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtractedIngredients=`, rawExtractedIngredients);
+      console.log(`[CLEANUP] Recipe ID ${row.id}: rawIngredients=`, rawIngredients);
+      console.log(`[CLEANUP] Recipe ID ${row.id}: cleanedIngredients=`, cleaned);
+
+      const updateResult = await pool.query(
+        'UPDATE recipes SET ingredients_display = $1 WHERE id = $2 RETURNING id, ingredients_display',
+        [cleaned, row.id]
+      );
+      console.log(`[CLEANUP] Recipe ID ${row.id}: Updated ingredients_display. Updated rows: ${updateResult.rowCount}`);
+      if (updateResult.rows[0]) {
+        console.log(`[CLEANUP] Recipe ID ${row.id}: ingredients_display saved preview=`, String(updateResult.rows[0].ingredients_display || '').slice(0, 300));
       }
-      await pool.query('UPDATE recipes SET Ingredients_display = $1 WHERE id = $2', [cleaned, row.id]);
-      console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned ingredients and copied to Ingredients_display.`);
       cleanupIngredientsProgress.current++;
       await new Promise(resolve => setTimeout(resolve, 500));
     }
@@ -424,7 +584,7 @@ router.post('/cleanup-instructions', (req, res) => {
 });
 
 // Get all recipes (with upload raw_data)
-router.get('/recipes', async (req, res) => {
+router.get('/', async (req, res) => {
   const sql = `
     SELECT recipes.*, recipes.instructions_display, recipes.ingredients_display, uploads.raw_data as upload_raw_data
     FROM recipes
@@ -432,6 +592,7 @@ router.get('/recipes', async (req, res) => {
   `;
   try {
     const result = await pool.query(sql);
+    console.log('[DEBUG /api/recipes] Number of recipes returned:', result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error('[DEBUG /api/recipes] Error:', err);

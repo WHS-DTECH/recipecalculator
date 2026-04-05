@@ -338,6 +338,12 @@
       <span id="selectedRecipeIdLabel" style="font-weight:bold;color:#333;"></span>
       <span id="save-status" style="margin-left:1rem;color:#009688;font-weight:bold;"></span>
     </div>
+    <div id="insert-progress-wrapper" style="max-width:420px;margin:-0.2rem 0 1rem 0;">
+      <div style="height:12px;background:#eceff1;border:1px solid #cfd8dc;border-radius:999px;overflow:hidden;">
+        <div id="insert-progress-bar" style="height:100%;width:0%;background:#1976d2;transition:width 0.25s ease;"></div>
+      </div>
+      <div id="insert-progress-text" style="font-size:0.9rem;color:#455a64;margin-top:0.35rem;">Idle</div>
+    </div>
 
     <!-- Paste and Preview UI moved up here -->
     <div style="margin-bottom:1.5rem;max-width:650px;">
@@ -360,6 +366,7 @@
       <label for="filter-recipe-select" style="font-weight:bold;">Filter by Recipe:</label>
       <select id="filter-recipe-select" style="min-width:180px;"></select>
       <button id="trigger-recipe-filter-btn" style="background:#1976d2;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Filter</button>
+      <button id="refresh-ingredients-table-btn" style="background:#455a64;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Refresh Table</button>
       <span id="filter-status" style="margin-left:1rem;color:#1976d2;font-weight:bold;"></span>
     </div>
     <!-- Hidden input for filtering by recipe ID (required by JS) -->
@@ -731,6 +738,19 @@
             const previewContainer = document.getElementById('insert-ingredients-preview-container');
             const previewBox = document.getElementById('insert-ingredients-preview');
             const saveStatus = document.getElementById('save-status');
+            const progressBar = document.getElementById('insert-progress-bar');
+            const progressText = document.getElementById('insert-progress-text');
+
+            function setInsertProgress(percent, message, type = 'info') {
+              if (progressBar) progressBar.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+              if (progressText) progressText.textContent = message || '';
+              if (progressBar) {
+                if (type === 'error') progressBar.style.background = '#e53935';
+                else if (type === 'success') progressBar.style.background = '#2e7d32';
+                else progressBar.style.background = '#1976d2';
+              }
+            }
+
             if (insertBtn && previewContainer && previewBox) {
               insertBtn.addEventListener('click', function() {
                 const recipeId = document.getElementById('recipeSelectForText').value;
@@ -738,6 +758,7 @@
                   alert('Select a recipe first.');
                   return;
                 }
+                setInsertProgress(10, 'Checking preview ingredients...');
                 // Use the preview box value (ingredients_display) for insertion
                 console.log('[InsertIngredients] Button clicked for RecipeID:', recipeId);
                 let text = document.getElementById('ingredientsPreviewBox').textContent;
@@ -752,7 +773,8 @@
                 lines = lines.filter(line => !/^([1-5]\s*Star)$/i.test(line));
                 console.log('[InsertIngredients] Lines after filtering star ratings:', lines);
                 if (lines.length === 0) {
-                  saveStatus.innerHTML = '<span style="color:#e53935;">No ingredients found in preview.</span>';
+                  setInsertProgress(0, 'No ingredients found in preview.', 'error');
+                  saveStatus.textContent = '';
                   return;
                 }
                 // Use parseIngredient from ingredients_parse.js for each line
@@ -760,6 +782,7 @@
                   alert('Ingredient parser not loaded.');
                   return;
                 }
+                setInsertProgress(30, 'Inserting ingredients...');
                 // Send only recipe_id to backend, which will fetch from recipe_display
                 fetch('/api/ingredients/inventory/save-bulk', {
                   method: 'POST',
@@ -770,6 +793,7 @@
                 .then(data => {
                   console.log('[InsertIngredients] save-bulk response:', data);
                   if (data.success) {
+                    setInsertProgress(60, 'Splitting quantities...');
                     // Now trigger split-quantity for this recipe
                     fetch('/api/ingredients/inventory/split-quantity', {
                       method: 'POST',
@@ -780,6 +804,7 @@
                     .then(data2 => {
                       console.log('[InsertIngredients] split-quantity response:', data2);
                       if (data2.success) {
+                        setInsertProgress(80, 'Assigning aisle categories...');
                         // Now trigger auto-assign aisles
                         fetch('/api/ingredients/inventory/auto-assign-aisles', {
                           method: 'POST',
@@ -790,33 +815,40 @@
                         .then(data3 => {
                           console.log('[InsertIngredients] auto-assign-aisles response:', data3);
                           if (data3.success) {
+                            setInsertProgress(100, 'Complete: ingredients inserted and assigned.', 'success');
                             saveStatus.innerHTML = '<span style="color:#009688;">Ingredients inserted, split, and aisles assigned!</span>';
                           } else {
+                            setInsertProgress(90, 'Inserted and split, but aisle assignment failed.', 'error');
                             saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted and split, but failed to assign aisles.</span>';
                           }
                           document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                         })
                         .catch((err) => {
                           console.error('[InsertIngredients] auto-assign-aisles error:', err);
+                          setInsertProgress(90, 'Error assigning aisles after split.', 'error');
                           saveStatus.innerHTML = '<span style="color:#e53935;">Error assigning aisles after split.</span>';
                           document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                         });
                       } else {
+                        setInsertProgress(70, 'Inserted, but splitting quantities failed.', 'error');
                         saveStatus.innerHTML = '<span style="color:#e53935;">Ingredients inserted, but failed to split quantities.</span>';
                         document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                       }
                     })
                     .catch((err) => {
                       console.error('[InsertIngredients] split-quantity error:', err);
+                      setInsertProgress(70, 'Error splitting quantities after insert.', 'error');
                       saveStatus.innerHTML = '<span style="color:#e53935;">Error splitting quantities after insert.</span>';
                       document.dispatchEvent(new Event('ingredients-inventory-refresh'));
                     });
                   } else {
+                    setInsertProgress(30, 'Failed to insert ingredients from preview.', 'error');
                     saveStatus.innerHTML = '<span style="color:#e53935;">Failed to insert ingredients from preview.</span>';
                   }
                 })
                 .catch((err) => {
                   console.error('[InsertIngredients] save-bulk error:', err);
+                  setInsertProgress(30, 'Error contacting server.', 'error');
                   saveStatus.innerHTML = '<span style="color:#e53935;">Error contacting server.</span>';
                 });
               });
@@ -884,17 +916,45 @@
       document.addEventListener('DOMContentLoaded', function() {
         if (window.renderIngredientsInventory) renderIngredientsInventory();
       });
-      // Also refresh after inventory actions
-      document.addEventListener('ingredients-inventory-refresh', function() {
-        // Always fetch the latest data from the backend and re-render
-        fetch('/api/ingredients/inventory/all')
+
+      function refreshIngredientsAndPublishedTables(showFeedback = false) {
+        const filterStatus = document.getElementById('filter-status');
+        if (showFeedback && filterStatus) filterStatus.textContent = 'Refreshing table...';
+
+        fetch(`/api/ingredients/inventory/all?_t=${Date.now()}`, { cache: 'no-store' })
           .then(res => res.json())
           .then(data => {
             const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
             if (typeof window.renderIngredientsInventoryTable === 'function') {
               window.renderIngredientsInventoryTable(ingredients);
             }
+            if (typeof renderPublishedRecipesTable === 'function') {
+              renderPublishedRecipesTable();
+            }
+            if (showFeedback && filterStatus) {
+              filterStatus.textContent = 'Table refreshed.';
+              setTimeout(() => {
+                if (filterStatus.textContent === 'Table refreshed.') filterStatus.textContent = '';
+              }, 1600);
+            }
+          })
+          .catch(() => {
+            if (showFeedback && filterStatus) filterStatus.textContent = 'Error refreshing table.';
           });
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        const refreshBtn = document.getElementById('refresh-ingredients-table-btn');
+        if (refreshBtn) {
+          refreshBtn.addEventListener('click', function() {
+            refreshIngredientsAndPublishedTables(true);
+          });
+        }
+      });
+
+      // Also refresh after inventory actions
+      document.addEventListener('ingredients-inventory-refresh', function() {
+        refreshIngredientsAndPublishedTables(false);
       });
 
       // Save Ingredients to Recipe button logic

@@ -118,11 +118,16 @@ module.exports = function initializeDatabase(db) {
     name TEXT,
     description TEXT,
     ingredients TEXT,
-    ingredients_display TEXT,
     serving_size INTEGER,
     url TEXT,
+    instructions TEXT,
     instructions_extracted TEXT,
-    instructions TEXT
+    ingredients_display TEXT,
+    extracted_ingredients TEXT,
+    extracted_serving_size INTEGER,
+    extracted_instructions TEXT,
+    instructions_display TEXT,
+    ingredients_inventories TEXT
   )`);
 
   // Add url, instructions_extracted, and instructions columns if they don't exist (for existing DBs)
