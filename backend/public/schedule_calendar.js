@@ -15,7 +15,6 @@ async function fetchBookingsForWeek(monday) {
   // Get all bookings (ideally, backend should filter by week, but we filter here for now)
   const res = await fetch('/api/bookings/all');
   const data = await res.json();
-  console.log('[DEBUG] Raw bookings data from API:', data.bookings);
   if (!data.bookings) return [];
   // Robustly calculate the Monday for the week containing the reference date
   const refDate = new Date(monday);
@@ -26,24 +25,12 @@ async function fetchBookingsForWeek(monday) {
   const mondayDate = new Date(refDate);
   mondayDate.setDate(refDate.getDate() - daysToMonday);
   mondayDate.setHours(0,0,0,0);
-  console.log('[DEBUG] Robust Calculated Monday:', getISODate(mondayDate), '| refDay:', refDay, '| daysToMonday:', daysToMonday);
   let weekDates = [];
   for (let i = 0; i < 7; ++i) {
     const d = new Date(mondayDate);
     d.setDate(mondayDate.getDate() + i);
     weekDates.push(getISODate(d));
   }
-  console.log('[DEBUG] weekDates for filtering:', weekDates);
-  data.bookings.forEach(b => {
-    console.log('[DEBUG] booking_date in DB:', b.booking_date, '| typeof:', typeof b.booking_date, '| match:', weekDates.includes(b.booking_date));
-    if (!weekDates.includes(b.booking_date)) {
-      weekDates.forEach(wd => {
-        if (b.booking_date == wd) {
-          console.log('[DEBUG] booking_date == weekDate (loose equality):', b.booking_date, wd);
-        }
-      });
-    }
-  });
   // Filter bookings for this week
   return data.bookings.filter(b => weekDates.includes(b.booking_date));
 }
@@ -69,7 +56,6 @@ let currentMonday = (() => {
 
 
 async function renderScheduleCalendar() {
-  console.log('[DEBUG] renderScheduleCalendar called');
   const table = document.getElementById('scheduleCalendarTable');
   // Calculate week dates
   let weekDates = [];
@@ -127,10 +113,8 @@ async function renderScheduleCalendar() {
   }
 
   table.innerHTML = html;
-  console.log('[DEBUG] Calendar table rendered with bookings:', bookings);
 
   // Add or update the Selected Bookings list below the calendar
-    console.log('[DEBUG] End of renderScheduleCalendar');
   let selectedListDiv = document.getElementById('selected-bookings-list');
   if (!selectedListDiv) {
     selectedListDiv = document.createElement('div');

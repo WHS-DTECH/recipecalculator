@@ -64,6 +64,122 @@ function getStaffCodeById(staffId, staffArr) {
 }
 
 let _staffArrCache = [];
+let _currentTeacherTimetablePeriods = [];
+
+function normalizeClassToken(value) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function autoSelectClassFromSelectedPeriod() {
+  const periodSelect = document.getElementById('periodSelect');
+  const classSelect = document.getElementById('classSelect');
+  if (!periodSelect || !classSelect) return;
+
+  const selectedPeriod = `P${periodSelect.value}`;
+  const periodEntry = (_currentTeacherTimetablePeriods || []).find(p => p && p.period === selectedPeriod);
+  if (!periodEntry || !Array.isArray(periodEntry.classes) || !periodEntry.classes.length) return;
+
+  const timetableTokens = periodEntry.classes
+    .flatMap(item => String(item || '').split(/[;,|]/g))
+    .map(token => token.trim())
+    .filter(Boolean);
+
+  const options = Array.from(classSelect.options).filter(opt => opt.value);
+  if (!options.length || !timetableTokens.length) return;
+
+  const normalizedTokens = timetableTokens.map(normalizeClassToken);
+  let matchedOption = null;
+
+  for (const opt of options) {
+    const valueNorm = normalizeClassToken(opt.value);
+    const textNorm = normalizeClassToken(opt.textContent);
+    if (normalizedTokens.some(tok => tok === valueNorm || tok === textNorm || tok.includes(valueNorm) || textNorm.includes(tok))) {
+      matchedOption = opt;
+      break;
+    }
+  }
+
+  if (matchedOption) {
+    classSelect.value = matchedOption.value;
+    fetchStudentsForClass(classSelect.value);
+  }
+}
+
+function updateBookingDateDayLabel() {
+  const dateInput = document.getElementById('dateInput');
+  const dayLabel = document.getElementById('dateDayOfWeek');
+  if (!dateInput || !dayLabel) return;
+  const value = dateInput.value;
+  if (!value) {
+    dayLabel.textContent = '';
+    return;
+  }
+  const parsed = new Date(value + 'T00:00:00');
+  if (isNaN(parsed.getTime())) {
+    dayLabel.textContent = '';
+    return;
+  }
+  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  dayLabel.textContent = `(${dayNames[parsed.getDay()]})`;
+}
+
+function renderTeacherTimetable(periods, teacherCode, date, weekday) {
+  const meta = document.getElementById('teacherTimetableMeta');
+  const body = document.getElementById('teacherTimetableBody');
+  if (!meta || !body) return;
+
+  meta.textContent = `${teacherCode} timetable for ${date}${weekday ? ` (${weekday})` : ''}`;
+  if (!periods || !periods.length) {
+    body.innerHTML = '<div class="text-muted">No timetable classes found for this day.</div>';
+    return;
+  }
+
+  const rows = periods.map(p => {
+    const classText = (p.classes && p.classes.length) ? p.classes.join(' | ') : '<span style="color:#999;">No class</span>';
+    return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
+  }).join('');
+  body.innerHTML = `
+    <table class="bookings-table" style="margin-top:0.5rem;">
+      <thead><tr><th>Period</th><th>Class(es)</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+
+  _currentTeacherTimetablePeriods = Array.isArray(periods) ? periods : [];
+  autoSelectClassFromSelectedPeriod();
+}
+
+function fetchTeacherTimetableForSelectedDate() {
+  const staffSelect = document.getElementById('staffSelect');
+  const dateInput = document.getElementById('dateInput');
+  const meta = document.getElementById('teacherTimetableMeta');
+  const body = document.getElementById('teacherTimetableBody');
+  if (!staffSelect || !dateInput || !meta || !body) return;
+
+  const staffCode = getStaffCodeById(staffSelect.value, _staffArrCache);
+  const date = dateInput.value;
+  if (!staffCode || !date) {
+    meta.textContent = 'Select teacher and date to view timetable.';
+    body.innerHTML = '';
+    return;
+  }
+
+  meta.textContent = 'Loading timetable...';
+  body.innerHTML = '';
+  fetch(`/api/upload_timetable/teacher-day?teacherCode=${encodeURIComponent(staffCode)}&date=${encodeURIComponent(date)}`)
+    .then(res => res.json())
+    .then(data => {
+      if (!data || data.success === false) {
+        throw new Error(data && data.error ? data.error : 'Failed to load timetable');
+      }
+      renderTeacherTimetable(data.periods || [], data.teacherCode || staffCode, data.date || date, data.weekday || '');
+    })
+    .catch(() => {
+      _currentTeacherTimetablePeriods = [];
+      meta.textContent = 'Failed to load timetable for selected teacher/date.';
+      body.innerHTML = '';
+    });
+}
 
 function renderClassStudents(students = []) {
   const tbody = document.getElementById('classStudentsBody');
@@ -176,10 +292,13 @@ function populateRecipeDropdown() {
       defaultOption.selected = true;
       select.appendChild(defaultOption);
       (data.recipes || []).forEach(recipe => {
+        const recipeId = recipe.recipeid != null ? recipe.recipeid : recipe.id;
+        const recipeName = recipe.name || '';
         const opt = document.createElement('option');
-        opt.value = recipe.id;
-        opt.textContent = `[ID: ${recipe.id}] ${recipe.name}`;
-        opt.setAttribute('data-recipe-id', recipe.id);
+        opt.value = String(recipeId);
+        opt.textContent = `[ID: ${recipeId}] ${recipeName}`;
+        opt.setAttribute('data-recipe-id', String(recipeId));
+        opt.setAttribute('data-recipe-name', recipeName);
         select.appendChild(opt);
       });
     });
@@ -199,12 +318,14 @@ function saveBooking() {
   const className = classSelect.value;
   const bookingDate = dateInput.value;
   const period = periodSelect.value;
-  const recipe = recipeSelect.value;
   const classSize = classSizeInput.value;
   // Get recipe_id from selected option (assume dropdown options have data-recipe-id)
   let recipeId = '';
+  let recipeName = '';
   if (recipeSelect.selectedIndex > 0) {
-    recipeId = recipeSelect.options[recipeSelect.selectedIndex].getAttribute('data-recipe-id') || '';
+    const selectedRecipeOption = recipeSelect.options[recipeSelect.selectedIndex];
+    recipeId = selectedRecipeOption.getAttribute('data-recipe-id') || selectedRecipeOption.value || '';
+    recipeName = selectedRecipeOption.getAttribute('data-recipe-name') || '';
   }
   // Track most selected
   setTopSelection('topStaff', staffId);
@@ -221,7 +342,7 @@ function saveBooking() {
       class_name: className,
       booking_date: bookingDate,
       period,
-      recipe,
+      recipe: recipeName,
       recipe_id: recipeId,
       class_size: classSize
     })
@@ -229,13 +350,19 @@ function saveBooking() {
     .then(res => res.json())
     .then(result => {
       if (result.success) {
+        if (window.QC) window.QC.toast('Booking saved successfully', 'success');
         document.getElementById('saveBookingBtn').textContent = 'Save booking';
         delete document.getElementById('saveBookingBtn').dataset.editId;
         document.getElementById('resetBtn').click();
         fetchAndRenderBookings();
       } else {
-        alert('Failed to save booking.');
+        if (window.QC) window.QC.toast('Failed to save booking', 'error');
+        else alert('Failed to save booking.');
       }
+    })
+    .catch(() => {
+      if (window.QC) window.QC.toast('Failed to save booking', 'error');
+      else alert('Failed to save booking.');
     });
 }
 
@@ -279,8 +406,7 @@ function renderBookings(bookings = []) {
       <td>${b.staff_name || ''}</td>
       <td>${b.class_name || ''}</td>
       <td>${b.class_size || ''}</td>
-      <td>${b.recipe || ''}</td>
-      <td>${b.recipe_id || ''}</td>
+      <td>${b.recipe_id ? `[ID: ${b.recipe_id}] ` : ''}${b.recipe || ''}</td>
       <td><button class='edit-btn'>Edit</button> <button class='delete-btn'>Delete</button></td>
     </tr>`;
   }).join('');
@@ -293,10 +419,18 @@ function renderBookings(bookings = []) {
         fetch(`/api/bookings/${bookingId}`, { method: 'DELETE' })
           .then(res => res.json())
           .then(result => {
-            if (result.success) fetchAndRenderBookings();
-            else alert('Failed to delete booking.');
+            if (result.success) {
+              if (window.QC) window.QC.toast('Booking deleted', 'success');
+              fetchAndRenderBookings();
+            } else {
+              if (window.QC) window.QC.toast('Failed to delete booking', 'error');
+              else alert('Failed to delete booking.');
+            }
           })
-          .catch(() => alert('Failed to delete booking.'));
+          .catch(() => {
+            if (window.QC) window.QC.toast('Failed to delete booking', 'error');
+            else alert('Failed to delete booking.');
+          });
       }
     };
   });
@@ -318,7 +452,19 @@ function renderBookings(bookings = []) {
       }, 200);
       document.getElementById('dateInput').value = booking.booking_date;
       document.getElementById('periodSelect').value = booking.period;
-      document.getElementById('recipeSelect').value = booking.recipe;
+      const recipeSelect = document.getElementById('recipeSelect');
+      if (recipeSelect) {
+        let recipeSelectValue = booking.recipe_id ? String(booking.recipe_id) : '';
+        if (!recipeSelectValue && booking.recipe) {
+          const idMatch = String(booking.recipe).match(/\[ID:\s*(\d+)\]/i);
+          if (idMatch) recipeSelectValue = idMatch[1];
+        }
+        recipeSelect.value = recipeSelectValue;
+        if (recipeSelect.selectedIndex < 0 && booking.recipe) {
+          const optionByName = Array.from(recipeSelect.options).find(opt => (opt.getAttribute('data-recipe-name') || '').trim() === String(booking.recipe).trim());
+          if (optionByName) recipeSelect.value = optionByName.value;
+        }
+      }
       document.getElementById('classSizeInput').value = booking.class_size;
       document.getElementById('saveBookingBtn').textContent = 'Update booking';
       document.getElementById('saveBookingBtn').dataset.editId = bookingId;
@@ -343,6 +489,7 @@ window.addEventListener('DOMContentLoaded', () => {
   if (dateInput && !dateInput.value) {
     dateInput.value = new Date().toISOString().slice(0, 10);
   }
+  updateBookingDateDayLabel();
 
   populateRecipeDropdown();
   fetchAndRenderBookings();
@@ -352,20 +499,67 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('recipeSelect').selectedIndex = 0;
     document.getElementById('periodSelect').selectedIndex = 0;
     document.getElementById('dateInput').value = new Date().toISOString().slice(0, 10);
+    updateBookingDateDayLabel();
     document.getElementById('classSelect').selectedIndex = 0;
     document.getElementById('staffSelect').selectedIndex = 0;
     // Reset class dropdown to first staff
     const staffId = document.getElementById('staffSelect').value;
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
     populateClassDropdown(staffCode);
+    fetchTeacherTimetableForSelectedDate();
   });
   document.getElementById('staffSelect').addEventListener('change', function() {
     const staffId = this.value;
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
     populateClassDropdown(staffCode);
+    fetchTeacherTimetableForSelectedDate();
+  });
+  document.getElementById('dateInput').addEventListener('change', function() {
+    updateBookingDateDayLabel();
+    fetchTeacherTimetableForSelectedDate();
+  });
+  document.getElementById('periodSelect').addEventListener('change', function() {
+    autoSelectClassFromSelectedPeriod();
   });
   document.getElementById('classSelect').addEventListener('change', function() {
     fetchStudentsForClass(this.value);
   });
   fetchStudentsForClass('');
+  fetchTeacherTimetableForSelectedDate();
+
+  if (window.QC) {
+    window.QC.addSanityButton('Book a Class', [
+      {
+        name: 'Staff dropdown has options',
+        run: async () => {
+          const el = document.getElementById('staffSelect');
+          return !!el && el.options.length > 1;
+        }
+      },
+      {
+        name: 'Class dropdown present',
+        run: async () => {
+          const el = document.getElementById('classSelect');
+          return !!el;
+        }
+      },
+      {
+        name: 'Recipe dropdown has options',
+        run: async () => {
+          const el = document.getElementById('recipeSelect');
+          return !!el && el.options.length > 1;
+        }
+      },
+      {
+        name: 'Timetable endpoint reachable',
+        run: async () => {
+          const staffCode = getStaffCodeById(document.getElementById('staffSelect')?.value, _staffArrCache);
+          const date = document.getElementById('dateInput')?.value;
+          if (!staffCode || !date) return true;
+          const res = await fetch(`/api/upload_timetable/teacher-day?teacherCode=${encodeURIComponent(staffCode)}&date=${encodeURIComponent(date)}`);
+          return res.ok;
+        }
+      }
+    ]);
+  }
 });

@@ -692,16 +692,6 @@ app.get('/api/timetable/all', async (req, res) => {
       }
     });
 
-    // --- Missing endpoint for desired_servings_ingredients ---
-    app.get('/api/ingredients/desired_servings_ingredients', async (req, res) => {
-      try {
-        const result = await pool.query('SELECT * FROM desired_servings_ingredients');
-        res.json(result.rows);
-      } catch (err) {
-        res.status(500).json({ error: err.message });
-      }
-    });
-
     // /api/ingredients/inventory_table/all
     app.get('/api/ingredients/inventory_table/all', async (req, res) => {
       try {

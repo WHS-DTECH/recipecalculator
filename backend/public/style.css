@@ -1273,7 +1273,7 @@ input, select, textarea, button {
 }
 
 /* --- Layout & Spacing Improvements (Jan 2026) --- */
-.shopping-app, .catering-app, .book-class-app, #app {
+.shopping-app, .catering-app, #app {
   max-width: 900px;
   margin: 48px auto 48px auto;
   background: #fff;

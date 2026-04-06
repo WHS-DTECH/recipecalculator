@@ -25,6 +25,99 @@ function buildHeaderIndexMap(headers) {
   return indexMap;
 }
 
+function getWeekdayInfo(dateStr) {
+  if (!dateStr) return null;
+  const parsed = new Date(dateStr);
+  if (isNaN(parsed.getTime())) return null;
+  const day = parsed.getDay();
+  if (day < 1 || day > 5) {
+    return {
+      weekday: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day],
+      timetableDay: null
+    };
+  }
+  return {
+    weekday: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day],
+    timetableDay: `D${day}`
+  };
+}
+
+// GET /api/upload_timetable/teacher-day?teacherCode=XXX&date=YYYY-MM-DD
+router.get('/teacher-day', async (req, res) => {
+  const teacherCode = String(req.query.teacherCode || '').trim();
+  const date = String(req.query.date || '').trim();
+  if (!teacherCode || !date) {
+    return res.status(400).json({ success: false, error: 'teacherCode and date are required.' });
+  }
+
+  const weekdayInfo = getWeekdayInfo(date);
+  if (!weekdayInfo) {
+    return res.status(400).json({ success: false, error: 'Invalid date format.' });
+  }
+
+  if (!weekdayInfo.timetableDay) {
+    return res.json({
+      success: true,
+      teacherCode,
+      date,
+      weekday: weekdayInfo.weekday,
+      timetableDay: null,
+      periods: []
+    });
+  }
+
+  try {
+      const result = await pool.query(
+        `SELECT * FROM kamar_timetable
+         WHERE upper(trim("Teacher")) = upper(trim($1))
+         AND COALESCE(status, 'Current') = 'Current'
+         LIMIT 1`,
+      [teacherCode]
+    );
+
+    if (!result.rows.length) {
+      return res.json({
+        success: true,
+        teacherCode,
+        date,
+        weekday: weekdayInfo.weekday,
+        timetableDay: weekdayInfo.timetableDay,
+        periods: []
+      });
+    }
+
+    const row = result.rows[0];
+    const d = weekdayInfo.timetableDay;
+    const periodCols = {
+      P1: [`${d}_P1_1`, `${d}_P1_2`],
+      P2: [`${d}_P2`],
+      P3: [`${d}_P3`],
+      P4: [`${d}_P4`],
+      P5: [`${d}_P5`]
+    };
+
+    const periods = Object.keys(periodCols).map(period => {
+      const classList = periodCols[period]
+        .map(col => row[col])
+        .map(v => (v || '').toString().trim())
+        .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i);
+      return { period, classes: classList };
+    });
+
+    return res.json({
+      success: true,
+      teacherCode,
+      date,
+      weekday: weekdayInfo.weekday,
+      timetableDay: weekdayInfo.timetableDay,
+      periods
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/upload_timetable
 router.post('/', async (req, res) => {
   const { timetable, headers = [] } = req.body;

@@ -1,14 +1,8 @@
-// --- Shopping List By Category ---
-async function generateShoppingListByCategory(bookingIds) {
-  if (!bookingIds || !bookingIds.length) return;
-  const url = `/api/ingredients/shopping_list/by_category?booking_ids=${bookingIds.join(',')}`;
-  try {
-    const resp = await fetch(url);
-    const data = await resp.json();
-    container.innerHTML = html;
-  } catch (err) {
-    console.error('Error fetching shopping list by teacher:', err);
-  }
+function getNormalizedSelectedBookingIds() {
+        const raw = Array.isArray(window.selectedBookingIds) ? window.selectedBookingIds : [];
+        return [...new Set(raw
+                .map(id => parseInt(id, 10))
+                .filter(id => Number.isInteger(id) && id > 0))];
 }
 
 // Helper to get selected bookings as HTML
@@ -95,11 +89,10 @@ document.addEventListener('DOMContentLoaded',()=>{
     const btnTeacher = document.getElementById('generateByTeacherBtn');
     if (btnTeacher) {
         btnTeacher.onclick = async function() {
-            console.log('[DEBUG] Generate Shopping List button clicked');
-            let bookingIds = (window.selectedBookingIds && window.selectedBookingIds.length) ? window.selectedBookingIds : [];
-            bookingIds = bookingIds.map(id => String(id));
+            const bookingIds = getNormalizedSelectedBookingIds();
             if (!bookingIds.length) {
-                alert('Please select at least one booking from the calendar.');
+                if (window.QC) window.QC.toast('Please select at least one booking from the calendar', 'warn');
+                else alert('Please select at least one booking from the calendar.');
                 return;
             }
             const container = document.getElementById('by-teacher-ingredients');
@@ -142,12 +135,15 @@ document.addEventListener('DOMContentLoaded',()=>{
                         }
                         html += '</div>';
                         container.innerHTML = html;
+                        if (window.QC) window.QC.toast('Shopping list by teacher generated', 'success');
                     } else {
                         container.innerHTML = '<em>No shopping list data returned.</em>';
+                        if (window.QC) window.QC.toast('No shopping list data returned for selected bookings', 'warn');
                     }
                 }
             } catch (err) {
                 console.error('[ERROR] Fetching shopping list failed:', err);
+                if (window.QC) window.QC.toast('Error generating shopping list by teacher', 'error');
                 if (container) {
                     container.innerHTML = '<span style="color:red">Error fetching shopping list: ' + err.message + '</span>';
                 }
@@ -159,17 +155,19 @@ document.addEventListener('DOMContentLoaded',()=>{
     const btnCat = document.getElementById('generateByCategoryBtn');
     if (btnCat) {
         btnCat.onclick = async function() {
-            console.log('[DEBUG] Generate Shopping List by Category button clicked');
-            let bookingIds = (window.selectedBookingIds && window.selectedBookingIds.length) ? window.selectedBookingIds : [];
-            bookingIds = bookingIds.map(id => String(id));
+            const bookingIds = getNormalizedSelectedBookingIds();
             const container = document.getElementById('by-category-ingredients');
             if (!bookingIds.length) {
                 if (container) container.innerHTML = '<em>Please select at least one booking from the calendar.</em>';
+                if (window.QC) window.QC.toast('Please select at least one booking from the calendar', 'warn');
                 return;
             }
             if (container) container.innerHTML = '<em>Loading shopping list by category...</em>';
             try {
                 const response = await fetch(`/api/ingredients/shopping_list/by_category?booking_ids=${bookingIds.join(',')}`);
+                if (!response.ok) {
+                    throw new Error('API request failed with status ' + response.status);
+                }
                 const data = await response.json();
                 if (container) {
                     if (data && data.success && data.data) {
@@ -196,12 +194,15 @@ document.addEventListener('DOMContentLoaded',()=>{
                         }
                         if (!html) html = '<em>No items found for selected bookings.</em>';
                         container.innerHTML = html;
+                        if (window.QC) window.QC.toast('Shopping list by category generated', 'success');
                     } else {
                         container.innerHTML = '<em>No shopping list data returned.</em>';
+                        if (window.QC) window.QC.toast('No shopping list data returned for selected bookings', 'warn');
                     }
                 }
             } catch (err) {
                 console.error('[ERROR] Fetching shopping list by category failed:', err);
+                if (window.QC) window.QC.toast('Error generating shopping list by category', 'error');
                 if (container) {
                     container.innerHTML = '<span style="color:red">Error fetching shopping list: ' + err.message + '</span>';
                 }
@@ -223,6 +224,31 @@ document.addEventListener('DOMContentLoaded',()=>{
             document.getElementById('tabOriginal').classList.remove('active');
             renderCalcPanelContent('calculated');
         };
+    }
+
+    if (window.QC) {
+        window.QC.addSanityButton('Book the Shopping', [
+            {
+                name: 'Selected booking ids available',
+                run: async () => Array.isArray(window.selectedBookingIds)
+            },
+            {
+                name: 'Teacher shopping endpoint reachable',
+                run: async () => {
+                    const ids = getNormalizedSelectedBookingIds();
+                    if (!ids.length) return true;
+                    return (await fetch(`/api/ingredients/shopping_list/by_teacher?booking_ids=${ids.join(',')}`)).ok;
+                }
+            },
+            {
+                name: 'Category shopping endpoint reachable',
+                run: async () => {
+                    const ids = getNormalizedSelectedBookingIds();
+                    if (!ids.length) return true;
+                    return (await fetch(`/api/ingredients/shopping_list/by_category?booking_ids=${ids.join(',')}`)).ok;
+                }
+            }
+        ]);
     }
 });
 

@@ -218,7 +218,7 @@ router.put('/recipes/:id/raw', async (req, res) => {
 // Updated: Return both id (primary key), recipeID, and name
 router.get('/display-dropdown', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, recipeid, name FROM recipe_display ORDER BY name');
+    const result = await pool.query('SELECT id, recipeid, name, serving_size FROM recipe_display ORDER BY name');
     res.json({ recipes: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -617,6 +617,7 @@ router.get('/', async (req, res) => {
     SELECT recipes.*, recipes.instructions_display, recipes.ingredients_display, uploads.raw_data as upload_raw_data
     FROM recipes
     LEFT JOIN uploads ON recipes.uploaded_recipe_id = uploads.id
+    ORDER BY recipes.id DESC
   `;
   try {
     const result = await pool.query(sql);
@@ -673,7 +674,7 @@ router.delete('/recipes/:id', async (req, res) => {
 // Get recipe options for dropdown
 router.get('/dropdown', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, name FROM recipes ORDER BY name');
+    const result = await pool.query('SELECT id, name FROM recipes ORDER BY id DESC');
     res.json({ recipes: result.rows || [] });
   } catch (err) {
     console.error('[DEBUG] Error fetching recipes:', err);

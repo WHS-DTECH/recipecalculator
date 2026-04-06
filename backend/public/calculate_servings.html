@@ -82,13 +82,6 @@
         <div style="flex:1;">
           <div style="display:flex;gap:1.5rem;justify-content:center;align-items:flex-start;margin-bottom:2.5rem;">
             <div style="flex:1;min-width:200px;background:#fff;border-radius:10px;padding:1rem 1rem 1.5rem 1rem;border:1px solid #e0e0e0;box-shadow:0 1px 4px #0001;">
-              <div style="font-weight:bold;font-size:1.1em;margin-bottom:1em;text-align:center;">Original Recipe Ingredients</div>
-              <div id="original-ingredients-col" style="min-height:80px;text-align:center;color:#888;">
-                <button id="show-recipe-ingredients-btn" style="margin-top:0.5em;">Show Recipe Ingredients</button>
-                <div id='serving-size-display' style='font-weight:bold;color:#1976d2;margin-top:0.7em;'>Serving Size: </div>
-              </div>
-            </div>
-            <div style="flex:1;min-width:200px;background:#fff;border-radius:10px;padding:1rem 1rem 1.5rem 1rem;border:1px solid #e0e0e0;box-shadow:0 1px 4px #0001;">
               <div style="font-weight:bold;font-size:1.1em;margin-bottom:1em;text-align:center;">Desired Serving</div>
               <div id="desired-serving-col" style="min-height:80px;text-align:center;color:#888;"></div>
             </div>
@@ -97,36 +90,33 @@
               <button id="calculate-desired-serving-btn" class="servings-btn" style="margin-bottom:1em;">Calculate Desired Serving Ingredients</button>
               <div id="single-serving-col" style="min-height:80px;text-align:center;color:#888;"></div>
             </div>
+            <div style="flex:1;min-width:200px;background:#fff;border-radius:10px;padding:1rem 1rem 1.5rem 1rem;border:1px solid #e0e0e0;box-shadow:0 1px 4px #0001;">
+              <div style="font-weight:bold;font-size:1.1em;margin-bottom:1em;text-align:center;">Original Recipe Ingredients</div>
+              <div id="original-ingredients-col" style="min-height:80px;text-align:center;color:#888;">
+                <div id="selected-recipe-display" style="font-weight:bold;color:#1976d2;margin-bottom:0.5em;">Recipe: </div>
+                <div id='serving-size-display' style='font-weight:bold;color:#1976d2;margin-top:0.7em;'>Serving Size: </div>
+                <div id="original-ingredients-list" style="margin-top:0.7em;text-align:left;max-height:760px;overflow:auto;"></div>
+              </div>
+            </div>
           </div>
-        </div>
-      </div>
-
-      <div style="max-width:1100px;margin:3rem auto 2rem auto;">
-        <h2>Ingredients Inventory</h2>
-        <div id="recipe-name-display" style="font-size:1.1em;font-weight:bold;color:#1976d2;margin-bottom:0.7em;"></div>
-        <div style="display:flex;align-items:center;gap:1em;margin-bottom:1rem;">
-          <button id="show-ingredients-btn">Show Ingredients</button>
-          <label for="filter-recipe-id" style="font-weight:normal;">Filter by Recipe ID:</label>
-          <input id="filter-recipe-id" type="number" min="1" style="width:70px;">
-          <button id="filter-ingredients-btn">Filter</button>
-          <button id="show-all-btn">Show All</button>
-          <button id="clear-filter-btn">Clear</button>
-        </div>
-        <div id="ingredients-inventory-table"></div>
-        <div style="margin-top:2.5em;">
-          <div style="display:flex;align-items:center;gap:1.5em;">
+          <div style="margin-top:0.5rem;">
             <h2 style="margin-bottom:0.5em;">Desired Serving Ingredients</h2>
-            <button id="delete-all-desired-serving-ingredients-btn" style="background:#c62828;color:#fff;padding:0.5em 1.2em;border:none;border-radius:5px;font-size:1em;">DELETE ALL</button>
-            <label for="filter-dsi-teacher" style="margin-left:2em;">Teacher:</label>
-            <select id="filter-dsi-teacher" style="min-width:160px;"></select>
-            <label for="filter-dsi-class" style="margin-left:1em;">Class:</label>
-            <select id="filter-dsi-class" style="min-width:120px;"></select>
+            <div style="display:flex;align-items:center;gap:1.5em;flex-wrap:wrap;">
+              <button id="delete-all-desired-serving-ingredients-btn" style="background:#c62828;color:#fff;padding:0.5em 1.2em;border:none;border-radius:5px;font-size:1em;">DELETE ALL</button>
+              <label for="filter-dsi-teacher">Teacher:</label>
+              <select id="filter-dsi-teacher" style="min-width:160px;"></select>
+              <label for="filter-dsi-class">Class:</label>
+              <select id="filter-dsi-class" style="min-width:120px;"></select>
+              <label for="filter-dsi-recipe">Recipe:</label>
+              <select id="filter-dsi-recipe" style="min-width:220px;"></select>
+            </div>
+            <div id="desired-serving-ingredients-table"></div>
           </div>
-          <div id="desired-serving-ingredients-table"></div>
         </div>
       </div>
       <script src="calculate_servings_bookings.js"></script>
       <script src="calculate_servings.js"></script>
+      <script src="shared/quality_tools.js"></script>
       <script>
         document.addEventListener('DOMContentLoaded', function() {
           // Scheduled Bookings Dropdowns UI
@@ -138,47 +128,299 @@
               <select id="teacher-select" style="margin-left:0.5em;min-width:160px;"></select>
             </div>
             <div style="margin-bottom:0.7em;">
+              <label for="date-select" style="font-weight:normal;">Date:</label>
+              <select id="date-select" style="margin-left:0.5em;min-width:220px;"></select>
+            </div>
+            <div style="margin-bottom:0.7em;">
               <label for="class-select" style="font-weight:normal;">Class:</label>
               <select id="class-select" style="margin-left:0.5em;min-width:220px;"></select>
             </div>
+            <div style="margin-top:0.8em;">
+              <div style="font-weight:bold;color:#1976d2;margin-bottom:0.3em;">Students In Selected Class</div>
+              <div id="calc-class-students-meta" style="font-size:0.9em;color:#666;margin-bottom:0.4em;">Choose a class to view students.</div>
+              <div style="max-height:760px;overflow:auto;border:1px solid #e0e0e0;border-radius:6px;">
+                <table style="width:100%;border-collapse:collapse;font-size:0.85em;">
+                  <thead>
+                    <tr style="background:#f5f7fa;">
+                      <th style="text-align:left;padding:6px;border-bottom:1px solid #e0e0e0;">ID Number</th>
+                      <th style="text-align:left;padding:6px;border-bottom:1px solid #e0e0e0;">Student Name</th>
+                      <th style="text-align:left;padding:6px;border-bottom:1px solid #e0e0e0;">Form Class</th>
+                      <th style="text-align:left;padding:6px;border-bottom:1px solid #e0e0e0;">Year</th>
+                    </tr>
+                  </thead>
+                  <tbody id="calc-class-students-body">
+                    <tr><td colspan="4" style="padding:6px;">No class selected.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           `;
-          // Fetch bookings and populate dropdowns
-          fetch('/api/bookings/all')
-            .then(res => res.json())
-            .then(data => {
-              const bookings = data.bookings || [];
+          // Fetch bookings and recipe display names, then populate dropdowns
+          Promise.all([
+            fetch('/api/bookings/all').then(res => res.json()),
+            fetch('/api/recipes/display-dropdown').then(res => res.json()).catch(() => ({ recipes: [] })),
+            fetch('/api/recipes/display-table').then(res => res.json()).catch(() => [])
+          ])
+            .then(([bookingsData, recipeDisplayData, recipeDisplayTable]) => {
+              const bookings = bookingsData.bookings || [];
+              const recipeDetailsById = {};
+              (recipeDisplayData.recipes || []).forEach(r => {
+                if (!r) return;
+                const details = {
+                  name: r.name || '',
+                  servingSize: r.serving_size || '',
+                  ingredients: ''
+                };
+                if (r.id != null) {
+                  recipeDetailsById[String(r.id)] = details;
+                }
+                if (r.recipeid != null) {
+                  recipeDetailsById[String(r.recipeid)] = details;
+                }
+              });
+              (Array.isArray(recipeDisplayTable) ? recipeDisplayTable : []).forEach(r => {
+                if (!r) return;
+                const details = {
+                  name: r.name || '',
+                  servingSize: r.serving_size || '',
+                  ingredients: r.ingredients || ''
+                };
+                if (r.id != null) {
+                  const idKey = String(r.id);
+                  recipeDetailsById[idKey] = { ...(recipeDetailsById[idKey] || {}), ...details };
+                }
+                if (r.recipeid != null) {
+                  const recipeKey = String(r.recipeid);
+                  recipeDetailsById[recipeKey] = { ...(recipeDetailsById[recipeKey] || {}), ...details };
+                }
+              });
               const teacherSelect = document.getElementById('teacher-select');
+              const dateSelect = document.getElementById('date-select');
               const classSelect = document.getElementById('class-select');
+              const studentsMeta = document.getElementById('calc-class-students-meta');
+              const studentsBody = document.getElementById('calc-class-students-body');
+
+              function setClassSizeFromStudents(count) {
+                const classSizeInput = document.getElementById('class-size-input');
+                if (!classSizeInput) return;
+                classSizeInput.value = String(count);
+                classSizeInput.dispatchEvent(new Event('input'));
+              }
+
+              function renderScheduledClassStudents(students = []) {
+                if (!studentsMeta || !studentsBody) return;
+                if (!students.length) {
+                  studentsMeta.textContent = '0 students timetabled for selected class.';
+                  studentsBody.innerHTML = '<tr><td colspan="4" style="padding:6px;">No students found for this class.</td></tr>';
+                  setClassSizeFromStudents(0);
+                  return;
+                }
+                studentsMeta.textContent = `${students.length} students timetabled for selected class.`;
+                setClassSizeFromStudents(students.length);
+                studentsBody.innerHTML = students.map(s => `
+                  <tr>
+                    <td style="padding:6px;border-top:1px solid #f0f0f0;">${s.id_number || ''}</td>
+                    <td style="padding:6px;border-top:1px solid #f0f0f0;">${s.student_name || ''}</td>
+                    <td style="padding:6px;border-top:1px solid #f0f0f0;">${s.form_class || ''}</td>
+                    <td style="padding:6px;border-top:1px solid #f0f0f0;">${s.year_level || ''}</td>
+                  </tr>
+                `).join('');
+              }
+
+              function fetchStudentsForScheduledClass(classCode) {
+                if (!studentsMeta || !studentsBody) return;
+                if (!classCode) {
+                  studentsMeta.textContent = 'Choose a class to view students.';
+                  studentsBody.innerHTML = '<tr><td colspan="4" style="padding:6px;">No class selected.</td></tr>';
+                  setClassSizeFromStudents(0);
+                  return;
+                }
+                studentsMeta.textContent = 'Loading students...';
+                fetch(`/api/student_upload/by-class/${encodeURIComponent(classCode)}`)
+                  .then(res => res.json())
+                  .then(data => renderScheduledClassStudents(data.students || []))
+                  .catch(() => {
+                    studentsMeta.textContent = 'Failed to load students for this class.';
+                    studentsBody.innerHTML = '<tr><td colspan="4" style="padding:6px;">Could not load students.</td></tr>';
+                  });
+              }
+
+              function getDateKey(dateValue) {
+                if (!dateValue) return '';
+                const raw = String(dateValue);
+                if (/^\d{4}-\d{2}-\d{2}/.test(raw)) {
+                  return raw.slice(0, 10);
+                }
+                const parsed = new Date(raw);
+                if (!isNaN(parsed)) {
+                  return parsed.toISOString().slice(0, 10);
+                }
+                return raw;
+              }
+
+              function formatDateWithDay(dateValue) {
+                const dateKey = getDateKey(dateValue);
+                if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return dateKey;
+                const [year, month, day] = dateKey.split('-').map(Number);
+                const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                const dayIndex = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+                return `${dateKey} (${dayNames[dayIndex]})`;
+              }
+
               // Group bookings by teacher
               const grouped = {};
               for (const b of bookings) {
                 if (!grouped[b.staff_name]) grouped[b.staff_name] = [];
                 grouped[b.staff_name].push(b);
               }
+
+              function populateClassOptions(teacher, selectedDate) {
+                if (!teacher || !selectedDate) {
+                  classSelect.innerHTML = '<option value="">Select class...</option>';
+                  updateSelectedRecipeDisplay();
+                  fetchStudentsForScheduledClass('');
+                  return;
+                }
+                const classes = (grouped[teacher] || []).filter(b => getDateKey(b.booking_date) === selectedDate);
+                classSelect.innerHTML = '<option value="">Select class...</option>' +
+                  classes.map(b => {
+                    const recipeId = b.recipe_id != null ? String(b.recipe_id) : '';
+                    const recipeName = (recipeDetailsById[recipeId] && recipeDetailsById[recipeId].name) || b.recipe || '';
+                    return `<option value="${recipeId}" data-recipe-id="${recipeId}" data-recipe-name="${recipeName}" data-booking-id="${b.id}" data-date="${b.booking_date}" data-class-name="${b.class_name}" data-class-code="${b.class_name}" data-staff-id="${b.staff_id}" data-class-size="${b.class_size}">${formatDateWithDay(b.booking_date)} | ${b.class_name} | [ID: ${recipeId}] ${recipeName}</option>`;
+                  }).join('');
+                updateSelectedRecipeDisplay();
+                fetchStudentsForScheduledClass('');
+              }
+
+              function populateDateOptions(teacher) {
+                if (!teacher) {
+                  dateSelect.innerHTML = '<option value="">Select date...</option>';
+                  classSelect.innerHTML = '<option value="">Select class...</option>';
+                  updateSelectedRecipeDisplay();
+                  fetchStudentsForScheduledClass('');
+                  return;
+                }
+                const dates = Array.from(new Set((grouped[teacher] || []).map(b => getDateKey(b.booking_date)).filter(Boolean))).sort();
+                dateSelect.innerHTML = '<option value="">Select date...</option>' +
+                  dates.map(d => `<option value="${d}">${formatDateWithDay(d)}</option>`).join('');
+                classSelect.innerHTML = '<option value="">Select class...</option>';
+                updateSelectedRecipeDisplay();
+                fetchStudentsForScheduledClass('');
+              }
+
+              function updateSelectedRecipeDisplay() {
+                const selectedRecipeDiv = document.getElementById('selected-recipe-display');
+                const servingSizeDiv = document.getElementById('serving-size-display');
+                const ingredientsListDiv = document.getElementById('original-ingredients-list');
+                if (!selectedRecipeDiv) return;
+                const selectedOption = classSelect.options[classSelect.selectedIndex];
+                const recipeId = selectedOption ? (selectedOption.getAttribute('data-recipe-id') || selectedOption.value || '') : '';
+                const selectedRecipeName = selectedOption ? (selectedOption.getAttribute('data-recipe-name') || '') : '';
+                const details = recipeId ? recipeDetailsById[String(recipeId)] : null;
+                const recipeName = (details && details.name ? details.name : '') || selectedRecipeName;
+                const servingSize = details && details.servingSize ? details.servingSize : '';
+                const ingredientsRaw = details && details.ingredients ? details.ingredients : '';
+                if (recipeId && recipeName) {
+                  selectedRecipeDiv.textContent = `Recipe: [ID: ${recipeId}] ${recipeName}`;
+                } else if (recipeId) {
+                  selectedRecipeDiv.textContent = `Recipe: [ID: ${recipeId}]`;
+                } else if (recipeName) {
+                  selectedRecipeDiv.textContent = `Recipe: ${recipeName}`;
+                } else {
+                  selectedRecipeDiv.textContent = 'Recipe: ';
+                }
+                if (servingSizeDiv) {
+                  servingSizeDiv.textContent = `Serving Size: ${servingSize || ''}`;
+                }
+                if (ingredientsListDiv) {
+                  const ingredients = String(ingredientsRaw || '')
+                    .replace(/<br\s*\/?>/gi, '\n')
+                    .split(/\r?\n/)
+                    .map(line => line.replace(/<[^>]+>/g, '').trim())
+                    .filter(Boolean);
+                  const normalizeIngredient = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                  window.originalRecipeIngredientOrder = ingredients.map(normalizeIngredient);
+                  if (ingredients.length > 0) {
+                    ingredientsListDiv.innerHTML = `<ul style="margin:0;padding-left:1.1em;">${ingredients.map(i => `<li style="margin-bottom:0.2em;">${i}</li>`).join('')}</ul>`;
+                  } else {
+                    ingredientsListDiv.innerHTML = '<div style="color:#888;text-align:center;">Ingredients: </div>';
+                  }
+                }
+              }
+
+              function preloadRecipeIngredientsForCalculation(recipeId) {
+                if (!recipeId) {
+                  window.filteredIngredientsForCalculation = [];
+                  return;
+                }
+                fetch('/api/ingredients/inventory/all')
+                  .then(res => res.json())
+                  .then(data => {
+                    const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+                    const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
+                    const order = Array.isArray(window.originalRecipeIngredientOrder) ? window.originalRecipeIngredientOrder : [];
+                    const normalizeIngredient = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                    const getSortIndex = (row) => {
+                      const candidates = [
+                        normalizeIngredient(row.ingredient_name),
+                        normalizeIngredient(row.strip_fooditem || row.stripFoodItem),
+                        normalizeIngredient(row.fooditem)
+                      ].filter(Boolean);
+                      for (let i = 0; i < order.length; i++) {
+                        const orderLine = order[i];
+                        if (candidates.some(c => orderLine.includes(c) || c.includes(orderLine))) {
+                          return i;
+                        }
+                      }
+                      return Number.MAX_SAFE_INTEGER;
+                    };
+                    window.filteredIngredientsForCalculation = filtered
+                      .map((row, idx) => ({ row, idx, sortIndex: getSortIndex(row) }))
+                      .sort((a, b) => (a.sortIndex - b.sortIndex) || (a.idx - b.idx))
+                      .map(item => item.row);
+                    const fooditemsCol = document.getElementById('single-serving-col');
+                    if (fooditemsCol) {
+                      fooditemsCol.innerHTML = '';
+                    }
+                  })
+                  .catch(() => {
+                    window.filteredIngredientsForCalculation = [];
+                  });
+              }
+
               // Populate teacher dropdown
               teacherSelect.innerHTML = '<option value="">Select teacher...</option>' +
                 Object.keys(grouped).sort().map(t => `<option value="${t}">${t}</option>`).join('');
-              // When teacher changes, populate class dropdown
+              dateSelect.innerHTML = '<option value="">Select date...</option>';
+              classSelect.innerHTML = '<option value="">Select class...</option>';
+
+              // When teacher changes, populate date dropdown
               teacherSelect.addEventListener('change', function() {
                 const teacher = this.value;
-                if (!teacher) {
-                  classSelect.innerHTML = '<option value="">Select class...</option>';
-                  return;
-                }
-                const classes = grouped[teacher] || [];
-                classSelect.innerHTML = '<option value="">Select class...</option>' +
-                  classes.map(b => `<option value="${b.recipe_id}" data-booking-id="${b.id}" data-date="${b.booking_date}" data-class-name="${b.class_name}" data-staff-id="${b.staff_id}" data-class-size="${b.class_size}">${b.booking_date} | ${b.class_name} | [ID: ${b.recipe_id}] ${b.recipe}</option>`).join('');
-                // Auto-populate class size when class changes
-                classSelect.addEventListener('change', function() {
-                  const selectedOption = classSelect.options[classSelect.selectedIndex];
-                  const classSize = selectedOption ? selectedOption.getAttribute('data-class-size') : '';
-                  const classSizeInput = document.getElementById('class-size-input');
-                  if (classSizeInput && classSize) {
-                    classSizeInput.value = classSize;
-                    classSizeInput.dispatchEvent(new Event('input'));
-                  }
-                });
+                populateDateOptions(teacher);
               });
+
+              // When date changes, populate class dropdown for teacher and date
+              dateSelect.addEventListener('change', function() {
+                populateClassOptions(teacherSelect.value, this.value);
+              });
+
+              // Auto-populate class size when class changes
+              classSelect.addEventListener('change', function() {
+                const selectedOption = classSelect.options[classSelect.selectedIndex];
+                const classSize = selectedOption ? selectedOption.getAttribute('data-class-size') : '';
+                const recipeId = selectedOption ? (selectedOption.getAttribute('data-recipe-id') || selectedOption.value || '') : '';
+                const classCode = selectedOption ? (selectedOption.getAttribute('data-class-code') || selectedOption.getAttribute('data-class-name') || '') : '';
+                updateSelectedRecipeDisplay();
+                const classSizeInput = document.getElementById('class-size-input');
+                if (classSizeInput) {
+                  classSizeInput.value = classSize || '';
+                  classSizeInput.dispatchEvent(new Event('input'));
+                }
+                preloadRecipeIngredientsForCalculation(recipeId);
+                fetchStudentsForScheduledClass(classCode);
+              });
+
               // Optionally, trigger change to clear class dropdown on load
               teacherSelect.dispatchEvent(new Event('change'));
             });
@@ -212,218 +454,106 @@
             groupsInput.addEventListener('input', recalcDesiredServings);
           }
 
-          // Show Recipe Ingredients button logic
-          document.getElementById('show-recipe-ingredients-btn').onclick = function() {
-            // Use the new dropdowns for selection
+          // Calculate Desired Serving Ingredients button logic
+          document.getElementById('calculate-desired-serving-btn').onclick = function() {
+            const fooditemsCol = document.getElementById('single-serving-col');
+            if (!fooditemsCol) return;
+            fooditemsCol.innerHTML = '';
+            const ul = document.createElement('ul');
+            ul.style.listStyle = 'none';
+            ul.style.padding = '0';
+            ul.style.textAlign = 'left';
+            // Get desired serving size
+            const desiredServingsInput = document.getElementById('desired-servings-input');
+            let desiredServings = 1;
+            if (desiredServingsInput && !isNaN(parseFloat(desiredServingsInput.value))) {
+              desiredServings = parseFloat(desiredServingsInput.value);
+            }
+            const filtered = window.filteredIngredientsForCalculation || [];
+            // Collect class/booking details from dropdowns
             const teacherSelect = document.getElementById('teacher-select');
             const classSelect = document.getElementById('class-select');
-            if (!teacherSelect || !classSelect) return;
-            const recipeId = classSelect.value;
-            console.log('[Show Recipe Ingredients] Clicked. Recipe ID:', recipeId);
-            if (!recipeId) {
-              alert('Please select a class from the dropdown.');
-              return;
-            }
-            // Set the filter input and trigger the filter
-            const filterInput = document.getElementById('filter-recipe-id');
-            if (filterInput) {
-              filterInput.value = recipeId;
-              console.log('[Show Recipe Ingredients] Set filter input value to:', filterInput.value);
-            } else {
-              console.warn('[Show Recipe Ingredients] filter-recipe-id input not found');
-            }
-            // Set class size input from selected class
-            const selectedOption = classSelect.options[classSelect.selectedIndex];
-            const classSize = selectedOption ? selectedOption.getAttribute('data-class-size') : '';
+            const teacher = teacherSelect ? teacherSelect.value : '';
+            const classOption = classSelect ? classSelect.options[classSelect.selectedIndex] : null;
+            const booking_id = classOption ? classOption.getAttribute('data-booking-id') : '';
+            const class_name = classOption ? classOption.getAttribute('data-class-name') : '';
+            const class_date = classOption ? classOption.getAttribute('data-date') : '';
+            const staff_id = classOption ? classOption.getAttribute('data-staff-id') : '';
             const classSizeInput = document.getElementById('class-size-input');
-            if (classSizeInput && classSize) {
-              classSizeInput.value = classSize;
-              classSizeInput.dispatchEvent(new Event('input'));
-            }
-            // Fetch recipe details and show serving size and name
-            fetch(`/api/recipes/${recipeId}`)
-              .then(res => res.json())
-              .then(recipe => {
-                // Update serving size display
-                const servingSizeDiv = document.getElementById('serving-size-display');
-                if (servingSizeDiv) {
-                  servingSizeDiv.textContent = 'Serving Size: ' + (recipe && recipe.serving_size ? recipe.serving_size : '');
-                  // Show recipe name below serving size
-                  let recipeNameDiv = document.getElementById('recipe-name-under-serving-size');
-                  if (!recipeNameDiv) {
-                    recipeNameDiv = document.createElement('div');
-                    recipeNameDiv.id = 'recipe-name-under-serving-size';
-                    recipeNameDiv.style.fontWeight = 'bold';
-                    recipeNameDiv.style.color = '#1976d2';
-                    recipeNameDiv.style.marginTop = '0.5em';
-                    servingSizeDiv.parentNode.appendChild(recipeNameDiv);
-                  }
-                  recipeNameDiv.textContent = recipe && recipe.name ? recipe.name : '';
-                }
-                // Fetch ingredients and show table
-                fetch(`/api/ingredients/inventory/all`)
-                  .then(res => res.json())
-                  .then(data => {
-                    // Use robust extraction logic for all response types
-                    const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
-                    const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
-                    if (typeof renderIngredientsTable === 'function') {
-                      renderIngredientsTable(filtered);
-                    }
-                    // Store filtered ingredients for calculation
-                    window.filteredIngredientsForCalculation = filtered;
-                    // Clear Desired Serving Ingredients box
-                    const fooditemsCol = document.getElementById('single-serving-col');
-                    if (fooditemsCol) {
-                      fooditemsCol.innerHTML = '';
-                    }
-                  });
-                // Calculate Desired Serving Ingredients button logic
-                document.getElementById('calculate-desired-serving-btn').onclick = function() {
-                  const fooditemsCol = document.getElementById('single-serving-col');
-                  if (!fooditemsCol) return;
-                  fooditemsCol.innerHTML = '';
-                  const ul = document.createElement('ul');
-                  ul.style.listStyle = 'none';
-                  ul.style.padding = '0';
-                  ul.style.textAlign = 'left';
-                  // Get desired serving size
-                  const desiredServingsInput = document.getElementById('desired-servings-input');
-                  let desiredServings = 1;
-                  if (desiredServingsInput && !isNaN(parseFloat(desiredServingsInput.value))) {
-                    desiredServings = parseFloat(desiredServingsInput.value);
-                  }
-                  const filtered = window.filteredIngredientsForCalculation || [];
-                  // Collect class/booking details from dropdowns
-                  const teacher = teacherSelect.value;
-                  const classOption = classSelect.options[classSelect.selectedIndex];
-                  const booking_id = classOption ? classOption.getAttribute('data-booking-id') : '';
-                  const class_name = classOption ? classOption.getAttribute('data-class-name') : '';
-                  const class_date = classOption ? classOption.getAttribute('data-date') : '';
-                  const staff_id = classOption ? classOption.getAttribute('data-staff-id') : '';
-                  const classSizeInput = document.getElementById('class-size-input');
-                  const groupsInput = document.getElementById('groups-input');
-                  const class_size = classSizeInput && !isNaN(parseInt(classSizeInput.value, 10)) ? parseInt(classSizeInput.value, 10) : '';
-                  const groups = groupsInput && !isNaN(parseInt(groupsInput.value, 10)) ? parseInt(groupsInput.value, 10) : '';
-                  // Prepare ingredients array for backend
-                  const ingredientsToSave = [];
-                  filtered.forEach(row => {
-                    const parts = [];
-                    let qty = row.measure_qty;
-                    let calculated_qty = qty;
-                    // Multiply qty by desired serving size if it's a number
-                    if (qty && !isNaN(parseFloat(qty))) {
-                      calculated_qty = (parseFloat(qty) * desiredServings).toString();
-                    }
-                    if (calculated_qty) parts.push(calculated_qty);
-                    if (row.measure_unit) parts.push(row.measure_unit);
-                    if (row.strip_fooditem || row.stripFoodItem) {
-                      parts.push(row.strip_fooditem || row.stripFoodItem);
-                    } else if (row.fooditem) {
-                      parts.push(row.fooditem);
-                    }
-                    if (parts.length > 0) {
-                      const li = document.createElement('li');
-                      li.textContent = parts.join(' ');
-                      ul.appendChild(li);
-                    }
-                    ingredientsToSave.push({
-                      ingredient_id: row.id,
-                      ingredient_name: row.ingredient_name,
-                      measure_qty: row.measure_qty,
-                      measure_unit: row.measure_unit,
-                      fooditem: row.fooditem,
-                      calculated_qty: calculated_qty,
-                      stripFoodItem: row.strip_fooditem || row.stripFoodItem || '',
-                      aisle_category_id: row.aisle_category_id || ''
-                    });
-                  });
-                  if (ul.children.length > 0) {
-                    fooditemsCol.appendChild(ul);
-                  }
-                  // Debug preview window removed
-                  // Send to backend
-                  fetch('/api/ingredients/desired_servings_ingredients/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      booking_id,
-                      teacher,
-                      staff_id,
-                      class_name,
-                      class_date,
-                      class_size,
-                      groups,
-                      desired_servings: desiredServings,
-                      recipe_id: classSelect.value, // Pass recipe_id from selected class
-                      ingredients: ingredientsToSave
-                    })
-                  })
-                  .then(res => res.json())
-                  .then(data => {
-                    if (data.success) {
-                      console.log('Saved desired servings ingredients:', data);
-                      if (typeof loadDesiredServingIngredientsTable === 'function') {
-                        loadDesiredServingIngredientsTable();
-                      }
-                    } else {
-                      console.error('Failed to save desired servings ingredients:', data);
-                    }
-                  })
-                  .catch(err => {
-                    console.error('Error saving desired servings ingredients:', err);
-                  });
-                };
+            const groupsInput = document.getElementById('groups-input');
+            const class_size = classSizeInput && !isNaN(parseInt(classSizeInput.value, 10)) ? parseInt(classSizeInput.value, 10) : '';
+            const groups = groupsInput && !isNaN(parseInt(groupsInput.value, 10)) ? parseInt(groupsInput.value, 10) : '';
+            // Prepare ingredients array for backend
+            const ingredientsToSave = [];
+            filtered.forEach(row => {
+              const parts = [];
+              let qty = row.measure_qty;
+              let calculated_qty = qty;
+              // Multiply qty by desired serving size if it's a number
+              if (qty && !isNaN(parseFloat(qty))) {
+                calculated_qty = (parseFloat(qty) * desiredServings).toString();
+              }
+              if (calculated_qty) parts.push(calculated_qty);
+              if (row.measure_unit) parts.push(row.measure_unit);
+              if (row.strip_fooditem || row.stripFoodItem) {
+                parts.push(row.strip_fooditem || row.stripFoodItem);
+              } else if (row.fooditem) {
+                parts.push(row.fooditem);
+              }
+              if (parts.length > 0) {
+                const li = document.createElement('li');
+                li.textContent = parts.join(' ');
+                ul.appendChild(li);
+              }
+              ingredientsToSave.push({
+                ingredient_id: row.id,
+                ingredient_name: row.ingredient_name,
+                measure_qty: row.measure_qty,
+                measure_unit: row.measure_unit,
+                fooditem: row.fooditem,
+                calculated_qty: calculated_qty,
+                stripFoodItem: row.strip_fooditem || row.stripFoodItem || '',
+                aisle_category_id: row.aisle_category_id || ''
               });
+            });
+            if (ul.children.length > 0) {
+              fooditemsCol.appendChild(ul);
+            }
+            // Send to backend
+            fetch('/api/ingredients/desired_servings_ingredients/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                booking_id,
+                teacher,
+                staff_id,
+                class_name,
+                class_date,
+                class_size,
+                groups,
+                desired_servings: desiredServings,
+                recipe_id: classSelect ? classSelect.value : '',
+                ingredients: ingredientsToSave
+              })
+            })
+            .then(res => res.json())
+            .then(data => {
+              if (data.success) {
+                if (window.QC) window.QC.toast('Desired serving ingredients saved', 'success');
+                if (typeof loadDesiredServingIngredientsTable === 'function') {
+                  loadDesiredServingIngredientsTable();
+                }
+              } else {
+                if (window.QC) window.QC.toast('Failed to save desired serving ingredients', 'error');
+                console.error('Failed to save desired servings ingredients:', data);
+              }
+            })
+            .catch(err => {
+              if (window.QC) window.QC.toast('Error saving desired serving ingredients', 'error');
+              console.error('Error saving desired servings ingredients:', err);
+            });
           };
 
-          // Other inventory table controls
-          document.getElementById('show-ingredients-btn').onclick = function() {
-            if (typeof renderIngredientsTable === 'function') {
-              renderIngredientsTable([]); // Clear first
-            }
-            if (typeof renderIngredientsInventory === 'function') {
-              renderIngredientsInventory();
-            }
-            document.getElementById('recipe-name-display').textContent = '';
-          };
-          document.getElementById('filter-ingredients-btn').onclick = function() {
-            const recipeId = document.getElementById('filter-recipe-id').value;
-            console.log('[Filter Button] Clicked. Recipe ID:', recipeId);
-            if (!recipeId) {
-              console.warn('[Filter Button] No recipeId entered');
-              return;
-            }
-            fetch(`/api/ingredients/inventory/all`)
-              .then(res => res.json())
-              .then(data => {
-                // Support array, {data: [...]}, or {ingredients: [...]}
-                const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
-                const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
-                console.log('[Filter Button] Filtered ingredients:', filtered);
-                renderIngredientsTable(filtered);
-                // Fetch recipe name
-                fetch(`/api/recipes/${recipeId}`)
-                  .then(res => res.json())
-                  .then(recipe => {
-                    document.getElementById('recipe-name-display').textContent = recipe && recipe.name ? recipe.name : '';
-                  });
-              });
-          };
-          document.getElementById('show-all-btn').onclick = function() {
-            document.getElementById('filter-recipe-id').value = '';
-            if (typeof renderIngredientsInventory === 'function') {
-              renderIngredientsInventory();
-            }
-            document.getElementById('recipe-name-display').textContent = '';
-          };
-          document.getElementById('clear-filter-btn').onclick = function() {
-            document.getElementById('filter-recipe-id').value = '';
-            if (typeof renderIngredientsTable === 'function') {
-              renderIngredientsTable([]);
-            }
-            document.getElementById('recipe-name-display').textContent = '';
-          };
         });
       </script>
     </body>

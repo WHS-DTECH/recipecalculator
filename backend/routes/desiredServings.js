@@ -153,4 +153,16 @@ router.post('/save', (req, res) => {
     });
   });
 });
+
+// DELETE /desired_servings_ingredients/all
+// Keep delete in the same router/data source as GET and save to avoid UI reloading stale rows.
+router.delete('/all', (req, res) => {
+  db.run('DELETE FROM desired_servings_ingredients', [], function(err) {
+    if (err) {
+      return res.status(500).json({ success: false, error: err.message });
+    }
+    res.json({ success: true, deleted: this.changes || 0 });
+  });
+});
+
 module.exports = router;
