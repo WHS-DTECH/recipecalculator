@@ -31,12 +31,18 @@ function populateStaffDropdown() {
         select.appendChild(defaultOption);
       const staffArr = data.staff || [];
       const topStaff = getTopSelections('topStaff');
+      const topList = topStaff.map(id => staffArr.find(s => String(s.id) === String(id))).filter(Boolean);
+      const restList = staffArr.filter(s => !topStaff.includes(String(s.id)));
       // Sort: topStaff first, then rest
-      const sorted = [
-        ...topStaff.map(id => staffArr.find(s => String(s.id) === String(id))).filter(Boolean),
-        ...staffArr.filter(s => !topStaff.includes(String(s.id)))
-      ];
-      sorted.forEach(staff => {
+      const sorted = [...topList, ...restList];
+      sorted.forEach((staff, idx) => {
+        // Add a separator between top (recent) and remaining staff
+        if (topList.length > 0 && idx === topList.length) {
+          const sep = document.createElement('option');
+          sep.disabled = true;
+          sep.textContent = '──────────────';
+          select.appendChild(sep);
+        }
         const opt = document.createElement('option');
         opt.value = staff.id;
         // Always show staff code if available
@@ -58,6 +64,54 @@ function getStaffCodeById(staffId, staffArr) {
 }
 
 let _staffArrCache = [];
+
+function renderClassStudents(students = []) {
+  const tbody = document.getElementById('classStudentsBody');
+  const meta = document.getElementById('classStudentsMeta');
+  const classSizeInput = document.getElementById('classSizeInput');
+  if (!tbody || !meta) return;
+
+  if (!students.length) {
+    tbody.innerHTML = '<tr><td colspan="4">No students found for this class.</td></tr>';
+    meta.textContent = '0 students timetabled for selected class.';
+    if (classSizeInput) classSizeInput.value = 0;
+    return;
+  }
+
+  meta.textContent = `${students.length} students timetabled for selected class.`;
+  if (classSizeInput) classSizeInput.value = students.length;
+  tbody.innerHTML = students.map(s => `
+    <tr>
+      <td>${s.id_number || ''}</td>
+      <td>${s.student_name || ''}</td>
+      <td>${s.form_class || ''}</td>
+      <td>${s.year_level || ''}</td>
+    </tr>
+  `).join('');
+}
+
+function fetchStudentsForClass(classCode) {
+  const meta = document.getElementById('classStudentsMeta');
+  const tbody = document.getElementById('classStudentsBody');
+  if (!meta || !tbody) return;
+
+  if (!classCode) {
+    meta.textContent = 'Choose a class to view students.';
+    tbody.innerHTML = '<tr><td colspan="4">No class selected.</td></tr>';
+    const classSizeInput = document.getElementById('classSizeInput');
+    if (classSizeInput) classSizeInput.value = 1;
+    return;
+  }
+
+  meta.textContent = 'Loading students...';
+  fetch(`/api/student_upload/by-class/${encodeURIComponent(classCode)}`)
+    .then(res => res.json())
+    .then(data => renderClassStudents(data.students || []))
+    .catch(() => {
+      meta.textContent = 'Failed to load students for this class.';
+      tbody.innerHTML = '<tr><td colspan="4">Could not load students.</td></tr>';
+    });
+}
 
 function populateClassDropdown(staffCode) {
   let url = '/api/classes/dropdown';
@@ -87,6 +141,7 @@ function populateClassDropdown(staffCode) {
         opt.value = '';
         opt.textContent = 'No classes available for this staff member';
         select.appendChild(opt);
+        fetchStudentsForClass('');
         return;
       }
       sorted.forEach(cls => {
@@ -101,6 +156,7 @@ function populateClassDropdown(staffCode) {
         }
         select.appendChild(opt);
       });
+      fetchStudentsForClass('');
     });
 }
 
@@ -258,6 +314,7 @@ function renderBookings(bookings = []) {
       populateClassDropdown(staffCode);
       setTimeout(() => {
         document.getElementById('classSelect').value = booking.class_name;
+        fetchStudentsForClass(booking.class_name);
       }, 200);
       document.getElementById('dateInput').value = booking.booking_date;
       document.getElementById('periodSelect').value = booking.period;
@@ -281,6 +338,12 @@ window.addEventListener('DOMContentLoaded', () => {
       const staffCode = getStaffCodeById(firstStaffId, _staffArrCache);
       populateClassDropdown(staffCode);
     });
+
+  const dateInput = document.getElementById('dateInput');
+  if (dateInput && !dateInput.value) {
+    dateInput.value = new Date().toISOString().slice(0, 10);
+  }
+
   populateRecipeDropdown();
   fetchAndRenderBookings();
   document.getElementById('saveBookingBtn').addEventListener('click', saveBooking);
@@ -301,4 +364,8 @@ window.addEventListener('DOMContentLoaded', () => {
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
     populateClassDropdown(staffCode);
   });
+  document.getElementById('classSelect').addEventListener('change', function() {
+    fetchStudentsForClass(this.value);
+  });
+  fetchStudentsForClass('');
 });

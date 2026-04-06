@@ -1,63 +1,53 @@
-
-const express = require('express');
+﻿const express = require('express');
 const router = express.Router();
-const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
-const dbPath = path.join(__dirname, '../database.sqlite');
-const db = new sqlite3.Database(dbPath);
+const pool = require('../db');
 
 // Update a booking by ID
-router.put('/:id', (req, res) => {
+router.put('/:id', async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size } = req.body;
-  db.run(
-    'UPDATE bookings SET staff_id = ?, staff_name = ?, class_name = ?, booking_date = ?, period = ?, recipe = ?, recipe_id = ?, class_size = ? WHERE id = ?',
-    [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size, req.params.id],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: 'Failed to update booking.' });
-      } else {
-        res.json({ success: true });
-      }
-    }
-  );
+  try {
+    await pool.query(
+      'UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_id=$7, class_size=$8 WHERE id=$9',
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size, req.params.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update booking.' });
+  }
 });
 
 // Delete a booking by ID
-router.delete('/:id', (req, res) => {
-  db.run('DELETE FROM bookings WHERE id = ?', [req.params.id], function(err) {
-    if (err) {
-      res.status(500).json({ error: 'Failed to delete booking.' });
-    } else {
-      res.json({ success: true });
-    }
-  });
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bookings WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete booking.' });
+  }
 });
 
 // Create a new booking
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size } = req.body;
-  db.run(
-    'INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size],
-    function(err) {
-      if (err) {
-        res.status(500).json({ error: 'Failed to create booking.' });
-      } else {
-        res.json({ success: true, booking_id: this.lastID });
-      }
-    }
-  );
+  try {
+    const result = await pool.query(
+      'INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size]
+    );
+    res.json({ success: true, booking_id: result.rows[0].id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create booking.' });
+  }
 });
 
 // Get all bookings
-router.get('/all', (req, res) => {
-  db.all('SELECT * FROM bookings ORDER BY booking_date DESC, period', [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: 'Failed to fetch bookings.' });
-    } else {
-      res.json({ bookings: rows });
-    }
-  });
+router.get('/all', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM bookings ORDER BY booking_date DESC, period');
+    res.json({ bookings: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch bookings.' });
+  }
 });
 
 module.exports = router;

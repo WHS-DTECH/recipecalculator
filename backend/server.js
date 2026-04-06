@@ -84,6 +84,21 @@ app.post('/api/title-extractor/solution', async (req, res) => {
 const uploadsRouter = require('./routes/api/uploads');
 app.use('/api/uploads', uploadsRouter);
 
+const staffUploadRouter = require('./routes/staff_upload');
+app.use('/api/staff_upload', staffUploadRouter);
+
+const bookingsRouter = require('./routes/bookings');
+app.use('/api/bookings', bookingsRouter);
+
+const classesRouter = require('./routes/classes');
+app.use('/api/classes', classesRouter);
+
+const uploadTimetableRouter = require('./routes/upload_timetable');
+app.use('/api/upload_timetable', uploadTimetableRouter);
+
+const studentUploadRouter = require('./routes/student_upload');
+app.use('/api/student_upload', studentUploadRouter);
+
 
 // --- Suggestions API ---
 app.get('/api/suggestions', async (req, res) => {
@@ -96,13 +111,23 @@ app.get('/api/suggestions', async (req, res) => {
 });
 app.post('/api/suggestions', async (req, res) => {
   const { date, recipe_name, suggested_by, email, url, reason } = req.body;
+  const doInsert = () => pool.query(
+    'INSERT INTO suggestions (date, recipe_name, suggested_by, email, url, reason) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+    [date, recipe_name, suggested_by, email, url, reason]
+  );
   try {
-    const result = await pool.query(
-      'INSERT INTO suggestions (date, recipe_name, suggested_by, email, url, reason) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [date, recipe_name, suggested_by, email, url, reason]
-    );
+    const result = await doInsert();
     res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
+    if (err.code === '23505' && err.constraint === 'suggestions_pkey') {
+      try {
+        await pool.query(`SELECT setval(pg_get_serial_sequence('suggestions','id'), COALESCE((SELECT MAX(id) FROM suggestions), 0))`);
+        const result = await doInsert();
+        return res.json({ success: true, id: result.rows[0].id });
+      } catch (retryErr) {
+        return res.status(500).json({ error: retryErr.message });
+      }
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -329,10 +354,10 @@ app.get('/api/search/recipes', (req, res) => {
 // Returns staff/teachers matching a query (by name or code)
 app.get('/api/search/staff', async (req, res) => {
   const q = (req.query.q || '').trim();
-  let sql = 'SELECT DISTINCT "Teacher", "Teacher Name" as "TeacherName" FROM kamar_timetable';
+  let sql = 'SELECT DISTINCT "Teacher", "Teacher_Name" as "TeacherName" FROM kamar_timetable WHERE COALESCE(status, \'Current\') = \'Current\'';
   let params = [];
   if (q) {
-    sql += ' WHERE "Teacher" ILIKE $1 OR "Teacher Name" ILIKE $2';
+    sql += ' AND ("Teacher" ILIKE $1 OR "Teacher_Name" ILIKE $2)';
     params = [`%${q}%`, `%${q}%`];
   }
   sql += ' ORDER BY "TeacherName"';
@@ -346,33 +371,173 @@ app.get('/api/search/staff', async (req, res) => {
 
 // --- Class Upload Endpoints ---
 
+function normalizeCsvHeader(value) {
+  return (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getHeaderIndex(headers, aliases) {
+  const normalized = (headers || []).map(normalizeCsvHeader);
+  for (const alias of aliases) {
+    const idx = normalized.indexOf(normalizeCsvHeader(alias));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
+
 // POST /api/class-upload: Upload class CSV data
 app.post('/api/class-upload', async (req, res) => {
-  const { classes } = req.body;
+  const { classes, headers = [] } = req.body;
   if (!Array.isArray(classes) || classes.length === 0) {
     return res.status(400).json({ success: false, error: 'No class data provided.' });
   }
-  let inserted = 0;
+
+  const ttcodeIdx = getHeaderIndex(headers, ['ttcode', 'tt code', 'code']);
+  const levelIdx = getHeaderIndex(headers, ['level', 'year level', 'year_level']);
+  const nameIdx = getHeaderIndex(headers, ['name', 'class name', 'classname']);
+  const qualificationIdx = getHeaderIndex(headers, ['qualification', 'year']);
+  const departmentIdx = getHeaderIndex(headers, ['department']);
+  const subDepartmentIdx = getHeaderIndex(headers, ['sub department', 'sub_department']);
+  const teacherIdx = getHeaderIndex(headers, ['teacher_in_charge', 'teacher in charge', 'teacher code', 'teachercode']);
+  const descriptionIdx = getHeaderIndex(headers, ['description', 'notes']);
+  const starIdx = getHeaderIndex(headers, ['star']);
+
+  const useHeaderMapping = Array.isArray(headers) && headers.length > 0 && ttcodeIdx >= 0;
+
+  const byCode = new Map();
+  let skippedNoTtcode = 0;
+  for (const row of classes) {
+    if (!Array.isArray(row)) continue;
+    const ttcode = (useHeaderMapping && ttcodeIdx >= 0 ? row[ttcodeIdx] : row[0] || '').toString().trim();
+    if (!ttcode) {
+      skippedNoTtcode++;
+      continue;
+    }
+    const level = (useHeaderMapping && levelIdx >= 0 ? row[levelIdx] : row[1] || '').toString().trim();
+    const name = (useHeaderMapping && nameIdx >= 0 ? row[nameIdx] : row[2] || '').toString().trim();
+    const qualification = (useHeaderMapping && qualificationIdx >= 0 ? row[qualificationIdx] : row[3] || '').toString().trim();
+    const department = (useHeaderMapping && departmentIdx >= 0 ? row[departmentIdx] : row[4] || '').toString().trim();
+    const subDepartment = (useHeaderMapping && subDepartmentIdx >= 0 ? row[subDepartmentIdx] : row[5] || '').toString().trim();
+    const teacherInCharge = (useHeaderMapping && teacherIdx >= 0 ? row[teacherIdx] : row[6] || '').toString().trim();
+    const description = (useHeaderMapping && descriptionIdx >= 0 ? row[descriptionIdx] : row[7] || '').toString().trim();
+    const star = (useHeaderMapping && starIdx >= 0 ? row[starIdx] : row[8] || '').toString().trim();
+
+    byCode.set(ttcode.toUpperCase(), {
+      ttcode,
+      level,
+      name,
+      qualification,
+      department,
+      subDepartment,
+      teacherInCharge,
+      description,
+      star
+    });
+  }
+
+  const deduped = Array.from(byCode.values());
+  const duplicateTtcodesInUpload = Math.max(0, classes.length - skippedNoTtcode - deduped.length);
+  if (deduped.length === 0) {
+    return res.status(400).json({ success: false, error: 'No valid rows with TTCode were found.' });
+  }
+
+  const client = await pool.connect();
   try {
-    for (const row of classes) {
-      if (row.length >= 9) {
-        await pool.query(
-          'INSERT INTO class_upload (ttcode, level, name, qualification, department, sub_department, teacher_in_charge, description, star) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
-          [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8]]
+    await client.query('BEGIN');
+
+    await client.query("UPDATE class_upload SET status = 'Not Current'");
+
+    let inserted = 0;
+    let updated = 0;
+    for (const row of deduped) {
+      const updateResult = await client.query(
+        `UPDATE class_upload
+         SET year_level = $2,
+             class_name = $3,
+             year = $4,
+             department = $5,
+             extra1 = $6,
+             teacher_code = $7,
+             notes = $8,
+             extra2 = $9,
+             status = 'Current'
+         WHERE upper(trim(code)) = upper(trim($1))`,
+        [
+          row.ttcode,
+          row.level,
+          row.name,
+          row.qualification,
+          row.department,
+          row.subDepartment,
+          row.teacherInCharge,
+          row.description,
+          row.star
+        ]
+      );
+
+      if (updateResult.rowCount > 0) {
+        updated += updateResult.rowCount;
+      } else {
+        await client.query(
+          `INSERT INTO class_upload
+            (code, year_level, class_name, year, department, extra1, teacher_code, notes, extra2, status)
+           VALUES
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Current')`,
+          [
+            row.ttcode,
+            row.level,
+            row.name,
+            row.qualification,
+            row.department,
+            row.subDepartment,
+            row.teacherInCharge,
+            row.description,
+            row.star
+          ]
         );
         inserted++;
       }
     }
-    res.json({ success: true, inserted });
+
+    const inactiveResult = await client.query("SELECT COUNT(*)::int AS count FROM class_upload WHERE status = 'Not Current'");
+    const markedNotCurrent = inactiveResult.rows[0]?.count || 0;
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      inserted,
+      updated,
+      marked_not_current: markedNotCurrent,
+      skipped_no_ttcode: skippedNoTtcode,
+      duplicate_ttcodes_in_upload: duplicateTtcodesInUpload,
+      processed: deduped.length
+    });
   } catch (err) {
+    await client.query('ROLLBACK');
     res.status(500).json({ success: false, error: err.message });
+  } finally {
+    client.release();
   }
 });
 
 // GET /api/class_upload/all: Fetch all class records
 app.get('/api/class_upload/all', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM class_upload');
+    const result = await pool.query(`
+      SELECT
+        id,
+        code AS ttcode,
+        year_level AS level,
+        class_name AS name,
+        year AS qualification,
+        department,
+        extra1 AS sub_department,
+        teacher_code AS teacher_in_charge,
+        notes AS description,
+        extra2 AS star,
+        COALESCE(status, 'Current') AS status
+      FROM class_upload
+      ORDER BY class_name
+    `);
     res.json({ classes: result.rows });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch class upload data.' });
