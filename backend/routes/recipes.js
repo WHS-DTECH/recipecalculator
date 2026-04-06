@@ -68,12 +68,24 @@ function normalizeIngredientLine(line) {
     .trim();
 }
 
+function splitCompressedIngredientText(text) {
+  if (!text) return '';
+  let normalized = String(text)
+    .replace(/\bFILLING\b/gi, '\nFILLING\n')
+    .replace(/([A-Za-z])(\d)/g, '$1\n$2')
+    .replace(/([^\n])([¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]\s*(?:cups?|tbsp|tsp|g|kg|ml|l)\b)/gi, '$1\n$2')
+    .replace(/([^\n])((?:\d+(?:\/\d+)?|\d*\.\d+)\s*(?:cups?|tbsp|tsp|g|kg|ml|l)\b)/gi, '$1\n$2');
+
+  return normalized;
+}
+
 function isMeaningfulIngredientLine(line) {
   if (!line) return false;
   const normalized = String(line).trim();
   if (!normalized) return false;
   if (normalized === '...') return false;
   if (/^[,.;:\-]+$/.test(normalized)) return false;
+  if (/^[1-5]\s*star$/i.test(normalized)) return false;
   if (/^(noopener|noreferrer|_blank)$/i.test(normalized)) return false;
   if (/^\/products\//i.test(normalized)) return false;
   return true;
@@ -91,6 +103,7 @@ function isLikelyInstructionToken(line) {
 function cleanIngredientsForDisplay(raw) {
   if (Array.isArray(raw)) {
     return raw
+      .flatMap((item) => splitCompressedIngredientText(String(item || '')).split(/\r?\n/))
       .map((item) => normalizeIngredientLine(String(item || '')))
       .filter(isMeaningfulIngredientLine)
       .join('\n');
@@ -106,8 +119,12 @@ function cleanIngredientsForDisplay(raw) {
   // HTML/anchor path: keep visible link text, never link attributes.
   if (/<a\b/i.test(source) || /<[^>]+>/.test(source)) {
     const htmlToText = source
+      .replace(/<\/?li[^>]*>/gi, '\n')
+      .replace(/<\/?ul[^>]*>/gi, '\n')
+      .replace(/<\/?ol[^>]*>/gi, '\n')
+      .replace(/<\/?p[^>]*>/gi, '\n')
       .replace(/<a[^>]*>([\s\S]*?)<\/a>/gi, '$1')
-      .replace(/<br\s*\/?>/gi, ',')
+      .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<[^>]+>/g, ' ')
       .replace(/&nbsp;/gi, ' ')
       .replace(/&amp;/gi, '&')
@@ -115,7 +132,7 @@ function cleanIngredientsForDisplay(raw) {
       .replace(/&quot;/gi, '"');
 
     const htmlTokens = htmlToText
-      .split(/\s*,\s*/)
+      .split(/\r?\n|\s*,\s*/)
       .map(normalizeIngredientLine)
       .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
 
@@ -130,6 +147,7 @@ function cleanIngredientsForDisplay(raw) {
       const parsed = JSON.parse(source);
       if (Array.isArray(parsed)) {
         return parsed
+          .flatMap((item) => splitCompressedIngredientText(String(item || '')).split(/\r?\n/))
           .map((item) => normalizeIngredientLine(String(item || '')))
           .filter(isMeaningfulIngredientLine)
           .join('\n');
@@ -386,18 +404,28 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
       const rawIngredients = row.ingredients;
       const rawSource = rawExtractedIngredients || rawIngredients || '';
       const cleaned = cleanIngredientsForDisplay(rawSource);
+      const cleanedForDisplay = cleaned
+        .split('\n')
+        .map(line => line.trim())
+        .filter(Boolean)
+        .join('<br>');
 
-      console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtractedIngredients=`, rawExtractedIngredients);
-      console.log(`[CLEANUP] Recipe ID ${row.id}: rawIngredients=`, rawIngredients);
-      console.log(`[CLEANUP] Recipe ID ${row.id}: cleanedIngredients=`, cleaned);
+      const rawExtractedPreview = String(rawExtractedIngredients || '').slice(0, 500);
+      const rawIngredientsPreview = String(rawIngredients || '').slice(0, 500);
+      const cleanedPreview = String(cleanedForDisplay || '').slice(0, 500);
+
+      console.log(`[CLEANUP][INGREDIENTS] Recipe ID ${row.id} raw extracted preview:`, rawExtractedPreview);
+      console.log(`[CLEANUP][INGREDIENTS] Recipe ID ${row.id} raw ingredients preview:`, rawIngredientsPreview);
+      console.log(`[CLEANUP][INGREDIENTS] Recipe ID ${row.id} cleaned display preview:`, cleanedPreview);
+      console.log(`[CLEANUP][INGREDIENTS] Recipe ID ${row.id} source length=${String(rawSource || '').length}, cleaned length=${String(cleanedForDisplay || '').length}`);
 
       const updateResult = await pool.query(
         'UPDATE recipes SET ingredients_display = $1 WHERE id = $2 RETURNING id, ingredients_display',
-        [cleaned, row.id]
+        [cleanedForDisplay, row.id]
       );
-      console.log(`[CLEANUP] Recipe ID ${row.id}: Updated ingredients_display. Updated rows: ${updateResult.rowCount}`);
+      console.log(`[CLEANUP][INGREDIENTS] Recipe ID ${row.id}: Updated ingredients_display. Updated rows: ${updateResult.rowCount}`);
       if (updateResult.rows[0]) {
-        console.log(`[CLEANUP] Recipe ID ${row.id}: ingredients_display saved preview=`, String(updateResult.rows[0].ingredients_display || '').slice(0, 300));
+        console.log(`[CLEANUP][INGREDIENTS] Recipe ID ${row.id}: ingredients_display saved preview=`, String(updateResult.rows[0].ingredients_display || '').slice(0, 500));
       }
       cleanupIngredientsProgress.current++;
       await new Promise(resolve => setTimeout(resolve, 500));

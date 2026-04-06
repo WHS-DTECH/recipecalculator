@@ -26,6 +26,12 @@
 		<div class="setup-card" style="max-width:1100px;margin:20px auto 0 auto;text-align:left;">
 			<label for="recipeIdFilter" style="font-weight:bold;margin-right:0.5em;">Filter/Sort by RecipeID:</label>
 			<select id="recipeIdFilter" style="min-width:200px;"></select>
+			<label for="publishStatusFilter" style="font-weight:bold;margin-left:0.9em;margin-right:0.4em;">View:</label>
+			<select id="publishStatusFilter" style="min-width:180px;">
+				<option value="all">All Recipes</option>
+				<option value="published">Only Published</option>
+				<option value="unpublished">Only To Be Published</option>
+			</select>
 			<button id="applyRecipeIdFilterBtn" style="margin-left:1em;">Sort/Filter</button>
 			<button id="refreshRecipesBtn" style="margin-left:0.5em;">Refresh</button>
 		</div>

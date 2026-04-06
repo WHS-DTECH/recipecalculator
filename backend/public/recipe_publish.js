@@ -9,6 +9,8 @@ document.addEventListener('click', (event) => {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
+	const cleanupSelectedRecipeKey = 'recipePublishSelectedRecipeId';
+	const publishStatusFilterKey = 'recipePublishStatusFilter';
 	const table = document.getElementById('recipesTable');
 	const tbody = table ? table.querySelector('tbody') : null;
 	if (!table || !tbody) {
@@ -117,7 +119,34 @@ function populateRecipeIdFilterOptions(recipes) {
 	});
 }
 
-function filterAndRenderRecipesById(recipes, selectedId) {
+function setRecipeFilterSelection(recipeId) {
+	const filter = document.getElementById('recipeIdFilter');
+	if (!filter) return '';
+	const wanted = String(recipeId || '').trim();
+	if (!wanted) return '';
+	const hasWanted = Array.from(filter.options).some(opt => String(opt.value) === wanted);
+	if (!hasWanted) return '';
+	filter.value = wanted;
+	sessionStorage.setItem(cleanupSelectedRecipeKey, wanted);
+	return wanted;
+}
+
+function getSelectedPublishStatusFilter() {
+	const statusFilter = document.getElementById('publishStatusFilter');
+	return statusFilter ? String(statusFilter.value || 'all') : 'all';
+}
+
+function setPublishStatusFilterSelection(value) {
+	const statusFilter = document.getElementById('publishStatusFilter');
+	if (!statusFilter) return 'all';
+	const wanted = String(value || 'all');
+	const valid = ['all', 'published', 'unpublished'].includes(wanted) ? wanted : 'all';
+	statusFilter.value = valid;
+	sessionStorage.setItem(publishStatusFilterKey, valid);
+	return valid;
+}
+
+function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') {
 	const table = document.getElementById('recipesTable');
 	const tbody = table ? table.querySelector('tbody') : null;
 	if (!table || !tbody) return;
@@ -131,6 +160,11 @@ function filterAndRenderRecipesById(recipes, selectedId) {
 	let filtered = recipes;
 	if (selectedId) {
 		filtered = recipes.filter(r => String(getRecipeFilterId(r)) === String(selectedId));
+	}
+	if (publishStatus === 'published') {
+		filtered = filtered.filter(r => publishedRecipeIds.has(Number(r.id)));
+	} else if (publishStatus === 'unpublished') {
+		filtered = filtered.filter(r => !publishedRecipeIds.has(Number(r.id)));
 	}
 	if (!Array.isArray(filtered) || filtered.length === 0) {
 		tbody.innerHTML = `<tr><td colspan="${columns.length}">No recipes found.</td></tr>`;
@@ -158,8 +192,12 @@ let allRecipesCache = [];
 			allRecipesCache = data;
 			refreshPublishedRecipeIds().then(() => {
 			populateRecipeIdFilterOptions(data);
+			const persistedRecipeId = sessionStorage.getItem(cleanupSelectedRecipeKey) || '';
+			const persistedStatusFilter = sessionStorage.getItem(publishStatusFilterKey) || 'all';
+			const selectedStatusFilter = setPublishStatusFilterSelection(persistedStatusFilter);
+			const selectedRecipeId = persistedRecipeId ? (setRecipeFilterSelection(persistedRecipeId) || '') : '';
 			console.log('[DEBUG] Populating RecipeID filter with:', data.map(getRecipeFilterLabel).filter(Boolean));
-			filterAndRenderRecipesById(data, '');
+			filterAndRenderRecipesById(data, selectedRecipeId, selectedStatusFilter);
 			});
 		})
 		.catch(err => {
@@ -175,8 +213,22 @@ let allRecipesCache = [];
 		filterBtn.addEventListener('click', () => {
 			const filter = document.getElementById('recipeIdFilter');
 			const selectedId = filter ? filter.value : '';
+			const selectedStatus = getSelectedPublishStatusFilter();
+			if (selectedId) sessionStorage.setItem(cleanupSelectedRecipeKey, selectedId);
+			sessionStorage.setItem(publishStatusFilterKey, selectedStatus);
 			console.log('[DEBUG] Filter button clicked. Selected RecipeID:', selectedId);
-			filterAndRenderRecipesById(allRecipesCache, selectedId);
+			filterAndRenderRecipesById(allRecipesCache, selectedId, selectedStatus);
+		});
+	}
+
+	const statusFilter = document.getElementById('publishStatusFilter');
+	if (statusFilter) {
+		statusFilter.addEventListener('change', () => {
+			const filter = document.getElementById('recipeIdFilter');
+			const selectedId = filter ? filter.value : '';
+			const selectedStatus = getSelectedPublishStatusFilter();
+			sessionStorage.setItem(publishStatusFilterKey, selectedStatus);
+			filterAndRenderRecipesById(allRecipesCache, selectedId, selectedStatus);
 		});
 	}
 
@@ -185,7 +237,7 @@ let allRecipesCache = [];
 		refreshBtn.addEventListener('click', async () => {
 			refreshBtn.disabled = true;
 			const selectedId = (document.getElementById('recipeIdFilter') || {}).value || '';
-			await refreshRecipesFromApi(selectedId);
+			await refreshRecipesFromApi(selectedId, getSelectedPublishStatusFilter());
 			refreshBtn.disabled = false;
 		});
 	}
@@ -204,7 +256,7 @@ let allRecipesCache = [];
 			if (data.success) {
 				publishedRecipeIds.add(Number(recipeId));
 				const selectedId = (document.getElementById('recipeIdFilter') || {}).value || '';
-				filterAndRenderRecipesById(allRecipesCache, selectedId);
+				filterAndRenderRecipesById(allRecipesCache, selectedId, getSelectedPublishStatusFilter());
 				alert(`RecipeID ${recipeId} published.`);
 			} else {
 				alert('Publish failed: ' + (data.error || 'Unknown error'));
@@ -215,10 +267,13 @@ let allRecipesCache = [];
 		btn.disabled = false;
 	});
 
-	async function refreshRecipesFromApi(preferredRecipeId = '') {
+	async function refreshRecipesFromApi(preferredRecipeId = '', preferredStatusFilter = '') {
 		try {
 			const filter = document.getElementById('recipeIdFilter');
 			const previousSelectedId = filter ? (filter.value || '') : '';
+			const previousStatusFilter = getSelectedPublishStatusFilter();
+			const persistedRecipeId = sessionStorage.getItem(cleanupSelectedRecipeKey) || '';
+			const persistedStatusFilter = sessionStorage.getItem(publishStatusFilterKey) || 'all';
 			await refreshPublishedRecipeIds();
 			const resp = await fetch(`/api/recipes?_ts=${Date.now()}`, { cache: 'no-store' });
 			const data = await resp.json();
@@ -226,16 +281,15 @@ let allRecipesCache = [];
 			populateRecipeIdFilterOptions(allRecipesCache);
 
 			let selectedId = previousSelectedId;
-			if (preferredRecipeId && filter) {
-				const wanted = String(preferredRecipeId);
-				const hasWanted = Array.from(filter.options).some(opt => String(opt.value) === wanted);
-				if (hasWanted) {
-					filter.value = wanted;
-					selectedId = wanted;
-				}
+			const targetRecipeId = String(preferredRecipeId || persistedRecipeId || previousSelectedId || '').trim();
+			if (targetRecipeId) {
+				selectedId = setRecipeFilterSelection(targetRecipeId) || previousSelectedId;
 			}
 
-			filterAndRenderRecipesById(allRecipesCache, selectedId);
+			const targetStatusFilter = String(preferredStatusFilter || persistedStatusFilter || previousStatusFilter || 'all').trim();
+			const selectedStatusFilter = setPublishStatusFilterSelection(targetStatusFilter);
+
+			filterAndRenderRecipesById(allRecipesCache, selectedId, selectedStatusFilter);
 		} catch (err) {
 			console.error('[DEBUG] Failed to refresh recipes after cleanup:', err);
 		}
@@ -273,6 +327,7 @@ let allRecipesCache = [];
 				alert('Please enter a valid numeric RecipeID.');
 				return;
 			}
+			sessionStorage.setItem(cleanupSelectedRecipeKey, String(recipeId));
 			if (!confirm(`Clean Instructions Display for RecipeID ${recipeId}?`)) return;
 			const previousInstructionsDisplay = getRecipeColumnValue(
 				allRecipesCache.find(r => Number(r.id) === recipeId),
@@ -326,11 +381,13 @@ let allRecipesCache = [];
 				alert('Please enter a valid numeric RecipeID.');
 				return;
 			}
+			sessionStorage.setItem(cleanupSelectedRecipeKey, String(recipeId));
 			if (!confirm(`Clean Ingredients Display for RecipeID ${recipeId}?`)) return;
 			const previousIngredientsDisplay = getRecipeColumnValue(
 				allRecipesCache.find(r => Number(r.id) === recipeId),
 				'ingredients_display'
 			);
+			console.log(`[DEBUG][Cleanup Ingredients] RecipeID ${recipeId} previous ingredients_display:`, String(previousIngredientsDisplay || '').slice(0, 500));
 
 			cleanupIngredientsBtnActive.disabled = true;
 			const progressBar = document.getElementById('cleanupProgressBar');
@@ -348,6 +405,18 @@ let allRecipesCache = [];
 
 			await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', progressFill);
 
+			try {
+				const inventorySyncResp = await fetch('/api/ingredients/inventory/sync', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ recipeId, reseed: true })
+				});
+				const inventorySyncData = await inventorySyncResp.json();
+				console.log(`[DEBUG][Cleanup Ingredients] Inventory reseed sync for RecipeID ${recipeId}:`, inventorySyncData);
+			} catch (syncErr) {
+				console.warn(`[DEBUG][Cleanup Ingredients] Inventory reseed sync failed for RecipeID ${recipeId}:`, syncErr);
+			}
+
 			if (progressBar && progressFill) {
 				progressBar.style.display = 'none';
 				progressFill.style.width = '0%';
@@ -360,6 +429,7 @@ let allRecipesCache = [];
 				allRecipesCache.find(r => Number(r.id) === recipeId),
 				'ingredients_display'
 			);
+			console.log(`[DEBUG][Cleanup Ingredients] RecipeID ${recipeId} refreshed ingredients_display:`, String(refreshedIngredientsDisplay || '').slice(0, 500));
 			if (String(refreshedIngredientsDisplay || '').trim() === String(previousIngredientsDisplay || '').trim()) {
 				console.warn('[DEBUG] Ingredients display unchanged after cleanup refresh; forcing page reload.');
 				window.location.reload();

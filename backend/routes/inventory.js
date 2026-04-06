@@ -14,11 +14,60 @@ const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorize
 router.post('/sync', async (req, res) => {
   try {
     const recipeId = String(req.body?.recipeId || '').trim();
+    const reseed = Boolean(req.body?.reseed);
+
+    if (recipeId && reseed) {
+      await pool.query('DELETE FROM ingredients_inventory WHERE recipe_id = $1', [recipeId]);
+    }
+
     const queryText = recipeId
       ? 'SELECT id, quantity, ingredient_name, fooditem FROM ingredients_inventory WHERE recipe_id = $1'
       : 'SELECT id, quantity, ingredient_name, fooditem FROM ingredients_inventory';
     const queryParams = recipeId ? [recipeId] : [];
-    const { rows } = await pool.query(queryText, queryParams);
+    let { rows } = await pool.query(queryText, queryParams);
+
+    // If syncing a specific recipe with no inventory rows yet, seed from recipe_display first.
+    if (recipeId && rows.length === 0) {
+      const recipeResult = await pool.query(
+        'SELECT ingredients_display, extracted_ingredients, ingredients FROM recipes WHERE id = $1 LIMIT 1',
+        [recipeId]
+      );
+
+      const sourceRow = recipeResult.rows[0];
+      const rawIngredients = String(
+        sourceRow?.ingredients_display || sourceRow?.extracted_ingredients || sourceRow?.ingredients || ''
+      );
+      const splitUnits = '(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|g|kg|ml|l)';
+      const splitQty = '(?:\\d+(?:\\/\\d+)?|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
+      const candidateLines = rawIngredients
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/\bFILLING\b/gi, '\nFILLING\n')
+        .replace(/([A-Za-z])(\d)/g, '$1\n$2')
+        .replace(new RegExp(`([^\\n])(${splitQty}\\s*${splitUnits}\\b)`, 'gi'), '$1\n$2')
+        .split(/\r?\n|\s*,\s*/)
+        .flatMap(line => line.split(new RegExp(`(?=${splitQty}\\s*${splitUnits}\\b)`, 'gi')))
+        .map(line => line.trim())
+        .filter(Boolean)
+        .filter(line => !/^[1-5]\s*Star$/i.test(line));
+
+      if (candidateLines.length > 0) {
+        for (const line of candidateLines) {
+          await pool.query(
+            `INSERT INTO ingredients_inventory (
+              ingredient_name, recipe_id, quantity, measure_qty, measure_unit, fooditem, stripfooditem, aisle_category_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [line, recipeId, '', null, '', '', '', null]
+          );
+        }
+      }
+
+      const refreshed = await pool.query(queryText, queryParams);
+      rows = refreshed.rows;
+    }
+
     let updated = 0;
     // Helper to convert unicode and vulgar fractions to float
     function parseFraction(str) {
@@ -44,11 +93,15 @@ router.post('/sync', async (req, res) => {
     const units = [
       'cup', 'cups', 'tbsp', 'tablespoon', 'tablespoons', 'tsp', 'teaspoon', 'teaspoons',
       'g', 'gram', 'grams', 'kg', 'kilogram', 'kilograms', 'ml', 'l', 'litre', 'litres', 'liter', 'liters',
-      'oz', 'ounce', 'ounces', 'lb', 'pound', 'pounds', 'pinch', 'dash', 'clove', 'cloves', 'can', 'cans', 'slice', 'slices', 'stick', 'sticks', 'packet', 'packets', 'piece', 'pieces', 'egg', 'eggs', 'drop', 'drops', 'block', 'blocks', 'sheet', 'sheets', 'bunch', 'bunches', 'sprig', 'sprigs', 'head', 'heads', 'filet', 'filets', 'fillet', 'fillets', 'bag', 'bags', 'jar', 'jars', 'bottle', 'bottles', 'container', 'containers', 'box', 'boxes', 'bar', 'bars', 'roll', 'rolls', 'strip', 'strips', 'cm', 'mm', 'inch', 'inches', 'pinches', 'handful', 'handfuls', 'dozen', 'sheet', 'sheets', 'leaf', 'leaves', 'stalk', 'stalks', 'rib', 'ribs', 'segment', 'segments', 'piece', 'pieces', 'cube', 'cubes', 'drop', 'drops', 'sprinkle', 'sprinkles', 'dash', 'dashes', 'splash', 'splashes', 'liter', 'liters', 'milliliter', 'millilitres', 'millilitre', 'millilitres', 'quart', 'quarts', 'pint', 'pints', 'gallon', 'gallons'
+      'oz', 'ounce', 'ounces', 'lb', 'pound', 'pounds', 'pinch', 'dash', 'clove', 'cloves', 'can', 'cans', 'slice', 'slices', 'stick', 'sticks', 'packet', 'packets', 'piece', 'pieces', 'drop', 'drops', 'block', 'blocks', 'sheet', 'sheets', 'bunch', 'bunches', 'sprig', 'sprigs', 'head', 'heads', 'filet', 'filets', 'fillet', 'fillets', 'bag', 'bags', 'jar', 'jars', 'bottle', 'bottles', 'container', 'containers', 'box', 'boxes', 'bar', 'bars', 'roll', 'rolls', 'strip', 'strips', 'cm', 'mm', 'inch', 'inches', 'pinches', 'handful', 'handfuls', 'dozen', 'sheet', 'sheets', 'leaf', 'leaves', 'stalk', 'stalks', 'rib', 'ribs', 'segment', 'segments', 'piece', 'pieces', 'cube', 'cubes', 'drop', 'drops', 'sprinkle', 'sprinkles', 'dash', 'dashes', 'splash', 'splashes', 'liter', 'liters', 'milliliter', 'millilitres', 'millilitre', 'millilitres', 'quart', 'quarts', 'pint', 'pints', 'gallon', 'gallons'
     ];
     const unitPattern = units.join('|');
     const regex = new RegExp(
       String.raw`^([\d\s\/.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+)\s*(${unitPattern})\b\s*(.*)$`,
+      'i'
+    );
+    const qtyOnlyRegex = new RegExp(
+      String.raw`^([\d\s\/.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]+)\s+(.+)$`,
       'i'
     );
     for (const row of rows) {
@@ -62,6 +115,13 @@ router.post('/sync', async (req, res) => {
           measure_qty = parseFraction(match[1]);
           measure_unit = (match[2] || '').trim();
           nextFoodItem = (match[3] || '').trim();
+        } else {
+          const qtyOnlyMatch = sourceText.match(qtyOnlyRegex);
+          if (qtyOnlyMatch) {
+            measure_qty = parseFraction(qtyOnlyMatch[1]);
+            measure_unit = null;
+            nextFoodItem = (qtyOnlyMatch[2] || '').trim();
+          }
         }
       }
 
@@ -113,8 +173,52 @@ router.post('/assign-aisle', async (req, res) => {
     const sql = 'UPDATE ingredients_inventory SET aisle_category_id = $1 WHERE id = $2';
     // console.log('[DEBUG] Executing SQL:', sql, [aisle_category_id, ingredient_id]);
     const result = await pool.query(sql, [aisle_category_id, ingredient_id]);
+
+    // Learn from manual assignment: upsert keyword into aisle_keywords.
+    let keywordAdded = false;
+    let keywordUpdated = false;
+    let learnedKeyword = '';
+
+    const ingredientLookup = await pool.query(
+      `SELECT
+         COALESCE(
+           NULLIF(TRIM(stripfooditem), ''),
+           NULLIF(TRIM(fooditem), ''),
+           NULLIF(TRIM(ingredient_name), '')
+         ) AS keyword_source
+       FROM ingredients_inventory
+       WHERE id = $1`,
+      [ingredient_id]
+    );
+
+    const keywordSource = String(ingredientLookup.rows?.[0]?.keyword_source || '').trim();
+    if (keywordSource) {
+      learnedKeyword = keywordSource;
+      const existingKeyword = await pool.query(
+        'SELECT id, aisle_category_id FROM aisle_keywords WHERE LOWER(keyword) = LOWER($1) LIMIT 1',
+        [learnedKeyword]
+      );
+
+      if (existingKeyword.rows.length > 0) {
+        const existing = existingKeyword.rows[0];
+        if (String(existing.aisle_category_id) !== String(aisle_category_id)) {
+          await pool.query('UPDATE aisle_keywords SET aisle_category_id = $1 WHERE id = $2', [aisle_category_id, existing.id]);
+          keywordUpdated = true;
+        }
+      } else {
+        await pool.query('INSERT INTO aisle_keywords (aisle_category_id, keyword) VALUES ($1, $2)', [aisle_category_id, learnedKeyword]);
+        keywordAdded = true;
+      }
+    }
+
     // console.log('[DEBUG] Update result:', result);
-    res.json({ success: true, updated: result.rowCount });
+    res.json({
+      success: true,
+      updated: result.rowCount,
+      keywordAdded,
+      keywordUpdated,
+      learnedKeyword
+    });
   } catch (err) {
     //console.error('[DEBUG] Error in /assign-aisle:', err);
     res.status(500).json({ success: false, error: err.message });

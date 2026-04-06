@@ -110,9 +110,16 @@
                 if (!container) return;
                 // Use the same logic as in renderIngredientsInventory, but only for the given array
                 fetch('food_brands.json').then(res => res.json()).then(brands => {
-                  fetch('/api/aisle_keywords/all').then(res => res.json()).then(keywordsData => {
+                  Promise.all([
+                    fetch('/api/aisle_keywords/all').then(res => res.json()),
+                    fetch('/api/aisle_category').then(res => res.json())
+                  ]).then(([keywordsData, aisleCategoryData]) => {
                     const keywords = keywordsData.keywords || [];
-                    const categories = Array.from(new Set(keywords.map(k => k.aisle_category))).filter(Boolean).map((name, i) => ({ id: i + 1, name }));
+                    const categories = Array.isArray(aisleCategoryData && aisleCategoryData.categories)
+                      ? aisleCategoryData.categories
+                          .map(c => ({ id: c.id, name: c.name, sort_order: c.sort_order }))
+                          .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || String(a.name || '').localeCompare(String(b.name || '')))
+                      : Array.from(new Set(keywords.map(k => k.aisle_category))).filter(Boolean).map((name, i) => ({ id: i + 1, name }));
                     function safe(val) { return val === null || val === undefined ? '' : val; }
                     function stripFoodItemDynamic(name) {
                       let stripped = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -177,7 +184,6 @@
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
@@ -202,7 +208,6 @@
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.recipe_id)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.fooditem) || safe(row.measure_unit)}</td>
-                              <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.quantity)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_qty)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_unit)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem; color:green;">${stripFood || safe(row.measure_unit)}</td>
@@ -403,13 +408,18 @@
                 return;
               }
               // Send all updates in parallel
-              Promise.all(updates.map(u =>
-                fetch('/api/ingredients/inventory/assign-aisle', {
+              Promise.all(updates.map(async u => {
+                const res = await fetch('/api/ingredients/inventory/assign-aisle', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(u)
-                })
-              ))
+                });
+                const data = await res.json();
+                if (!res.ok || !data.success) {
+                  throw new Error(data.error || `Failed to save assignment for ingredient ${u.ingredient_id}`);
+                }
+                return data;
+              }))
               .then(() => {
                 document.getElementById('save-assignments-status').textContent = 'Assignments saved!';
                 // Refresh table with latest data
@@ -420,8 +430,8 @@
                     window.renderIngredientsInventoryTable(updatedIngredients);
                   });
               })
-              .catch(() => {
-                document.getElementById('save-assignments-status').textContent = 'Error saving assignments.';
+              .catch((err) => {
+                document.getElementById('save-assignments-status').textContent = 'Error saving assignments: ' + (err.message || err);
               })
               .finally(() => {
                 saveBtn.disabled = false;
@@ -440,8 +450,13 @@
         .then(data => {
           const filterSelect = document.getElementById('filter-recipe-select');
           if (filterSelect) {
+            const sorted = (Array.isArray(data) ? [...data] : []).sort((a, b) => {
+              const aId = Number(a.recipeid) || 0;
+              const bId = Number(b.recipeid) || 0;
+              return aId - bId;
+            });
             filterSelect.innerHTML = '<option value="">-- Show All Recipes --</option>' +
-              data.map(r => `<option value="${r.recipeid}">${r.recipeid} | ${r.name || r.recipe_title || 'Recipe ' + r.recipeid}</option>`).join('');
+              sorted.map(r => `<option value="${r.recipeid}">${r.recipeid} | ${r.name || r.recipe_title || 'Recipe ' + r.recipeid}</option>`).join('');
           }
         });
       const filterSelect = document.getElementById('filter-recipe-select');
@@ -489,9 +504,16 @@
         const container = document.getElementById('ingredients-inventory-table');
         if (!container) return;
         fetch('food_brands.json').then(res => res.json()).then(brands => {
-          fetch('/api/aisle_keywords/all').then(res => res.json()).then(keywordsData => {
+          Promise.all([
+            fetch('/api/aisle_keywords/all').then(res => res.json()),
+            fetch('/api/aisle_category').then(res => res.json())
+          ]).then(([keywordsData, aisleCategoryData]) => {
             const keywords = keywordsData.keywords || [];
-            const categories = Array.from(new Set(keywords.map(k => k.aisle_category))).filter(Boolean).map((name, i) => ({ id: i + 1, name }));
+            const categories = Array.isArray(aisleCategoryData && aisleCategoryData.categories)
+              ? aisleCategoryData.categories
+                  .map(c => ({ id: c.id, name: c.name, sort_order: c.sort_order }))
+                  .sort((a, b) => (Number(a.sort_order) || 0) - (Number(b.sort_order) || 0) || String(a.name || '').localeCompare(String(b.name || '')))
+              : Array.from(new Set(keywords.map(k => k.aisle_category))).filter(Boolean).map((name, i) => ({ id: i + 1, name }));
             function safe(val) { return val === null || val === undefined ? '' : val; }
             function stripFoodItemDynamic(name) {
               let stripped = name.replace(/\s*\([^)]*\)\s*$/, '').trim();
@@ -527,7 +549,6 @@
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Quantity</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
@@ -552,7 +573,6 @@
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.id)}</td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.recipe_id)}</td>
-                      <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.quantity)}</td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_qty)}</td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.measure_unit)}</td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.fooditem) || safe(row.measure_unit)}</td>
@@ -1061,8 +1081,13 @@
         .then(data => {
           const select = document.getElementById('recipeSelectForText');
           if (select) {
+            const sorted = (Array.isArray(data) ? [...data] : []).sort((a, b) => {
+              const aId = Number(a.recipeid) || 0;
+              const bId = Number(b.recipeid) || 0;
+              return aId - bId;
+            });
             select.innerHTML = '<option value="">-- Select Recipe --</option>' +
-              data.map(r => `<option value="${r.recipeid}">${r.recipeid} | ${r.name || r.recipe_title || 'Recipe ' + r.recipeid}</option>`).join('');
+              sorted.map(r => `<option value="${r.recipeid}">${r.recipeid} | ${r.name || r.recipe_title || 'Recipe ' + r.recipeid}</option>`).join('');
           }
         });
       const select = document.getElementById('recipeSelectForText');

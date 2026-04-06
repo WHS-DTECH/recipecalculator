@@ -24,11 +24,45 @@ router.get('/', async (req, res) => {
 // Add a new aisle category
 router.post('/', async (req, res) => {
   const { name, sort_order } = req.body;
-  if (!name) return res.status(400).json({ error: 'Category name required' });
+  const trimmedName = String(name || '').trim();
+  const parsedSortOrder = Number.isFinite(Number(sort_order)) ? Number(sort_order) : null;
+  if (!trimmedName) return res.status(400).json({ error: 'Category name required' });
+
+  const insertSql = `
+    INSERT INTO aisle_category (name, sort_order)
+    VALUES (
+      $1,
+      COALESCE($2, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM aisle_category))
+    )
+    RETURNING id, sort_order
+  `;
+
   try {
-    const result = await pool.query('INSERT INTO aisle_category (name, sort_order) VALUES ($1, $2) RETURNING id', [name, sort_order || 0]);
-    res.json({ id: result.rows[0].id, name, sort_order });
+    const result = await pool.query(insertSql, [trimmedName, parsedSortOrder]);
+    res.json({ id: result.rows[0].id, name: trimmedName, sort_order: result.rows[0].sort_order });
   } catch (err) {
+    // Common after data imports: id sequence falls behind max(id), causing PK duplicates.
+    if (err && err.code === '23505' && String(err.constraint || '').includes('aisle_category_pkey')) {
+      try {
+        await pool.query(
+          `SELECT setval(
+             pg_get_serial_sequence('aisle_category', 'id'),
+             COALESCE((SELECT MAX(id) FROM aisle_category), 0)
+           )`
+        );
+        const retry = await pool.query(insertSql, [trimmedName, parsedSortOrder]);
+        return res.json({ id: retry.rows[0].id, name: trimmedName, sort_order: retry.rows[0].sort_order, recoveredSequence: true });
+      } catch (retryErr) {
+        console.error('AisleCategory POST retry after sequence reset failed:', retryErr);
+        return res.status(500).json({ error: retryErr.message });
+      }
+    }
+
+    if (err && err.code === '23505' && String(err.constraint || '').includes('name')) {
+      return res.status(409).json({ error: 'Category name already exists' });
+    }
+
+    console.error('AisleCategory POST error:', err);
     res.status(500).json({ error: err.message });
   }
 });
@@ -39,8 +73,12 @@ router.put('/:id', async (req, res) => {
   const { id } = req.params;
   if (!name) return res.status(400).json({ error: 'Category name required' });
   try {
-    await pool.query('UPDATE aisle_category SET name = $1, sort_order = $2 WHERE id = $3', [name, sort_order || 0, id]);
-    res.json({ id, name, sort_order });
+    if (Number.isFinite(Number(sort_order))) {
+      await pool.query('UPDATE aisle_category SET name = $1, sort_order = $2 WHERE id = $3', [name, Number(sort_order), id]);
+    } else {
+      await pool.query('UPDATE aisle_category SET name = $1 WHERE id = $2', [name, id]);
+    }
+    res.json({ id, name });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
