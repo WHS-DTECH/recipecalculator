@@ -51,7 +51,7 @@ document.addEventListener('DOMContentLoaded', function () {
     titleHeading.parentElement.insertBefore(ul, titleHeading.nextSibling);
   }
   let rawData = '';
-  const rawDataBox = document.querySelector('textarea[placeholder="Raw Data (HTML/Text)"]') || document.querySelector('textarea');
+  const rawDataBox = document.getElementById('rawDataBox');
   let currentRecipeId = null;
   // Use static buttons from HTML
   const loadRawBtn = document.getElementById('loadRawBtn');
@@ -65,6 +65,32 @@ document.addEventListener('DOMContentLoaded', function () {
   const sendSolutionBtn = document.getElementById('sendSolutionBtn');
   // Disable Start Step-by-Step until raw data is loaded
   if (startStepBtn) startStepBtn.disabled = true;
+
+  function hasIngredientSignal(text) {
+    const raw = String(text || '');
+    return /recipeIngredient|ingredients|<li|<ul|\bcups?\b|\btsp\b|\btbsp\b|\bg\b|\bml\b/i.test(raw);
+  }
+
+  async function fetchVisibleTextForRecipe(recipeId) {
+    const selectedOption = recipeSelect.options[recipeSelect.selectedIndex];
+    const label = selectedOption ? selectedOption.textContent : '';
+    const urlFromLabel = label.includes('|') ? label.split('|').slice(1).join('|').trim() : '';
+    if (!urlFromLabel) return '';
+
+    const res = await fetch(`/api/extract-visible-text?url=${encodeURIComponent(urlFromLabel)}`);
+    if (!res.ok) return '';
+    const payload = await res.json();
+
+    const blocks = [];
+    if (Array.isArray(payload.listItems) && payload.listItems.length) {
+      blocks.push('Visible List Items:\n' + payload.listItems.join('\n'));
+    }
+    if (payload.visibleText) {
+      blocks.push('Visible Page Text:\n' + String(payload.visibleText));
+    }
+
+    return blocks.join('\n\n').trim();
+  }
 
   // Load Raw Data button event handler
   if (loadRawBtn) {
@@ -87,9 +113,14 @@ document.addEventListener('DOMContentLoaded', function () {
           throw new Error('Failed to fetch raw data');
         }
         rawData = await res.text();
+        if (!hasIngredientSignal(rawData)) {
+          const visibleRaw = await fetchVisibleTextForRecipe(recipeId);
+          if (visibleRaw && visibleRaw.length > rawData.length) {
+            rawData = visibleRaw;
+          }
+        }
         console.log('[DEBUG][LoadRawData] Raw data loaded:', rawData.slice(0, 200));
-        const rawDataTextarea = document.querySelector('textarea[placeholder="Raw Data (HTML/Text)"]') || document.querySelectorAll('textarea')[1];
-        if (rawDataTextarea) rawDataTextarea.value = rawData;
+        if (rawDataBox) rawDataBox.value = rawData;
         if (startStepBtn) startStepBtn.disabled = false;
       } catch (e) {
         console.error('[DEBUG][LoadRawData] Error:', e);
@@ -137,14 +168,30 @@ document.addEventListener('DOMContentLoaded', function () {
         return res.text();
       })
       .then(data => {
-        rawDataBox.value = data;
         rawData = data;
-        if (startStepBtn) startStepBtn.disabled = false;
-        console.log('[DEBUG][AutoLoadRawData] Raw data loaded for recipeId:', recipeId);
-        if (callback) callback(true);
+        Promise.resolve()
+          .then(async () => {
+            if (!hasIngredientSignal(rawData)) {
+              const visibleRaw = await fetchVisibleTextForRecipe(recipeId);
+              if (visibleRaw && visibleRaw.length > rawData.length) {
+                rawData = visibleRaw;
+              }
+            }
+          })
+          .then(() => {
+            if (rawDataBox) rawDataBox.value = rawData;
+            if (startStepBtn) startStepBtn.disabled = false;
+            console.log('[DEBUG][AutoLoadRawData] Raw data loaded for recipeId:', recipeId);
+            if (callback) callback(true);
+          })
+          .catch(() => {
+            if (rawDataBox) rawDataBox.value = rawData;
+            if (startStepBtn) startStepBtn.disabled = false;
+            if (callback) callback(true);
+          });
       })
       .catch(err => {
-        rawDataBox.value = '[Error loading raw data]';
+        if (rawDataBox) rawDataBox.value = '[Error loading raw data]';
         rawData = '';
         if (startStepBtn) startStepBtn.disabled = true;
         console.error('[AutoLoadRawData] Error loading raw data:', err);
@@ -272,6 +319,43 @@ document.addEventListener('DOMContentLoaded', function () {
         run: async function(recipeId) {
           const fileText = rawData;
           this.result = fileText.includes('ingredient-list--content-wysiwyg') ? ['Found wysiwyg'] : [];
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Extract lines between Ingredients and Method',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = String(rawData || '');
+          const lines = fileText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          const start = lines.findIndex(l => /^ingredients?$/i.test(l) || /^ingredients?\b/i.test(l));
+          const end = lines.findIndex((l, idx) => idx > (start >= 0 ? start : -1) && (/^method\b/i.test(l) || /^instructions?\b/i.test(l)));
+          if (start >= 0) {
+            const chunk = lines.slice(start + 1, end > start ? end : start + 25)
+              .filter(l => !/^sponsored/i.test(l) && !/^see more/i.test(l));
+            this.result = chunk;
+          } else {
+            this.result = [];
+          }
+          this.applied = true;
+          this.solved = !!this.result.length;
+          return this.result;
+        }
+      },
+      {
+        name: 'Extract ingredient-like quantity lines',
+        applied: false,
+        result: '',
+        solved: false,
+        run: async function(recipeId) {
+          const fileText = String(rawData || '');
+          const lines = fileText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+          const qtyRegex = /^((\d+([/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|pinch|cloves?|slices?)\b/i;
+          this.result = lines.filter(l => qtyRegex.test(l));
           this.applied = true;
           this.solved = !!this.result.length;
           return this.result;
@@ -417,23 +501,3 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
   });
-
-  if (smartBtn) {
-    smartBtn.addEventListener('click', function () {
-      const selectedId = recipeSelect.value;
-      if (!selectedId) {
-        alert('Please select a recipe.');
-        return;
-      }
-      smartBtn.disabled = true;
-      loadRawDataForRecipe(selectedId, function(success) {
-        if (success) {
-          if (startStepBtn) startStepBtn.disabled = false;
-          startStepBtn.click();
-        } else {
-          alert('Failed to load raw data.');
-        }
-        smartBtn.disabled = false;
-      });
-    });
-  }

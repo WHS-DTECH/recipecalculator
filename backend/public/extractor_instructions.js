@@ -11,18 +11,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
   let currentRecipeId = null;
   let rawData = '';
+  const recipeById = new Map();
   // Disable Start Step-by-step until rawData is loaded
   startStepBtn.disabled = true;
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function normalizeStrategyResult(result) {
+    if (Array.isArray(result)) return result.join('\n').trim();
+    if (result && typeof result === 'object') return JSON.stringify(result, null, 2).trim();
+    return String(result || '').trim();
+  }
+
+  function hasInstructionSignal(raw) {
+    const text = String(raw || '');
+    return /recipeInstructions|HowToStep|itemprop=["']recipeInstructions["']|<ol|<ul|\bmethod\b/i.test(text);
+  }
 
   // Fetch recipes for dropdown
   fetch('/api/recipes')
     .then(res => res.json())
     .then(recipes => {
       recipes.forEach(recipe => {
+        recipeById.set(String(recipe.id), recipe);
         const opt = document.createElement('option');
         opt.value = recipe.id;
-        // Only show the URL as the label
-        opt.textContent = recipe.url && recipe.url.trim() ? recipe.url : `Recipe #${recipe.id}`;
+        const title = recipe.name && recipe.name.trim() ? recipe.name.trim() : 'Untitled Recipe';
+        const url = recipe.url && recipe.url.trim() ? recipe.url.trim() : '';
+        const urlSuffix = url ? ` | ${url}` : '';
+        opt.textContent = `[${recipe.id}] ${title}${urlSuffix}`;
         recipeSelect.appendChild(opt);
       });
     });
@@ -56,8 +78,49 @@ document.addEventListener('DOMContentLoaded', function () {
     // Always use recipeID for file path
     fetch(`/RawDataTXT/${currentRecipeId}.txt`)
       .then(res => res.ok ? res.text() : '')
-      .then(text => {
+      .then(async text => {
         rawData = text || '';
+        if (!hasInstructionSignal(rawData)) {
+          const recipe = recipeById.get(String(currentRecipeId));
+          const recipeUrl = recipe && recipe.url ? recipe.url.trim() : '';
+          if (recipeUrl) {
+            try {
+              const visibleRes = await fetch(`/api/extract-visible-text?url=${encodeURIComponent(recipeUrl)}`);
+              if (visibleRes.ok) {
+                const visibleData = await visibleRes.json();
+                const blocks = [];
+
+                if (Array.isArray(visibleData.jsonLdInstructions) && visibleData.jsonLdInstructions.length) {
+                  blocks.push('JSON-LD Recipe Instructions:\n' + visibleData.jsonLdInstructions.join('\n'));
+                }
+                if (Array.isArray(visibleData.headingCandidates) && visibleData.headingCandidates.length) {
+                  blocks.push('Heading Candidates:\n' + visibleData.headingCandidates.join('\n\n'));
+                }
+                if (Array.isArray(visibleData.listItems) && visibleData.listItems.length) {
+                  blocks.push('Visible List Items:\n' + visibleData.listItems.join('\n'));
+                }
+                if (visibleData.visibleText) {
+                  blocks.push('Visible Page Text:\n' + String(visibleData.visibleText).slice(0, 20000));
+                }
+
+                const combinedVisible = blocks.join('\n\n');
+                if (combinedVisible && combinedVisible.length > rawData.length) {
+                  rawData = combinedVisible;
+                }
+              } else {
+                const freshRes = await fetch(`/api/extract-rendered-html?url=${encodeURIComponent(recipeUrl)}`);
+                if (freshRes.ok) {
+                  const freshRaw = await freshRes.text();
+                  if (freshRaw && freshRaw.length > rawData.length) {
+                    rawData = freshRaw;
+                  }
+                }
+              }
+            } catch (_) {
+              // Keep existing rawData if fallback extraction fails.
+            }
+          }
+        }
         console.log('[DEBUG] rawData loaded. Length:', rawData.length, 'Preview:', rawData.slice(0, 300));
         startStepBtn.disabled = false;
       });
@@ -237,6 +300,30 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     },
     {
+      name: 'Fallback: extract visible text from page',
+      fn: raw => {
+        const plain = htmlUnescape(raw)
+          .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+          .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+          .replace(/<[^>]+>/g, '\n')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .split('\n')
+          .map(line => line.trim())
+          .filter(Boolean)
+          .slice(0, 12)
+          .join('\n');
+        return plain || '';
+      }
+    },
+    {
+      name: 'Fallback: raw HTML preview (debug)',
+      fn: raw => {
+        const preview = String(raw || '').trim().slice(0, 500);
+        return preview || '';
+      }
+    },
+    {
       name: 'If none, returns "N/A"',
       fn: raw => 'N/A'
     }
@@ -254,7 +341,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     // Always run all strategies on the original, uncleaned rawData
     stepStrategies = strategies.map(s => {
-      const result = s.fn(rawData);
+      const result = normalizeStrategyResult(s.fn(rawData));
       return {
         name: s.name,
         applied: false,
@@ -277,7 +364,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <td>${i + 1}</td>
         <td>${s.name}</td>
         <td>${s.applied ? '\u2713' : '\u2014'}</td>
-        <td class='extractor-result' style='color:#333;background:#f8f8ff;min-width:340px;max-width:700px;width:40vw;overflow-x:auto;white-space:pre-wrap;word-break:break-all;'>${s.result ? s.result : '<span style="color:#bbb">(no result)</span>'}</td>
+        <td class='extractor-result' style='color:#333;background:#f8f8ff;min-width:340px;max-width:700px;width:40vw;overflow-x:auto;white-space:pre-wrap;word-break:break-all;'>${s.result ? escapeHtml(s.result) : '<span style="color:#bbb">(no result)</span>'}</td>
         <td>${s.solved ? '<span style="color:green">\u2714</span>' : '<span style="color:red">\u2717</span>'}</td>
       `;
       strategyTable.appendChild(tr);

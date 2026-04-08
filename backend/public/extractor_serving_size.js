@@ -2,6 +2,13 @@
 // Strategies for Serving Size Extractor (logic will be applied to rawData)
 const strategies = [
   {
+    name: 'Find common yield phrases: serves/makes/yield',
+    fn: raw => {
+      const match = raw.match(/\b(?:serves?|servings?|makes?|yield)\b\s*[:\-]?\s*(\d{1,3})\b/i);
+      return match ? match[1] : '';
+    }
+  },
+  {
     name: 'Hard-coded: <label class="field-label">Servings:</label> <text>24</text>',
     fn: raw => {
       const match = raw.match(/<label class="field-label">Servings:<\/label>\s*<text>(\d+)<\/text>/i);
@@ -23,11 +30,11 @@ const strategies = [
     }
   },
   {
-    name: 'Find numbers near "serving" or in text',
+    name: 'Find numbers near "serving"/"serves" in text',
     fn: raw => {
       const lines = raw.split(/\n|<br\s*\/?\s*>/i);
       for (let line of lines) {
-        if (/serving/i.test(line)) {
+        if (/(?:serving|serves|yield|makes)/i.test(line)) {
           const match = line.match(/(\d+)/);
           if (match) return match[1];
         }
@@ -47,10 +54,14 @@ const strategies = [
     }
   },
   {
-    name: 'Fallback: Any number in first 10 lines',
+    name: 'Fallback: number in first lines (skip step numbers)',
     fn: raw => {
-      const lines = raw.split(/\n|<br\s*\/?\s*>/i).slice(0, 10);
+      const lines = raw.split(/\n|<br\s*\/?\s*>/i).slice(0, 40);
       for (let line of lines) {
+        const trimmed = String(line || '').trim();
+        if (!trimmed) continue;
+        // Ignore common numbered instruction step lines like "1. Preheat..."
+        if (/^\d+\./.test(trimmed)) continue;
         const match = line.match(/(\d+)/);
         if (match) return match[1];
       }

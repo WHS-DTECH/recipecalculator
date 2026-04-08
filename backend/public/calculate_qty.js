@@ -153,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const selectedRecipeId = document.getElementById('filter-recipe-id').value;
           fetchIngredientsInventory()
             .then(freshIngredients => {
-              renderIngredientsTable(freshIngredients, selectedRecipeId);
+              renderIngredientsTable(freshIngredients, selectedRecipeId, allPublishedRecipes);
               renderPublishedRecipesTable(allPublishedRecipes, selectedRecipeId);
             })
             .catch(err => {
@@ -162,7 +162,7 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         };
       }
-      renderIngredientsTable(ingredients, pendingRecipeId || '');
+      renderIngredientsTable(ingredients, pendingRecipeId || '', allPublishedRecipes);
     })
     .catch(err => {
       const tableDiv = document.getElementById('ingredients-list-table');
@@ -182,12 +182,35 @@ document.addEventListener('DOMContentLoaded', function() {
       if (tableDiv) tableDiv.innerHTML = `<div class="w3-panel w3-red">Error: ${err.message}</div>`;
     });
 
-  function renderIngredientsTable(ingredients, filterRecipeId) {
+  function getPublishedOrderMap(publishedRecipes, filterRecipeId) {
+    if (!filterRecipeId || !Array.isArray(publishedRecipes)) return null;
+    const rec = publishedRecipes.find(r => String(r.recipeid) === String(filterRecipeId));
+    if (!rec || !rec.ingredients) return null;
+    const lines = rec.ingredients
+      .split(/<br\s*\/?>|\n/i)
+      .map(l => l.replace(/<[^>]+>/g, '').trim())
+      .filter(Boolean);
+    const map = new Map();
+    lines.forEach((line, i) => map.set(line.toLowerCase(), i));
+    return map;
+  }
+
+  function renderIngredientsTable(ingredients, filterRecipeId, publishedRecipes) {
     const tableDiv = document.getElementById('ingredients-list-table');
     if (!tableDiv) return;
     let filtered = ingredients;
     if (filterRecipeId) {
       filtered = ingredients.filter(ing => String(ing.recipe_id) === String(filterRecipeId));
+    }
+    if (filterRecipeId && publishedRecipes) {
+      const orderMap = getPublishedOrderMap(publishedRecipes, filterRecipeId);
+      if (orderMap) {
+        filtered = [...filtered].sort((a, b) => {
+          const aPos = orderMap.get((a.ingredient_name || '').toLowerCase().trim());
+          const bPos = orderMap.get((b.ingredient_name || '').toLowerCase().trim());
+          return (aPos !== undefined ? aPos : 9999) - (bPos !== undefined ? bPos : 9999);
+        });
+      }
     }
     let html = '<table class="w3-table-all w3-small w3-hoverable"><thead><tr>' +
       '<th>ID</th><th>Ingredient Name</th><th>Recipe ID</th><th>Measure Qty</th><th>Measure Unit</th><th>Food Item</th>' +

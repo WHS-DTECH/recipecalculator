@@ -195,8 +195,53 @@ function cleanIngredientsForDisplay(raw) {
     .join('\n');
 }
 
+const INGREDIENT_UNITS_PATTERN = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
+const INGREDIENT_QTY_PATTERN = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
+const leadingMeasureRegex = new RegExp(`^(${INGREDIENT_QTY_PATTERN}(?:\\s*[-–]\\s*${INGREDIENT_QTY_PATTERN})?)\\s*(${INGREDIENT_UNITS_PATTERN})\\b\\s*(.+)?$`, 'i');
+const trailingMeasureRegex = new RegExp(`^(.*?)\\s*[-:–]\\s*(${INGREDIENT_QTY_PATTERN}(?:\\s*[-–]\\s*${INGREDIENT_QTY_PATTERN})?)\\s*(${INGREDIENT_UNITS_PATTERN})\\b\\s*(.*)$`, 'i');
+const qtyUnitOnlyRegex = new RegExp(`^${INGREDIENT_QTY_PATTERN}\\s*${INGREDIENT_UNITS_PATTERN}\\b$`, 'i');
+
+function formatIngredientsAsMeasureFooditem(cleanedLines) {
+  if (!Array.isArray(cleanedLines)) return [];
+
+  let previousFooditem = '';
+  return cleanedLines
+    .map((line) => String(line || '').trim())
+    .filter(Boolean)
+    .map((line) => {
+      let measurement = '';
+      let fooditem = '';
+
+      const leading = line.match(leadingMeasureRegex);
+      if (leading) {
+        measurement = `${leading[1]} ${leading[2]}`.replace(/\\s+/g, ' ').trim();
+        fooditem = String(leading[3] || '').trim();
+      } else {
+        const trailing = line.match(trailingMeasureRegex);
+        if (trailing) {
+          measurement = `${trailing[2]} ${trailing[3]}`.replace(/\\s+/g, ' ').trim();
+          fooditem = `${String(trailing[1] || '').trim()} ${String(trailing[4] || '').trim()}`.replace(/\\s+/g, ' ').trim();
+        } else {
+          fooditem = line;
+        }
+      }
+
+      if (!fooditem && measurement && previousFooditem && qtyUnitOnlyRegex.test(line)) {
+        fooditem = previousFooditem;
+      }
+
+      if (fooditem) {
+        previousFooditem = fooditem.replace(/[-:–]\\s*$/, '').trim() || previousFooditem;
+      }
+
+      const merged = measurement && fooditem ? `${measurement} ${fooditem}` : (fooditem || measurement);
+      return merged.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    })
+    .filter(Boolean);
+}
+
 // PUT /api/recipes/:id/raw - Save raw data for a recipe (file only)
-router.put('/recipes/:id/raw', async (req, res) => {
+router.put('/:id/raw', async (req, res) => {
   const { id } = req.params;
   const { raw_data } = req.body;
   if (!raw_data) return res.status(400).json({ success: false, error: 'Missing raw_data' });
@@ -404,10 +449,12 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
       const rawIngredients = row.ingredients;
       const rawSource = rawExtractedIngredients || rawIngredients || '';
       const cleaned = cleanIngredientsForDisplay(rawSource);
-      const cleanedForDisplay = cleaned
+      const cleanedLines = cleaned
         .split('\n')
         .map(line => line.trim())
-        .filter(Boolean)
+        .filter(Boolean);
+      const formattedLines = formatIngredientsAsMeasureFooditem(cleanedLines);
+      const cleanedForDisplay = formattedLines
         .join('<br>');
 
       const rawExtractedPreview = String(rawExtractedIngredients || '').slice(0, 500);

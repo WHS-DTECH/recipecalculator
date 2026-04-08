@@ -127,11 +127,15 @@
                         const re = new RegExp('^' + brand.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
                         stripped = stripped.replace(re, '');
                       });
+                      stripped = stripped.replace(/\s*\+\s*extra.*$/i, '').trim();
                       // Handle patterns like 'number fooditem (abc)' and extract fooditem
                       // e.g. '16 marshmallows (best to use Explorer lollies)' -> 'marshmallows'
-                      const match = stripped.match(/^(\d+)?\s*([a-zA-Z ]+)/);
+                      const match = stripped.match(/^(\d+(?:\.\d+)?)?\s*([a-zA-Z][a-zA-Z'\-\s]*)/);
                       if (match && match[2]) {
                         let item = match[2].trim();
+                        if (/self[-\s]?raising\s+flour/i.test(item)) {
+                          return 'Self-Raising Flour';
+                        }
                         // Special case for marshmallows
                         if (/marshmallow/i.test(item)) {
                           return 'marshmallows';

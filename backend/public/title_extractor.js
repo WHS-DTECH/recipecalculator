@@ -14,6 +14,41 @@ document.addEventListener('DOMContentLoaded', function () {
   let rawData = '';
   let stepStrategies = [];
   let stepIndex = 0;
+  const recipesById = new Map();
+
+  function hasTitleSignal(text) {
+    const raw = String(text || '');
+    return /<title|<h1|"@type"\s*:\s*"Recipe"|\brecipe name\b|\bJSON-LD Recipe name\b/i.test(raw);
+  }
+
+  function isNoiseTitleLine(line) {
+    const s = String(line || '').trim();
+    if (!s) return true;
+    if (/^(json-ld|visible page text|visible list items|heading candidates)\s*:/i.test(s)) return true;
+    if (/^(prep\s*&?\s*cook\s*time|prep\s*time|cook\s*time|servings?|sponsored recipe|see more recipes)$/i.test(s)) return true;
+    if (/^(home|contact|privacy|terms|shop|menu)$/i.test(s)) return true;
+    return false;
+  }
+
+  async function fetchVisibleTextByRecipeId(recipeId) {
+    const recipe = recipesById.get(String(recipeId));
+    const url = recipe && recipe.url ? String(recipe.url).trim() : '';
+    if (!url) return '';
+
+    const res = await fetch(`/api/extract-visible-text?url=${encodeURIComponent(url)}`);
+    if (!res.ok) return '';
+    const data = await res.json();
+
+    const sections = [];
+    if (data.visibleText) {
+      sections.push(String(data.visibleText));
+    }
+    if (Array.isArray(data.listItems) && data.listItems.length) {
+      sections.push(data.listItems.join('\n'));
+    }
+
+    return sections.join('\n').trim();
+  }
 
   // Fetch recipes for dropdown
   fetch('/api/recipes')
@@ -21,10 +56,12 @@ document.addEventListener('DOMContentLoaded', function () {
     .then(recipes => {
       console.log('[DEBUG][Dropdown] Recipes loaded:', recipes);
       recipes.forEach(recipe => {
+        recipesById.set(String(recipe.id), recipe);
         const opt = document.createElement('option');
         opt.value = recipe.id;
         opt.setAttribute('data-recipeid', recipe.id);
-        opt.textContent = recipe.name + ' [ID: ' + recipe.id + ']';
+        const url = recipe.url || 'No URL';
+        opt.textContent = '[ID: ' + recipe.id + '] ' + url;
         recipeSelect.appendChild(opt);
       });
       console.log('[DEBUG][Dropdown] Options:', Array.from(recipeSelect.options).map(o => ({value: o.value, text: o.textContent, dataRecipeId: o.getAttribute('data-recipeid')})));
@@ -44,7 +81,7 @@ document.addEventListener('DOMContentLoaded', function () {
         name: s.name,
         result,
         applied: false,
-        solved: false
+        solved: !!result
       };
     });
     stepIndex = 0;
@@ -74,8 +111,14 @@ document.addEventListener('DOMContentLoaded', function () {
         console.log('[DEBUG][LoadRawData] Fetching URL:', fetchUrl, 'for RecipeID:', currentRecipeId);
         fetch(fetchUrl)
           .then(res => res.ok ? res.text() : '')
-          .then(text => {
+          .then(async text => {
             rawData = text || '';
+            if (!hasTitleSignal(rawData)) {
+              const visibleRaw = await fetchVisibleTextByRecipeId(currentRecipeId);
+              if (visibleRaw && visibleRaw.length > rawData.length) {
+                rawData = visibleRaw;
+              }
+            }
             updateRawDataBox(rawData);
             runAllStrategiesAndUpdateUI();
           });
@@ -108,6 +151,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // Define strategies for extracting the recipe name
   const strategies = [
+    {
+      name: 'Extract title from recipe URL slug',
+      fn: () => {
+        const recipe = recipesById.get(String(currentRecipeId));
+        const url = recipe && recipe.url ? String(recipe.url).trim() : '';
+        if (!url) return '';
+
+        let slug = '';
+        try {
+          const parsed = new URL(url);
+          const parts = parsed.pathname.split('/').filter(Boolean);
+          slug = parts.length ? parts[parts.length - 1] : '';
+        } catch (_) {
+          const parts = url.split('/').filter(Boolean);
+          slug = parts.length ? parts[parts.length - 1] : '';
+        }
+
+        if (!slug) return '';
+
+        const cleaned = decodeURIComponent(slug)
+          .replace(/\.[a-z0-9]+$/i, '')
+          .replace(/[-_]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (!cleaned) return '';
+
+        return cleaned
+          .split(' ')
+          .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
+          .join(' ')
+          .trim();
+      }
+    },
     {
       name: 'Look for title tag',
       fn: raw => {
@@ -155,6 +232,27 @@ document.addEventListener('DOMContentLoaded', function () {
         const lines = raw.split(/\n|<br\s*\/\?\s*>/i);
         const found = lines.find(line => line.trim().length > 0);
         return found ? found.trim() : '';
+      }
+    },
+    {
+      name: 'Visible text: first meaningful title-like line',
+      fn: raw => {
+        const lines = String(raw || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        for (const line of lines) {
+          if (isNoiseTitleLine(line)) continue;
+          if (line.length < 4) continue;
+          if (/^\d+[.)]\s/.test(line)) continue;
+          if (/\b(servings?|prep|cook)\b/i.test(line)) continue;
+          return line;
+        }
+        return '';
+      }
+    },
+    {
+      name: 'Dropdown recipe name fallback',
+      fn: () => {
+        const recipe = recipesById.get(String(currentRecipeId));
+        return recipe && recipe.name ? String(recipe.name).trim() : '';
       }
     },
     {
@@ -212,12 +310,15 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
     // Re-run strategies to reset stepper and table
-    stepStrategies = strategies.map(s => ({
-      name: s.name,
-      result: s.fn(rawData),
-      applied: false,
-      solved: false
-    }));
+    stepStrategies = strategies.map(s => {
+      const result = s.fn(rawData);
+      return {
+        name: s.name,
+        result,
+        applied: false,
+        solved: !!result
+      };
+    });
     stepIndex = 0;
     renderStepTable();
     updateStepControls();

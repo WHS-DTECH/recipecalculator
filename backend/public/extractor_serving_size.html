@@ -125,69 +125,103 @@
     <script src="extractor_serving_size.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // --- Recipe URL Dropdown Logic ---
         const recipeUrlSelect = document.getElementById('recipeUrlSelect');
-        if (recipeUrlSelect) {
-            // Fetch recipes and populate dropdown
-            fetch('/api/recipes')
-                .then(res => res.json())
-                .then(recipes => {
-                    recipeUrlSelect.innerHTML = '<option value="">-- Select a recipe --</option>' +
-                        recipes.map(r => `<option value="${r.id}" data-url="${r.url || ''}">${r.url || r.name || 'Untitled Recipe'}</option>`).join('');
-                });
-
-            // When a recipe is chosen, fetch its raw data using uploaded_recipe_id if present
-            recipeUrlSelect.addEventListener('change', function() {
-                const selectedId = this.value;
-                if (!selectedId) {
-                    const rawDataBox = document.getElementById('rawDataBox');
-                    if (rawDataBox) rawDataBox.textContent = '';
-                    window.rawData = '';
-                    return;
-                }
-                // Always use recipeID for raw data file
-                fetch(`/RawDataTXT/${selectedId}.txt`)
-                    .then(res => res.ok ? res.text() : '')
-                    .then(raw => {
-                        const rawDataBox = document.getElementById('rawDataBox');
-                        if (rawDataBox) rawDataBox.textContent = raw;
-                        window.rawData = raw;
-                    });
-            });
-        }
-
-        // Patch: ensure window.rawData is set for modal logic
-        window.rawData = typeof rawData !== 'undefined' ? rawData : '';
-        let currentStep = 0;
-        let accepted = false;
+        const rawDataBox = document.getElementById('rawDataBox');
         const stepControls = document.getElementById('stepControls');
         const startBtn = document.getElementById('startStrategyRunner');
         const acceptBtn = document.getElementById('acceptResultBtn');
         const continueBtn = document.getElementById('continueBtn');
         const currentStrategyName = document.getElementById('currentStrategyName');
         const currentStrategyResult = document.getElementById('currentStrategyResult');
+        const solutionBox = document.getElementById('solutionBox');
+        const sendSolutionBtn = document.getElementById('sendSolutionBtn');
 
-        // Safely add event listeners only if elements exist
+        let currentStep = 0;
+        window.rawData = '';
+
+        function runStrategiesOnRawData(raw) {
+            return strategies.map((s, i) => {
+                const result = s.fn(raw);
+                return {
+                    name: s.name,
+                    applied: false,
+                    result,
+                    solved: !!result && result !== 'N/A'
+                };
+            });
+        }
+
+        function showStep(idx) {
+            if (!stepControls || !startBtn || !currentStrategyName || !currentStrategyResult) return;
+            if (idx >= strategies.length) {
+                stepControls.style.display = 'none';
+                startBtn.disabled = false;
+                return;
+            }
+
+            const results = runStrategiesOnRawData(window.rawData || '');
+            results.forEach((r, i) => {
+                r.applied = (i === idx);
+            });
+
+            currentStrategyName.textContent = results[idx].name;
+            currentStrategyResult.textContent = 'Result: ' + (results[idx].result || '(none)');
+            stepControls.style.display = '';
+            startBtn.disabled = true;
+            renderServingExtractorTable(results);
+        }
+
+        if (recipeUrlSelect) {
+            fetch('/api/recipes')
+                .then(res => res.json())
+                .then(recipes => {
+                    const rows = Array.isArray(recipes) ? recipes : [];
+                    recipeUrlSelect.innerHTML = '<option value="">-- Select a recipe --</option>' +
+                        rows.map(r => {
+                            const title = (r.name || 'Untitled Recipe').trim();
+                            const url = (r.url || '').trim();
+                            const suffix = url ? ` | ${url}` : '';
+                            return `<option value="${r.id}" data-url="${url}">[${r.id}] ${title}${suffix}</option>`;
+                        }).join('');
+                })
+                .catch(() => {
+                    recipeUrlSelect.innerHTML = '<option value="">Failed to load recipes</option>';
+                });
+
+            recipeUrlSelect.addEventListener('change', function() {
+                const selectedId = this.value;
+                if (!selectedId) {
+                    if (rawDataBox) rawDataBox.textContent = '';
+                    window.rawData = '';
+                    return;
+                }
+
+                fetch(`/RawDataTXT/${selectedId}.txt`)
+                    .then(res => res.ok ? res.text() : '')
+                    .then(raw => {
+                        window.rawData = raw || '';
+                        if (rawDataBox) rawDataBox.textContent = window.rawData;
+                        renderServingExtractorTable(runStrategiesOnRawData(window.rawData));
+                    })
+                    .catch(() => {
+                        window.rawData = '';
+                        if (rawDataBox) rawDataBox.textContent = '';
+                    });
+            });
+        }
+
         if (startBtn) {
             startBtn.addEventListener('click', function() {
                 currentStep = 0;
-                accepted = false;
                 showStep(currentStep);
             });
         }
+
         if (acceptBtn) {
             acceptBtn.addEventListener('click', function() {
-                accepted = true;
-                // Always use current raw data and re-run strategies
-                const raw = window.rawData || '';
-                const results = strategies.map((s) => {
-                    const result = s.fn(raw);
-                    return { name: s.name, result };
-                });
-                // Set solution box to the result of the accepted strategy
-                const solutionBox = document.getElementById('solutionBox');
-                if (solutionBox) solutionBox.value = results[currentStep].result;
-                // Mark this strategy as applied and solved (for table)
+                const results = runStrategiesOnRawData(window.rawData || '');
+                if (solutionBox) solutionBox.value = results[currentStep] ? (results[currentStep].result || '') : '';
+
                 const tableResults = results.map((r, i) => ({
                     name: strategies[i].name,
                     applied: (i === currentStep),
@@ -195,156 +229,61 @@
                     solved: !!r.result && r.result !== 'N/A'
                 }));
                 renderServingExtractorTable(tableResults);
+
                 if (stepControls) stepControls.style.display = 'none';
                 if (startBtn) startBtn.disabled = false;
             });
         }
-        // (No continueBtn handler)
-        const sendSolutionBtn = document.getElementById('sendSolutionBtn');
+
+        if (continueBtn) {
+            continueBtn.addEventListener('click', function() {
+                if (currentStep < strategies.length - 1) {
+                    currentStep++;
+                    showStep(currentStep);
+                } else {
+                    if (stepControls) stepControls.style.display = 'none';
+                    if (startBtn) startBtn.disabled = false;
+                    const results = runStrategiesOnRawData(window.rawData || '');
+                    renderServingExtractorTable(results);
+                }
+            });
+        }
+
         if (sendSolutionBtn) {
             sendSolutionBtn.addEventListener('click', function() {
-                const solutionBox = document.getElementById('solutionBox');
                 const solution = solutionBox ? solutionBox.value.trim() : '';
+                const recipeId = recipeUrlSelect ? recipeUrlSelect.value : '';
+
+                if (!recipeId) {
+                    alert('Please select a recipe first.');
+                    return;
+                }
                 if (!solution) {
                     alert('Please enter a solution before sending.');
                     return;
                 }
-                // Send both recipeId and solution
-                // ...existing code for sending solution...
+
+                fetch('/api/serving-size/solution', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recipeId, solution })
+                })
+                    .then(res => res.ok ? res.json() : Promise.reject(res))
+                    .then(() => {
+                        alert('Solution sent and record amended!');
+                    })
+                    .catch(() => {
+                        alert('Failed to send solution.');
+                    });
             });
         }
 
-    // Helper: run all strategies on the current raw data
-    function runStrategiesOnRawData(raw) {
-        return strategies.map((s, i) => {
-            const result = s.fn(raw);
-            return {
-                name: s.name,
-                applied: false,
-                result: result,
-                solved: !!result && result !== 'N/A'
-            };
-        });
-    }
-
-    function showStep(idx) {
-        console.log('[showStep] idx:', idx);
-        if (idx >= strategies.length) {
-            console.log('[showStep] idx >= strategies.length, hiding controls');
-            stepControls.style.display = 'none';
-            startBtn.disabled = false;
-            return;
-        }
-        // Always use current raw data
-        const raw = window.rawData || '';
-        const results = runStrategiesOnRawData(raw);
-        // Mark current step as applied
-        results.forEach((r, i) => {
-            r.applied = (i === idx);
-        });
-        const s = results[idx];
-        console.log('[showStep] Showing strategy:', s.name, 'Result:', s.result);
-        currentStrategyName.textContent = s.name;
-        currentStrategyResult.textContent = 'Result: ' + (s.result || '(none)');
-        stepControls.style.display = '';
-        startBtn.disabled = true;
-        renderServingExtractorTable(results);
-    }
-
-    startBtn.addEventListener('click', function() {
-        currentStep = 0;
-        accepted = false;
-        showStep(currentStep);
-    });
-
-    acceptBtn.addEventListener('click', function() {
-        accepted = true;
-        // Always use current raw data and re-run strategies
-        const raw = window.rawData || '';
-        const results = strategies.map((s) => {
-            const result = s.fn(raw);
-            return { name: s.name, result };
-        });
-        // Set solution box to the result of the accepted strategy
-        document.getElementById('solutionBox').value = results[currentStep].result;
-        // Mark this strategy as applied and solved (for table)
-        const tableResults = results.map((r, i) => ({
-            name: strategies[i].name,
-            applied: (i === currentStep),
-            result: r.result,
-            solved: !!r.result && r.result !== 'N/A'
-        }));
-        renderServingExtractorTable(tableResults);
-        stepControls.style.display = 'none';
-        startBtn.disabled = false;
-    });
-    // SEND SOLUTION button logic
-    document.getElementById('sendSolutionBtn').addEventListener('click', function() {
-        const solution = document.getElementById('solutionBox').value.trim();
-        if (!solution) {
-            alert('Please enter a solution before sending.');
-            return;
-        }
-        // Send both recipeId and solution
-        const recipeId = recipeUrlSelect.value;
-        fetch('/api/serving-size/solution', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ recipeId, solution })
-        })
-        .then(res => res.ok ? res.json() : Promise.reject(res))
-        .then(data => {
-            alert('Solution sent and record amended!');
-        })
-        .catch(() => {
-            alert('Failed to send solution.');
-        });
-    });
-
-    continueBtn.addEventListener('click', function() {
-        // Only increment and show next step ONCE per click
-        if (currentStep < strategies.length - 1) {
-            currentStep++;
-            showStep(currentStep);
-        } else {
-            // At the end, show all strategies with none marked as applied
-            const raw = window.rawData || '';
-            const results = runStrategiesOnRawData(raw);
-            results.forEach((r) => { r.applied = false; });
-            stepControls.style.display = 'none';
-            startBtn.disabled = false;
-            renderServingExtractorTable(results);
-        }
-    });
-        // Navbar include logic
         fetch('/_navbar.html')
             .then(res => res.text())
             .then(html => {
-                document.getElementById('navbar-container').innerHTML = html;
+                const container = document.getElementById('navbar-container');
+                if (container) container.innerHTML = html;
             });
-
-        // Modal logic for Raw Data with Line Numbers
-    const showRawDataModalBtn = document.getElementById('showRawDataModalBtn');
-    const rawDataModal = document.getElementById('rawDataModal');
-    const closeRawDataModalBtn = document.getElementById('closeRawDataModalBtn');
-    const rawDataWithLines = document.getElementById('rawDataWithLines');
-
-    showRawDataModalBtn.addEventListener('click', function() {
-        // Split window.rawData into lines and add line numbers
-        const lines = (window.rawData || '').split('\n');
-        rawDataWithLines.innerHTML = lines.map((line, idx) => {
-            const ln = String(idx+1).padStart(3, ' ');
-            return `<span style=\"color:#888;\">${ln} |</span> ${line}`;
-        }).join('\n');
-        rawDataModal.style.display = 'flex';
-    });
-    closeRawDataModalBtn.addEventListener('click', function() {
-        rawDataModal.style.display = 'none';
-    });
-    // Optional: close modal on outside click
-    rawDataModal.addEventListener('click', function(e) {
-        if (e.target === rawDataModal) rawDataModal.style.display = 'none';
-    });
     });
     </script>
 </body>
