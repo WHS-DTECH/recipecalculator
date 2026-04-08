@@ -105,6 +105,77 @@ function autoSelectClassFromSelectedPeriod() {
   }
 }
 
+function selectClassOptionFromToken(classToken) {
+  const classSelect = document.getElementById('classSelect');
+  if (!classSelect || !classToken) return false;
+
+  const rawToken = String(classToken || '').trim();
+  const tokenNorm = normalizeClassToken(rawToken);
+  const tokenParts = rawToken
+    .split(/[^A-Za-z0-9]+/g)
+    .map(p => normalizeClassToken(p))
+    .filter(p => p.length >= 3);
+  const options = Array.from(classSelect.options).filter(opt => opt.value);
+  if (!options.length) return false;
+
+  let matchedOption = null;
+
+  // Pass 1: strict matching only (exact raw/exact normalized).
+  for (const opt of options) {
+    const rawValue = String(opt.value || '').trim();
+    const rawText = String(opt.textContent || '').trim();
+    const valueNorm = normalizeClassToken(opt.value);
+    const textNorm = normalizeClassToken(opt.textContent);
+
+    if (
+      rawToken.toUpperCase() === rawValue.toUpperCase() ||
+      rawToken.toUpperCase() === rawText.toUpperCase() ||
+      tokenNorm === valueNorm ||
+      tokenNorm === textNorm
+    ) {
+      matchedOption = opt;
+      break;
+    }
+  }
+
+  // Pass 2: conservative fuzzy matching (only for longer, meaningful tokens).
+  if (!matchedOption) {
+    for (const opt of options) {
+      const valueNorm = normalizeClassToken(opt.value);
+      const textNorm = normalizeClassToken(opt.textContent);
+
+      const partExactMatch = tokenParts.some(part => part === valueNorm || part === textNorm);
+      const safeContainMatch = tokenNorm.length >= 5 && valueNorm.length >= 5 &&
+        (tokenNorm.includes(valueNorm) || valueNorm.includes(tokenNorm));
+
+      if (partExactMatch || safeContainMatch) {
+        matchedOption = opt;
+        break;
+      }
+    }
+  }
+
+  if (matchedOption) {
+    classSelect.value = matchedOption.value;
+    fetchStudentsForClass(classSelect.value);
+    return true;
+  }
+
+  // Fallback: add/select the clicked timetable class if no existing option matches.
+  const tempOptId = '__timetableDynamicClassOption';
+  const existingTemp = document.getElementById(tempOptId);
+  if (existingTemp) existingTemp.remove();
+
+  const fallbackOpt = document.createElement('option');
+  fallbackOpt.id = tempOptId;
+  fallbackOpt.value = rawToken;
+  fallbackOpt.textContent = `${rawToken} (from timetable)`;
+  classSelect.appendChild(fallbackOpt);
+  classSelect.value = rawToken;
+  fetchStudentsForClass(classSelect.value);
+  return true;
+}
+
 function updateBookingDateDayLabel() {
   const dateInput = document.getElementById('dateInput');
   const dayLabel = document.getElementById('dateDayOfWeek');
@@ -135,7 +206,9 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   }
 
   const rows = periods.map(p => {
-    const classText = (p.classes && p.classes.length) ? p.classes.join(' | ') : '<span style="color:#999;">No class</span>';
+    const classText = (p.classes && p.classes.length)
+      ? p.classes.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;">${cls}</button>`).join('')
+      : '<span style="color:#999;">No class</span>';
     return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
   }).join('');
   body.innerHTML = `
@@ -147,6 +220,28 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
 
   _currentTeacherTimetablePeriods = Array.isArray(periods) ? periods : [];
   autoSelectClassFromSelectedPeriod();
+
+  body.querySelectorAll('.timetable-class-chip').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const periodSelect = document.getElementById('periodSelect');
+      const dateInput = document.getElementById('dateInput');
+      if (dateInput && date) {
+        dateInput.value = date;
+        updateBookingDateDayLabel();
+      }
+
+      const periodValue = String(btn.getAttribute('data-period') || '').replace(/^P/i, '');
+      if (periodSelect && periodValue) {
+        periodSelect.value = periodValue;
+      }
+
+      const classToken = btn.getAttribute('data-class-token') || '';
+      const wasMatched = selectClassOptionFromToken(classToken);
+      if (!wasMatched) {
+        autoSelectClassFromSelectedPeriod();
+      }
+    });
+  });
 }
 
 function fetchTeacherTimetableForSelectedDate() {

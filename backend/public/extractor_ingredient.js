@@ -71,25 +71,12 @@ document.addEventListener('DOMContentLoaded', function () {
     return /recipeIngredient|ingredients|<li|<ul|\bcups?\b|\btsp\b|\btbsp\b|\bg\b|\bml\b/i.test(raw);
   }
 
-  async function fetchVisibleTextForRecipe(recipeId) {
-    const selectedOption = recipeSelect.options[recipeSelect.selectedIndex];
-    const label = selectedOption ? selectedOption.textContent : '';
-    const urlFromLabel = label.includes('|') ? label.split('|').slice(1).join('|').trim() : '';
-    if (!urlFromLabel) return '';
-
-    const res = await fetch(`/api/extract-visible-text?url=${encodeURIComponent(urlFromLabel)}`);
-    if (!res.ok) return '';
-    const payload = await res.json();
-
-    const blocks = [];
-    if (Array.isArray(payload.listItems) && payload.listItems.length) {
-      blocks.push('Visible List Items:\n' + payload.listItems.join('\n'));
+  function parseIngredientLinesFromRaw(fileText) {
+    if (window.ExtractorAutoCore && typeof window.ExtractorAutoCore.parseIngredientLinesFromRaw === 'function') {
+      return window.ExtractorAutoCore.parseIngredientLinesFromRaw(fileText);
     }
-    if (payload.visibleText) {
-      blocks.push('Visible Page Text:\n' + String(payload.visibleText));
-    }
-
-    return blocks.join('\n\n').trim();
+    console.warn('[Ingredients Extractor] Shared auto core is unavailable; returning no parsed lines.');
+    return [];
   }
 
   // Load Raw Data button event handler
@@ -113,12 +100,6 @@ document.addEventListener('DOMContentLoaded', function () {
           throw new Error('Failed to fetch raw data');
         }
         rawData = await res.text();
-        if (!hasIngredientSignal(rawData)) {
-          const visibleRaw = await fetchVisibleTextForRecipe(recipeId);
-          if (visibleRaw && visibleRaw.length > rawData.length) {
-            rawData = visibleRaw;
-          }
-        }
         console.log('[DEBUG][LoadRawData] Raw data loaded:', rawData.slice(0, 200));
         if (rawDataBox) rawDataBox.value = rawData;
         if (startStepBtn) startStepBtn.disabled = false;
@@ -169,26 +150,10 @@ document.addEventListener('DOMContentLoaded', function () {
       })
       .then(data => {
         rawData = data;
-        Promise.resolve()
-          .then(async () => {
-            if (!hasIngredientSignal(rawData)) {
-              const visibleRaw = await fetchVisibleTextForRecipe(recipeId);
-              if (visibleRaw && visibleRaw.length > rawData.length) {
-                rawData = visibleRaw;
-              }
-            }
-          })
-          .then(() => {
-            if (rawDataBox) rawDataBox.value = rawData;
-            if (startStepBtn) startStepBtn.disabled = false;
-            console.log('[DEBUG][AutoLoadRawData] Raw data loaded for recipeId:', recipeId);
-            if (callback) callback(true);
-          })
-          .catch(() => {
-            if (rawDataBox) rawDataBox.value = rawData;
-            if (startStepBtn) startStepBtn.disabled = false;
-            if (callback) callback(true);
-          });
+        if (rawDataBox) rawDataBox.value = rawData;
+        if (startStepBtn) startStepBtn.disabled = false;
+        console.log('[DEBUG][AutoLoadRawData] Raw data loaded for recipeId:', recipeId);
+        if (callback) callback(true);
       })
       .catch(err => {
         if (rawDataBox) rawDataBox.value = '[Error loading raw data]';
@@ -330,17 +295,8 @@ document.addEventListener('DOMContentLoaded', function () {
         result: '',
         solved: false,
         run: async function(recipeId) {
-          const fileText = String(rawData || '');
-          const lines = fileText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          const start = lines.findIndex(l => /^ingredients?$/i.test(l) || /^ingredients?\b/i.test(l));
-          const end = lines.findIndex((l, idx) => idx > (start >= 0 ? start : -1) && (/^method\b/i.test(l) || /^instructions?\b/i.test(l)));
-          if (start >= 0) {
-            const chunk = lines.slice(start + 1, end > start ? end : start + 25)
-              .filter(l => !/^sponsored/i.test(l) && !/^see more/i.test(l));
-            this.result = chunk;
-          } else {
-            this.result = [];
-          }
+          const parsed = parseIngredientLinesFromRaw(rawData);
+          this.result = parsed;
           this.applied = true;
           this.solved = !!this.result.length;
           return this.result;
@@ -352,10 +308,7 @@ document.addEventListener('DOMContentLoaded', function () {
         result: '',
         solved: false,
         run: async function(recipeId) {
-          const fileText = String(rawData || '');
-          const lines = fileText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-          const qtyRegex = /^((\d+([/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|pinch|cloves?|slices?)\b/i;
-          this.result = lines.filter(l => qtyRegex.test(l));
+          this.result = parseIngredientLinesFromRaw(rawData);
           this.applied = true;
           this.solved = !!this.result.length;
           return this.result;
@@ -534,28 +487,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function runAutoExtract() {
-    const fileText = String(rawData || '');
-    const lines = fileText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const start = lines.findIndex(l => /^ingredients?$/i.test(l) || /^ingredients?\b/i.test(l));
-    const end = lines.findIndex((l, idx) => idx > (start >= 0 ? start : -1) && (/^method\b/i.test(l) || /^instructions?\b/i.test(l)));
     let result = [];
     let strategyUsed = '';
-    if (start >= 0) {
-      result = lines.slice(start + 1, end > start ? end : start + 25)
-        .filter(l => !/^sponsored/i.test(l) && !/^see more/i.test(l));
-      if (result.length) {
-        strategyUsed = 'Extract lines between Ingredients and Method';
-      }
-    }
-
-    // Fallback strategy for ingredient-like quantity lines.
-    if (!result.length) {
-      const qtyRegex = /^((\d+([/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|pinch|cloves?|slices?)\b/i;
-      result = lines.filter(l => qtyRegex.test(l));
-      if (result.length) {
-        strategyUsed = 'Extract ingredient-like quantity lines';
-      }
-    }
+    result = parseIngredientLinesFromRaw(rawData);
+    if (result.length) strategyUsed = 'Extract ingredient lines from raw text';
 
     autoExtractSolution = result.join('\n');
     if (autoExtractResultText) {

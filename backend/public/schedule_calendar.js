@@ -5,6 +5,199 @@
 const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const periods = [1, 2, 3, 4, 5, 6];
 
+function getWeekDatesFromMonday(monday) {
+  const weekDates = [];
+  for (let i = 0; i < 7; ++i) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    weekDates.push({
+      display: formatDateDMY(d),
+      iso: getISODate(d)
+    });
+  }
+  return weekDates;
+}
+
+function mondayToWeekInputValue(monday) {
+  const refMonday = new Date(monday);
+  refMonday.setHours(0, 0, 0, 0);
+  const thursday = new Date(refMonday);
+  thursday.setDate(refMonday.getDate() + 3);
+  const year = thursday.getFullYear();
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = jan4.getDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - jan4Day + 1);
+  const diffDays = Math.round((refMonday - week1Monday) / 86400000);
+  const weekNo = Math.floor(diffDays / 7) + 1;
+  return `${year}-W${String(weekNo).padStart(2, '0')}`;
+}
+
+function weekInputValueToMonday(weekValue) {
+  const match = /^(\d{4})-W(\d{2})$/.exec(weekValue || '');
+  if (!match) return null;
+  const year = Number(match[1]);
+  const weekNo = Number(match[2]);
+  if (weekNo < 1 || weekNo > 53) return null;
+  const jan4 = new Date(year, 0, 4);
+  const jan4Day = jan4.getDay() || 7;
+  const week1Monday = new Date(jan4);
+  week1Monday.setDate(jan4.getDate() - jan4Day + 1);
+  const monday = new Date(week1Monday);
+  monday.setDate(week1Monday.getDate() + ((weekNo - 1) * 7));
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function askWeekToPrint(defaultMonday) {
+  return new Promise(resolve => {
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;z-index:9999;';
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);padding:1rem 1.1rem;min-width:320px;max-width:90vw;';
+    const defaultWeek = mondayToWeekInputValue(defaultMonday);
+    box.innerHTML = `
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:0.65rem;">Print Add Booking Schedule</div>
+      <label for="weekToPrintInput" style="display:block;margin-bottom:0.35rem;">Which week do you want to print?</label>
+      <input id="weekToPrintInput" type="week" value="${defaultWeek}" style="width:100%;padding:0.4rem;margin-bottom:0.8rem;" />
+      <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
+        <button id="weekPrintCancelBtn" style="padding:0.42rem 0.8rem;border:1px solid #bbb;background:#f2f2f2;border-radius:5px;">Cancel</button>
+        <button id="weekPrintConfirmBtn" style="padding:0.42rem 0.8rem;border:0;background:#1976d2;color:#fff;border-radius:5px;">Print</button>
+      </div>
+    `;
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    const cleanup = () => {
+      overlay.remove();
+    };
+
+    box.querySelector('#weekPrintCancelBtn').onclick = () => {
+      cleanup();
+      resolve(null);
+    };
+
+    box.querySelector('#weekPrintConfirmBtn').onclick = () => {
+      const weekValue = box.querySelector('#weekToPrintInput').value;
+      const monday = weekInputValueToMonday(weekValue);
+      cleanup();
+      resolve(monday);
+    };
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) {
+        cleanup();
+        resolve(null);
+      }
+    });
+  });
+}
+
+function buildPrintGrid(bookings, weekDates) {
+  const grid = Array.from({ length: periods.length }, () => Array(days.length).fill(null));
+  bookings.forEach(b => {
+    const dayIdx = weekDates.findIndex(wd => wd.iso === b.booking_date);
+    const periodIdx = periods.indexOf(Number(b.period));
+    if (dayIdx !== -1 && periodIdx !== -1) {
+      grid[periodIdx][dayIdx] = b;
+    }
+  });
+  return grid;
+}
+
+async function printScheduleForWeek(printMonday) {
+  if (!printMonday) return;
+
+  const weekDates = getWeekDatesFromMonday(printMonday);
+  const bookings = await fetchBookingsForWeek(printMonday);
+  const grid = buildPrintGrid(bookings, weekDates);
+  const weekStart = new Date(printMonday);
+  const weekEnd = new Date(printMonday);
+  weekEnd.setDate(weekStart.getDate() + 6);
+  const printDate = new Date().toLocaleDateString();
+  const logoUrl = new URL('images/whs logo circular reo .png', window.location.href).href;
+
+  let tableHtml = '<table class="print-calendar-table"><thead>';
+  tableHtml += '<tr><th class="period-col"></th>';
+  tableHtml += days.map(day => `<th>${day}</th>`).join('');
+  tableHtml += '</tr>';
+  tableHtml += '<tr><th class="period-col"></th>';
+  tableHtml += weekDates.map(d => `<th class="date-head">${d.display}</th>`).join('');
+  tableHtml += '</tr></thead><tbody>';
+
+  for (let p = 0; p < periods.length; ++p) {
+    tableHtml += `<tr><td class="period-col">P${periods[p]}</td>`;
+    for (let d = 0; d < days.length; ++d) {
+      const cell = grid[p][d];
+      if (cell) {
+        tableHtml += `<td><div class="booking-box"><div class="booking-title">Class: ${cell.class_name || ''}</div><div class="booking-teacher">Teacher: ${cell.staff_name || ''}</div></div></td>`;
+      } else {
+        tableHtml += '<td></td>';
+      }
+    }
+    tableHtml += '</tr>';
+  }
+
+  tableHtml += '</tbody></table>';
+
+  const win = window.open('', '', 'width=1300,height=850');
+  if (!win) {
+    alert('Please allow pop-ups to print the schedule.');
+    return;
+  }
+
+  win.document.write(`
+    <html>
+      <head>
+        <title>Add Booking ${formatDateDMY(weekStart)} to ${formatDateDMY(weekEnd)}</title>
+        <style>
+          @page { size: A4 landscape; margin: 10mm; }
+          * { box-sizing: border-box; }
+          body { font-family: "Segoe UI", Arial, sans-serif; color: #1d1d1d; margin: 0; }
+          .print-page { width: 100%; }
+          .print-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1976d2; padding-bottom: 8px; margin-bottom: 10px; }
+          .print-brand { display: flex; align-items: center; gap: 10px; }
+          .print-brand img { width: 56px; height: 56px; object-fit: contain; }
+          .print-title { font-size: 22px; font-weight: 700; color: #1976d2; margin: 0; }
+          .print-subtitle { margin: 2px 0 0 0; font-size: 13px; }
+          .print-meta { font-size: 12px; text-align: right; }
+          .print-calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .print-calendar-table th, .print-calendar-table td { border: 1px solid #8f8f8f; padding: 4px; text-align: center; vertical-align: top; font-size: 11px; height: 64px; }
+          .print-calendar-table th { background: #1976d2; color: #fff; font-weight: 700; }
+          .print-calendar-table th.date-head { background: #eaf1ff; color: #222; font-weight: 600; }
+          .period-col { width: 46px; background: #f1f1f1 !important; color: #222 !important; font-weight: 700; }
+          .booking-box { background: #e8f5e9; border-radius: 6px; padding: 4px; min-height: 52px; }
+          .booking-title { font-weight: 700; margin-bottom: 2px; }
+          .booking-teacher { color: #2e7d32; font-weight: 600; }
+        </style>
+      </head>
+      <body>
+        <div class="print-page">
+          <div class="print-header">
+            <div class="print-brand">
+              <img src="${logoUrl}" alt="School Logo" />
+              <div>
+                <h1 class="print-title">Add Booking</h1>
+                <p class="print-subtitle">Week of ${formatDateDMY(weekStart)} to ${formatDateDMY(weekEnd)}</p>
+              </div>
+            </div>
+            <div class="print-meta">
+              <div><strong>Printed:</strong> ${printDate}</div>
+              <div><strong>Total Bookings:</strong> ${bookings.length}</div>
+            </div>
+          </div>
+          ${tableHtml}
+        </div>
+      </body>
+    </html>
+  `);
+  win.document.close();
+  win.focus();
+  setTimeout(() => {
+    win.print();
+  }, 300);
+}
+
 // Helper to get ISO date string (yyyy-mm-dd) for a given date
 function getISODate(date) {
   return date.toISOString().slice(0, 10);
@@ -57,31 +250,12 @@ let currentMonday = (() => {
 
 async function renderScheduleCalendar() {
   const table = document.getElementById('scheduleCalendarTable');
-  // Calculate week dates
-  let weekDates = [];
-  for (let i = 0; i < 7; ++i) {
-    const d = new Date(currentMonday);
-    d.setDate(currentMonday.getDate() + i);
-    weekDates.push({
-      display: formatDateDMY(d),
-      iso: getISODate(d)
-    });
-  }
+  const weekDates = getWeekDatesFromMonday(currentMonday);
 
   // Fetch bookings for this week
   const bookings = await fetchBookingsForWeek(currentMonday);
 
-  // Build a grid: periods x days, fill with bookings
-  const grid = Array.from({ length: periods.length }, () => Array(days.length).fill(null));
-  bookings.forEach(b => {
-    // Find day index (by booking_date)
-    const dayIdx = weekDates.findIndex(wd => wd.iso === b.booking_date);
-    // Find period index (periods are 1-based)
-    const periodIdx = periods.indexOf(Number(b.period));
-    if (dayIdx !== -1 && periodIdx !== -1) {
-      grid[periodIdx][dayIdx] = b;
-    }
-  });
+  const grid = buildPrintGrid(bookings, weekDates);
 
   // Header rows
     let html = `<thead><tr style='background:#1976d2;color:#fff;'>
@@ -216,22 +390,12 @@ document.addEventListener('DOMContentLoaded', () => {
     currentMonday.setDate(currentMonday.getDate() + 7);
     renderScheduleCalendar();
   };
+  const printScheduleBtn = document.getElementById('printScheduleBtn');
+  if (printScheduleBtn) {
+    printScheduleBtn.onclick = async () => {
+      const chosenMonday = await askWeekToPrint(currentMonday);
+      if (!chosenMonday) return;
+      await printScheduleForWeek(chosenMonday);
+    };
+  }
 });
-    document.getElementById('prevWeekBtn').onclick = () => {
-      currentMonday.setDate(currentMonday.getDate() - 7);
-      renderScheduleCalendar();
-    };
-    document.getElementById('todayBtn').onclick = () => {
-      // Reset to this week's Monday
-      const today = new Date();
-      const day = today.getDay();
-      const diff = (day === 0 ? -6 : 1) - day;
-      currentMonday = new Date(today);
-      currentMonday.setDate(today.getDate() + diff);
-      currentMonday.setHours(0,0,0,0);
-      renderScheduleCalendar();
-    };
-    document.getElementById('nextWeekBtn').onclick = () => {
-      currentMonday.setDate(currentMonday.getDate() + 7);
-      renderScheduleCalendar();
-    };

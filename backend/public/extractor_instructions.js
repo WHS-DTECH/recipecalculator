@@ -60,17 +60,27 @@ document.addEventListener('DOMContentLoaded', function () {
       button { margin-top: 1.5em; padding: 0.5em 1.2em; background: #1976d2; color: #fff; border: none; border-radius: 4px; font-size: 1em; cursor: pointer; }
       </style></head><body>
       <h2>Raw Data (from Upload)</h2>
+          let expectedStepNumber = 1;
       <pre>"${String(rawData).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '\n')}"</pre>
       <button onclick="window.close()">Close</button>
       </body></html>
-    `);
+            const numberedInline = line.match(/^(\d+)\.\s+(\S.*)$/);
+            if (numberedInline) {
+              const stepNumber = Number(numberedInline[1]);
+              if (!steps.length && stepNumber !== 1) continue;
+              if (steps.length && stepNumber !== expectedStepNumber) break;
     win.document.close();
+              expectedStepNumber = stepNumber + 1;
   }
 
 
+              const stepNumber = Number(line.replace(/[.)]$/, ''));
+              if (!steps.length && stepNumber !== 1) continue;
+              if (steps.length && stepNumber !== expectedStepNumber) break;
   recipeSelect.addEventListener('change', function () {
     currentRecipeId = recipeSelect.value;
-    rawData = '';
+                steps.push(`${stepNumber}. ${next}`);
+                expectedStepNumber = stepNumber + 1;
     startStepBtn.disabled = true;
     if (!currentRecipeId) {
       return;
@@ -183,7 +193,35 @@ document.addEventListener('DOMContentLoaded', function () {
       fn: raw => {
         const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
         const lines = unescapedData.split(/\n|<br\s*\/?\s*>/i);
-        const steps = lines.filter(line => /^\d+\./.test(line.trim()));
+        const steps = [];
+        let expectedStepNumber = 1;
+        for (let i = 0; i < lines.length; i++) {
+          const line = String(lines[i] || '').trim();
+          if (!line) continue;
+          const numberedInline = line.match(/^(\d+)\.\s+(\S.*)$/);
+          if (numberedInline) {
+            const stepNumber = Number(numberedInline[1]);
+            if (!steps.length && stepNumber !== 1) continue;
+            if (steps.length && stepNumber !== expectedStepNumber) break;
+            steps.push(line);
+            expectedStepNumber = stepNumber + 1;
+            continue;
+          }
+          if (/^\d+[.)]?$/.test(line)) {
+            const stepNumber = Number(line.replace(/[.)]$/, ''));
+            if (!steps.length && stepNumber !== 1) continue;
+            if (steps.length && stepNumber !== expectedStepNumber) break;
+            let next = '';
+            for (let j = i + 1; j < lines.length; j++) {
+              next = String(lines[j] || '').trim();
+              if (next) break;
+            }
+            if (next && !/^\d+[.)]?$/.test(next) && !/^(ingredients?|method|instructions?)\b/i.test(next)) {
+              steps.push(`${stepNumber}. ${next}`);
+              expectedStepNumber = stepNumber + 1;
+            }
+          }
+        }
         if (steps.length) {
           console.debug('[DEBUG][numbered steps] Found steps:', steps.slice(0, 3));
         } else {
@@ -229,13 +267,21 @@ document.addEventListener('DOMContentLoaded', function () {
       fn: raw => {
         const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
         const lower = unescapedData.toLowerCase();
-        const methodIndex = lower.indexOf('method');
-        if (methodIndex === -1) {
+        const visibleTextIndex = lower.indexOf('visible page text:');
+        const scopedLower = visibleTextIndex >= 0 ? lower.slice(visibleTextIndex) : lower;
+        const scopedOffset = visibleTextIndex >= 0 ? visibleTextIndex : 0;
+        const methodMatches = [...scopedLower.matchAll(/\bmethod\b/g)].map(m => ({ index: m.index + scopedOffset }));
+        if (!methodMatches.length) {
           console.debug("[DEBUG][method visible text] No 'method' marker found");
           return '';
         }
 
-        let methodChunk = unescapedData.slice(methodIndex, methodIndex + 4000);
+        const isInstructionLike = s => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place|sift|grease|bring|cool|refrigerate|remove|cut|chop)\b/i.test(s);
+        const isIngredientLike = s => /^\s*(\d+(?:[/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|oz|lb|pinch|salt|sugar|butter|milk)\b/i.test(s);
+        const navNoise = /\b(recipes|products|contact|home recipes|school visits|comments|review|favourites|join|newsletter|cookie|privacy|terms)\b/i;
+        const promoStopRegex = /\b(?:chelsea\s+products\s+in\s+recipe|you\s+may\s+like\s+these|load\s+more|watch\s+video|rate\s+recipe|what\s+did\s+you\s+think\s+of\s+this\s+recipe|reviews?|details)\b/i;
+        const candidates = [];
+
         const stopMarkers = [
           'page text:',
           'login to',
@@ -243,40 +289,67 @@ document.addEventListener('DOMContentLoaded', function () {
           'join our newsletter',
           'cookies',
           'privacy statement',
-          'terms and conditions'
+          'terms and conditions',
+          'comments',
+          'review',
+          'products',
+          'contact us',
+          'home recipes',
+          'school visits',
+          'chelsea products in recipe',
+          'you may like these',
+          'load more'
         ];
-        for (const marker of stopMarkers) {
-          const stopAt = methodChunk.toLowerCase().indexOf(marker);
-          if (stopAt > 0) {
-            methodChunk = methodChunk.slice(0, stopAt);
-            break;
+
+        for (const match of methodMatches) {
+          const methodIndex = match.index;
+          const lookBehind = lower.slice(Math.max(0, methodIndex - 24), methodIndex);
+          if (lookBehind.includes('ingredients')) continue;
+
+          let methodChunk = unescapedData.slice(methodIndex, methodIndex + 4000);
+          for (const marker of stopMarkers) {
+            const stopAt = methodChunk.toLowerCase().indexOf(marker);
+            if (stopAt > 0) {
+              methodChunk = methodChunk.slice(0, stopAt);
+              break;
+            }
+          }
+          const promoMatch = methodChunk.match(promoStopRegex);
+          if (promoMatch && promoMatch.index > 0) {
+            methodChunk = methodChunk.slice(0, promoMatch.index);
+          }
+
+          methodChunk = methodChunk
+            .replace(/^method\s*[:\-]?\s*/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+          if (!methodChunk) continue;
+
+          const sentenceParts = methodChunk
+            .split(/(?<=[.!?])\s+/)
+            .map(s => s.trim())
+            .filter(Boolean);
+
+          const firstFew = sentenceParts.slice(0, 8);
+          const ingredientCount = firstFew.filter(isIngredientLike).length;
+          const instructionCount = firstFew.filter(isInstructionLike).length;
+          if (ingredientCount >= 3 && instructionCount === 0) continue;
+
+          const instructionLines = sentenceParts.filter(s => isInstructionLike(s) && !navNoise.test(s));
+          if (instructionLines.length) {
+            candidates.push(instructionLines);
           }
         }
 
-        methodChunk = methodChunk
-          .replace(/^method\s*[:\-]?\s*/i, '')
-          .replace(/\s+/g, ' ')
-          .trim();
-        if (!methodChunk) {
-          console.debug('[DEBUG][method visible text] Method chunk empty after cleanup');
-          return '';
-        }
-
-        const sentenceParts = methodChunk
-          .split(/(?<=[.!?])\s+(?=[A-Z])/)
-          .map(s => s.trim())
-          .filter(Boolean);
-
-        const looksLikeInstruction = s => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place)\b/i.test(s);
-        const instructionLines = sentenceParts.filter(looksLikeInstruction);
-
-        if (!instructionLines.length) {
+        if (!candidates.length) {
           console.debug('[DEBUG][method visible text] No instruction-like sentences found');
           return '';
         }
 
-        console.debug('[DEBUG][method visible text] Found instruction lines:', instructionLines.slice(0, 3));
-        return instructionLines.join('\n');
+        const best = candidates.sort((a, b) => b.length - a.length)[0];
+
+        console.debug('[DEBUG][method visible text] Found instruction lines:', best.slice(0, 3));
+        return best.join('\n');
       }
     },
     {
@@ -294,18 +367,25 @@ document.addEventListener('DOMContentLoaded', function () {
           .map(line => line.replace(/\s+/g, ' ').trim())
           .filter(Boolean);
 
-        const instructionLine = line => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place)\b/i.test(line);
-        const methodIndex = lines.findIndex(line => /^method\b/i.test(line));
+        const instructionLine = line => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place|sift|grease|bring|cool|refrigerate|remove|cut|chop)\b/i.test(line);
+        const navNoise = /\b(recipes|products|contact|home recipes|school visits|comments|review|favourites|join|newsletter|cookie|privacy|terms)\b/i;
+        const methodIndex = lines.findIndex(line => /^method\s*[:\-]?\s*$/i.test(line));
         const startIndex = methodIndex >= 0 ? methodIndex : lines.findIndex(instructionLine);
         if (startIndex < 0) {
           console.debug('[DEBUG][visible list tail] No instruction-like lines found');
           return '';
         }
 
-        const extracted = lines
-          .slice(startIndex)
-          .map(line => line.replace(/^method\s*[:\-]?\s*/i, '').trim())
-          .filter(instructionLine);
+        const tail = lines.slice(startIndex).map(line => line.replace(/^method\s*[:\-]?\s*/i, '').trim());
+        const cutoffIndex = tail.findIndex((line, idx) => idx > 0 && navNoise.test(line));
+        const relevantTail = cutoffIndex >= 0 ? tail.slice(0, cutoffIndex) : tail;
+
+        const extracted = [];
+        for (const line of relevantTail) {
+          if (navNoise.test(line) && extracted.length) break;
+          if (instructionLine(line) && !navNoise.test(line)) extracted.push(line);
+          else if (extracted.length) break;
+        }
 
         if (!extracted.length) {
           console.debug('[DEBUG][visible list tail] No extracted instruction lines after cleanup');
@@ -545,11 +625,18 @@ document.addEventListener('DOMContentLoaded', function () {
         };
       });
 
-      const coreIndices = AUTO_EXTRACT_CORE_STRATEGY_NAMES
-        .map(name => stepStrategies.findIndex(s => s.name === name))
-        .filter(idx => idx >= 0);
-      const solvedCoreIndex = coreIndices.find(idx => stepStrategies[idx].solved);
-      autoExtractSolution = solvedCoreIndex !== undefined ? stepStrategies[solvedCoreIndex].result : '';
+      const hasSharedAuto = window.ExtractorAutoCore && typeof window.ExtractorAutoCore.runInstructionsAutoCore === 'function';
+      if (!hasSharedAuto) {
+        alert('Instruction Auto Extract core is unavailable. Please reload the page.');
+        return;
+      }
+
+      const sharedAuto = window.ExtractorAutoCore.runInstructionsAutoCore(rawData);
+      autoExtractSolution = String(sharedAuto && sharedAuto.solution ? sharedAuto.solution : '').trim();
+      const preferredName = String(sharedAuto && sharedAuto.strategyName ? sharedAuto.strategyName : '').trim();
+      const solvedCoreIndex = preferredName
+        ? stepStrategies.findIndex(s => s.name === preferredName)
+        : stepStrategies.findIndex(s => String(s.result || '').trim() === autoExtractSolution);
 
       if (solvedCoreIndex !== undefined) {
         stepStrategies[solvedCoreIndex].applied = true;

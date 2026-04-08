@@ -35,6 +35,8 @@
       <div class="setup-section-desc">Direct connection to existing Raw Data Extractor button code.</div>
       <label for="uploadSelect" style="font-weight:bold;">Choose Uploaded Recipe:</label>
       <select id="uploadSelect" style="margin-left:0.6rem; min-width:320px;"></select>
+      <button id="teacherAsyncSyncBtn" style="margin-left:0.6rem;background:#3949ab;color:#fff;border:none;border-radius:4px;padding:0.45rem 0.9rem;cursor:pointer;">Async Sync (From RecipeID)</button>
+      <span id="teacherAsyncSyncStatus" style="margin-left:0.6rem;font-size:0.92rem;color:#3949ab;"></span>
       <div style="margin-top:0.8rem;">
         <button class="extractor-btn" id="extractVisibleTextBtn" style="margin-bottom:1rem; background:#00897b; color:#fff; border:none; border-radius:5px; padding:0.6rem 1.5rem; font-size:1rem; cursor:pointer;">Extract Visible Text (Browser View)</button>
         <div id="extractVisibleTextBtnProgressBar" style="display:none;width:220px;height:6px;background:#e0f2f1;border-radius:6px;overflow:hidden;margin-top:-0.7rem;margin-bottom:0.9rem;">
@@ -50,7 +52,7 @@
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Serving Size Auto Extract</div>
-      <div class="setup-section-desc">Copy of the Serving Size Auto Extract system (strategy 1 only).</div>
+      <div class="setup-section-desc">Launcher to the Serving Size controller page.</div>
       <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
         <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
@@ -58,7 +60,7 @@
         </div>
         <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
-          <button id="teacherServingAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Serving Size Auto Extract (Strategy 1)</button>
+          <button id="teacherServingAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Open Serving Size Extractor</button>
         </div>
       </div>
 
@@ -72,7 +74,7 @@
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Title Auto Extract</div>
-      <div class="setup-section-desc">Copy of the Title Auto Extract system (strategy 1 only).</div>
+      <div class="setup-section-desc">Launcher to the Title controller page.</div>
       <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
         <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
@@ -80,7 +82,7 @@
         </div>
         <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
-          <button id="teacherTitleAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Title Auto Extract (Strategy 1)</button>
+          <button id="teacherTitleAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Open Title Extractor</button>
         </div>
       </div>
 
@@ -94,7 +96,7 @@
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Instruction Auto Extract</div>
-      <div class="setup-section-desc">Copy of the Instruction Auto Extract system (strategies 1&ndash;6, first solved).</div>
+      <div class="setup-section-desc">Launcher to the Instructions controller page.</div>
       <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
         <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
@@ -102,7 +104,7 @@
         </div>
         <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
-          <button id="teacherInstructionAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Instruction Auto Extract (Strategies 1&ndash;6)</button>
+          <button id="teacherInstructionAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Open Instructions Extractor</button>
         </div>
       </div>
 
@@ -116,7 +118,7 @@
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Ingredients Auto Extract</div>
-      <div class="setup-section-desc">Copy of the Ingredients Auto Extract system (Ingredients&ndash;Method section, then quantity-line fallback).</div>
+      <div class="setup-section-desc">Launcher to the Ingredients controller page.</div>
       <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
         <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
@@ -124,7 +126,7 @@
         </div>
         <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
           <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
-          <button id="teacherIngredientsAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Ingredients Auto Extract</button>
+          <button id="teacherIngredientsAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Open Ingredients Extractor</button>
         </div>
       </div>
 
@@ -164,6 +166,7 @@
   <script src="upload_url.js?v=20260408d"></script>
   <script src="extractor_raw.js?v=20260408a"></script>
   <script src="extractor_serving_size.js?v=20260408a"></script>
+  <script src="extractor_auto_core.js?v=20260408g"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const stepByStepBtn = document.getElementById('teacherServingStepByStepBtn');
@@ -195,12 +198,23 @@
       const autoPublishAcceptBtn = document.getElementById('teacherAutoPublishAcceptBtn');
       const autoPublishDeclineBtn = document.getElementById('teacherAutoPublishDeclineBtn');
       const recipeSelect = document.getElementById('uploadSelect');
+      const teacherAsyncSyncBtn = document.getElementById('teacherAsyncSyncBtn');
+      const teacherAsyncSyncStatus = document.getElementById('teacherAsyncSyncStatus');
       const rawDataInput = document.getElementById('rawDataInput');
-
       let extractedServingSize = '';
       let extractedTitle = '';
+      let extractedInstructions = '';
       let extractedIngredients = '';
       let pendingAutoPublishRecipeId = null;
+
+      function openControllerPage(pagePath) {
+        const selectedRecipeId = recipeSelect ? String(recipeSelect.value || '').trim() : '';
+        if (selectedRecipeId) {
+          sessionStorage.setItem('selectedRecipeId', selectedRecipeId);
+        }
+        const query = selectedRecipeId ? `?recipeId=${encodeURIComponent(selectedRecipeId)}` : '';
+        window.location.href = `${pagePath}${query}`;
+      }
 
       async function getRawData(recipeId) {
         const existing = (rawDataInput && rawDataInput.value ? rawDataInput.value : '').trim();
@@ -218,6 +232,10 @@
         const recipes = await res.json();
         if (!Array.isArray(recipes)) return null;
         return recipes.find(r => String(r.id) === String(recipeId)) || null;
+      }
+
+      function getSelectedRecipeIdValue() {
+        return recipeSelect ? String(recipeSelect.value || '').trim() : '';
       }
 
       async function postJsonChecked(url, payload, stepLabel) {
@@ -297,475 +315,218 @@
         }
       }
 
-      function extractTitleFromUrlSlug(url) {
-        if (!url) return '';
-        let slug = '';
-        try {
-          const parsed = new URL(url);
-          const parts = parsed.pathname.split('/').filter(Boolean);
-          slug = parts.length ? parts[parts.length - 1] : '';
-        } catch (_) {
-          const parts = String(url).split('/').filter(Boolean);
-          slug = parts.length ? parts[parts.length - 1] : '';
-        }
+      if (teacherAsyncSyncBtn) {
+        teacherAsyncSyncBtn.addEventListener('click', async function() {
+          const defaultRecipeId = getSelectedRecipeIdValue() || '7';
+          const startInput = prompt('Sync from which RecipeID onward?', defaultRecipeId);
+          if (startInput === null) return;
 
-        if (!slug) return '';
+          const startRecipeId = Number(String(startInput).trim());
+          if (!Number.isInteger(startRecipeId) || startRecipeId <= 0) {
+            alert('Please enter a valid numeric RecipeID.');
+            return;
+          }
 
-        const cleaned = decodeURIComponent(slug)
-          .replace(/\.[a-z0-9]+$/i, '')
-          .replace(/[-_]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+          teacherAsyncSyncBtn.disabled = true;
+          teacherAsyncSyncBtn.textContent = 'Async Syncing...';
+          if (teacherAsyncSyncStatus) teacherAsyncSyncStatus.textContent = 'Loading recipe list...';
 
-        if (!cleaned) return '';
+          try {
+            const dropdownResp = await fetch('/api/recipes/display-dropdown');
+            const dropdownData = await dropdownResp.json();
+            const recipes = Array.isArray(dropdownData && dropdownData.recipes) ? dropdownData.recipes : [];
+            const recipeIds = recipes
+              .map(r => Number(r.recipeid))
+              .filter(id => Number.isInteger(id) && id >= startRecipeId)
+              .sort((a, b) => a - b);
 
-        return cleaned
-          .split(' ')
-          .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
-          .join(' ')
-          .trim();
-      }
+            if (!recipeIds.length) {
+              alert('No recipes found from RecipeID ' + startRecipeId + ' onward.');
+              if (teacherAsyncSyncStatus) teacherAsyncSyncStatus.textContent = 'No recipes found.';
+              return;
+            }
 
-      if (stepByStepBtn) {
-        stepByStepBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_serving_size.html';
+            let successCount = 0;
+            let failCount = 0;
+
+            for (let i = 0; i < recipeIds.length; i++) {
+              const recipeId = recipeIds[i];
+              if (teacherAsyncSyncStatus) {
+                teacherAsyncSyncStatus.textContent = `Syncing ${i + 1}/${recipeIds.length} (RecipeID ${recipeId})...`;
+              }
+
+              try {
+                const resp = await fetch('/api/ingredients/inventory/sync', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ recipeId, reseed: true })
+                });
+                const data = await resp.json();
+                if (resp.ok && data && data.success) successCount++;
+                else failCount++;
+              } catch (_) {
+                failCount++;
+              }
+            }
+
+            if (teacherAsyncSyncStatus) {
+              teacherAsyncSyncStatus.textContent = `Done. Success: ${successCount}, Failed: ${failCount}`;
+            }
+          } catch (err) {
+            alert('Async sync failed: ' + (err && err.message ? err.message : err));
+            if (teacherAsyncSyncStatus) teacherAsyncSyncStatus.textContent = 'Async sync failed.';
+          } finally {
+            teacherAsyncSyncBtn.disabled = false;
+            teacherAsyncSyncBtn.textContent = 'Async Sync (From RecipeID)';
+          }
         });
       }
 
+      // Add Recipe runs shared auto-extract logic; step-by-step still goes to controller pages.
+      if (stepByStepBtn) stepByStepBtn.addEventListener('click', function() { openControllerPage('extractor_serving_size.html'); });
+      if (declineBtn) declineBtn.addEventListener('click', function() { openControllerPage('extractor_serving_size.html'); });
       if (autoBtn) {
         autoBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-
+          if (!recipeId) return alert('Please select a recipe first.');
           const raw = await getRawData(recipeId);
-          if (!raw) {
-            alert('No raw data found for this recipe.');
-            return;
-          }
-
-          const strategyOne = window.strategies && window.strategies[0];
-          extractedServingSize = strategyOne && typeof strategyOne.fn === 'function' ? (strategyOne.fn(raw) || '') : '';
-
+          if (!raw) return alert('No raw data found for this recipe.');
+          const autoCore = window.ExtractorAutoCore;
+          const extracted = autoCore && autoCore.runServingSizeAuto ? autoCore.runServingSizeAuto(raw) : { solution: '', strategyName: '' };
+          extractedServingSize = extracted.solution || '';
           if (resultText) {
             resultText.textContent = extractedServingSize
-              ? `Strategy 1 result: ${extractedServingSize}`
-              : 'Strategy 1 found no serving size value.';
+              ? `${extracted.strategyName || 'Auto Extract'} result: ${extractedServingSize}`
+              : 'No serving size found by Auto Extract.';
           }
           if (resultBox) resultBox.style.display = '';
         });
       }
-
       if (confirmBtn) {
-        confirmBtn.addEventListener('click', function() {
+        confirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-          if (!extractedServingSize) {
-            alert('No auto extract result to send.');
-            return;
-          }
-
-          fetch('/api/serving-size/solution', {
+          if (!recipeId) return alert('Please select a recipe first.');
+          if (!extractedServingSize) return alert('No auto extract result to send.');
+          const res = await fetch('/api/serving-size/solution', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipeId, solution: extractedServingSize })
-          })
-            .then(res => res.ok ? res.json() : Promise.reject(res))
-            .then(() => {
-              alert('Serving size solution sent successfully.');
-            })
-            .catch(() => {
-              alert('Failed to send serving size solution.');
-            });
+          });
+          const data = await res.json();
+          if (data && data.success) alert('Serving size saved!');
+          else alert('Failed to save serving size.');
         });
       }
 
-      if (declineBtn) {
-        declineBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_serving_size.html';
-        });
-      }
-
-      if (titleStepByStepBtn) {
-        titleStepByStepBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_title.html';
-        });
-      }
-
+      if (titleStepByStepBtn) titleStepByStepBtn.addEventListener('click', function() { openControllerPage('extractor_title.html'); });
+      if (titleDeclineBtn) titleDeclineBtn.addEventListener('click', function() { openControllerPage('extractor_title.html'); });
       if (titleAutoBtn) {
         titleAutoBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-
+          if (!recipeId) return alert('Please select a recipe first.');
           const recipe = await getRecipeById(recipeId);
           const url = recipe && recipe.url ? String(recipe.url).trim() : '';
-          extractedTitle = extractTitleFromUrlSlug(url);
-
+          const autoCore = window.ExtractorAutoCore;
+          extractedTitle = autoCore && autoCore.extractTitleFromUrlSlug ? autoCore.extractTitleFromUrlSlug(url) : '';
           if (titleResultText) {
             titleResultText.textContent = extractedTitle
-              ? `Strategy 1 result: ${extractedTitle}`
-              : 'Strategy 1 found no title value.';
+              ? `Auto Extract result: ${extractedTitle}`
+              : 'No title found by Auto Extract.';
           }
           if (titleResultBox) titleResultBox.style.display = '';
         });
       }
-
       if (titleConfirmBtn) {
-        titleConfirmBtn.addEventListener('click', function() {
+        titleConfirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-          if (!extractedTitle) {
-            alert('No auto extract result to send.');
-            return;
-          }
-
-          fetch('/api/title-extractor/solution', {
+          if (!recipeId) return alert('Please select a recipe first.');
+          if (!extractedTitle) return alert('No auto extract result to send.');
+          const res = await fetch('/api/title-extractor/solution', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipeId, solution: extractedTitle })
-          })
-            .then(res => res.ok ? res.json() : Promise.reject(res))
-            .then(data => {
-              if (data && data.success) {
-                alert('Title saved!');
-              } else {
-                alert('Failed to save title.');
-              }
-            })
-            .catch(() => {
-              alert('Error saving title.');
-            });
+          });
+          const data = await res.json();
+          if (data && data.success) alert('Title saved!');
+          else alert('Failed to save title.');
         });
       }
 
-      if (titleDeclineBtn) {
-        titleDeclineBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_title.html';
-        });
-      }
-
-      // --- Instruction Auto Extract ---
       const instructionStepByStepBtn = document.getElementById('teacherInstructionStepByStepBtn');
       const instructionAutoExtractBtn = document.getElementById('teacherInstructionAutoExtractBtn');
       const instructionAutoResultBox = document.getElementById('teacherInstructionAutoResultBox');
       const instructionAutoResultText = document.getElementById('teacherInstructionAutoResultText');
       const instructionConfirmBtn = document.getElementById('teacherInstructionConfirmBtn');
       const instructionDeclineBtn = document.getElementById('teacherInstructionDeclineBtn');
-      let extractedInstructions = '';
-
-      function htmlUnescapeInstr(str) {
-        const temp = document.createElement('textarea');
-        temp.innerHTML = str;
-        return temp.value;
-      }
-
-      function normalizeInstrResult(result) {
-        if (Array.isArray(result)) return result.join('\n').trim();
-        if (result && typeof result === 'object') return JSON.stringify(result, null, 2).trim();
-        return String(result || '').trim();
-      }
-
-      const instructionStrategies = [
-        {
-          name: 'Look for ordered list',
-          fn: raw => {
-            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
-            const match = u.match(/<ol[^>]*>([\s\S]*?)<\/ol>/i);
-            return match ? match[1].replace(/<li[^>]*>/g, '').replace(/<\/li>/g, '\n').trim() : '';
-          }
-        },
-        {
-          name: 'Look for numbered steps',
-          fn: raw => {
-            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
-            const lines = u.split(/\n|<br\s*\/?>\s*/i);
-            const steps = lines.filter(line => /^\d+\./.test(line.trim()));
-            return steps.length ? steps.join('\n') : '';
-          }
-        },
-        {
-          name: "Find 'method' and nearest list",
-          fn: raw => {
-            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
-            const methodIndex = u.toLowerCase().indexOf('method');
-            if (methodIndex === -1) return '';
-            const after = u.substring(methodIndex);
-            let listMatch = after.match(/<(ol|ul)[^>]*>([\s\S]*?)<\/\1>/i);
-            if (!listMatch) {
-              const wysiwygBlocks = [...u.matchAll(/<div[^>]*class=["'][^"']*wysiwyg[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)];
-              for (const block of wysiwygBlocks) {
-                const list = block[1].match(/<(ol|ul)[^>]*>([\s\S]*?)<\/\1>/i);
-                if (list) { listMatch = list; break; }
-              }
-            }
-            if (listMatch) {
-              const items = [...listMatch[2].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean);
-              return items.length ? items : '';
-            }
-            return '';
-          }
-        },
-        {
-          name: "Find 'Method' text in visible blocks",
-          fn: raw => {
-            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
-            const lower = u.toLowerCase();
-            const methodIndex = lower.indexOf('method');
-            if (methodIndex === -1) return '';
-
-            let methodChunk = u.slice(methodIndex, methodIndex + 4000);
-            const stopMarkers = [
-              'page text:',
-              'login to',
-              'favourites',
-              'join our newsletter',
-              'cookies',
-              'privacy statement',
-              'terms and conditions'
-            ];
-            for (const marker of stopMarkers) {
-              const stopAt = methodChunk.toLowerCase().indexOf(marker);
-              if (stopAt > 0) {
-                methodChunk = methodChunk.slice(0, stopAt);
-                break;
-              }
-            }
-
-            methodChunk = methodChunk
-              .replace(/^method\s*[:\-]?\s*/i, '')
-              .replace(/\s+/g, ' ')
-              .trim();
-            if (!methodChunk) return '';
-
-            const sentenceParts = methodChunk
-              .split(/(?<=[.!?])\s+(?=[A-Z])/)
-              .map(s => s.trim())
-              .filter(Boolean);
-
-            const looksLikeInstruction = s => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place)\b/i.test(s);
-            const instructionLines = sentenceParts.filter(looksLikeInstruction);
-            return instructionLines.length ? instructionLines.join('\n') : '';
-          }
-        },
-        {
-          name: 'Extract recipeInstructions array from JSON',
-          fn: raw => {
-            const match = raw.match(/"recipeInstructions"\s*:\s*(\[[\s\S]*?\])/);
-            return match ? match[1] : '';
-          }
-        },
-        {
-          name: 'Find recipeInstructions in JSON-LD (string or array)',
-          fn: raw => {
-            let doc;
-            try { doc = new DOMParser().parseFromString(raw, 'text/html'); } catch (e) { return ''; }
-            const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
-            for (const script of scripts) {
-              let json;
-              try { json = JSON.parse(script.textContent); } catch (e) { continue; }
-              let candidates = Array.isArray(json) ? json : json['@graph'] ? json['@graph'] : [json];
-              for (const item of candidates) {
-                if (item && item['@type'] && (item['@type'] === 'Recipe' || (Array.isArray(item['@type']) && item['@type'].includes('Recipe')))) {
-                  if (typeof item.recipeInstructions === 'string') return item.recipeInstructions;
-                  if (Array.isArray(item.recipeInstructions)) {
-                    return item.recipeInstructions.map(step => typeof step === 'string' ? step : (step.text || step['@value'] || '')).join('\n');
-                  }
-                }
-              }
-            }
-            return '';
-          }
-        },
-        {
-          name: 'Look for "recipeInstructions" itemprop elements',
-          fn: raw => {
-            const matches = [...raw.matchAll(/<p[^>]*itemprop=["']recipeInstructions["'][^>]*>([\s\S]*?)<\/p>/gi)];
-            return matches.length ? matches.map(m => m[0]).join('\n') : '';
-          }
-        }
-      ];
-
-      if (instructionStepByStepBtn) {
-        instructionStepByStepBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_instructions.html';
-        });
-      }
-
+      if (instructionStepByStepBtn) instructionStepByStepBtn.addEventListener('click', function() { openControllerPage('extractor_instructions.html'); });
       if (instructionAutoExtractBtn) {
         instructionAutoExtractBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
+          if (!recipeId) return alert('Please select a recipe first.');
           const raw = await getRawData(recipeId);
-          if (!raw) {
-            alert('No raw data found for this recipe.');
-            return;
-          }
-
-          const results = instructionStrategies.map(s => {
-            const result = normalizeInstrResult(s.fn(raw));
-            return { result, solved: !!result && result !== 'N/A' };
-          });
-
-          const firstSolved = results.find(r => r.solved);
-          extractedInstructions = firstSolved ? firstSolved.result : '';
-
+          if (!raw) return alert('No raw data found for this recipe.');
+          const autoCore = window.ExtractorAutoCore;
+          const extracted = autoCore && autoCore.runInstructionsAutoCore ? autoCore.runInstructionsAutoCore(raw) : { solution: '', strategyName: '' };
+          extractedInstructions = extracted.solution || '';
           if (instructionAutoResultText) {
             instructionAutoResultText.textContent = extractedInstructions
-              ? `First solved result (strategies 1-6):\n${extractedInstructions}`
-              : 'No solved result found in strategies 1-6.';
+              ? `First solved result (${extracted.strategyName || 'Auto Extract'}):\n${extractedInstructions}`
+              : 'No solved result found in core controller strategies.';
           }
           if (instructionAutoResultBox) instructionAutoResultBox.style.display = '';
         });
       }
-
       if (instructionConfirmBtn) {
-        instructionConfirmBtn.addEventListener('click', function() {
+        instructionConfirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-          if (!extractedInstructions) {
-            alert('No auto extract result to send.');
-            return;
-          }
-          fetch('/api/instructions-extractor/solution', {
+          if (!recipeId) return alert('Please select a recipe first.');
+          if (!extractedInstructions) return alert('No auto extract result to send.');
+          const res = await fetch('/api/instructions-extractor/solution', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipeId, solution: extractedInstructions })
-          })
-            .then(res => res.ok ? res.json() : Promise.reject(res))
-            .then(data => {
-              if (data && data.success) {
-                alert('Instructions saved!');
-              } else {
-                alert('Failed to save instructions.');
-              }
-            })
-            .catch(() => {
-              alert('Error saving instructions.');
-            });
+          });
+          const data = await res.json();
+          if (data && data.success) alert('Instructions saved!');
+          else alert('Failed to save instructions.');
         });
       }
+      if (instructionDeclineBtn) instructionDeclineBtn.addEventListener('click', function() { openControllerPage('extractor_instructions.html'); });
 
-      if (instructionDeclineBtn) {
-        instructionDeclineBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_instructions.html';
-        });
-      }
-
-      // --- Ingredients Auto Extract ---
-      function extractIngredientsAuto(raw) {
-        const lines = String(raw || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-        const start = lines.findIndex(l => /^ingredients?$/i.test(l) || /^ingredients?\b/i.test(l));
-        const end = lines.findIndex((l, idx) => idx > (start >= 0 ? start : -1) && (/^method\b/i.test(l) || /^instructions?\b/i.test(l)));
-        let result = [];
-        let strategyUsed = '';
-
-        if (start >= 0) {
-          result = lines.slice(start + 1, end > start ? end : start + 25)
-            .filter(l => !/^sponsored/i.test(l) && !/^see more/i.test(l));
-          if (result.length) {
-            strategyUsed = 'Extract lines between Ingredients and Method';
-          }
-        }
-
-        if (!result.length) {
-          const qtyRegex = /^((\d+([/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|pinch|cloves?|slices?)\b/i;
-          result = lines.filter(l => qtyRegex.test(l));
-          if (result.length) {
-            strategyUsed = 'Extract ingredient-like quantity lines';
-          }
-        }
-
-        return {
-          solution: result.join('\n'),
-          strategyUsed
-        };
-      }
-
-      if (ingredientsStepByStepBtn) {
-        ingredientsStepByStepBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_ingredient.html';
-        });
-      }
-
+      if (ingredientsStepByStepBtn) ingredientsStepByStepBtn.addEventListener('click', function() { openControllerPage('extractor_ingredient.html'); });
       if (ingredientsAutoBtn) {
         ingredientsAutoBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-
+          if (!recipeId) return alert('Please select a recipe first.');
           const raw = await getRawData(recipeId);
-          if (!raw) {
-            alert('No raw data found for this recipe.');
-            return;
-          }
-
-          const extracted = extractIngredientsAuto(raw);
-          extractedIngredients = extracted.solution;
-
+          if (!raw) return alert('No raw data found for this recipe.');
+          const autoCore = window.ExtractorAutoCore;
+          const extracted = autoCore && autoCore.runIngredientsAutoCore ? autoCore.runIngredientsAutoCore(raw) : { solution: '', strategyName: '' };
+          extractedIngredients = extracted.solution || '';
           if (ingredientsResultText) {
             ingredientsResultText.textContent = extractedIngredients
-              ? `Ingredients found (${extracted.strategyUsed || 'Auto Extract'}):\n${extractedIngredients}`
-              : 'No ingredients found by Ingredients Auto Extract.';
+              ? `Ingredients found (${extracted.strategyName || 'Auto Extract'}):\n${extractedIngredients}`
+              : 'No ingredients found by Auto Extract.';
           }
           if (ingredientsResultBox) ingredientsResultBox.style.display = '';
         });
       }
-
       if (ingredientsConfirmBtn) {
-        ingredientsConfirmBtn.addEventListener('click', function() {
+        ingredientsConfirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) {
-            alert('Please select a recipe first.');
-            return;
-          }
-          if (!extractedIngredients) {
-            alert('No auto extract result to send.');
-            return;
-          }
-
-          fetch('/api/ingredients-extractor/solution', {
+          if (!recipeId) return alert('Please select a recipe first.');
+          if (!extractedIngredients) return alert('No auto extract result to send.');
+          const res = await fetch('/api/ingredients-extractor/solution', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ recipeId, solution: extractedIngredients })
-          })
-            .then(res => res.ok ? res.json() : Promise.reject(res))
-            .then(data => {
-              if (data && data.success) {
-                alert('Ingredients saved!');
-              } else {
-                alert('Failed to save ingredients.');
-              }
-            })
-            .catch(() => {
-              alert('Error saving ingredients.');
-            });
+          });
+          const data = await res.json();
+          if (data && data.success) alert('Ingredients saved!');
+          else alert('Failed to save ingredients.');
         });
       }
-
-      if (ingredientsDeclineBtn) {
-        ingredientsDeclineBtn.addEventListener('click', function() {
-          window.location.href = 'extractor_ingredient.html';
-        });
-      }
+      if (ingredientsDeclineBtn) ingredientsDeclineBtn.addEventListener('click', function() { openControllerPage('extractor_ingredient.html'); });
 
       if (autoPublishBtn) {
         autoPublishBtn.addEventListener('click', async function() {

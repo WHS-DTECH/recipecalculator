@@ -5,16 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Book a Class</title>
     <link rel="stylesheet" href="style.css">
+    <style>
+        .teacher-embed-mode body {
+            background: #fff;
+            padding-top: 0;
+            margin: 0;
+        }
+        .teacher-embed-mode #navbar-include,
+        .teacher-embed-mode #adminScheduledBookingsSection {
+            display: none !important;
+        }
+        .teacher-embed-mode .book-class-app {
+            margin: 0;
+            max-width: 100%;
+            box-shadow: none;
+            border-radius: 0;
+            padding: 0;
+        }
+    </style>
 </head>
 <body>
         <div id="navbar-include"></div>
         <script>
-            // Dynamically load the shared navbar
-            fetch('_navbar.html')
-                .then(res => res.text())
-                .then(html => {
-                    document.getElementById('navbar-include').innerHTML = html;
-                });
+            const embedView = new URLSearchParams(window.location.search).get('view');
+            const isTeacherEmbedMode = embedView === 'teacher_embed';
+            if (isTeacherEmbedMode) {
+                document.documentElement.classList.add('teacher-embed-mode');
+            } else {
+                // Dynamically load the shared navbar for full admin page view
+                fetch('_navbar.html')
+                    .then(res => res.text())
+                    .then(html => {
+                        document.getElementById('navbar-include').innerHTML = html;
+                    });
+            }
         </script>
     
     <div class="book-class-app">
@@ -75,7 +99,7 @@
                     <div id="teacherTimetableMeta" class="class-students-meta">Select teacher and date to view timetable.</div>
                     <div id="teacherTimetableBody"></div>
                 </div>
-                <div class="scheduled-bookings">
+                <div class="scheduled-bookings" id="adminScheduledBookingsSection">
                     <h2>Scheduled Bookings</h2>
                     <table class="bookings-table">
                         <thead>

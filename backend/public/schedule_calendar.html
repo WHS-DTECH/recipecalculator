@@ -3,22 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schedule Calendar</title>
+    <title>Add Booking</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="navbar-include"></div>
     <script src="shared/navbar_loader.js"></script>
     <div class="calendar-app">
-        <h1>Schedule Calendar</h1>
+        <h1>Add Booking</h1>
         <div style="text-align:center;margin-bottom:1.2rem;">
             <div id="calendarWeekLabel" style="font-size:1.3em;font-weight:bold;margin-bottom:0.7em;">Week of 02/02/26 to 06/02/26</div>
             <button id="prevWeekBtn" style="margin:0 0.3em;">&larr; Previous</button>
             <button id="todayBtn" style="margin:0 0.3em;">Today</button>
             <button id="nextWeekBtn" style="margin:0 0.3em;">Next &rarr;</button>
+            <button id="printScheduleBtn" style="margin:0 0.3em;background:#1976d2;color:#fff;border:none;border-radius:5px;padding:0.45rem 1rem;">Print Schedule (A4)</button>
         </div>
         <div class="calendar-wrap">
             <table class="calendar-table" id="scheduleCalendarTable"></table>
+        </div>
+        <div style="margin-top:1rem;border:1px solid #d8dee6;border-radius:8px;background:#f7fafc;padding:0.9rem 1rem;">
+            <div style="font-weight:600;margin-bottom:0.25rem;">Book a Class (Teacher Controls)</div>
+            <div style="margin-bottom:0.6rem;font-size:0.95rem;color:#4a5568;">This uses the Book a Class master controller in teacher view mode.</div>
+            <div style="margin-bottom:0.75rem;">
+                <a href="calculate_servings.html" style="display:inline-block;background:#1976d2;color:#fff;text-decoration:none;border:none;border-radius:5px;padding:0.45rem 1rem;font-size:0.95rem;">Auto Calculate</a>
+            </div>
+            <iframe
+                src="book_a_class.html?view=teacher_embed"
+                title="Teacher Book a Class Controls"
+                style="width:100%;min-height:560px;border:1px solid #d0d7de;border-radius:8px;background:#fff;"
+                loading="lazy">
+            </iframe>
         </div>
     </div>
     <script src="schedule_calendar.js"></script>
