@@ -20,7 +20,16 @@
           <option value="">-- Select a recipe --</option>
           <!-- Populated by JS -->
         </select>
-        <button class="extractor-btn" id="startStepBtn">Start Step-by-Step</button>
+        <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+          <button class="extractor-btn" id="startStepBtn">Start Step-by-Step</button>
+          <button class="extractor-btn" id="autoExtractBtn" style="background:#00897b;">Instruction Auto Extract (Core Strategies)</button>
+        </div>
+        <div id="autoExtractResultBox" style="display:none;margin:0.6rem 0 1rem;border:1px solid #cfd8dc;border-radius:8px;background:#fafcff;padding:0.8rem;">
+          <div style="font-weight:600;margin-bottom:0.35rem;">Auto Extract Result</div>
+          <div id="autoExtractResultText" style="margin-bottom:0.7rem;"></div>
+          <button class="extractor-btn" id="autoAcceptSendBtn" style="background:#8000b0;">Accept + Send Solution</button>
+          <button class="extractor-btn" id="autoDeclineBtn" style="background:#e53935;margin-left:0.5rem;">Decline (Return to Instructions Extractor)</button>
+        </div>
         <div id="stepControls" style="display:none; margin-top:1rem;">
           <div id="currentStrategyName" style="font-weight:bold;"></div>
           <div id="currentStrategyResult" style="margin:0.5rem 0;"></div>

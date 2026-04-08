@@ -7,16 +7,53 @@ document.addEventListener('DOMContentLoaded', function () {
     const rawDataInput = document.getElementById('rawDataInput');
     const saveBtn = document.getElementById('saveRawDataBtn');
 
+    const buttonProgressEls = {
+        extractDataBtn: {
+            bar: document.getElementById('extractDataBtnProgressBar'),
+            fill: document.getElementById('extractDataBtnProgressFill')
+        },
+        extractRenderedBtn: {
+            bar: document.getElementById('extractRenderedBtnProgressBar'),
+            fill: document.getElementById('extractRenderedBtnProgressFill')
+        },
+        extractVisibleTextBtn: {
+            bar: document.getElementById('extractVisibleTextBtnProgressBar'),
+            fill: document.getElementById('extractVisibleTextBtnProgressFill')
+        },
+        smartExtractBtn: {
+            bar: document.getElementById('smartExtractBtnProgressBar'),
+            fill: document.getElementById('smartExtractBtnProgressFill')
+        },
+        saveRawDataBtn: {
+            bar: document.getElementById('saveRawDataBtnProgressBar'),
+            fill: document.getElementById('saveRawDataBtnProgressFill')
+        }
+    };
+
     let recipesCache = [];
+
+    function setButtonProgress(buttonId, percent) {
+        const parts = buttonProgressEls[buttonId];
+        if (!parts || !parts.bar || !parts.fill) return;
+        const safePercent = Math.max(0, Math.min(100, percent));
+        parts.bar.style.display = safePercent > 0 ? 'block' : 'none';
+        parts.fill.style.width = `${safePercent}%`;
+    }
 
     function setBusy(btn, busy, busyText, idleText) {
         if (!btn) return;
         btn.disabled = !!busy;
         btn.textContent = busy ? busyText : idleText;
+        if (busy) {
+            setButtonProgress(btn.id, 25);
+        } else {
+            setButtonProgress(btn.id, 100);
+            setTimeout(() => setButtonProgress(btn.id, 0), 650);
+        }
     }
 
-    async function getRecipes() {
-        if (recipesCache.length) return recipesCache;
+    async function getRecipes(forceRefresh = false) {
+        if (recipesCache.length && !forceRefresh) return recipesCache;
         const res = await fetch('/api/recipes');
         const recipes = await res.json();
         recipesCache = Array.isArray(recipes) ? recipes : [];
@@ -24,8 +61,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function getRecipeById(recipeId) {
-        const recipes = await getRecipes();
-        return recipes.find(r => String(r.id) === String(recipeId));
+        let recipes = await getRecipes();
+        let recipe = recipes.find(r => String(r.id) === String(recipeId));
+        if (recipe) return recipe;
+
+        // If a new recipe was inserted after initial page load, refresh cache once.
+        recipes = await getRecipes(true);
+        recipe = recipes.find(r => String(r.id) === String(recipeId));
+        return recipe;
     }
 
     async function loadRawDataFromFile(recipeId) {

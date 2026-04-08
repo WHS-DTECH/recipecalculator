@@ -140,8 +140,22 @@ document.addEventListener('DOMContentLoaded', function () {
   const currentStrategyResult = document.getElementById('currentStrategyResult');
   const acceptResultBtn = document.getElementById('acceptResultBtn');
   const continueBtn = document.getElementById('continueBtn');
+  const autoExtractBtn = document.getElementById('autoExtractBtn');
+  const autoExtractResultBox = document.getElementById('autoExtractResultBox');
+  const autoExtractResultText = document.getElementById('autoExtractResultText');
+  const autoAcceptSendBtn = document.getElementById('autoAcceptSendBtn');
+  const autoDeclineBtn = document.getElementById('autoDeclineBtn');
   let stepStrategies = [];
   let stepIndex = 0;
+  let autoExtractSolution = '';
+  const AUTO_EXTRACT_CORE_STRATEGY_NAMES = [
+    'Look for ordered list',
+    'Look for numbered steps',
+    "Find 'method' and nearest list",
+    "Find 'Method' text in visible blocks",
+    'Extract instruction tail from Visible List Items',
+    'Extract recipeInstructions array from JSON'
+  ];
 
   // Utility to decode HTML entities
   function htmlUnescape(str) {
@@ -208,6 +222,98 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         console.debug('[DEBUG][method+list] No list found after method');
         return '';
+      }
+    },
+    {
+      name: "Find 'Method' text in visible blocks",
+      fn: raw => {
+        const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
+        const lower = unescapedData.toLowerCase();
+        const methodIndex = lower.indexOf('method');
+        if (methodIndex === -1) {
+          console.debug("[DEBUG][method visible text] No 'method' marker found");
+          return '';
+        }
+
+        let methodChunk = unescapedData.slice(methodIndex, methodIndex + 4000);
+        const stopMarkers = [
+          'page text:',
+          'login to',
+          'favourites',
+          'join our newsletter',
+          'cookies',
+          'privacy statement',
+          'terms and conditions'
+        ];
+        for (const marker of stopMarkers) {
+          const stopAt = methodChunk.toLowerCase().indexOf(marker);
+          if (stopAt > 0) {
+            methodChunk = methodChunk.slice(0, stopAt);
+            break;
+          }
+        }
+
+        methodChunk = methodChunk
+          .replace(/^method\s*[:\-]?\s*/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!methodChunk) {
+          console.debug('[DEBUG][method visible text] Method chunk empty after cleanup');
+          return '';
+        }
+
+        const sentenceParts = methodChunk
+          .split(/(?<=[.!?])\s+(?=[A-Z])/)
+          .map(s => s.trim())
+          .filter(Boolean);
+
+        const looksLikeInstruction = s => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place)\b/i.test(s);
+        const instructionLines = sentenceParts.filter(looksLikeInstruction);
+
+        if (!instructionLines.length) {
+          console.debug('[DEBUG][method visible text] No instruction-like sentences found');
+          return '';
+        }
+
+        console.debug('[DEBUG][method visible text] Found instruction lines:', instructionLines.slice(0, 3));
+        return instructionLines.join('\n');
+      }
+    },
+    {
+      name: 'Extract instruction tail from Visible List Items',
+      fn: raw => {
+        const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
+        const blockMatch = unescapedData.match(/Visible List Items:\s*([\s\S]*?)(?:\n\s*Page Text:|\n\s*Visible Page Text:|$)/i);
+        if (!blockMatch) {
+          console.debug('[DEBUG][visible list tail] No Visible List Items block found');
+          return '';
+        }
+
+        const lines = blockMatch[1]
+          .split('\n')
+          .map(line => line.replace(/\s+/g, ' ').trim())
+          .filter(Boolean);
+
+        const instructionLine = line => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place)\b/i.test(line);
+        const methodIndex = lines.findIndex(line => /^method\b/i.test(line));
+        const startIndex = methodIndex >= 0 ? methodIndex : lines.findIndex(instructionLine);
+        if (startIndex < 0) {
+          console.debug('[DEBUG][visible list tail] No instruction-like lines found');
+          return '';
+        }
+
+        const extracted = lines
+          .slice(startIndex)
+          .map(line => line.replace(/^method\s*[:\-]?\s*/i, '').trim())
+          .filter(instructionLine);
+
+        if (!extracted.length) {
+          console.debug('[DEBUG][visible list tail] No extracted instruction lines after cleanup');
+          return '';
+        }
+
+        console.debug('[DEBUG][visible list tail] Extracted lines:', extracted.slice(0, 3));
+        return extracted.join('\n');
       }
     },
     {
@@ -410,6 +516,91 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  function sendInstructionsSolution(recipeId, solution) {
+    return fetch('/api/instructions-extractor/solution', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipeId, solution })
+    });
+  }
+
+  if (autoExtractBtn) {
+    autoExtractBtn.addEventListener('click', function () {
+      if (!currentRecipeId) {
+        alert('Please select a recipe first.');
+        return;
+      }
+      if (!rawData || rawData.length < 100) {
+        alert('Raw data not loaded yet. Please wait and try again.');
+        return;
+      }
+
+      stepStrategies = strategies.map((s, i) => {
+        const result = normalizeStrategyResult(s.fn(rawData));
+        return {
+          name: s.name,
+          applied: false,
+          result,
+          solved: !!result && result !== 'N/A'
+        };
+      });
+
+      const coreIndices = AUTO_EXTRACT_CORE_STRATEGY_NAMES
+        .map(name => stepStrategies.findIndex(s => s.name === name))
+        .filter(idx => idx >= 0);
+      const solvedCoreIndex = coreIndices.find(idx => stepStrategies[idx].solved);
+      autoExtractSolution = solvedCoreIndex !== undefined ? stepStrategies[solvedCoreIndex].result : '';
+
+      if (solvedCoreIndex !== undefined) {
+        stepStrategies[solvedCoreIndex].applied = true;
+      }
+
+      renderStepTable();
+
+      if (autoExtractResultText) {
+        autoExtractResultText.textContent = autoExtractSolution
+          ? `First solved result (core controller strategies): ${autoExtractSolution}`
+          : 'No solved result found in core controller strategies.';
+      }
+      if (autoExtractResultBox) autoExtractResultBox.style.display = '';
+    });
+  }
+
+  if (autoAcceptSendBtn) {
+    autoAcceptSendBtn.addEventListener('click', function () {
+      if (!currentRecipeId) {
+        alert('Please select a recipe.');
+        return;
+      }
+      if (!autoExtractSolution) {
+        alert('No auto extract solution available to send.');
+        return;
+      }
+
+      solutionBox.value = autoExtractSolution;
+      sendInstructionsSolution(currentRecipeId, autoExtractSolution)
+        .then(res => res.json())
+        .then(data => {
+          console.log('[LOG] Server response:', data);
+          if (data.success) {
+            alert('Solution sent and record amended!');
+          } else {
+            alert('Failed to send solution.');
+          }
+        })
+        .catch((err) => {
+          console.error('[LOG] Solution send error:', err);
+          alert('Failed to send solution.');
+        });
+    });
+  }
+
+  if (autoDeclineBtn) {
+    autoDeclineBtn.addEventListener('click', function () {
+      window.location.href = 'extractor_instructions.html';
+    });
+  }
+
   sendSolutionBtn.addEventListener('click', function () {
     if (!currentRecipeId) {
       alert('Please select a recipe.');
@@ -421,11 +612,7 @@ document.addEventListener('DOMContentLoaded', function () {
       alert('Please enter a solution.');
       return;
     }
-    fetch('http://localhost:4000/api/instructions-extractor/solution', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipeId: currentRecipeId, solution })
-    })
+    sendInstructionsSolution(currentRecipeId, solution)
       .then(res => res.json())
       .then(data => {
         console.log('[LOG] Server response:', data);

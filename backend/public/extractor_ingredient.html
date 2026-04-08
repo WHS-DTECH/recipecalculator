@@ -19,8 +19,26 @@
         <option value="">-- Select a recipe --</option>
         <!-- Populated by JS -->
       </select>
-      <button class="extractor-btn" id="startStepBtn">Start Step-by-Step</button>
-      <button class="extractor-btn" id="smartBtn">SMART</button>
+    </div>
+    <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;margin-bottom:1rem;">
+      <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:200px;">
+        <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
+        <button class="extractor-btn" id="startStepBtn">Start Step-by-Step</button>
+      </div>
+      <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:200px;">
+        <div style="font-weight:600;margin-bottom:0.5rem;">SMART</div>
+        <button class="extractor-btn" id="smartBtn">SMART</button>
+      </div>
+      <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;">
+        <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
+        <button class="extractor-btn" id="autoExtractBtn" style="background:#00897b;color:#fff;">Ingredients Auto Extract</button>
+      </div>
+    </div>
+    <div id="autoExtractResultBox" style="display:none;margin-bottom:1rem;border:1px solid #cfd8dc;border-radius:8px;background:#fafcff;padding:0.8rem;">
+      <div style="font-weight:600;margin-bottom:0.4rem;">Auto Extract Result</div>
+      <div id="autoExtractResultText" style="margin-bottom:0.7rem;white-space:pre-wrap;"></div>
+      <button id="autoAcceptSendBtn" style="background:#8000b0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Accept and Send Solution</button>
+      <button id="autoDeclineBtn" style="background:#e53935;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Decline (Open Ingredients Extractor)</button>
     </div>
     <div class="extractor-section" style="display: flex; gap: 2rem; align-items: flex-start;">
       <!-- Left column: Strategies table and controls -->

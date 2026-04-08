@@ -10,10 +10,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const stepControls = document.getElementById('stepControls');
   const acceptResultBtn = document.getElementById('acceptResultBtn');
   const continueBtn = document.getElementById('continueBtn');
+  const titleAutoExtractBtn = document.getElementById('titleAutoExtractBtn');
+  const titleAutoResultBox = document.getElementById('titleAutoResultBox');
+  const titleAutoResultText = document.getElementById('titleAutoResultText');
+  const titleAutoAcceptSendBtn = document.getElementById('titleAutoAcceptSendBtn');
+  const titleAutoDeclineBtn = document.getElementById('titleAutoDeclineBtn');
   let currentRecipeId = null;
   let rawData = '';
   let stepStrategies = [];
   let stepIndex = 0;
+  let autoExtractedTitle = '';
   const recipesById = new Map();
 
   function hasTitleSignal(text) {
@@ -370,6 +376,77 @@ function showStep(index) {
   stepControls.style.display = 'block';
 }
 
+function sendTitleSolution(recipeId, solution) {
+  return fetch('/api/title-extractor/solution', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipeId, solution })
+  });
+}
+
+if (titleAutoExtractBtn) {
+  titleAutoExtractBtn.addEventListener('click', function () {
+    if (!currentRecipeId) {
+      alert('Please select a recipe.');
+      return;
+    }
+
+    const strategyOne = strategies[0];
+    autoExtractedTitle = strategyOne && typeof strategyOne.fn === 'function' ? (strategyOne.fn(rawData) || '') : '';
+
+    stepStrategies = strategies.map((s, idx) => {
+      const result = s.fn(rawData);
+      return {
+        name: s.name,
+        result,
+        applied: idx === 0,
+        solved: !!result
+      };
+    });
+    stepIndex = 0;
+    renderStepTable();
+    updateStepControls();
+
+    if (titleAutoResultText) {
+      titleAutoResultText.textContent = autoExtractedTitle
+        ? `Strategy 1 result: ${autoExtractedTitle}`
+        : 'Strategy 1 found no title value.';
+    }
+    if (titleAutoResultBox) titleAutoResultBox.style.display = '';
+  });
+}
+
+if (titleAutoAcceptSendBtn) {
+  titleAutoAcceptSendBtn.addEventListener('click', function () {
+    if (!currentRecipeId) {
+      alert('Please select a recipe.');
+      return;
+    }
+    if (!autoExtractedTitle) {
+      alert('No auto extract result to send.');
+      return;
+    }
+
+    solutionBox.value = autoExtractedTitle;
+    sendTitleSolution(currentRecipeId, autoExtractedTitle)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          alert('Title saved!');
+        } else {
+          alert('Failed to save title.');
+        }
+      })
+      .catch(() => alert('Error saving title.'));
+  });
+}
+
+if (titleAutoDeclineBtn) {
+  titleAutoDeclineBtn.addEventListener('click', function () {
+    window.location.href = 'extractor_title.html';
+  });
+}
+
 // Hook up SEND SOLUTION button
 sendSolutionBtn.addEventListener('click', function () {
     console.log('[SEND SOLUTION] currentRecipeId:', typeof currentRecipeId, currentRecipeId);
@@ -390,11 +467,7 @@ sendSolutionBtn.addEventListener('click', function () {
       return;
     }
     console.log('[SEND SOLUTION] recipeIdToSend:', recipeIdToSend, 'solution:', solution);
-    fetch('/api/title-extractor/solution', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ recipeId: recipeIdToSend, solution })
-    })
+    sendTitleSolution(recipeIdToSend, solution)
       .then(res => res.json())
       .then(data => {
         if (data.success) {

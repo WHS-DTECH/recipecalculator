@@ -77,6 +77,27 @@
             font-size: 0.98rem;
             white-space: pre-wrap;
         }
+        .runner-grid {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+        .runner-box {
+            border: 1px solid #d7e3f4;
+            border-radius: 8px;
+            background: #f8fbff;
+            padding: 0.8rem;
+            min-width: 260px;
+            flex: 1;
+        }
+        .auto-result-box {
+            margin-top: 0.8rem;
+            border: 1px solid #cfd8dc;
+            border-radius: 8px;
+            background: #fafcff;
+            padding: 0.8rem;
+        }
     </style>
 </head>
 <body>
@@ -88,7 +109,24 @@
         </div>
         <div class="extractor-header">Serving Size Extraction Strategies</div>
         <div id="strategy-runner-controls">
-            <button class="extractor-btn" id="startStrategyRunner">Start Step-by-Step</button>
+            <div class="runner-grid">
+                <div class="runner-box">
+                    <div style="font-weight:600; margin-bottom:0.5rem;">Step-by-step</div>
+                    <button class="extractor-btn" id="startStrategyRunner">Start Step-by-Step</button>
+                </div>
+                <div class="runner-box">
+                    <div style="font-weight:600; margin-bottom:0.5rem;">Auto Extract</div>
+                    <button class="extractor-btn" id="autoExtractFirstStrategyBtn" style="background:#00897b;">Serving Size Auto Extract (Strategy 1)</button>
+                </div>
+            </div>
+
+            <div id="autoExtractResultBox" class="auto-result-box" style="display:none;">
+                <div style="font-weight:600; margin-bottom:0.4rem;">Auto Extract Result</div>
+                <div id="autoExtractResultText" style="margin-bottom:0.7rem;"></div>
+                <button class="extractor-btn" id="confirmAutoExtractBtn" style="background:#8000b0;">Confirm and Send Solution</button>
+                <button class="extractor-btn" id="declineAutoExtractBtn" style="background:#e53935; margin-left:0.5rem;">Decline (Open Serving Size Page)</button>
+            </div>
+
             <div id="stepControls" style="display:none; margin-top:1rem;">
                 <div id="currentStrategyName" style="font-weight:bold;"></div>
                 <div id="currentStrategyResult" style="margin:0.5rem 0;"></div>
@@ -129,6 +167,11 @@
         const rawDataBox = document.getElementById('rawDataBox');
         const stepControls = document.getElementById('stepControls');
         const startBtn = document.getElementById('startStrategyRunner');
+        const autoExtractBtn = document.getElementById('autoExtractFirstStrategyBtn');
+        const autoExtractResultBox = document.getElementById('autoExtractResultBox');
+        const autoExtractResultText = document.getElementById('autoExtractResultText');
+        const confirmAutoExtractBtn = document.getElementById('confirmAutoExtractBtn');
+        const declineAutoExtractBtn = document.getElementById('declineAutoExtractBtn');
         const acceptBtn = document.getElementById('acceptResultBtn');
         const continueBtn = document.getElementById('continueBtn');
         const currentStrategyName = document.getElementById('currentStrategyName');
@@ -137,6 +180,7 @@
         const sendSolutionBtn = document.getElementById('sendSolutionBtn');
 
         let currentStep = 0;
+        let autoExtractValue = '';
         window.rawData = '';
 
         function runStrategiesOnRawData(raw) {
@@ -169,6 +213,24 @@
             stepControls.style.display = '';
             startBtn.disabled = true;
             renderServingExtractorTable(results);
+        }
+
+        function sendSolution(recipeId, solution) {
+            return fetch('/api/serving-size/solution', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId, solution })
+            });
+        }
+
+        async function ensureRawDataLoaded(recipeId) {
+            if ((window.rawData || '').trim()) return window.rawData;
+            const res = await fetch(`/RawDataTXT/${recipeId}.txt`);
+            if (!res.ok) return '';
+            const raw = await res.text();
+            window.rawData = raw || '';
+            if (rawDataBox) rawDataBox.textContent = window.rawData;
+            return window.rawData;
         }
 
         if (recipeUrlSelect) {
@@ -263,11 +325,7 @@
                     return;
                 }
 
-                fetch('/api/serving-size/solution', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ recipeId, solution })
-                })
+                sendSolution(recipeId, solution)
                     .then(res => res.ok ? res.json() : Promise.reject(res))
                     .then(() => {
                         alert('Solution sent and record amended!');
@@ -275,6 +333,68 @@
                     .catch(() => {
                         alert('Failed to send solution.');
                     });
+            });
+        }
+
+        if (autoExtractBtn) {
+            autoExtractBtn.addEventListener('click', async function() {
+                const recipeId = recipeUrlSelect ? recipeUrlSelect.value : '';
+                if (!recipeId) {
+                    alert('Please select a recipe first.');
+                    return;
+                }
+
+                const raw = await ensureRawDataLoaded(recipeId);
+                if (!raw) {
+                    alert('No raw data found for this recipe.');
+                    return;
+                }
+
+                const strategyOne = strategies[0];
+                autoExtractValue = strategyOne && typeof strategyOne.fn === 'function' ? (strategyOne.fn(raw) || '') : '';
+
+                const results = runStrategiesOnRawData(raw);
+                results.forEach((r, i) => {
+                    r.applied = (i === 0);
+                });
+                renderServingExtractorTable(results);
+
+                if (autoExtractResultText) {
+                    autoExtractResultText.textContent = autoExtractValue
+                        ? `Strategy 1 result: ${autoExtractValue}`
+                        : 'Strategy 1 found no serving size value.';
+                }
+                if (autoExtractResultBox) autoExtractResultBox.style.display = '';
+            });
+        }
+
+        if (confirmAutoExtractBtn) {
+            confirmAutoExtractBtn.addEventListener('click', function() {
+                const recipeId = recipeUrlSelect ? recipeUrlSelect.value : '';
+                if (!recipeId) {
+                    alert('Please select a recipe first.');
+                    return;
+                }
+                if (!autoExtractValue) {
+                    alert('No auto extract result to send.');
+                    return;
+                }
+                if (solutionBox) solutionBox.value = autoExtractValue;
+
+                sendSolution(recipeId, autoExtractValue)
+                    .then(res => res.ok ? res.json() : Promise.reject(res))
+                    .then(() => {
+                        alert('Auto extract solution sent and record amended!');
+                    })
+                    .catch(() => {
+                        alert('Failed to send auto extract solution.');
+                    });
+            });
+        }
+
+        if (declineAutoExtractBtn) {
+            declineAutoExtractBtn.addEventListener('click', function() {
+                window.location.href = 'extractor_serving_size.html';
             });
         }
 

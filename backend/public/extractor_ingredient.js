@@ -500,4 +500,106 @@ document.addEventListener('DOMContentLoaded', function () {
           console.error('[SendSolution] Error:', err);
         });
     });
+
+  const autoExtractBtn = document.getElementById('autoExtractBtn');
+  const autoExtractResultBox = document.getElementById('autoExtractResultBox');
+  const autoExtractResultText = document.getElementById('autoExtractResultText');
+  const autoAcceptSendBtn = document.getElementById('autoAcceptSendBtn');
+  const autoDeclineBtn = document.getElementById('autoDeclineBtn');
+  let autoExtractSolution = '';
+
+  if (autoExtractBtn) {
+    autoExtractBtn.addEventListener('click', function() {
+      const recipeId = recipeSelect ? recipeSelect.value : '';
+      if (!recipeId) {
+        alert('Please select a recipe first.');
+        return;
+      }
+      if (rawData) {
+        runAutoExtract();
+        return;
+      }
+      autoExtractBtn.disabled = true;
+      autoExtractBtn.textContent = 'Loading...';
+      loadRawDataForRecipe(recipeId, function(success) {
+        autoExtractBtn.disabled = false;
+        autoExtractBtn.textContent = 'Ingredients Auto Extract';
+        if (!success) {
+          alert('Failed to load raw data for this recipe.');
+          return;
+        }
+        runAutoExtract();
+      });
+    });
+  }
+
+  function runAutoExtract() {
+    const fileText = String(rawData || '');
+    const lines = fileText.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    const start = lines.findIndex(l => /^ingredients?$/i.test(l) || /^ingredients?\b/i.test(l));
+    const end = lines.findIndex((l, idx) => idx > (start >= 0 ? start : -1) && (/^method\b/i.test(l) || /^instructions?\b/i.test(l)));
+    let result = [];
+    let strategyUsed = '';
+    if (start >= 0) {
+      result = lines.slice(start + 1, end > start ? end : start + 25)
+        .filter(l => !/^sponsored/i.test(l) && !/^see more/i.test(l));
+      if (result.length) {
+        strategyUsed = 'Extract lines between Ingredients and Method';
+      }
+    }
+
+    // Fallback strategy for ingredient-like quantity lines.
+    if (!result.length) {
+      const qtyRegex = /^((\d+([/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|pinch|cloves?|slices?)\b/i;
+      result = lines.filter(l => qtyRegex.test(l));
+      if (result.length) {
+        strategyUsed = 'Extract ingredient-like quantity lines';
+      }
+    }
+
+    autoExtractSolution = result.join('\n');
+    if (autoExtractResultText) {
+      autoExtractResultText.textContent = autoExtractSolution
+        ? `Ingredients found (${strategyUsed || 'Auto Extract'}):\n${autoExtractSolution}`
+        : 'No ingredients found between "Ingredients" and "Method" headings.';
+    }
+    if (autoExtractResultBox) autoExtractResultBox.style.display = '';
+  }
+
+  if (autoAcceptSendBtn) {
+    autoAcceptSendBtn.addEventListener('click', function() {
+      const recipeId = recipeSelect ? recipeSelect.value : '';
+      if (!recipeId) {
+        alert('Please select a recipe first.');
+        return;
+      }
+      if (!autoExtractSolution) {
+        alert('No auto extract solution available to send.');
+        return;
+      }
+      solutionBox.value = autoExtractSolution;
+      fetch('/api/ingredients-extractor/solution', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipeId, solution: autoExtractSolution })
+      })
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            alert('✅ Ingredients solution sent!');
+          } else {
+            alert('❌ Failed to send solution.');
+          }
+        })
+        .catch(() => {
+          alert('❌ Error sending solution.');
+        });
+    });
+  }
+
+  if (autoDeclineBtn) {
+    autoDeclineBtn.addEventListener('click', function() {
+      window.location.href = 'extractor_ingredient.html';
+    });
+  }
   });

@@ -27,7 +27,19 @@
 			<label class="recipe-url-label standout-label">Recipe URL:</label>
 			<input type="text" class="setup-url-input wide-url-input super-wide-url-input" placeholder="e.g., https://www.chelsea.co.nz/browse-recipes/...">
 			<button class="setup-btn upload-url-btn standout-btn" id="uploadUrlBtn">Upload URL</button>
+			<div id="uploadUrlBtnProgressBar" style="display:none;width:220px;height:6px;background:#e3f2fd;border-radius:6px;overflow:hidden;margin:0.35rem 0 0 0;">
+				<div id="uploadUrlBtnProgressFill" style="height:100%;width:0;background:#1976d2;transition:width 0.2s;"></div>
+			</div>
+			<button id="smartUploadBtn" class="setup-btn" style="margin-left:0.5rem;background:#0d47a1;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">SMART Upload (Upload + Sync)</button>
+			<div id="smartUploadBtnProgressBar" style="display:none;width:220px;height:6px;background:#e8eaf6;border-radius:6px;overflow:hidden;margin:0.35rem 0 0.1rem 0.5rem;">
+				<div id="smartUploadBtnProgressFill" style="height:100%;width:0;background:#0d47a1;transition:width 0.2s;"></div>
+			</div>
 			<button id="syncUploadedToRecipesBtn" style="margin-left:1rem;background:#388e3c;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Sync Uploaded Recipes to Recipes Table</button>
+			<div id="syncUploadedToRecipesBtnProgressBar" style="display:none;width:220px;height:6px;background:#e8f5e9;border-radius:6px;overflow:hidden;margin:0.35rem 0 0 1rem;">
+				<div id="syncUploadedToRecipesBtnProgressFill" style="height:100%;width:0;background:#2e7d32;transition:width 0.2s;"></div>
+			</div>
+			<div id="uploadStatusBanner" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
+			<div id="uploadProgressText" style="margin-top:0.6rem;font-size:0.92rem;color:#0d47a1;display:none;"></div>
 			<!-- Removed Extract Recipe Information and Clean up for Display sections as requested -->
 		</div>
 		<!-- Removed Raw Data Preview section as requested -->
@@ -55,23 +67,6 @@
 			</table>
 		</div>
 	</div>
-	<script src="upload_url.js?v=20260127"></script>
-	<script>
-	document.getElementById('syncUploadedToRecipesBtn').addEventListener('click', function() {
-		if (confirm('This will insert any uploaded recipes not yet in the Recipes table. Continue?')) {
-			fetch('/api/recipes/sync-from-uploads', { method: 'POST' })
-				.then(res => res.json())
-				.then(data => {
-					if (data.success) {
-						alert('Sync complete: ' + data.inserted + ' recipes added.');
-						location.reload();
-					} else {
-						alert('Sync failed.');
-					}
-				})
-				.catch(() => alert('Error contacting server.'));
-		}
-	});
-	</script>
+	<script src="upload_url.js?v=20260408c"></script>
 </body>
 </html>

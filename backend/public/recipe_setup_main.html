@@ -5,6 +5,17 @@
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
 	<title>Recipe Setup Main</title>
 	<link rel="stylesheet" href="../shared/style.css">
+	<style>
+		#publishedRecipesTable td ol,
+		#publishedRecipesTable td ul {
+			margin: 0;
+			padding-left: 1.2rem;
+		}
+		#publishedRecipesTable td li {
+			margin: 0.2rem 0;
+			line-height: 1.35;
+		}
+	</style>
 </head>
 <body>
 	<!-- Shared Navbar Include -->
@@ -61,6 +72,21 @@
 			.replace(/'/g, '&#39;');
 	}
 
+	function sanitizeListHtml(value) {
+		return String(value || '')
+			.replace(/<script[\s\S]*?<\/script>/gi, '')
+			.replace(/\son\w+="[^"]*"/gi, '')
+			.replace(/\son\w+='[^']*'/gi, '');
+	}
+
+	function renderListOrTextCell(value) {
+		const text = String(value || '');
+		if (/<(ol|ul|li)\b/i.test(text)) {
+			return sanitizeListHtml(text);
+		}
+		return escapeHtml(text);
+	}
+
 	function populatePublishedRecipeFilter(rows) {
 		const select = document.getElementById('publishedRecipeFilter');
 		if (!select) return;
@@ -115,10 +141,10 @@
 			tr.innerHTML = `
 				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${escapeHtml(row.id)}</td>
 				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${escapeHtml(row.name || '')}</td>
-				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${escapeHtml(row.ingredients || '')}</td>
+				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${renderListOrTextCell(row.ingredients || '')}</td>
 				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${escapeHtml(row.serving_size || '')}</td>
 				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${row.url ? `<a href='${escapeHtml(row.url)}' target='_blank'>Link</a>` : ''}</td>
-				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;min-width:320px;width:34%;'>${escapeHtml(row.instructions || '')}</td>
+				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;min-width:320px;width:34%;'>${renderListOrTextCell(row.instructions || '')}</td>
 				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${escapeHtml(row.recipeid || '')}</td>
 				<td style='border:1px solid #eee;padding:0.5rem 0.7rem;text-align:center;'>
 					<button class='unpublish-recipe-btn' data-id='${row.id}' style='background:#e53935;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;'>Unpublish</button>

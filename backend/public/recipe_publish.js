@@ -32,13 +32,36 @@ document.addEventListener('DOMContentLoaded', () => {
 				return;
 			}
 			const sortedRecipes = sortRecipesNewestFirst(data);
-			tbody.innerHTML = sortedRecipes.map(recipe =>
-				`<tr>${columns.map(col =>
-					col === 'url'
-						? `<td>${getRecipeColumnValue(recipe, col) ? `<a href="${getRecipeColumnValue(recipe, col)}" target="_blank">Link</a>` : ''}</td>`
-						: `<td>${getRecipeColumnValue(recipe, col)}</td>`
-				).join('')}</tr>`
-			).join('');
+			tbody.innerHTML = '';
+			sortedRecipes.forEach(recipe => {
+				const tr = document.createElement('tr');
+				columns.forEach(col => {
+					const td = document.createElement('td');
+					if (col === 'url') {
+						const url = getRecipeColumnValue(recipe, col);
+						if (url) {
+							const link = document.createElement('a');
+							link.href = url;
+							link.target = '_blank';
+							link.textContent = 'Link';
+							td.appendChild(link);
+						}
+					} else if (col === 'instructions_display' || col === 'ingredients_display') {
+						const value = getRecipeColumnValue(recipe, col);
+					if (value && (value.includes('<ol') || value.includes('<ul') || value.includes('<li'))) {
+							td.innerHTML = value;
+						} else {
+							td.textContent = value;
+						}
+					} else if (col === 'actions') {
+						td.innerHTML = getRecipeColumnValue(recipe, col);
+					} else {
+						td.textContent = getRecipeColumnValue(recipe, col);
+					}
+					tr.appendChild(td);
+				});
+				tbody.appendChild(tr);
+			});
 		})
 		.catch(err => {
 			console.error('Error fetching recipes:', err);
@@ -175,9 +198,36 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 	if (debugRow) {
 		console.log('[DEBUG][Render] ID 20 ingredients_display value:', debugRow.ingredients_display);
 	}
-	tbody.innerHTML = sortedRecipes.map(recipe =>
-		`<tr>${columns.map(col => `<td>${getRecipeColumnValue(recipe, col)}</td>`).join('')}</tr>`
-	).join('');
+	tbody.innerHTML = '';
+	sortedRecipes.forEach(recipe => {
+		const tr = document.createElement('tr');
+		columns.forEach(col => {
+			const td = document.createElement('td');
+			if (col === 'url') {
+				const url = getRecipeColumnValue(recipe, col);
+				if (url) {
+					const link = document.createElement('a');
+					link.href = url;
+					link.target = '_blank';
+					link.textContent = 'Link';
+					td.appendChild(link);
+				}
+			} else if (col === 'instructions_display' || col === 'ingredients_display') {
+				const value = getRecipeColumnValue(recipe, col);
+				if (value && (value.includes('<ol') || value.includes('<ul') || value.includes('<li'))) {
+					td.innerHTML = value;
+				} else {
+					td.textContent = value;
+				}
+			} else if (col === 'actions') {
+				td.innerHTML = getRecipeColumnValue(recipe, col);
+			} else {
+				td.textContent = getRecipeColumnValue(recipe, col);
+			}
+			tr.appendChild(td);
+		});
+		tbody.appendChild(tr);
+	});
 }
 
 let allRecipesCache = [];
@@ -242,6 +292,162 @@ let allRecipesCache = [];
 		});
 	}
 
+	const autoPublishBtn = document.getElementById('autoPublishBtn');
+	const autoPublishReviewBox = document.getElementById('autoPublishReviewBox');
+	const autoPublishReviewText = document.getElementById('autoPublishReviewText');
+	const autoPublishAcceptBtn = document.getElementById('autoPublishAcceptBtn');
+	const autoPublishDeclineBtn = document.getElementById('autoPublishDeclineBtn');
+	let pendingAutoPublishRecipeId = null;
+	const cleanupProgressPanel = document.getElementById('cleanupProgressPanel');
+
+	async function postJsonChecked(url, payload, stepLabel) {
+		const resp = await fetch(url, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify(payload || {})
+		});
+		let data = null;
+		try {
+			data = await resp.json();
+		} catch (_) {
+			data = null;
+		}
+		if (!resp.ok || (data && data.error)) {
+			const detail = (data && (data.error || data.message)) || `${resp.status} ${resp.statusText}`;
+			throw new Error(`${stepLabel} failed: ${detail}`);
+		}
+		return data || { success: true };
+	}
+
+	async function publishRecipeById(recipeId) {
+		const resp = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
+		const data = await resp.json();
+		if (!data.success) {
+			throw new Error(data.error || 'Unknown publish error');
+		}
+		publishedRecipeIds.add(Number(recipeId));
+		await refreshRecipesFromApi(String(recipeId));
+	}
+
+	if (autoPublishBtn) {
+		autoPublishBtn.addEventListener('click', async () => {
+			const selectedFromFilter = String((document.getElementById('recipeIdFilter') || {}).value || '').trim();
+			let recipeId = Number(selectedFromFilter);
+			if (!Number.isInteger(recipeId) || recipeId <= 0) {
+				const recipeIdInput = prompt('Enter the RecipeID to Auto Publish:');
+				if (recipeIdInput === null) return;
+				recipeId = Number(String(recipeIdInput).trim());
+			}
+			if (!Number.isInteger(recipeId) || recipeId <= 0) {
+				alert('Please enter a valid numeric RecipeID.');
+				return;
+			}
+
+			if (!confirm(`Run Auto Publish for RecipeID ${recipeId}?\n\nThis will run Cleanup Instructions, then Cleanup Ingredients, then refresh the table.`)) {
+				return;
+			}
+
+			sessionStorage.setItem(cleanupSelectedRecipeKey, String(recipeId));
+			autoPublishBtn.disabled = true;
+			if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
+
+			const instructionsProgressBar = document.getElementById('cleanupProgressBar');
+			const instructionsProgressFill = document.getElementById('cleanupProgressFill');
+			const ingredientsProgressBar = document.getElementById('cleanupIngredientsProgressBar');
+			const ingredientsProgressFill = document.getElementById('cleanupIngredientsProgressFill');
+			if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'block';
+			if (instructionsProgressBar && instructionsProgressFill) {
+				instructionsProgressBar.style.display = 'block';
+				instructionsProgressFill.style.width = '0%';
+			}
+			if (ingredientsProgressBar && ingredientsProgressFill) {
+				ingredientsProgressBar.style.display = 'block';
+				ingredientsProgressFill.style.width = '0%';
+			}
+
+			try {
+				await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+				await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', instructionsProgressFill);
+
+				await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+				await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', ingredientsProgressFill);
+
+				try {
+					await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
+				} catch (syncErr) {
+					console.warn('[DEBUG][Auto Publish] Inventory sync failed:', syncErr);
+				}
+
+				if (instructionsProgressFill) instructionsProgressFill.style.width = '100%';
+				if (ingredientsProgressFill) ingredientsProgressFill.style.width = '100%';
+				if (instructionsProgressBar && instructionsProgressFill) {
+					instructionsProgressBar.style.display = 'none';
+					instructionsProgressFill.style.width = '0%';
+				}
+				if (ingredientsProgressBar && ingredientsProgressFill) {
+					ingredientsProgressBar.style.display = 'none';
+					ingredientsProgressFill.style.width = '0%';
+				}
+				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
+
+				await refreshRecipesFromApi(String(recipeId));
+				await new Promise(resolve => setTimeout(resolve, 250));
+				await refreshRecipesFromApi(String(recipeId));
+
+				pendingAutoPublishRecipeId = recipeId;
+				if (autoPublishReviewText) {
+					autoPublishReviewText.textContent = `RecipeID ${recipeId} cleanup complete. Choose Accept to publish or Decline to return.`;
+				}
+				if (autoPublishReviewBox) {
+					autoPublishReviewBox.style.display = 'block';
+					autoPublishReviewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+				}
+			} catch (err) {
+				if (instructionsProgressBar && instructionsProgressFill) {
+					instructionsProgressBar.style.display = 'none';
+					instructionsProgressFill.style.width = '0%';
+				}
+				if (ingredientsProgressBar && ingredientsProgressFill) {
+					ingredientsProgressBar.style.display = 'none';
+					ingredientsProgressFill.style.width = '0%';
+				}
+				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
+				alert('Auto Publish failed: ' + (err?.message || err));
+			} finally {
+				autoPublishBtn.disabled = false;
+			}
+		});
+	}
+
+	if (autoPublishAcceptBtn) {
+		autoPublishAcceptBtn.addEventListener('click', async () => {
+			const recipeId = Number(pendingAutoPublishRecipeId);
+			if (!Number.isInteger(recipeId) || recipeId <= 0) {
+				alert('No recipe is ready to publish. Please run Auto Publish first.');
+				return;
+			}
+
+			autoPublishAcceptBtn.disabled = true;
+			try {
+				await publishRecipeById(recipeId);
+				alert(`RecipeID ${recipeId} published.`);
+				if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
+				pendingAutoPublishRecipeId = null;
+			} catch (err) {
+				alert('Publish failed: ' + err.message);
+			} finally {
+				autoPublishAcceptBtn.disabled = false;
+			}
+		});
+	}
+
+	if (autoPublishDeclineBtn) {
+		autoPublishDeclineBtn.addEventListener('click', () => {
+			pendingAutoPublishRecipeId = null;
+			window.location.href = 'recipe_publish.html';
+		});
+	}
+
 	tbody.addEventListener('click', async (event) => {
 		const btn = event.target;
 		if (!btn || !btn.classList || !btn.classList.contains('publish-recipe-btn')) return;
@@ -298,19 +504,40 @@ let allRecipesCache = [];
 	async function waitForCleanupCompletion(progressUrl, progressFill) {
 		let sawRunning = false;
 		let keepPolling = true;
+		let guardPolls = 0;
 		while (keepPolling) {
 			try {
 				const resp = await fetch(progressUrl);
 				const data = await resp.json();
 				if (data && data.running === true) sawRunning = true;
-				if (progressFill && data && typeof data.progress === 'number' && typeof data.total === 'number') {
-					const percent = data.total > 0 ? Math.round((data.progress / data.total) * 100) : (sawRunning ? 100 : 0);
+				const doneCount = Number(data?.progress ?? data?.current ?? 0);
+				const totalCount = Number(data?.total ?? 0);
+				if (progressFill && Number.isFinite(doneCount) && Number.isFinite(totalCount)) {
+					const percent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : (sawRunning ? 100 : 0);
 					progressFill.style.width = percent + '%';
+				}
+				const hasNumericProgress = Number.isFinite(doneCount) && Number.isFinite(totalCount);
+				const alreadyComplete = hasNumericProgress && totalCount > 0 && doneCount >= totalCount;
+				const emptyComplete = hasNumericProgress && totalCount === 0 && data && data.running === false;
+				if (!sawRunning && alreadyComplete) {
+					keepPolling = false;
+					continue;
+				}
+				if (!sawRunning && emptyComplete) {
+					if (progressFill) progressFill.style.width = '100%';
+					keepPolling = false;
+					continue;
 				}
 				if (sawRunning && data && data.running === false) {
 					keepPolling = false;
+					continue;
 				}
 			} catch {
+				keepPolling = false;
+			}
+			guardPolls++;
+			if (guardPolls > 180) {
+				console.warn('[DEBUG] waitForCleanupCompletion guard timeout reached for', progressUrl);
 				keepPolling = false;
 			}
 			if (keepPolling) await new Promise(resolve => setTimeout(resolve, 350));
@@ -337,9 +564,12 @@ let allRecipesCache = [];
 			cleanupInstructionsBtnActive.disabled = true;
 			const progressBar = document.getElementById('cleanupProgressBar');
 			const progressFill = document.getElementById('cleanupProgressFill');
+			const ingredientsProgressBar = document.getElementById('cleanupIngredientsProgressBar');
 			if (progressBar && progressFill) {
+				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'block';
 				progressBar.style.display = 'block';
 				progressFill.style.width = '0%';
+				if (ingredientsProgressBar) ingredientsProgressBar.style.display = 'none';
 			}
 
 			await fetch('/api/recipes/cleanup-instructions-stepwise', {
@@ -353,6 +583,7 @@ let allRecipesCache = [];
 			if (progressBar && progressFill) {
 				progressBar.style.display = 'none';
 				progressFill.style.width = '0%';
+				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
 			}
 			cleanupInstructionsBtnActive.disabled = false;
 			await refreshRecipesFromApi(String(recipeId));
@@ -390,11 +621,14 @@ let allRecipesCache = [];
 			console.log(`[DEBUG][Cleanup Ingredients] RecipeID ${recipeId} previous ingredients_display:`, String(previousIngredientsDisplay || '').slice(0, 500));
 
 			cleanupIngredientsBtnActive.disabled = true;
-			const progressBar = document.getElementById('cleanupProgressBar');
-			const progressFill = document.getElementById('cleanupProgressFill');
+			const progressBar = document.getElementById('cleanupIngredientsProgressBar');
+			const progressFill = document.getElementById('cleanupIngredientsProgressFill');
+			const instructionsProgressBar = document.getElementById('cleanupProgressBar');
 			if (progressBar && progressFill) {
+				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'block';
 				progressBar.style.display = 'block';
 				progressFill.style.width = '0%';
+				if (instructionsProgressBar) instructionsProgressBar.style.display = 'none';
 			}
 
 			await fetch('/api/recipes/cleanup-ingredients-stepwise', {
@@ -420,6 +654,7 @@ let allRecipesCache = [];
 			if (progressBar && progressFill) {
 				progressBar.style.display = 'none';
 				progressFill.style.width = '0%';
+				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
 			}
 			cleanupIngredientsBtnActive.disabled = false;
 			await refreshRecipesFromApi(String(recipeId));
@@ -438,6 +673,9 @@ let allRecipesCache = [];
 			alert(`Ingredients cleanup finished for RecipeID ${recipeId}.`);
 		});
 	}
+
+	// Stop here: legacy code below this point is kept for reference only and must not run on recipe_publish.html.
+	return;
 // Only logic for Upload URL and Uploaded Recipes table remains
 document.addEventListener('DOMContentLoaded', () => {
 	// Upload URL button

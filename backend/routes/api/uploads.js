@@ -4,15 +4,38 @@ const pool = require('../../db');
 const fs = require('fs');
 const path = require('path');
 
+async function insertUploadRecord(recipeTitle, uploadType, sourceUrl, uploadedBy, uploadDate, rawData) {
+  return pool.query(
+    'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
+    [recipeTitle, uploadType, sourceUrl, uploadedBy, uploadDate, rawData]
+  );
+}
+
+async function repairUploadsIdSequence() {
+  await pool.query(`
+    SELECT setval(
+      pg_get_serial_sequence('uploads', 'id'),
+      COALESCE((SELECT MAX(id) FROM uploads), 0)
+    )
+  `);
+}
+
 // POST /api/uploads
 router.post('/', async (req, res) => {
   const { recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data } = req.body;
   try {
-    const result = await pool.query(
-      'INSERT INTO uploads (recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-      [recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data]
-    );
-    res.json({ success: true, upload_id: result.rows[0].id });
+    try {
+      const result = await insertUploadRecord(recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data);
+      return res.json({ success: true, upload_id: result.rows[0].id });
+    } catch (insertErr) {
+      const isUploadsPkConflict = insertErr && insertErr.code === '23505' && insertErr.constraint === 'uploads_pkey';
+      if (!isUploadsPkConflict) throw insertErr;
+
+      await repairUploadsIdSequence();
+
+      const retryResult = await insertUploadRecord(recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data);
+      return res.json({ success: true, upload_id: retryResult.rows[0].id, sequenceRepaired: true });
+    }
   } catch (err) {
     console.error('[DEBUG /api/uploads] Failed to insert upload:', err.message);
     res.status(500).json({ success: false, error: err.message });

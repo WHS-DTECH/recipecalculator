@@ -150,6 +150,28 @@
             padding: 0.8rem;
             margin-bottom: 1rem;
         }
+        .runner-grid {
+            display: flex;
+            gap: 1rem;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            margin-bottom: 0.8rem;
+        }
+        .runner-box {
+            border: 1px solid #d7e3f4;
+            border-radius: 8px;
+            background: #f8fbff;
+            padding: 0.8rem;
+            min-width: 260px;
+            flex: 1;
+        }
+        .auto-result-box {
+            margin-bottom: 0.9rem;
+            border: 1px solid #cfd8dc;
+            border-radius: 8px;
+            background: #fafcff;
+            padding: 0.8rem;
+        }
         @media (max-width: 980px) {
             .extractor-two-col {
                 grid-template-columns: 1fr;
@@ -166,7 +188,22 @@
                 <select id="recipeSelect">
                     <option value="">-- Select a recipe --</option>
                 </select>
-                <button class="extractor-btn" id="startStepByStepBtn">Start Step-by-Step</button>
+                <div class="runner-grid">
+                    <div class="runner-box">
+                        <div style="font-weight:600; margin-bottom:0.5rem;">Step-by-step</div>
+                        <button class="extractor-btn" id="startStepByStepBtn">Start Step-by-Step</button>
+                    </div>
+                    <div class="runner-box">
+                        <div style="font-weight:600; margin-bottom:0.5rem;">Auto Extract</div>
+                        <button class="extractor-btn" id="titleAutoExtractBtn" style="background:#00897b;">Title Auto Extract (Strategy 1)</button>
+                    </div>
+                </div>
+                <div id="titleAutoResultBox" class="auto-result-box" style="display:none;">
+                    <div style="font-weight:600; margin-bottom:0.4rem;">Auto Extract Result</div>
+                    <div id="titleAutoResultText" style="margin-bottom:0.7rem;"></div>
+                    <button class="extractor-btn" id="titleAutoAcceptSendBtn" style="background:#8000b0;">Accept and Send Solution</button>
+                    <button class="extractor-btn" id="titleAutoDeclineBtn" style="background:#e53935; margin-left:0.5rem;">Decline (Return to Title Extractor)</button>
+                </div>
             </div>
             <div class="extractor-section">
                 <div class="extractor-two-col">

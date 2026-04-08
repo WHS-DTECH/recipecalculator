@@ -10,6 +10,7 @@ const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorize
 
 function normalizeInstructionLine(line) {
   return (line || '')
+    .replace(/JSON-LD\s+Recipe\s+Instructions\s*:/gi, ' ')
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
     .replace(/&nbsp;/gi, ' ')
@@ -40,6 +41,7 @@ function cleanInstructionsForDisplay(raw) {
 
   // Fallback: aggressively remove structural JSON/schema markers, keep readable text.
   return source
+    .replace(/JSON-LD\s+Recipe\s+Instructions\s*:/gi, ' ')
     .replace(/"@type"\s*:\s*"HowToStep",?/gi, '')
     .replace(/"name"\s*:\s*"((?:\\.|[^"\\])*)",?/gi, '')
     .replace(/"text"\s*:\s*/gi, '')
@@ -51,6 +53,34 @@ function cleanInstructionsForDisplay(raw) {
     .map(normalizeInstructionLine)
     .filter(Boolean)
     .join('\n');
+}
+
+function isMeaningfulInstructionSentence(s) {
+  if (!s || s.length < 5) return false;
+  const junkPatterns = [
+    /^(Visible\s+List\s+Items|Recipes|Biscuits|Bread|Cakes|Cupcakes|Desserts|Loaves|Muffins|Pastry|Scones|Slices|Sweets|Products|Explore|Shop|Kids|Contact|Factory|Tours|School|Visits|Groups|Events|Home|Ingredients|Method\s*2|teaspoons|tablespoons|butter|flour|milk|sugar|cinnamon|vanilla|water|lemon|cream|cheese|onion|egg|approximately|finely|melted|chopped|grated|salt|pinch)\b/i,
+    /^([A-Z][a-z]+\s+){2,}(Tour|Visits|School|Factory|Products|Recipes|Ingredients|Method)/i,
+    /^\d+\s*(cups?|tsp|tbsp|g|kg|ml|teaspoon|tablespoon|gram)\b/i,
+    /^(Tour|School|Visits|Factory|Products|Recipes|Ingredients|Method|Home)[\s:,]/i
+  ];
+  return !junkPatterns.some(pattern => pattern.test(s));
+}
+
+function formatInstructionsAsNumberedSentences(raw) {
+  const normalized = normalizeInstructionLine(String(raw || ''));
+  if (!normalized) return '';
+
+  const sentenceMatches = normalized.match(/[^.!?]+[.!?]+|[^.!?]+$/g) || [];
+  const normalizedSentences = sentenceMatches
+    .map((s) => normalizeInstructionLine(s))
+    .filter(Boolean);
+  const sentences = normalizedSentences
+    .filter(isMeaningfulInstructionSentence);
+
+  const finalSentences = sentences.length > 0 ? sentences : normalizedSentences;
+  if (finalSentences.length === 0) return '';
+  const listItems = finalSentences.map((s) => `<li>${s}</li>`).join('');
+  return `<ol>${listItems}</ol>`;
 }
 
 function normalizeIngredientLine(line) {
@@ -70,11 +100,20 @@ function normalizeIngredientLine(line) {
 
 function splitCompressedIngredientText(text) {
   if (!text) return '';
+  const units = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
+  const qty = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
+
   let normalized = String(text)
     .replace(/\bFILLING\b/gi, '\nFILLING\n')
-    .replace(/([A-Za-z])(\d)/g, '$1\n$2')
-    .replace(/([^\n])([¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]\s*(?:cups?|tbsp|tsp|g|kg|ml|l)\b)/gi, '$1\n$2')
-    .replace(/([^\n])((?:\d+(?:\/\d+)?|\d*\.\d+)\s*(?:cups?|tbsp|tsp|g|kg|ml|l)\b)/gi, '$1\n$2');
+    // Split when a quantity+unit is glued right after a word, e.g. "eggs¼ cup".
+    .replace(/(?<=[A-Za-z])(?=[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])/g, '\n')
+    // Split before embedded quantity+unit tokens, e.g. "Sugar 2 tsp", preserving all characters.
+    .replace(new RegExp(`\\s+(?=${qty}\\s*${units}\\b)`, 'gi'), '\n')
+    // Keep existing split for letter-digit joins like "item2".
+    .replace(/(?<=[A-Za-z])(?=\d)/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n\s+/g, '\n')
+    .trim();
 
   return normalized;
 }
@@ -132,7 +171,9 @@ function cleanIngredientsForDisplay(raw) {
       .replace(/&quot;/gi, '"');
 
     const htmlTokens = htmlToText
-      .split(/\r?\n|\s*,\s*/)
+      .split(/\r?\n/)
+      .flatMap((line) => splitCompressedIngredientText(String(line || '')).split(/\r?\n/))
+      .flatMap((line) => String(line || '').split(/\s*,\s*/))
       .map(normalizeIngredientLine)
       .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
 
@@ -176,6 +217,8 @@ function cleanIngredientsForDisplay(raw) {
         return normalizeIngredientLine(match[1].replace(/\\n/g, ' '));
       }
     })
+    .flatMap((item) => splitCompressedIngredientText(String(item || '')).split(/\r?\n/))
+    .map(normalizeIngredientLine)
     .filter((item) => isMeaningfulIngredientLine(item) && !isLikelyInstructionToken(item) && !/^(@type|name|text|recipeIngredient)$/i.test(item));
 
   if (quotedItems.length > 0) {
@@ -305,13 +348,14 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
       if (!cleanedExtracted) {
         cleanedExtracted = cleanInstructionsForDisplay(row.instructions);
       }
+      const numberedDisplay = formatInstructionsAsNumberedSentences(cleanedExtracted);
       // Debug output for extracted instructions
       console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtracted=`, rawExtracted);
       console.log(`[CLEANUP] Recipe ID ${row.id}: cleanedExtracted=`, cleanedExtracted);
       // Always write to instructions_display, never overwrite instructions
-      if (cleanedExtracted && cleanedExtracted.length > 0) {
+      if (numberedDisplay && numberedDisplay.length > 0) {
         try {
-          const updateResult = await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleanedExtracted, row.id]);
+          const updateResult = await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [numberedDisplay, row.id]);
           console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned extracted_instructions and copied to instructions_display. Updated rows: ${updateResult.rowCount}`);
         } catch (err) {
           console.error(`[CLEANUP][ERROR] Recipe ID ${row.id}: Failed to update instructions_display.`, err);
@@ -320,21 +364,19 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
         let cleaned = row.instructions
           .replace(/"recipeInstructions"\s*:\s*\[.*?\]/gs, '')
           .replace(/\{\s*"@type"\s*:\s*"HowToStep".*?\}/gs, '')
+          .replace(/JSON-LD\s+Recipe\s+Instructions\s*:/gi, ' ')
           .replace(/<\/?p>/gi, ' ')
           .replace(/<br\s*\/?\s*>/gi, ' ')
           .replace(/<[^>]+>/g, '')
           .replace(/[Â]/g, '')
           .replace(/\s+/g, ' ')
           .trim();
-        if (cleaned !== row.instructions.trim()) {
-          try {
-            const updateResult = await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleaned, row.id]);
-            console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned instructions and copied to instructions_display. Updated rows: ${updateResult.rowCount}`);
-          } catch (err) {
-            console.error(`[CLEANUP][ERROR] Recipe ID ${row.id}: Failed to update instructions_display.`, err);
-          }
-        } else {
-          console.log(`[CLEANUP] Recipe ID ${row.id}: No change needed.`);
+        const numberedFallback = formatInstructionsAsNumberedSentences(cleaned);
+        try {
+          const updateResult = await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [numberedFallback || cleaned, row.id]);
+          console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned instructions and copied to instructions_display. Updated rows: ${updateResult.rowCount}`);
+        } catch (err) {
+          console.error(`[CLEANUP][ERROR] Recipe ID ${row.id}: Failed to update instructions_display.`, err);
         }
       } else {
         console.log(`[CLEANUP] Recipe ID ${row.id}: No instructions, skipping.`);
@@ -454,8 +496,12 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
         .map(line => line.trim())
         .filter(Boolean);
       const formattedLines = formatIngredientsAsMeasureFooditem(cleanedLines);
-      const cleanedForDisplay = formattedLines
-        .join('<br>');
+      const listItems = formattedLines
+        .map(line => String(line || '').trim())
+        .filter(Boolean)
+        .map(line => `<li>${line}</li>`)
+        .join('');
+      const cleanedForDisplay = listItems ? `<ul>${listItems}</ul>` : '';
 
       const rawExtractedPreview = String(rawExtractedIngredients || '').slice(0, 500);
       const rawIngredientsPreview = String(rawIngredients || '').slice(0, 500);
@@ -556,15 +602,19 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
             .trim();
         }
       }
+      cleanedExtracted = String(cleanedExtracted || '').replace(/JSON-LD\s+Recipe\s+Instructions\s*:/gi, ' ').trim();
+      const numberedDisplay = formatInstructionsAsNumberedSentences(cleanedExtracted);
+
       // Debug output for extracted instructions
       console.log(`[CLEANUP] Recipe ID ${row.id}: rawExtracted=`, rawExtracted);
       console.log(`[CLEANUP] Recipe ID ${row.id}: cleanedExtracted=`, cleanedExtracted);
       // Always write to instructions_display, never overwrite instructions
-      if (cleanedExtracted && cleanedExtracted.length > 0) {
-        await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleanedExtracted, row.id]);
+      if (numberedDisplay && numberedDisplay.length > 0) {
+        await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [numberedDisplay, row.id]);
         console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned extracted_instructions and copied to instructions_display.`);
       } else if (row.instructions) {
         let cleaned = row.instructions
+          .replace(/JSON-LD\s+Recipe\s+Instructions\s*:/gi, ' ')
           .replace(/"recipeInstructions"\s*:\s*\[.*?\]/gs, '')
           .replace(/\{\s*"@type"\s*:\s*"HowToStep".*?\}/gs, '')
           .replace(/<\/?p>/gi, ' ')
@@ -573,12 +623,9 @@ router.post('/cleanup-instructions-stepwise', async (req, res) => {
           .replace(/[Â]/g, '')
           .replace(/\s+/g, ' ')
           .trim();
-        if (cleaned !== row.instructions.trim()) {
-          await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [cleaned, row.id]);
-          console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned instructions and copied to instructions_display.`);
-        } else {
-          console.log(`[CLEANUP] Recipe ID ${row.id}: No change needed.`);
-        }
+        const numberedFallback = formatInstructionsAsNumberedSentences(cleaned);
+        await pool.query('UPDATE recipes SET instructions_display = $1 WHERE id = $2', [numberedFallback || cleaned, row.id]);
+        console.log(`[CLEANUP] Recipe ID ${row.id}: Cleaned instructions and copied to instructions_display.`);
       } else {
         console.log(`[CLEANUP] Recipe ID ${row.id}: No instructions, skipping.`);
       }

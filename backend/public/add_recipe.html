@@ -1,0 +1,855 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Add Recipe</title>
+  <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <link rel="stylesheet" href="admin_styles.css">
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+
+  <div id="cleanupProgressBar" style="display:none;position:fixed;top:0;left:0;width:100vw;height:6px;z-index:9999;background:#eee;">
+    <div id="cleanupProgressFill" style="height:100%;width:0;background:#008080;transition:width 0.2s;"></div>
+  </div>
+
+  <div class="main-content-margins">
+    <h2>Add Recipe</h2>
+    <div class="setup-section">
+      <div class="setup-section-title">Load Recipe (URL)</div>
+      <div class="setup-section-desc">Import recipe from a website URL.</div>
+      <label class="recipe-url-label standout-label">Recipe URL:</label>
+      <input type="text" class="setup-url-input wide-url-input super-wide-url-input" placeholder="e.g., https://www.chelsea.co.nz/browse-recipes/...">
+      <button id="smartUploadBtn" class="setup-btn" style="margin-top:0.6rem;background:#0d47a1;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">SMART Upload (Upload + Sync)</button>
+      <div id="smartUploadBtnProgressBar" style="display:none;width:220px;height:6px;background:#e8eaf6;border-radius:6px;overflow:hidden;margin:0.35rem 0 0 0;">
+        <div id="smartUploadBtnProgressFill" style="height:100%;width:0;background:#0d47a1;transition:width 0.2s;"></div>
+      </div>
+      <div id="uploadStatusBanner" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
+      <div id="uploadProgressText" style="margin-top:0.6rem;font-size:0.92rem;color:#0d47a1;display:none;"></div>
+    </div>
+
+    <div class="setup-section" style="margin-top:1.1rem;">
+      <div class="setup-section-title">Raw Data Extractor</div>
+      <div class="setup-section-desc">Direct connection to existing Raw Data Extractor button code.</div>
+      <label for="uploadSelect" style="font-weight:bold;">Choose Uploaded Recipe:</label>
+      <select id="uploadSelect" style="margin-left:0.6rem; min-width:320px;"></select>
+      <div style="margin-top:0.8rem;">
+        <button class="extractor-btn" id="extractVisibleTextBtn" style="margin-bottom:1rem; background:#00897b; color:#fff; border:none; border-radius:5px; padding:0.6rem 1.5rem; font-size:1rem; cursor:pointer;">Extract Visible Text (Browser View)</button>
+        <div id="extractVisibleTextBtnProgressBar" style="display:none;width:220px;height:6px;background:#e0f2f1;border-radius:6px;overflow:hidden;margin-top:-0.7rem;margin-bottom:0.9rem;">
+          <div id="extractVisibleTextBtnProgressFill" style="height:100%;width:0;transition:width 0.2s;background:#00695c;"></div>
+        </div>
+      </div>
+      <textarea id="rawDataInput" style="width:100%;min-height:160px;border-radius:6px;border:1px solid #bbb;font-size:1rem;padding:0.7rem;" placeholder="Visible text output will appear here..."></textarea>
+      <button id="saveRawDataBtn" style="background:#8000b0;color:#fff;margin-top:1rem;width:100%;border:none;border-radius:6px;font-size:1.1rem;padding:0.7rem;cursor:pointer;">Save Raw Data</button>
+      <div id="saveRawDataBtnProgressBar" style="display:none;width:100%;height:6px;background:#f3e5f5;border-radius:6px;overflow:hidden;margin-top:0.4rem;">
+        <div id="saveRawDataBtnProgressFill" style="height:100%;width:0;transition:width 0.2s;background:#6a1b9a;"></div>
+      </div>
+    </div>
+
+    <div class="setup-section" style="margin-top:1.1rem;">
+      <div class="setup-section-title">Serving Size Auto Extract</div>
+      <div class="setup-section-desc">Copy of the Serving Size Auto Extract system (strategy 1 only).</div>
+      <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
+        <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
+          <button id="teacherServingStepByStepBtn" style="background:#1976d2;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Start Step-by-Step</button>
+        </div>
+        <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
+          <button id="teacherServingAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Serving Size Auto Extract (Strategy 1)</button>
+        </div>
+      </div>
+
+      <div id="teacherServingAutoResultBox" style="display:none;margin-top:0.8rem;border:1px solid #cfd8dc;border-radius:8px;background:#fafcff;padding:0.8rem;">
+        <div style="font-weight:600;margin-bottom:0.4rem;">Auto Extract Result</div>
+        <div id="teacherServingAutoResultText" style="margin-bottom:0.7rem;"></div>
+        <button id="teacherServingConfirmBtn" style="background:#8000b0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Confirm and Send Solution</button>
+        <button id="teacherServingDeclineBtn" style="background:#e53935;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Decline (Open Serving Size Page)</button>
+      </div>
+    </div>
+
+    <div class="setup-section" style="margin-top:1.1rem;">
+      <div class="setup-section-title">Title Auto Extract</div>
+      <div class="setup-section-desc">Copy of the Title Auto Extract system (strategy 1 only).</div>
+      <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
+        <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
+          <button id="teacherTitleStepByStepBtn" style="background:#1976d2;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Start Step-by-Step</button>
+        </div>
+        <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
+          <button id="teacherTitleAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Title Auto Extract (Strategy 1)</button>
+        </div>
+      </div>
+
+      <div id="teacherTitleAutoResultBox" style="display:none;margin-top:0.8rem;border:1px solid #cfd8dc;border-radius:8px;background:#fafcff;padding:0.8rem;">
+        <div style="font-weight:600;margin-bottom:0.4rem;">Auto Extract Result</div>
+        <div id="teacherTitleAutoResultText" style="margin-bottom:0.7rem;"></div>
+        <button id="teacherTitleConfirmBtn" style="background:#8000b0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Accept and Send Solution</button>
+        <button id="teacherTitleDeclineBtn" style="background:#e53935;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Decline (Open Title Extractor)</button>
+      </div>
+    </div>
+
+    <div class="setup-section" style="margin-top:1.1rem;">
+      <div class="setup-section-title">Instruction Auto Extract</div>
+      <div class="setup-section-desc">Copy of the Instruction Auto Extract system (strategies 1&ndash;6, first solved).</div>
+      <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
+        <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
+          <button id="teacherInstructionStepByStepBtn" style="background:#1976d2;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Start Step-by-Step</button>
+        </div>
+        <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
+          <button id="teacherInstructionAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Instruction Auto Extract (Strategies 1&ndash;6)</button>
+        </div>
+      </div>
+
+      <div id="teacherInstructionAutoResultBox" style="display:none;margin-top:0.8rem;border:1px solid #cfd8dc;border-radius:8px;background:#fafcff;padding:0.8rem;">
+        <div style="font-weight:600;margin-bottom:0.4rem;">Auto Extract Result</div>
+        <div id="teacherInstructionAutoResultText" style="margin-bottom:0.7rem;white-space:pre-wrap;"></div>
+        <button id="teacherInstructionConfirmBtn" style="background:#8000b0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Accept and Send Solution</button>
+        <button id="teacherInstructionDeclineBtn" style="background:#e53935;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Decline (Open Instructions Extractor)</button>
+      </div>
+    </div>
+
+    <div class="setup-section" style="margin-top:1.1rem;">
+      <div class="setup-section-title">Ingredients Auto Extract</div>
+      <div class="setup-section-desc">Copy of the Ingredients Auto Extract system (Ingredients&ndash;Method section, then quantity-line fallback).</div>
+      <div style="display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;">
+        <div style="display:none;border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Step-by-step</div>
+          <button id="teacherIngredientsStepByStepBtn" style="background:#1976d2;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Start Step-by-Step</button>
+        </div>
+        <div style="border:1px solid #d7e3f4;border-radius:8px;background:#f8fbff;padding:0.8rem;min-width:260px;flex:1;">
+          <div style="font-weight:600;margin-bottom:0.5rem;">Auto Extract</div>
+          <button id="teacherIngredientsAutoExtractBtn" style="background:#00897b;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.5rem;font-size:1rem;cursor:pointer;">Ingredients Auto Extract</button>
+        </div>
+      </div>
+
+      <div id="teacherIngredientsAutoResultBox" style="display:none;margin-top:0.8rem;border:1px solid #cfd8dc;border-radius:8px;background:#fafcff;padding:0.8rem;">
+        <div style="font-weight:600;margin-bottom:0.4rem;">Auto Extract Result</div>
+        <div id="teacherIngredientsAutoResultText" style="margin-bottom:0.7rem;white-space:pre-wrap;"></div>
+        <button id="teacherIngredientsConfirmBtn" style="background:#8000b0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Accept and Send Solution</button>
+        <button id="teacherIngredientsDeclineBtn" style="background:#e53935;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Decline (Open Ingredients Extractor)</button>
+      </div>
+    </div>
+
+    <div class="setup-section" style="margin-top:1.1rem;">
+      <div class="setup-section-title">Auto Publish</div>
+      <div class="setup-section-desc">Run Cleanup Instructions + Cleanup Ingredients, then choose whether to publish to the published recipes table.</div>
+      <button id="teacherAutoPublishBtn" style="background:#6a1b9a;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Auto Publish (Selected Recipe)</button>
+
+      <div id="teacherAutoPublishProgressPanel" style="display:none;margin-top:0.8rem;max-width:560px;">
+        <div style="font-size:0.85rem;color:#1b1b1b;margin-bottom:4px;">Cleanup Instructions</div>
+        <div id="teacherAutoPublishInstructionsProgressBar" style="display:none;width:100%;height:10px;background:#e6e6e6;border-radius:999px;overflow:hidden;">
+          <div id="teacherAutoPublishInstructionsProgressFill" style="width:0%;height:100%;background:#1976d2;transition:width 0.2s ease;"></div>
+        </div>
+
+        <div style="font-size:0.85rem;color:#1b1b1b;margin-top:8px;margin-bottom:4px;">Cleanup Ingredients</div>
+        <div id="teacherAutoPublishIngredientsProgressBar" style="display:none;width:100%;height:10px;background:#e6e6e6;border-radius:999px;overflow:hidden;">
+          <div id="teacherAutoPublishIngredientsProgressFill" style="width:0%;height:100%;background:#2e7d32;transition:width 0.2s ease;"></div>
+        </div>
+      </div>
+
+      <div id="teacherAutoPublishReviewBox" style="display:none;margin-top:0.8rem;border:1px solid #d8c7ef;border-radius:8px;background:#faf5ff;padding:0.8rem;max-width:560px;">
+        <div id="teacherAutoPublishReviewText" style="font-weight:600;margin-bottom:0.6rem;color:#4a148c;">Auto Publish review ready.</div>
+        <button id="teacherAutoPublishAcceptBtn" style="background:#1976d2;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.1rem;font-size:0.96rem;cursor:pointer;">Accept and Publish</button>
+        <button id="teacherAutoPublishDeclineBtn" style="background:#e53935;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.1rem;font-size:0.96rem;cursor:pointer;margin-left:0.5rem;">Decline</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="upload_url.js?v=20260408d"></script>
+  <script src="extractor_raw.js?v=20260408a"></script>
+  <script src="extractor_serving_size.js?v=20260408a"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const stepByStepBtn = document.getElementById('teacherServingStepByStepBtn');
+      const autoBtn = document.getElementById('teacherServingAutoExtractBtn');
+      const resultBox = document.getElementById('teacherServingAutoResultBox');
+      const resultText = document.getElementById('teacherServingAutoResultText');
+      const confirmBtn = document.getElementById('teacherServingConfirmBtn');
+      const declineBtn = document.getElementById('teacherServingDeclineBtn');
+      const titleStepByStepBtn = document.getElementById('teacherTitleStepByStepBtn');
+      const titleAutoBtn = document.getElementById('teacherTitleAutoExtractBtn');
+      const titleResultBox = document.getElementById('teacherTitleAutoResultBox');
+      const titleResultText = document.getElementById('teacherTitleAutoResultText');
+      const titleConfirmBtn = document.getElementById('teacherTitleConfirmBtn');
+      const titleDeclineBtn = document.getElementById('teacherTitleDeclineBtn');
+      const ingredientsStepByStepBtn = document.getElementById('teacherIngredientsStepByStepBtn');
+      const ingredientsAutoBtn = document.getElementById('teacherIngredientsAutoExtractBtn');
+      const ingredientsResultBox = document.getElementById('teacherIngredientsAutoResultBox');
+      const ingredientsResultText = document.getElementById('teacherIngredientsAutoResultText');
+      const ingredientsConfirmBtn = document.getElementById('teacherIngredientsConfirmBtn');
+      const ingredientsDeclineBtn = document.getElementById('teacherIngredientsDeclineBtn');
+      const autoPublishBtn = document.getElementById('teacherAutoPublishBtn');
+      const autoPublishProgressPanel = document.getElementById('teacherAutoPublishProgressPanel');
+      const autoPublishInstructionsBar = document.getElementById('teacherAutoPublishInstructionsProgressBar');
+      const autoPublishInstructionsFill = document.getElementById('teacherAutoPublishInstructionsProgressFill');
+      const autoPublishIngredientsBar = document.getElementById('teacherAutoPublishIngredientsProgressBar');
+      const autoPublishIngredientsFill = document.getElementById('teacherAutoPublishIngredientsProgressFill');
+      const autoPublishReviewBox = document.getElementById('teacherAutoPublishReviewBox');
+      const autoPublishReviewText = document.getElementById('teacherAutoPublishReviewText');
+      const autoPublishAcceptBtn = document.getElementById('teacherAutoPublishAcceptBtn');
+      const autoPublishDeclineBtn = document.getElementById('teacherAutoPublishDeclineBtn');
+      const recipeSelect = document.getElementById('uploadSelect');
+      const rawDataInput = document.getElementById('rawDataInput');
+
+      let extractedServingSize = '';
+      let extractedTitle = '';
+      let extractedIngredients = '';
+      let pendingAutoPublishRecipeId = null;
+
+      async function getRawData(recipeId) {
+        const existing = (rawDataInput && rawDataInput.value ? rawDataInput.value : '').trim();
+        if (existing) return existing;
+        const res = await fetch(`/RawDataTXT/${recipeId}.txt`);
+        if (!res.ok) return '';
+        const raw = await res.text();
+        if (rawDataInput) rawDataInput.value = raw || '';
+        return raw || '';
+      }
+
+      async function getRecipeById(recipeId) {
+        const res = await fetch('/api/recipes');
+        if (!res.ok) return null;
+        const recipes = await res.json();
+        if (!Array.isArray(recipes)) return null;
+        return recipes.find(r => String(r.id) === String(recipeId)) || null;
+      }
+
+      async function postJsonChecked(url, payload, stepLabel) {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload || {})
+        });
+        let data = null;
+        try {
+          data = await resp.json();
+        } catch (_) {
+          data = null;
+        }
+        if (!resp.ok || (data && data.error)) {
+          const detail = (data && (data.error || data.message)) || `${resp.status} ${resp.statusText}`;
+          throw new Error(`${stepLabel} failed: ${detail}`);
+        }
+        return data || { success: true };
+      }
+
+      async function waitForCleanupCompletion(progressUrl, progressFill) {
+        let sawRunning = false;
+        let keepPolling = true;
+        let guardPolls = 0;
+        while (keepPolling) {
+          try {
+            const resp = await fetch(progressUrl);
+            const data = await resp.json();
+            if (data && data.running === true) sawRunning = true;
+
+            const doneCount = Number(data?.progress ?? data?.current ?? 0);
+            const totalCount = Number(data?.total ?? 0);
+            if (progressFill && Number.isFinite(doneCount) && Number.isFinite(totalCount)) {
+              const percent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : (sawRunning ? 100 : 0);
+              progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            }
+
+            const hasNumeric = Number.isFinite(doneCount) && Number.isFinite(totalCount);
+            const alreadyComplete = hasNumeric && totalCount > 0 && doneCount >= totalCount;
+            const emptyComplete = hasNumeric && totalCount === 0 && data && data.running === false;
+            if ((!sawRunning && alreadyComplete) || (!sawRunning && emptyComplete)) {
+              if (progressFill) progressFill.style.width = '100%';
+              keepPolling = false;
+              continue;
+            }
+            if (sawRunning && data && data.running === false) {
+              if (progressFill) progressFill.style.width = '100%';
+              keepPolling = false;
+              continue;
+            }
+          } catch {
+            keepPolling = false;
+          }
+          guardPolls++;
+          if (guardPolls > 180) {
+            console.warn('[DEBUG][Add Recipe Auto Publish] waitForCleanupCompletion timeout for', progressUrl);
+            keepPolling = false;
+          }
+          if (keepPolling) await new Promise(resolve => setTimeout(resolve, 350));
+        }
+      }
+
+      function resetAutoPublishUi() {
+        if (autoPublishInstructionsBar) autoPublishInstructionsBar.style.display = 'none';
+        if (autoPublishInstructionsFill) autoPublishInstructionsFill.style.width = '0%';
+        if (autoPublishIngredientsBar) autoPublishIngredientsBar.style.display = 'none';
+        if (autoPublishIngredientsFill) autoPublishIngredientsFill.style.width = '0%';
+        if (autoPublishProgressPanel) autoPublishProgressPanel.style.display = 'none';
+      }
+
+      async function publishRecipeToDisplay(recipeId) {
+        const resp = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
+        const data = await resp.json();
+        if (!data.success) {
+          throw new Error(data.error || 'Unknown publish error');
+        }
+      }
+
+      function extractTitleFromUrlSlug(url) {
+        if (!url) return '';
+        let slug = '';
+        try {
+          const parsed = new URL(url);
+          const parts = parsed.pathname.split('/').filter(Boolean);
+          slug = parts.length ? parts[parts.length - 1] : '';
+        } catch (_) {
+          const parts = String(url).split('/').filter(Boolean);
+          slug = parts.length ? parts[parts.length - 1] : '';
+        }
+
+        if (!slug) return '';
+
+        const cleaned = decodeURIComponent(slug)
+          .replace(/\.[a-z0-9]+$/i, '')
+          .replace(/[-_]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (!cleaned) return '';
+
+        return cleaned
+          .split(' ')
+          .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
+          .join(' ')
+          .trim();
+      }
+
+      if (stepByStepBtn) {
+        stepByStepBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_serving_size.html';
+        });
+      }
+
+      if (autoBtn) {
+        autoBtn.addEventListener('click', async function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+
+          const raw = await getRawData(recipeId);
+          if (!raw) {
+            alert('No raw data found for this recipe.');
+            return;
+          }
+
+          const strategyOne = window.strategies && window.strategies[0];
+          extractedServingSize = strategyOne && typeof strategyOne.fn === 'function' ? (strategyOne.fn(raw) || '') : '';
+
+          if (resultText) {
+            resultText.textContent = extractedServingSize
+              ? `Strategy 1 result: ${extractedServingSize}`
+              : 'Strategy 1 found no serving size value.';
+          }
+          if (resultBox) resultBox.style.display = '';
+        });
+      }
+
+      if (confirmBtn) {
+        confirmBtn.addEventListener('click', function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+          if (!extractedServingSize) {
+            alert('No auto extract result to send.');
+            return;
+          }
+
+          fetch('/api/serving-size/solution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipeId, solution: extractedServingSize })
+          })
+            .then(res => res.ok ? res.json() : Promise.reject(res))
+            .then(() => {
+              alert('Serving size solution sent successfully.');
+            })
+            .catch(() => {
+              alert('Failed to send serving size solution.');
+            });
+        });
+      }
+
+      if (declineBtn) {
+        declineBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_serving_size.html';
+        });
+      }
+
+      if (titleStepByStepBtn) {
+        titleStepByStepBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_title.html';
+        });
+      }
+
+      if (titleAutoBtn) {
+        titleAutoBtn.addEventListener('click', async function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+
+          const recipe = await getRecipeById(recipeId);
+          const url = recipe && recipe.url ? String(recipe.url).trim() : '';
+          extractedTitle = extractTitleFromUrlSlug(url);
+
+          if (titleResultText) {
+            titleResultText.textContent = extractedTitle
+              ? `Strategy 1 result: ${extractedTitle}`
+              : 'Strategy 1 found no title value.';
+          }
+          if (titleResultBox) titleResultBox.style.display = '';
+        });
+      }
+
+      if (titleConfirmBtn) {
+        titleConfirmBtn.addEventListener('click', function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+          if (!extractedTitle) {
+            alert('No auto extract result to send.');
+            return;
+          }
+
+          fetch('/api/title-extractor/solution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipeId, solution: extractedTitle })
+          })
+            .then(res => res.ok ? res.json() : Promise.reject(res))
+            .then(data => {
+              if (data && data.success) {
+                alert('Title saved!');
+              } else {
+                alert('Failed to save title.');
+              }
+            })
+            .catch(() => {
+              alert('Error saving title.');
+            });
+        });
+      }
+
+      if (titleDeclineBtn) {
+        titleDeclineBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_title.html';
+        });
+      }
+
+      // --- Instruction Auto Extract ---
+      const instructionStepByStepBtn = document.getElementById('teacherInstructionStepByStepBtn');
+      const instructionAutoExtractBtn = document.getElementById('teacherInstructionAutoExtractBtn');
+      const instructionAutoResultBox = document.getElementById('teacherInstructionAutoResultBox');
+      const instructionAutoResultText = document.getElementById('teacherInstructionAutoResultText');
+      const instructionConfirmBtn = document.getElementById('teacherInstructionConfirmBtn');
+      const instructionDeclineBtn = document.getElementById('teacherInstructionDeclineBtn');
+      let extractedInstructions = '';
+
+      function htmlUnescapeInstr(str) {
+        const temp = document.createElement('textarea');
+        temp.innerHTML = str;
+        return temp.value;
+      }
+
+      function normalizeInstrResult(result) {
+        if (Array.isArray(result)) return result.join('\n').trim();
+        if (result && typeof result === 'object') return JSON.stringify(result, null, 2).trim();
+        return String(result || '').trim();
+      }
+
+      const instructionStrategies = [
+        {
+          name: 'Look for ordered list',
+          fn: raw => {
+            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
+            const match = u.match(/<ol[^>]*>([\s\S]*?)<\/ol>/i);
+            return match ? match[1].replace(/<li[^>]*>/g, '').replace(/<\/li>/g, '\n').trim() : '';
+          }
+        },
+        {
+          name: 'Look for numbered steps',
+          fn: raw => {
+            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
+            const lines = u.split(/\n|<br\s*\/?>\s*/i);
+            const steps = lines.filter(line => /^\d+\./.test(line.trim()));
+            return steps.length ? steps.join('\n') : '';
+          }
+        },
+        {
+          name: "Find 'method' and nearest list",
+          fn: raw => {
+            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
+            const methodIndex = u.toLowerCase().indexOf('method');
+            if (methodIndex === -1) return '';
+            const after = u.substring(methodIndex);
+            let listMatch = after.match(/<(ol|ul)[^>]*>([\s\S]*?)<\/\1>/i);
+            if (!listMatch) {
+              const wysiwygBlocks = [...u.matchAll(/<div[^>]*class=["'][^"']*wysiwyg[^"']*["'][^>]*>([\s\S]*?)<\/div>/gi)];
+              for (const block of wysiwygBlocks) {
+                const list = block[1].match(/<(ol|ul)[^>]*>([\s\S]*?)<\/\1>/i);
+                if (list) { listMatch = list; break; }
+              }
+            }
+            if (listMatch) {
+              const items = [...listMatch[2].matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+              return items.length ? items : '';
+            }
+            return '';
+          }
+        },
+        {
+          name: "Find 'Method' text in visible blocks",
+          fn: raw => {
+            const u = htmlUnescapeInstr(raw).replace(/<img[^>]*>/gi, '');
+            const lower = u.toLowerCase();
+            const methodIndex = lower.indexOf('method');
+            if (methodIndex === -1) return '';
+
+            let methodChunk = u.slice(methodIndex, methodIndex + 4000);
+            const stopMarkers = [
+              'page text:',
+              'login to',
+              'favourites',
+              'join our newsletter',
+              'cookies',
+              'privacy statement',
+              'terms and conditions'
+            ];
+            for (const marker of stopMarkers) {
+              const stopAt = methodChunk.toLowerCase().indexOf(marker);
+              if (stopAt > 0) {
+                methodChunk = methodChunk.slice(0, stopAt);
+                break;
+              }
+            }
+
+            methodChunk = methodChunk
+              .replace(/^method\s*[:\-]?\s*/i, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+            if (!methodChunk) return '';
+
+            const sentenceParts = methodChunk
+              .split(/(?<=[.!?])\s+(?=[A-Z])/)
+              .map(s => s.trim())
+              .filter(Boolean);
+
+            const looksLikeInstruction = s => /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place)\b/i.test(s);
+            const instructionLines = sentenceParts.filter(looksLikeInstruction);
+            return instructionLines.length ? instructionLines.join('\n') : '';
+          }
+        },
+        {
+          name: 'Extract recipeInstructions array from JSON',
+          fn: raw => {
+            const match = raw.match(/"recipeInstructions"\s*:\s*(\[[\s\S]*?\])/);
+            return match ? match[1] : '';
+          }
+        },
+        {
+          name: 'Find recipeInstructions in JSON-LD (string or array)',
+          fn: raw => {
+            let doc;
+            try { doc = new DOMParser().parseFromString(raw, 'text/html'); } catch (e) { return ''; }
+            const scripts = Array.from(doc.querySelectorAll('script[type="application/ld+json"]'));
+            for (const script of scripts) {
+              let json;
+              try { json = JSON.parse(script.textContent); } catch (e) { continue; }
+              let candidates = Array.isArray(json) ? json : json['@graph'] ? json['@graph'] : [json];
+              for (const item of candidates) {
+                if (item && item['@type'] && (item['@type'] === 'Recipe' || (Array.isArray(item['@type']) && item['@type'].includes('Recipe')))) {
+                  if (typeof item.recipeInstructions === 'string') return item.recipeInstructions;
+                  if (Array.isArray(item.recipeInstructions)) {
+                    return item.recipeInstructions.map(step => typeof step === 'string' ? step : (step.text || step['@value'] || '')).join('\n');
+                  }
+                }
+              }
+            }
+            return '';
+          }
+        },
+        {
+          name: 'Look for "recipeInstructions" itemprop elements',
+          fn: raw => {
+            const matches = [...raw.matchAll(/<p[^>]*itemprop=["']recipeInstructions["'][^>]*>([\s\S]*?)<\/p>/gi)];
+            return matches.length ? matches.map(m => m[0]).join('\n') : '';
+          }
+        }
+      ];
+
+      if (instructionStepByStepBtn) {
+        instructionStepByStepBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_instructions.html';
+        });
+      }
+
+      if (instructionAutoExtractBtn) {
+        instructionAutoExtractBtn.addEventListener('click', async function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+          const raw = await getRawData(recipeId);
+          if (!raw) {
+            alert('No raw data found for this recipe.');
+            return;
+          }
+
+          const results = instructionStrategies.map(s => {
+            const result = normalizeInstrResult(s.fn(raw));
+            return { result, solved: !!result && result !== 'N/A' };
+          });
+
+          const firstSolved = results.find(r => r.solved);
+          extractedInstructions = firstSolved ? firstSolved.result : '';
+
+          if (instructionAutoResultText) {
+            instructionAutoResultText.textContent = extractedInstructions
+              ? `First solved result (strategies 1-6):\n${extractedInstructions}`
+              : 'No solved result found in strategies 1-6.';
+          }
+          if (instructionAutoResultBox) instructionAutoResultBox.style.display = '';
+        });
+      }
+
+      if (instructionConfirmBtn) {
+        instructionConfirmBtn.addEventListener('click', function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+          if (!extractedInstructions) {
+            alert('No auto extract result to send.');
+            return;
+          }
+          fetch('/api/instructions-extractor/solution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipeId, solution: extractedInstructions })
+          })
+            .then(res => res.ok ? res.json() : Promise.reject(res))
+            .then(data => {
+              if (data && data.success) {
+                alert('Instructions saved!');
+              } else {
+                alert('Failed to save instructions.');
+              }
+            })
+            .catch(() => {
+              alert('Error saving instructions.');
+            });
+        });
+      }
+
+      if (instructionDeclineBtn) {
+        instructionDeclineBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_instructions.html';
+        });
+      }
+
+      // --- Ingredients Auto Extract ---
+      function extractIngredientsAuto(raw) {
+        const lines = String(raw || '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+        const start = lines.findIndex(l => /^ingredients?$/i.test(l) || /^ingredients?\b/i.test(l));
+        const end = lines.findIndex((l, idx) => idx > (start >= 0 ? start : -1) && (/^method\b/i.test(l) || /^instructions?\b/i.test(l)));
+        let result = [];
+        let strategyUsed = '';
+
+        if (start >= 0) {
+          result = lines.slice(start + 1, end > start ? end : start + 25)
+            .filter(l => !/^sponsored/i.test(l) && !/^see more/i.test(l));
+          if (result.length) {
+            strategyUsed = 'Extract lines between Ingredients and Method';
+          }
+        }
+
+        if (!result.length) {
+          const qtyRegex = /^((\d+([/.]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*(cups?|cup|tbsp|tsp|g|kg|ml|l|pinch|cloves?|slices?)\b/i;
+          result = lines.filter(l => qtyRegex.test(l));
+          if (result.length) {
+            strategyUsed = 'Extract ingredient-like quantity lines';
+          }
+        }
+
+        return {
+          solution: result.join('\n'),
+          strategyUsed
+        };
+      }
+
+      if (ingredientsStepByStepBtn) {
+        ingredientsStepByStepBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_ingredient.html';
+        });
+      }
+
+      if (ingredientsAutoBtn) {
+        ingredientsAutoBtn.addEventListener('click', async function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+
+          const raw = await getRawData(recipeId);
+          if (!raw) {
+            alert('No raw data found for this recipe.');
+            return;
+          }
+
+          const extracted = extractIngredientsAuto(raw);
+          extractedIngredients = extracted.solution;
+
+          if (ingredientsResultText) {
+            ingredientsResultText.textContent = extractedIngredients
+              ? `Ingredients found (${extracted.strategyUsed || 'Auto Extract'}):\n${extractedIngredients}`
+              : 'No ingredients found by Ingredients Auto Extract.';
+          }
+          if (ingredientsResultBox) ingredientsResultBox.style.display = '';
+        });
+      }
+
+      if (ingredientsConfirmBtn) {
+        ingredientsConfirmBtn.addEventListener('click', function() {
+          const recipeId = recipeSelect ? recipeSelect.value : '';
+          if (!recipeId) {
+            alert('Please select a recipe first.');
+            return;
+          }
+          if (!extractedIngredients) {
+            alert('No auto extract result to send.');
+            return;
+          }
+
+          fetch('/api/ingredients-extractor/solution', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ recipeId, solution: extractedIngredients })
+          })
+            .then(res => res.ok ? res.json() : Promise.reject(res))
+            .then(data => {
+              if (data && data.success) {
+                alert('Ingredients saved!');
+              } else {
+                alert('Failed to save ingredients.');
+              }
+            })
+            .catch(() => {
+              alert('Error saving ingredients.');
+            });
+        });
+      }
+
+      if (ingredientsDeclineBtn) {
+        ingredientsDeclineBtn.addEventListener('click', function() {
+          window.location.href = 'extractor_ingredient.html';
+        });
+      }
+
+      if (autoPublishBtn) {
+        autoPublishBtn.addEventListener('click', async function() {
+          const recipeId = recipeSelect ? Number(recipeSelect.value) : NaN;
+          if (!Number.isInteger(recipeId) || recipeId <= 0) {
+            alert('Please select a recipe first.');
+            return;
+          }
+
+          if (!confirm(`Run Auto Publish for RecipeID ${recipeId}?\n\nThis will run Cleanup Instructions, then Cleanup Ingredients.`)) {
+            return;
+          }
+
+          autoPublishBtn.disabled = true;
+          if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
+          if (autoPublishProgressPanel) autoPublishProgressPanel.style.display = 'block';
+          if (autoPublishInstructionsBar) autoPublishInstructionsBar.style.display = 'block';
+          if (autoPublishInstructionsFill) autoPublishInstructionsFill.style.width = '0%';
+          if (autoPublishIngredientsBar) autoPublishIngredientsBar.style.display = 'block';
+          if (autoPublishIngredientsFill) autoPublishIngredientsFill.style.width = '0%';
+
+          try {
+            await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+            await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', autoPublishInstructionsFill);
+
+            await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+            await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', autoPublishIngredientsFill);
+
+            try {
+              await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
+            } catch (syncErr) {
+              console.warn('[DEBUG][Add Recipe Auto Publish] Inventory sync failed:', syncErr);
+            }
+
+            pendingAutoPublishRecipeId = recipeId;
+            if (autoPublishReviewText) {
+              autoPublishReviewText.textContent = `RecipeID ${recipeId} cleanup complete. Choose Accept to publish or Decline to return.`;
+            }
+            if (autoPublishReviewBox) {
+              autoPublishReviewBox.style.display = 'block';
+              autoPublishReviewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+
+            setTimeout(() => {
+              resetAutoPublishUi();
+            }, 450);
+          } catch (err) {
+            resetAutoPublishUi();
+            alert('Auto Publish failed: ' + (err && err.message ? err.message : err));
+          } finally {
+            autoPublishBtn.disabled = false;
+          }
+        });
+      }
+
+      if (autoPublishAcceptBtn) {
+        autoPublishAcceptBtn.addEventListener('click', async function() {
+          const recipeId = Number(pendingAutoPublishRecipeId);
+          if (!Number.isInteger(recipeId) || recipeId <= 0) {
+            alert('No recipe is ready to publish. Run Auto Publish first.');
+            return;
+          }
+
+          autoPublishAcceptBtn.disabled = true;
+          try {
+            await publishRecipeToDisplay(recipeId);
+            alert(`RecipeID ${recipeId} published.`);
+            if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
+            pendingAutoPublishRecipeId = null;
+          } catch (err) {
+            alert('Publish failed: ' + (err && err.message ? err.message : err));
+          } finally {
+            autoPublishAcceptBtn.disabled = false;
+          }
+        });
+      }
+
+      if (autoPublishDeclineBtn) {
+        autoPublishDeclineBtn.addEventListener('click', function() {
+          pendingAutoPublishRecipeId = null;
+          if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
+        });
+      }
+    });
+  </script>
+</body>
+</html>

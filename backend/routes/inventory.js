@@ -42,13 +42,17 @@ router.post('/sync', async (req, res) => {
       const splitUnits = '(?:cups?|tbsp|tablespoons?|tsp|teaspoons?|g|kg|ml|l)';
       const splitQty = '(?:\\d+[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d*\\.\\d+|\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
       const candidateLines = rawIngredients
+        // Preserve HTML list item boundaries before stripping tags.
+        .replace(/<\/?(ul|ol)\b[^>]*>/gi, '\n')
+        .replace(/<li\b[^>]*>/gi, '')
+        .replace(/<\/li>/gi, '\n')
         .replace(/<br\s*\/?>/gi, '\n')
         .replace(/<[^>]+>/g, ' ')
         .replace(/&nbsp;/gi, ' ')
         .replace(/&amp;/gi, '&')
         .replace(/\bFILLING\b/gi, '\nFILLING\n')
         .replace(/([A-Za-z])(\d)/g, '$1\n$2')
-        .split(/\r?\n|\s*,\s*/)
+        .split(/\r?\n/)
         .map(line => line.trim())
         .filter(Boolean)
         .filter(line => !/^\d+$/.test(line))
