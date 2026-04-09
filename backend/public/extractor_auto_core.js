@@ -93,17 +93,24 @@
         fn: t => {
           const u = htmlUnescape(t).replace(/<img[^>]*>/gi, '');
           const lines = u.split(/\n|<br\s*\/?\s*>/i);
+          const methodHeadingIndex = lines.findIndex(line => /^method\b/i.test(String(line || '').trim()));
+          const startIndex = methodHeadingIndex >= 0 ? methodHeadingIndex : 0;
+          const instructionVerbRegex = /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place|sift|grease|bring|cool|refrigerate|remove|cut|chop|drizzle|garnish|top|divide)\b/i;
+          const pageNoiseRegex = /\b(heartfoundation\.org\.nz|vegetables\.co\.nz)\b|\|\s*\d{4}\b/i;
           const steps = [];
           let expectedStepNumber = 1;
-          for (let i = 0; i < lines.length; i++) {
+          for (let i = startIndex; i < lines.length; i++) {
             const line = String(lines[i] || '').trim();
             if (!line) continue;
             const numberedInline = line.match(/^(\d+)\.\s+(\S.*)$/);
             if (numberedInline) {
               const stepNumber = Number(numberedInline[1]);
+              const stepText = String(numberedInline[2] || '').trim();
+              if (!stepText || pageNoiseRegex.test(stepText)) continue;
+              if (!instructionVerbRegex.test(stepText) && stepText.split(/\s+/).length < 4) continue;
               if (!steps.length && stepNumber !== 1) continue;
               if (steps.length && stepNumber !== expectedStepNumber) break;
-              steps.push(line);
+              steps.push(`${stepNumber}. ${stepText}`);
               expectedStepNumber = stepNumber + 1;
               continue;
             }
@@ -117,7 +124,13 @@
                 next = String(lines[j] || '').trim();
                 if (next) break;
               }
-              if (next && !/^\d+[.)]?$/.test(next) && !/^(ingredients?|method|instructions?)\b/i.test(next)) {
+              if (
+                next &&
+                !/^\d+[.)]?$/.test(next) &&
+                !/^(ingredients?|method|instructions?)\b/i.test(next) &&
+                !pageNoiseRegex.test(next) &&
+                (instructionVerbRegex.test(next) || next.split(/\s+/).length >= 4)
+              ) {
                 steps.push(`${stepNumber}. ${next}`);
                 expectedStepNumber = stepNumber + 1;
               }
@@ -254,6 +267,21 @@
   function parseIngredientLinesFromRaw(fileText) {
     const source = String(fileText || '');
     const lines = source.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+
+    // Merge OCR/PDF split fractions such as "1" + "/2 cup milk" into "1/2 cup milk".
+    const normalizedLines = [];
+    for (let i = 0; i < lines.length; i++) {
+      const current = String(lines[i] || '').trim();
+      const next = String(lines[i + 1] || '').trim();
+      if (/^\d+$/.test(current) && /^\/\d+\b/.test(next)) {
+        normalizedLines.push(`${current}${next}`);
+        i++;
+        continue;
+      }
+      normalizedLines.push(current);
+    }
+
+    const workingLines = normalizedLines;
     const qtyRegex = /^((\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*([a-zA-Z]+)?/i;
     const unitRegex = /\b(cups?|cup|tbsp|tsp|g|kg|mg|ml|l|oz|lb|pinch|cloves?|slices?|eggs?)\b/i;
     const instructionVerbRegex = /\b(place|bring|reduce|cover|remove|transfer|stir|use|slice|serve|rinse|preheat|bake|cook|mix|whisk)\b/i;
@@ -280,13 +308,13 @@
     };
 
     function collectIngredientBlock(startIndex, endIndexExclusive) {
-      const maxEnd = Math.min(lines.length, Math.max(startIndex, endIndexExclusive));
+      const maxEnd = Math.min(workingLines.length, Math.max(startIndex, endIndexExclusive));
       const out = [];
       let started = false;
       let nonIngredientAfterStart = 0;
 
       for (let i = startIndex; i < maxEnd; i++) {
-        const rawLine = lines[i];
+        const rawLine = workingLines[i];
         if (!rawLine) continue;
         if (stopRegex.test(rawLine) && started) break;
 
@@ -331,18 +359,19 @@
     }
 
     const ingredientHeadingIndices = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (/^ingredients?\b/i.test(lines[i])) ingredientHeadingIndices.push(i);
+    for (let i = 0; i < workingLines.length; i++) {
+      if (/^ingredients?\b/i.test(workingLines[i])) ingredientHeadingIndices.push(i);
     }
 
     const methodHeadingIndices = [];
     const instructionHeadingIndices = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (/^method\b/i.test(lines[i])) methodHeadingIndices.push(i);
-      if (/^instructions?\b/i.test(lines[i])) instructionHeadingIndices.push(i);
+    for (let i = 0; i < workingLines.length; i++) {
+      if (/^method\b/i.test(workingLines[i])) methodHeadingIndices.push(i);
+      if (/^instructions?\b/i.test(workingLines[i])) instructionHeadingIndices.push(i);
     }
 
     let bestCandidates = [];
+    let firstValidCandidates = [];
 
     for (const ingredientsIdx of ingredientHeadingIndices) {
       const nextHeadingCandidates = [...methodHeadingIndices, ...instructionHeadingIndices]
@@ -360,13 +389,20 @@
 
       // Prefer the explicit Ingredients -> Method window when available.
       const candidate = between.length ? between : afterMethod;
+      if (!firstValidCandidates.length && candidate.length) {
+        firstValidCandidates = candidate;
+      }
       if (candidate.length > bestCandidates.length) {
         bestCandidates = candidate;
       }
     }
 
-    if (!bestCandidates.length) {
-      bestCandidates = collectIngredientBlock(0, Math.min(lines.length, 200));
+    const selectedCandidates = firstValidCandidates.length ? firstValidCandidates : bestCandidates;
+
+    if (!selectedCandidates.length) {
+      bestCandidates = collectIngredientBlock(0, Math.min(workingLines.length, 200));
+    } else {
+      bestCandidates = selectedCandidates;
     }
 
     const deduped = [];

@@ -181,17 +181,24 @@ document.addEventListener('DOMContentLoaded', function () {
       fn: raw => {
         const unescapedData = htmlUnescape(raw).replace(/<img[^>]*>/gi, '');
         const lines = unescapedData.split(/\n|<br\s*\/?\s*>/i);
+        const methodHeadingIndex = lines.findIndex(line => /^method\b/i.test(String(line || '').trim()));
+        const startIndex = methodHeadingIndex >= 0 ? methodHeadingIndex : 0;
+        const instructionVerbRegex = /\b(preheat|heat|melt|add|mix|stir|cook|pour|bake|serve|beat|whisk|simmer|combine|fold|place|sift|grease|bring|cool|refrigerate|remove|cut|chop|drizzle|garnish|top|divide)\b/i;
+        const pageNoiseRegex = /\b(heartfoundation\.org\.nz|vegetables\.co\.nz)\b|\|\s*\d{4}\b/i;
         const steps = [];
         let expectedStepNumber = 1;
-        for (let i = 0; i < lines.length; i++) {
+        for (let i = startIndex; i < lines.length; i++) {
           const line = String(lines[i] || '').trim();
           if (!line) continue;
           const numberedInline = line.match(/^(\d+)\.\s+(\S.*)$/);
           if (numberedInline) {
             const stepNumber = Number(numberedInline[1]);
+            const stepText = String(numberedInline[2] || '').trim();
+            if (!stepText || pageNoiseRegex.test(stepText)) continue;
+            if (!instructionVerbRegex.test(stepText) && stepText.split(/\s+/).length < 4) continue;
             if (!steps.length && stepNumber !== 1) continue;
             if (steps.length && stepNumber !== expectedStepNumber) break;
-            steps.push(line);
+            steps.push(`${stepNumber}. ${stepText}`);
             expectedStepNumber = stepNumber + 1;
             continue;
           }
@@ -204,7 +211,13 @@ document.addEventListener('DOMContentLoaded', function () {
               next = String(lines[j] || '').trim();
               if (next) break;
             }
-            if (next && !/^\d+[.)]?$/.test(next) && !/^(ingredients?|method|instructions?)\b/i.test(next)) {
+            if (
+              next &&
+              !/^\d+[.)]?$/.test(next) &&
+              !/^(ingredients?|method|instructions?)\b/i.test(next) &&
+              !pageNoiseRegex.test(next) &&
+              (instructionVerbRegex.test(next) || next.split(/\s+/).length >= 4)
+            ) {
               steps.push(`${stepNumber}. ${next}`);
               expectedStepNumber = stepNumber + 1;
             }

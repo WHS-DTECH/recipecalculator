@@ -2,6 +2,11 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
+async function ensureStaffSchema() {
+  await pool.query("ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'staff'");
+  await pool.query("UPDATE staff_upload SET primary_role = 'staff' WHERE primary_role IS NULL OR trim(primary_role) = ''");
+}
+
 function normalizeHeader(value) {
   return (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -19,6 +24,7 @@ function getIndexByAliases(headers, aliases) {
 router.get('/dropdown', async (req, res) => {
   console.log('[DEBUG] /api/staff_upload/dropdown called');
   try {
+    await ensureStaffSchema();
     const result = await pool.query("SELECT id, code, last_name, first_name FROM staff_upload WHERE COALESCE(status, 'Current') = 'Current' ORDER BY last_name, first_name");
     console.log('[DEBUG] Staff rows:', result.rows);
     res.json({ staff: result.rows });
@@ -31,6 +37,7 @@ router.get('/dropdown', async (req, res) => {
 // Get all staff_upload rows
 router.get('/all', async (req, res) => {
   try {
+    await ensureStaffSchema();
     const result = await pool.query('SELECT * FROM staff_upload');
     res.json({ staff: result.rows });
   } catch (err) {
@@ -40,6 +47,7 @@ router.get('/all', async (req, res) => {
 
 // Handle staff CSV upload
 router.post('/', async (req, res) => {
+  await ensureStaffSchema();
   const staff = req.body.staff;
   const headers = Array.isArray(req.body.headers) ? req.body.headers : [];
   if (!Array.isArray(staff) || staff.length === 0) {
@@ -98,7 +106,7 @@ router.post('/', async (req, res) => {
     for (const row of dedupedRows) {
       const updateResult = await client.query(
         `UPDATE staff_upload
-         SET code = $1, last_name = $2, first_name = $3, title = $4, email_school = $5, status = 'Current'
+         SET code = $1, last_name = $2, first_name = $3, title = $4, email_school = $5, status = 'Current', primary_role = 'staff'
          WHERE lower(trim(email_school)) = lower(trim($5))`,
         [row.code, row.lastName, row.firstName, row.title, row.email]
       );
@@ -107,8 +115,8 @@ router.post('/', async (req, res) => {
         updated += updateResult.rowCount;
       } else {
         await client.query(
-          'INSERT INTO staff_upload (code, last_name, first_name, title, email_school, status) VALUES ($1, $2, $3, $4, $5, $6)',
-          [row.code, row.lastName, row.firstName, row.title, row.email, 'Current']
+          'INSERT INTO staff_upload (code, last_name, first_name, title, email_school, status, primary_role) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [row.code, row.lastName, row.firstName, row.title, row.email, 'Current', 'staff']
         );
         inserted++;
       }

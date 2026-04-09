@@ -61,6 +61,7 @@
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <button id="teacherAutoPublishAsyncSyncBtn" style="background:#3949ab;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Auto Publish + Async Sync</button>
+      <span id="teacherAutoPublishStatus" style="margin-left:0.6rem;font-size:0.92rem;color:#3949ab;"></span>
       <div id="teacherAutoPublishQuickProgressPanel" style="display:none;margin-top:0.55rem;max-width:560px;">
         <div style="font-size:0.85rem;color:#1b1b1b;margin-bottom:4px;">Cleanup Instructions</div>
         <div id="teacherAutoPublishQuickInstructionsBar" style="width:100%;height:10px;background:#e6e6e6;border-radius:999px;overflow:hidden;">
@@ -111,6 +112,7 @@
       const extractAllProgressFill = document.getElementById('teacherExtractAllProgressFill');
       const extractAllStatus = document.getElementById('teacherExtractAllStatus');
       const autoPublishBtn = document.getElementById('teacherAutoPublishAsyncSyncBtn');
+      const autoPublishStatus = document.getElementById('teacherAutoPublishStatus');
       const autoPublishQuickProgressPanel = document.getElementById('teacherAutoPublishQuickProgressPanel');
       const autoPublishQuickInstructionsFill = document.getElementById('teacherAutoPublishQuickInstructionsFill');
       const autoPublishQuickIngredientsFill = document.getElementById('teacherAutoPublishQuickIngredientsFill');
@@ -491,23 +493,136 @@
         }
       }
 
-      function runAutoPublishPreviewBars() {
+      function setAutoPublishStatus(message, type) {
+        if (!autoPublishStatus) return;
+        autoPublishStatus.textContent = message || '';
+        if (!message) {
+          autoPublishStatus.style.color = '#3949ab';
+          return;
+        }
+        if (type === 'success') {
+          autoPublishStatus.style.color = '#1b5e20';
+          return;
+        }
+        if (type === 'error') {
+          autoPublishStatus.style.color = '#b71c1c';
+          return;
+        }
+        autoPublishStatus.style.color = '#3949ab';
+      }
+
+      function resetAutoPublishProgressPanel() {
         if (!autoPublishQuickProgressPanel || !autoPublishQuickInstructionsFill || !autoPublishQuickIngredientsFill) return;
-        autoPublishQuickProgressPanel.style.display = 'block';
+        autoPublishQuickProgressPanel.style.display = 'none';
         autoPublishQuickInstructionsFill.style.width = '0%';
         autoPublishQuickIngredientsFill.style.width = '0%';
+      }
 
-        window.setTimeout(function() {
-          autoPublishQuickInstructionsFill.style.width = '100%';
-        }, 50);
-        window.setTimeout(function() {
-          autoPublishQuickIngredientsFill.style.width = '100%';
-        }, 850);
-        window.setTimeout(function() {
-          autoPublishQuickProgressPanel.style.display = 'none';
-          autoPublishQuickInstructionsFill.style.width = '0%';
-          autoPublishQuickIngredientsFill.style.width = '0%';
-        }, 1900);
+      async function postJsonChecked(url, payload, stepLabel) {
+        const resp = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload || {})
+        });
+        let data = null;
+        try { data = await resp.json(); } catch (_) { data = null; }
+        if (!resp.ok || (data && data.error)) {
+          const detail = (data && (data.error || data.message)) || `${resp.status} ${resp.statusText}`;
+          throw new Error(`${stepLabel} failed: ${detail}`);
+        }
+        return data || { success: true };
+      }
+
+      async function waitForCleanupCompletion(progressUrl, progressFill) {
+        let sawRunning = false;
+        let keepPolling = true;
+        let guardPolls = 0;
+
+        while (keepPolling) {
+          try {
+            const resp = await fetch(progressUrl);
+            const data = await resp.json();
+            if (data && data.running === true) sawRunning = true;
+
+            const doneCount = Number(data && (data.progress ?? data.current) || 0);
+            const totalCount = Number(data && data.total || 0);
+
+            if (progressFill && Number.isFinite(doneCount) && Number.isFinite(totalCount)) {
+              const percent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : (sawRunning ? 100 : 0);
+              progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+            }
+
+            const hasNumeric = Number.isFinite(doneCount) && Number.isFinite(totalCount);
+            const alreadyComplete = hasNumeric && totalCount > 0 && doneCount >= totalCount;
+            const emptyComplete = hasNumeric && totalCount === 0 && data && data.running === false;
+
+            if ((!sawRunning && alreadyComplete) || (!sawRunning && emptyComplete)) {
+              if (progressFill) progressFill.style.width = '100%';
+              keepPolling = false;
+              continue;
+            }
+
+            if (sawRunning && data && data.running === false) {
+              if (progressFill) progressFill.style.width = '100%';
+              keepPolling = false;
+              continue;
+            }
+          } catch (_) {
+            keepPolling = false;
+          }
+
+          guardPolls++;
+          if (guardPolls > 180) keepPolling = false;
+          if (keepPolling) await new Promise(resolve => setTimeout(resolve, 350));
+        }
+      }
+
+      async function publishRecipeToDisplay(recipeId) {
+        const resp = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
+        const data = await resp.json();
+        if (!data || !data.success) {
+          throw new Error((data && data.error) || 'Unknown publish error');
+        }
+      }
+
+      async function runAsyncSyncFromRecipeId(startRecipeId, statusCallback) {
+        const dropdownResp = await fetch('/api/recipes/display-dropdown');
+        const dropdownData = await dropdownResp.json();
+        const recipes = Array.isArray(dropdownData && dropdownData.recipes) ? dropdownData.recipes : [];
+        const recipeIds = recipes
+          .map(r => Number(r.recipeid))
+          .filter(id => Number.isInteger(id) && id >= startRecipeId)
+          .sort((a, b) => a - b);
+
+        if (!recipeIds.length) {
+          if (typeof statusCallback === 'function') statusCallback('No recipes found to sync.');
+          return { successCount: 0, failCount: 0, total: 0 };
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+
+        for (let i = 0; i < recipeIds.length; i++) {
+          const recipeId = recipeIds[i];
+          if (typeof statusCallback === 'function') {
+            statusCallback(`Async syncing ${i + 1}/${recipeIds.length} (RecipeID ${recipeId})...`);
+          }
+
+          try {
+            const resp = await fetch('/api/ingredients/inventory/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipeId, reseed: true })
+            });
+            const data = await resp.json();
+            if (resp.ok && data && data.success) successCount++;
+            else failCount++;
+          } catch (_) {
+            failCount++;
+          }
+        }
+
+        return { successCount, failCount, total: recipeIds.length };
       }
 
       if (saveRecipeBtn) {
@@ -658,8 +773,49 @@
       }
 
       if (autoPublishBtn) {
-        autoPublishBtn.addEventListener('click', function() {
-          runAutoPublishPreviewBars();
+        autoPublishBtn.addEventListener('click', async function() {
+          const recipeId = Number(selectedRecipeId);
+          if (!Number.isInteger(recipeId) || recipeId <= 0) {
+            setAutoPublishStatus('No selected recipe. Save a recipe first.', 'error');
+            return;
+          }
+
+          autoPublishBtn.disabled = true;
+          autoPublishBtn.textContent = 'Running...';
+          setAutoPublishStatus(`Starting Auto Publish + Async Sync for RecipeID ${recipeId}...`, 'info');
+
+          if (autoPublishQuickProgressPanel) autoPublishQuickProgressPanel.style.display = 'block';
+          if (autoPublishQuickInstructionsFill) autoPublishQuickInstructionsFill.style.width = '0%';
+          if (autoPublishQuickIngredientsFill) autoPublishQuickIngredientsFill.style.width = '0%';
+
+          try {
+            await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+            await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', autoPublishQuickInstructionsFill);
+
+            await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+            await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', autoPublishQuickIngredientsFill);
+
+            setAutoPublishStatus(`Cleanup complete for RecipeID ${recipeId}. Publishing...`, 'info');
+            await publishRecipeToDisplay(recipeId);
+
+            const syncResult = await runAsyncSyncFromRecipeId(recipeId, function(message) {
+              setAutoPublishStatus(message, 'info');
+            });
+
+            await refreshRecipeMatrix(recipeId);
+            setAutoPublishStatus(
+              `Done. Success: ${syncResult.successCount}, Failed: ${syncResult.failCount}. Table refreshed.`,
+              syncResult.failCount > 0 ? 'error' : 'success'
+            );
+          } catch (err) {
+            setAutoPublishStatus(`Auto Publish + Async Sync failed: ${err && err.message ? err.message : err}`, 'error');
+          } finally {
+            autoPublishBtn.disabled = false;
+            autoPublishBtn.textContent = 'Auto Publish + Async Sync';
+            window.setTimeout(function() {
+              resetAutoPublishProgressPanel();
+            }, 450);
+          }
         });
       }
 

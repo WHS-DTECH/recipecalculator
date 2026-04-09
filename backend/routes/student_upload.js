@@ -70,6 +70,9 @@ async function ensureSchema() {
     ON student_timetable (lower(trim(id_number)))
     WHERE id_number IS NOT NULL AND trim(id_number) <> ''
   `);
+
+  await pool.query("ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'student'");
+  await pool.query("UPDATE student_timetable SET primary_role = 'student' WHERE primary_role IS NULL OR trim(primary_role) = ''");
 }
 
 function normalizeCsvHeader(value) {
@@ -226,7 +229,8 @@ router.post('/', async (req, res) => {
           fri_p4 = $41,
           fri_l = $42,
           fri_p5 = $43,
-          status = 'Current'
+          status = 'Current',
+          primary_role = 'student'
       WHERE lower(trim(id_number)) = lower(trim($44))
     `;
 
@@ -238,7 +242,7 @@ router.post('/', async (req, res) => {
         wed_p1_1, wed_p1_2, wed_p2, wed_i, wed_p3, wed_p4, wed_l, wed_p5,
         thu_p1_1, thu_p1_2, thu_p2, thu_i, thu_p3, thu_p4, thu_l, thu_p5,
         fri_p1_1, fri_p1_2, fri_p2, fri_i, fri_p3, fri_p4, fri_l, fri_p5,
-        status
+        status, primary_role
       ) VALUES (
         $1, $2, $3, $4,
         $5, $6, $7, $8, $9, $10, $11, $12,
@@ -246,7 +250,7 @@ router.post('/', async (req, res) => {
         $21, $22, $23, $24, $25, $26, $27, $28,
         $29, $30, $31, $32, $33, $34, $35, $36,
         $37, $38, $39, $40, $41, $42, $43, $44,
-        'Current'
+        'Current', 'student'
       )
     `;
 

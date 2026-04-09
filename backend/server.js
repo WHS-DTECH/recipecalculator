@@ -99,6 +99,14 @@ app.use('/api/upload_timetable', uploadTimetableRouter);
 const studentUploadRouter = require('./routes/student_upload');
 app.use('/api/student_upload', studentUploadRouter);
 
+const departmentRouter = require('./routes/department');
+app.use('/api/department', departmentRouter);
+
+const permissionsRouter = require('./routes/permissions');
+app.use('/api/permissions', permissionsRouter);
+
+const userRolesRouter = require('./routes/user_roles');
+app.use('/api/user_roles', userRolesRouter);
 
 // --- Suggestions API ---
 app.get('/api/suggestions', async (req, res) => {
