@@ -60,27 +60,15 @@ document.addEventListener('DOMContentLoaded', function () {
       button { margin-top: 1.5em; padding: 0.5em 1.2em; background: #1976d2; color: #fff; border: none; border-radius: 4px; font-size: 1em; cursor: pointer; }
       </style></head><body>
       <h2>Raw Data (from Upload)</h2>
-          let expectedStepNumber = 1;
-      <pre>"${String(rawData).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '\n')}"</pre>
+      <pre>${String(rawData).replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
       <button onclick="window.close()">Close</button>
       </body></html>
-            const numberedInline = line.match(/^(\d+)\.\s+(\S.*)$/);
-            if (numberedInline) {
-              const stepNumber = Number(numberedInline[1]);
-              if (!steps.length && stepNumber !== 1) continue;
-              if (steps.length && stepNumber !== expectedStepNumber) break;
+    `);
     win.document.close();
-              expectedStepNumber = stepNumber + 1;
   }
 
-
-              const stepNumber = Number(line.replace(/[.)]$/, ''));
-              if (!steps.length && stepNumber !== 1) continue;
-              if (steps.length && stepNumber !== expectedStepNumber) break;
   recipeSelect.addEventListener('change', function () {
     currentRecipeId = recipeSelect.value;
-                steps.push(`${stepNumber}. ${next}`);
-                expectedStepNumber = stepNumber + 1;
     startStepBtn.disabled = true;
     if (!currentRecipeId) {
       return;

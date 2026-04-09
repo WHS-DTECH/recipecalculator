@@ -70,6 +70,61 @@ function normalizeClassToken(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function expandTimetableClassTokens(values) {
+  return (Array.isArray(values) ? values : [])
+    .flatMap(v => String(v || '').split(/[;|]/g))
+    .map(v => v.trim())
+    .filter(Boolean);
+}
+
+function deriveClassCodeFromTimetableToken(token) {
+  const raw = String(token || '').trim();
+  if (!raw) return '';
+  const trimmed = raw.replace(/^-+|-+$/g, '');
+  if (!trimmed) return '';
+
+  const parts = trimmed.split('-').map(p => p.trim()).filter(Boolean);
+  if (parts.length >= 2 && /^\d{1,3}[A-Z]?$/i.test(parts[0])) {
+    return parts[1].toUpperCase();
+  }
+  if (parts.length >= 3 && /^\d{1,3}[A-Z]?$/i.test(parts[0])) {
+    return parts[1].toUpperCase();
+  }
+  if (parts.length > 1) {
+    const best = parts.find(p => /[A-Za-z]/.test(p) && p.length >= 4);
+    if (best) return best.toUpperCase();
+  }
+  return trimmed.toUpperCase();
+}
+
+function syncClassDropdownFromTimetable(periods) {
+  const classSelect = document.getElementById('classSelect');
+  if (!classSelect) return;
+
+  const tokens = (Array.isArray(periods) ? periods : [])
+    .flatMap(p => expandTimetableClassTokens(p && p.classes))
+    .map(deriveClassCodeFromTimetableToken)
+    .filter(Boolean);
+
+  if (!tokens.length) return;
+
+  const uniqueCodes = [...new Set(tokens)];
+  const existingNorm = new Set(
+    Array.from(classSelect.options)
+      .map(opt => normalizeClassToken(opt.value))
+      .filter(Boolean)
+  );
+
+  uniqueCodes.forEach(code => {
+    if (existingNorm.has(normalizeClassToken(code))) return;
+    const opt = document.createElement('option');
+    opt.value = code;
+    opt.textContent = `${code} (from timetable)`;
+    opt.setAttribute('data-timetable-fallback', '1');
+    classSelect.appendChild(opt);
+  });
+}
+
 function autoSelectClassFromSelectedPeriod() {
   const periodSelect = document.getElementById('periodSelect');
   const classSelect = document.getElementById('classSelect');
@@ -206,8 +261,9 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   }
 
   const rows = periods.map(p => {
-    const classText = (p.classes && p.classes.length)
-      ? p.classes.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;">${cls}</button>`).join('')
+    const classTokens = expandTimetableClassTokens(p.classes);
+    const classText = classTokens.length
+      ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;">${cls}</button>`).join('')
       : '<span style="color:#999;">No class</span>';
     return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
   }).join('');
@@ -218,7 +274,12 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
     </table>
   `;
 
-  _currentTeacherTimetablePeriods = Array.isArray(periods) ? periods : [];
+  _currentTeacherTimetablePeriods = (Array.isArray(periods) ? periods : []).map(p => ({
+    ...p,
+    classes: expandTimetableClassTokens(p && p.classes)
+  }));
+
+  syncClassDropdownFromTimetable(_currentTeacherTimetablePeriods);
   autoSelectClassFromSelectedPeriod();
 
   body.querySelectorAll('.timetable-class-chip').forEach(btn => {

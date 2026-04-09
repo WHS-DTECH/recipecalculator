@@ -256,11 +256,13 @@
     const lines = source.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
     const qtyRegex = /^((\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*([a-zA-Z]+)?/i;
     const unitRegex = /\b(cups?|cup|tbsp|tsp|g|kg|mg|ml|l|oz|lb|pinch|cloves?|slices?|eggs?)\b/i;
+    const instructionVerbRegex = /\b(place|bring|reduce|cover|remove|transfer|stir|use|slice|serve|rinse|preheat|bake|cook|mix|whisk)\b/i;
     const stopRegex = /^(videos?|method\b|instructions?\b|can you|try one of these recipes|products|home recipes|comments|review|favourites|join|newsletter|contact|privacy|terms|school visits|tour|cafe|related recipes|you may like these|chelsea products in recipe)/i;
     const splitPacked = (line) => String(line || '')
       .split(/\s*,\s*(?=(?:\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))/)
       .map(part => part.trim())
       .filter(Boolean);
+    const equipmentLineRegex = /\b(baking paper|baking tray|roasting dish|cutting board|kitchen scales?|measuring cups?|measuring spoons?|\btongs?\b|\bspoons?\b|equipment)\b/i;
 
     const isBareStepNumber = (line) => /^\d+[.)]?$/.test(String(line || '').trim());
 
@@ -268,6 +270,11 @@
       if (!line) return false;
       if (stopRegex.test(line)) return false;
       if (isBareStepNumber(line)) return false;
+      // Reject numbered method steps such as "1. Place rice ..." unless the line clearly looks like a quantity ingredient.
+      if (/^\d+\.\s+/.test(line)) {
+        if (instructionVerbRegex.test(line)) return false;
+        if (!unitRegex.test(line)) return false;
+      }
       if (qtyRegex.test(line)) return true;
       return unitRegex.test(line) && (/^\d/.test(line) || /^[¼½¾⅓⅔⅛⅜⅝⅞]/.test(line));
     };
@@ -298,6 +305,12 @@
         if (started && !addedThisLine) {
           // A short, lowercase-starting line is a preparation descriptor (e.g. "sliced", "chopped",
           // "sliced into strips"). Append it to the last collected ingredient rather than stopping.
+          const isSkippableMetaLine = /^(equipment|preparation and cooking skills|nutrition|tips)\b/i.test(rawLine)
+            || /^\([^)]*\)$/.test(rawLine);
+          if (isSkippableMetaLine) {
+            continue;
+          }
+
           const isDescriptor = rawLine.length < 60
             && /^[a-z]/.test(rawLine)
             && !stopRegex.test(rawLine)
@@ -306,7 +319,8 @@
             out[out.length - 1] = out[out.length - 1] + ', ' + rawLine;
           } else {
             nonIngredientAfterStart++;
-            if (nonIngredientAfterStart >= 1) break;
+            // Allow brief non-ingredient runs so "Ingredients -> Equipment -> Ingredients" layouts still parse.
+            if (out.length >= 2 && nonIngredientAfterStart >= 6) break;
           }
         } else if (addedThisLine) {
           nonIngredientAfterStart = 0;
@@ -344,7 +358,8 @@
         afterMethod = collectIngredientBlock(firstMethodAfter + 1, firstMethodAfter + 120);
       }
 
-      const candidate = between.length >= afterMethod.length ? between : afterMethod;
+      // Prefer the explicit Ingredients -> Method window when available.
+      const candidate = between.length ? between : afterMethod;
       if (candidate.length > bestCandidates.length) {
         bestCandidates = candidate;
       }
@@ -357,6 +372,7 @@
     const deduped = [];
     const seen = new Set();
     for (const line of bestCandidates) {
+      if (equipmentLineRegex.test(line)) continue;
       const key = line.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);

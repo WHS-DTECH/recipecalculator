@@ -1355,6 +1355,7 @@ app.get('/RawDataTXT/:file', (req, res, next) => {
 
 
 // Serve static files from backend/public
+app.use('/SavedPDFs', express.static(path.join(__dirname, 'SavedPDFs')));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 404 Handler (should be last middleware)

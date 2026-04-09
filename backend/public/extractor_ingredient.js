@@ -377,6 +377,7 @@ document.addEventListener('DOMContentLoaded', function () {
         step.result = '';
         console.error('[DEBUG] Error running strategy', step.name, e);
       }
+      renderStepTable();
     }
     currentStrategyResult.textContent = step.result || '(no result)';
     acceptResultBtn.style.display = '';

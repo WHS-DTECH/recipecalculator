@@ -20,6 +20,19 @@ async function repairUploadsIdSequence() {
   `);
 }
 
+function sanitizePdfFileName(name) {
+  const base = String(name || 'uploaded').replace(/\.pdf$/i, '').trim();
+  const cleaned = base.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  return `${cleaned || 'uploaded'}.pdf`;
+}
+
+function parsePdfDataUrl(dataUrl) {
+  const raw = String(dataUrl || '');
+  const match = /^data:application\/pdf(?:;charset=[^;,]+)?;base64,(.+)$/i.exec(raw);
+  if (!match) return null;
+  return Buffer.from(match[1], 'base64');
+}
+
 // POST /api/uploads
 router.post('/', async (req, res) => {
   const { recipe_title, upload_type, source_url, uploaded_by, upload_date, raw_data } = req.body;
@@ -39,6 +52,63 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('[DEBUG /api/uploads] Failed to insert upload:', err.message);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/uploads/pdf
+router.post('/pdf', async (req, res) => {
+  const { file_name, file_data, uploaded_by } = req.body || {};
+  const pdfBuffer = parsePdfDataUrl(file_data);
+  if (!pdfBuffer) {
+    return res.status(400).json({ success: false, error: 'Invalid PDF payload. Expected data URL (base64).' });
+  }
+
+  const savedPdfDir = path.join(__dirname, '../../SavedPDFs');
+  if (!fs.existsSync(savedPdfDir)) {
+    fs.mkdirSync(savedPdfDir, { recursive: true });
+  }
+
+  const safeName = sanitizePdfFileName(file_name);
+  const parsed = path.parse(safeName);
+  const stampedName = `${parsed.name}_${Date.now()}${parsed.ext}`;
+  const filePath = path.join(savedPdfDir, stampedName);
+
+  try {
+    await fs.promises.writeFile(filePath, pdfBuffer);
+    const sourceUrl = `/SavedPDFs/${encodeURIComponent(stampedName)}`;
+
+    let result;
+    try {
+      result = await insertUploadRecord(
+        parsed.name,
+        'pdf',
+        sourceUrl,
+        uploaded_by || 'user@example.com',
+        new Date().toISOString(),
+        ''
+      );
+    } catch (insertErr) {
+      const isUploadsPkConflict = insertErr && insertErr.code === '23505' && insertErr.constraint === 'uploads_pkey';
+      if (!isUploadsPkConflict) throw insertErr;
+      await repairUploadsIdSequence();
+      result = await insertUploadRecord(
+        parsed.name,
+        'pdf',
+        sourceUrl,
+        uploaded_by || 'user@example.com',
+        new Date().toISOString(),
+        ''
+      );
+    }
+
+    return res.json({
+      success: true,
+      upload_id: result.rows[0].id,
+      source_url: sourceUrl,
+      file_name: stampedName
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

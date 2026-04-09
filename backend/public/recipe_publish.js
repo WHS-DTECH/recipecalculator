@@ -17,56 +17,43 @@ document.addEventListener('DOMContentLoaded', () => {
 		console.error('Table or tbody not found!');
 		return;
 	}
-	fetch('/api/recipes')
-		.then(res => res.json())
-		.then(data => {
-			const columns = [
-				'id', 'name',
-				'instructions_extracted',
-				'instructions_display',
-				'extracted_ingredients', 'ingredients_display',
-				'actions'
-			];
-			if (!Array.isArray(data) || data.length === 0) {
-				tbody.innerHTML = `<tr><td colspan="${columns.length}">No recipes found.</td></tr>`;
-				return;
-			}
-			const sortedRecipes = sortRecipesNewestFirst(data);
-			tbody.innerHTML = '';
-			sortedRecipes.forEach(recipe => {
-				const tr = document.createElement('tr');
-				columns.forEach(col => {
-					const td = document.createElement('td');
-					if (col === 'url') {
-						const url = getRecipeColumnValue(recipe, col);
-						if (url) {
-							const link = document.createElement('a');
-							link.href = url;
-							link.target = '_blank';
-							link.textContent = 'Link';
-							td.appendChild(link);
-						}
-					} else if (col === 'instructions_display' || col === 'ingredients_display') {
-						const value = getRecipeColumnValue(recipe, col);
-					if (value && (value.includes('<ol') || value.includes('<ul') || value.includes('<li'))) {
-							td.innerHTML = value;
-						} else {
-							td.textContent = value;
-						}
-					} else if (col === 'actions') {
-						td.innerHTML = getRecipeColumnValue(recipe, col);
-					} else {
-						td.textContent = getRecipeColumnValue(recipe, col);
-					}
-					tr.appendChild(td);
-				});
-				tbody.appendChild(tr);
-			});
-		})
-		.catch(err => {
-			console.error('Error fetching recipes:', err);
-			tbody.innerHTML = `<tr><td colspan="15">Error loading recipes.</td></tr>`;
-		});
+
+function renderRecipesTableMessage(message) {
+	tbody.innerHTML = `<tr><td colspan="7">${message}</td></tr>`;
+}
+
+function extractApiErrorMessage(payload, fallback) {
+	if (payload && typeof payload === 'object') {
+		if (payload.error) return String(payload.error);
+		if (payload.message) return String(payload.message);
+	}
+	return fallback;
+}
+
+async function fetchRecipesList() {
+	try {
+		const resp = await fetch(`/api/recipes?_ts=${Date.now()}`, { cache: 'no-store' });
+		let payload = null;
+		try {
+			payload = await resp.json();
+		} catch (_) {
+			payload = null;
+		}
+
+		if (!resp.ok) {
+			const detail = extractApiErrorMessage(payload, `${resp.status} ${resp.statusText}`);
+			return { recipes: [], error: detail };
+		}
+		if (!Array.isArray(payload)) {
+			const detail = extractApiErrorMessage(payload, 'Unexpected response shape from /api/recipes');
+			return { recipes: [], error: detail };
+		}
+
+		return { recipes: payload, error: '' };
+	} catch (err) {
+		return { recipes: [], error: (err && err.message) ? err.message : 'Network error' };
+	}
+}
 
 // Populate the RecipeID filter selector and add filter/sort logic
 function getRecipeFilterId(recipe) {
@@ -127,10 +114,11 @@ function getRecipeColumnValue(recipe, col) {
 function populateRecipeIdFilterOptions(recipes) {
 	const filter = document.getElementById('recipeIdFilter');
 	if (!filter) return;
+	const safeRecipes = Array.isArray(recipes) ? recipes : [];
 	filter.innerHTML = '<option value="">-- Select RecipeID --</option>';
 	// Get unique recipeIDs and names
 	const unique = {};
-	recipes.forEach(r => {
+	safeRecipes.forEach(r => {
 		const recipeId = getRecipeFilterId(r);
 		if (!recipeId || unique[recipeId]) return;
 		unique[recipeId] = getRecipeFilterLabel(r);
@@ -173,6 +161,7 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 	const table = document.getElementById('recipesTable');
 	const tbody = table ? table.querySelector('tbody') : null;
 	if (!table || !tbody) return;
+	const safeRecipes = Array.isArray(recipes) ? recipes : [];
 	const columns = [
 		'id', 'name',
 		'instructions_extracted',
@@ -180,7 +169,7 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 		'extracted_ingredients', 'ingredients_display',
 		'actions'
 	];
-	let filtered = recipes;
+	let filtered = safeRecipes;
 	if (selectedId) {
 		filtered = recipes.filter(r => String(getRecipeFilterId(r)) === String(selectedId));
 	}
@@ -232,30 +221,21 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 
 let allRecipesCache = [];
 	// Fetch all recipes and populate both the table and the filter selector
-	fetch('/api/recipes')
-		.then(res => res.json())
-		.then(data => {
-			console.log('[DEBUG] /api/recipes returned:', data);
-			if (Array.isArray(data) && data.length > 0) {
-				console.log('[DEBUG] First recipe object:', data[0]);
-			}
-			allRecipesCache = data;
-			refreshPublishedRecipeIds().then(() => {
-			populateRecipeIdFilterOptions(data);
-			const persistedRecipeId = sessionStorage.getItem(cleanupSelectedRecipeKey) || '';
-			const persistedStatusFilter = sessionStorage.getItem(publishStatusFilterKey) || 'all';
-			const selectedStatusFilter = setPublishStatusFilterSelection(persistedStatusFilter);
-			const selectedRecipeId = persistedRecipeId ? (setRecipeFilterSelection(persistedRecipeId) || '') : '';
-			console.log('[DEBUG] Populating RecipeID filter with:', data.map(getRecipeFilterLabel).filter(Boolean));
-			filterAndRenderRecipesById(data, selectedRecipeId, selectedStatusFilter);
-			});
-		})
-		.catch(err => {
-			const table = document.getElementById('recipesTable');
-			const tbody = table ? table.querySelector('tbody') : null;
-			if (tbody) tbody.innerHTML = `<tr><td colspan="7">Error loading recipes.</td></tr>`;
-			console.error('[DEBUG] Error fetching recipes:', err);
-		});
+	(async () => {
+		const { recipes, error } = await fetchRecipesList();
+		allRecipesCache = recipes;
+		await refreshPublishedRecipeIds();
+		populateRecipeIdFilterOptions(recipes);
+		const persistedRecipeId = sessionStorage.getItem(cleanupSelectedRecipeKey) || '';
+		const persistedStatusFilter = sessionStorage.getItem(publishStatusFilterKey) || 'all';
+		const selectedStatusFilter = setPublishStatusFilterSelection(persistedStatusFilter);
+		const selectedRecipeId = persistedRecipeId ? (setRecipeFilterSelection(persistedRecipeId) || '') : '';
+		filterAndRenderRecipesById(recipes, selectedRecipeId, selectedStatusFilter);
+		if (error) {
+			console.error('[DEBUG] /api/recipes error:', error);
+			renderRecipesTableMessage(`Error loading recipes: ${error}`);
+		}
+	})();
 
 	// Add event for filter button
 	const filterBtn = document.getElementById('applyRecipeIdFilterBtn');
@@ -481,9 +461,8 @@ let allRecipesCache = [];
 			const persistedRecipeId = sessionStorage.getItem(cleanupSelectedRecipeKey) || '';
 			const persistedStatusFilter = sessionStorage.getItem(publishStatusFilterKey) || 'all';
 			await refreshPublishedRecipeIds();
-			const resp = await fetch(`/api/recipes?_ts=${Date.now()}`, { cache: 'no-store' });
-			const data = await resp.json();
-			allRecipesCache = Array.isArray(data) ? data : [];
+			const { recipes, error } = await fetchRecipesList();
+			allRecipesCache = recipes;
 			populateRecipeIdFilterOptions(allRecipesCache);
 
 			let selectedId = previousSelectedId;
@@ -496,8 +475,13 @@ let allRecipesCache = [];
 			const selectedStatusFilter = setPublishStatusFilterSelection(targetStatusFilter);
 
 			filterAndRenderRecipesById(allRecipesCache, selectedId, selectedStatusFilter);
+			if (error) {
+				console.error('[DEBUG] Failed to refresh recipes from API:', error);
+				renderRecipesTableMessage(`Error loading recipes: ${error}`);
+			}
 		} catch (err) {
 			console.error('[DEBUG] Failed to refresh recipes after cleanup:', err);
+			renderRecipesTableMessage('Error loading recipes.');
 		}
 	}
 
