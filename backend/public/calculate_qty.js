@@ -4,6 +4,14 @@ document.addEventListener('DOMContentLoaded', function() {
   const syncedRecipeFilterKey = 'calculateQtySyncedRecipeId';
   let allPublishedRecipes = [];
 
+  function notify(message, type = 'info', duration = 4200) {
+    if (typeof window.showToast === 'function') {
+      window.showToast(message, type, duration);
+      return;
+    }
+    alert(message);
+  }
+
   function fetchIngredientsInventory() {
     return fetch(`/api/ingredients/inventory/all?_t=${Date.now()}`, { cache: 'no-store' })
       .then(res => res.json())
@@ -22,7 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (recipeIdInput === null) return;
       const recipeId = recipeIdInput.trim();
       if (!recipeId) {
-        alert('Please enter a RecipeID to sync.');
+        notify('Please enter a RecipeID to sync.', 'warning');
         return;
       }
 
@@ -33,17 +41,24 @@ document.addEventListener('DOMContentLoaded', function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ recipeId, reseed: true })
       })
-        .then(res => res.json())
+        .then(res => {
+          if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+          return res.json();
+        })
         .then(data => {
-          if (data.success) {
+          if (data && data.success) {
             sessionStorage.setItem(syncedRecipeFilterKey, recipeId);
-            alert('Quantity sync complete for RecipeID ' + recipeId + '! Updated: ' + data.updated);
-            location.reload();
+            notify(`Quantity sync complete for RecipeID ${recipeId}! Updated: ${data.updated}`, 'success', 4200);
+            setTimeout(() => location.reload(), 500);
           } else {
-            alert('Sync failed: ' + (data.error || 'Unknown error'));
+            const message = data?.error || 'Unknown error';
+            notify(`Sync failed: ${message}`, 'error', 6200);
           }
         })
-        .catch(err => alert('Sync failed: ' + err.message))
+        .catch(err => {
+          const message = err && err.message ? err.message : String(err);
+          notify(`Sync failed: ${message}`, 'error', 6200);
+        })
         .finally(() => {
           syncBtn.disabled = false;
           syncBtn.textContent = 'Sync Quantity';
@@ -59,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if (startInput === null) return;
       const startRecipeId = Number(String(startInput).trim());
       if (!Number.isInteger(startRecipeId) || startRecipeId <= 0) {
-        alert('Please enter a valid numeric RecipeID.');
+        notify('Please enter a valid numeric RecipeID.', 'warning');
         return;
       }
 
@@ -69,6 +84,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
       try {
         const dropdownResp = await fetch('/api/recipes/display-dropdown');
+        if (!dropdownResp.ok) {
+          throw new Error(`Failed to load recipe list: ${dropdownResp.status} ${dropdownResp.statusText}`);
+        }
         const dropdownData = await dropdownResp.json();
         const recipes = Array.isArray(dropdownData?.recipes) ? dropdownData.recipes : [];
         const recipeIds = recipes
@@ -77,7 +95,7 @@ document.addEventListener('DOMContentLoaded', function() {
           .sort((a, b) => a - b);
 
         if (!recipeIds.length) {
-          alert('No recipes found from RecipeID ' + startRecipeId + ' onward.');
+          notify(`No recipes found from RecipeID ${startRecipeId} onward.`, 'info', 4200);
           return;
         }
 
@@ -97,7 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
               body: JSON.stringify({ recipeId, reseed: true })
             });
             const data = await resp.json();
-            if (resp.ok && data.success) successCount++;
+            if (resp.ok && data && data.success) successCount++;
             else failCount++;
           } catch {
             failCount++;
@@ -107,12 +125,18 @@ document.addEventListener('DOMContentLoaded', function() {
         if (asyncSyncStatus) {
           asyncSyncStatus.textContent = `Done. Success: ${successCount}, Failed: ${failCount}`;
         }
+        notify(
+          `Async sync complete. Success: ${successCount}, Failed: ${failCount}.`,
+          failCount > 0 ? 'warning' : 'success',
+          failCount > 0 ? 6200 : 4200
+        );
 
         const finalRecipeId = String(recipeIds[recipeIds.length - 1]);
         sessionStorage.setItem(syncedRecipeFilterKey, finalRecipeId);
-        location.reload();
+        setTimeout(() => location.reload(), 500);
       } catch (err) {
-        alert('Async sync failed: ' + (err?.message || err));
+        const message = err && err.message ? err.message : String(err);
+        notify(`Async sync failed: ${message}`, 'error', 6200);
         if (asyncSyncStatus) asyncSyncStatus.textContent = 'Async sync failed.';
       } finally {
         asyncSyncBtn.disabled = false;

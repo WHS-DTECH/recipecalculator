@@ -45,6 +45,9 @@
 3. [ ] **Phase 3c: Accessibility Pass** - Run contrast checker, keyboard nav test, and screen reader validation
 4. [ ] **Phase 3d: Mobile Responsiveness Testing** - Test at 320px, 768px, 1024px breakpoints
 5. [ ] **Phase 3e: Integration & Documentation** - Swap navbar, update design system docs
+6. [x] **Phase 4a: Typography Polish** - Inter font wired through design_tokens.css (Google Fonts, graceful system-font fallback)
+7. [x] **Phase 4b: Global Toast Notifications** - Created `shared/toast.js` + CSS in `components.css`; auto-loaded by navbar_loader. Use `window.showToast(msg, type)` on any page.
+8. [x] **Phase 4c: API Error Callout Component** - `.ui-error-callout` added to `components.css` for inline API failure display.
 
 ## Phase 3 Summary (In Progress)
 
@@ -99,9 +102,85 @@
   - `book_the_shopping.html` print table styles now enforce wrapping, smaller print cell sizing, and page margins
   - `ingredients_directory.html` now has print-only output mode that hides controls and prints core inventory table cleanly
   - `style.css` now has intermediate-width shopping controls tuning (1024/1200 bands) to better handle browser zoom-induced narrow layouts
-- [ ] **Print/Zoom Manual Validation**: Confirm final browser behavior at 200% zoom and print preview for Shopping + Ingredients pages
-
-## File Manifest (Phase 2 Deliverables)
+- [x] **Publish Workflow Feedback Hardening**:
+  - `recipe_publish.js` active runtime path now uses non-blocking toast feedback for success/warning/error states (publish, auto-publish, cleanup actions)
+  - Recipe load failures now render inline `.ui-error-callout` blocks in the table area instead of plain text rows
+  - `recipe_publish.html` cleaned of leftover debug artifacts (removed top stray `</div>` and TEST marker banner), with script cache version bumped
+- [x] **Teacher Workflow Feedback Hardening**:
+  - `add_recipe.html` active actions now replace blocking alerts with toast-based warnings/errors for async sync and extractor actions
+  - `quick_add.html` now emits toast feedback for Save Recipe, Extract All, Accept ALL, and Auto Publish + Async Sync outcomes
+  - Recipe Matrix API failures in `add_recipe.html` and `quick_add.html` now render inline `.ui-error-callout` blocks (instead of plain text-only failure states)
+  - `extractor_auto_core.js` asset version bumped to `20260410a` in both pages so parser/UI improvements are fetched immediately
+- [x] **Backend Startup Command Clarified**:
+  - Verified server startup succeeds from backend folder with `node server.js`
+  - Previous failure came from running `Set-Location backend` while already in backend (resolved command-path issue)
+- [x] **Shared Asset Cache Busting**:
+  - `shared/navbar_loader.js` now appends `?v=20260410a` to local navbar-loaded CSS/JS assets (`navbar.css`, `navbar_user.js`, `navbar_roles.js`, `shared/toast.js`)
+  - Keeps external CDN styles untouched while forcing fresh fetch of local redesign assets after deployments
+- [x] **Publish Script Legacy Tail Cleanup**:
+  - Removed unreachable legacy code after the explicit early return in `recipe_publish.js`
+  - Kept only the active runtime path used by `recipe_publish.html`, reducing duplicate handlers and regression risk
+- [x] **Publish Cleanup Reliability Hardening**:
+  - Cleanup Instructions/Cleanup Ingredients button flows in `recipe_publish.js` now use checked API calls (`postJsonChecked`) instead of unchecked fetches
+  - Added explicit error toasts and guaranteed progress/button state reset via `try/catch/finally`
+- [x] **Add Recipe Auto Publish Reliability + Feedback Hardening**:
+  - `publishRecipeToDisplay(...)` now validates HTTP status and payload success before considering publish complete
+  - Async Sync recipe-list bootstrap now fails loudly when `/api/recipes/display-dropdown` is unavailable (instead of silently continuing)
+  - Auto Publish review/accept/decline and failure paths now emit toast feedback in addition to inline status text
+- [x] **Quick Add Auto Publish Reliability + Feedback Hardening**:
+  - `publishRecipeToDisplay(...)` now validates HTTP status + payload success (non-2xx no longer treated as success)
+  - Async Sync startup now validates `/api/recipes/display-dropdown` response status before parsing
+  - Auto Publish flow now treats cleanup step failures as explicit warnings (toasts) while continuing publish + sync
+  - Consolidated error messaging in catch-paths for clearer status text + toast output
+- [x] **Phase 3 Manual-Signoff Prep Evidence Refresh (2026-04-10)**:
+  - Re-ran `check_contrast.js` (all semantic text colors pass WCAG AA on white)
+  - Re-ran `test_keyboard_nav.js` (no new structural blockers; manual Tab-order run still pending for complex pages)
+  - Verified runtime HTTP 200 for signoff pages: quick_add, add_recipe, book_a_class, book_the_shopping, ingredients_directory, recipe_publish
+- [x] **Sync Quantity Parsing Fix (Calculate Quantity page)**:
+  - Fixed: quantity + ingredient_name in separate DB fields now combined for pattern matching
+  - Before: "½" (qty alone) + "banana peeled" (ingredient) => only FoodItem captured
+  - After: combined as "½ banana peeled" => correctly splits to ½ qty + banana peeled fooditem
+  - Fixes rows: 1667 (banana peeled), 1721 (avocado sliced), 1687/1686 (courgettes variants)
+  - Pattern now matches fractions/ranges at start: ½, 1-2, 1/2, etc. followed by fooditem text
+- [x] **Calculate Qty Page Hardening (2026-04-10)**:
+  - Added 8 validation & error-handlings for edge cases:
+    - Null/undefined quantity, ingredient, server response checks
+    - NaN detection for parsed fractions with fallback to original
+    - Invalid quantity string rejection (non-numeric patterns)
+    - Request/response malformation resilience
+  - Updated logging to track 8 data points for troubleshooting
+- [x] **Accessibility Audit Tooling + Focus Coverage Hardening (2026-04-10)**:
+  - Extended `test_keyboard_nav.js` and `test_a11y.py` coverage from 4 to 6 signoff pages (quick_add, add_recipe, book_a_class, book_the_shopping, ingredients_directory, recipe_publish)
+  - Improved both audits to resolve linked local stylesheets when checking `:focus` / `:focus-visible` selectors
+  - Added shared design-system CSS links (`shared/design_tokens.css`, `shared/base.css`, `shared/components.css`) to `quick_add.html`, `add_recipe.html`, `ingredients_directory.html`, and `recipe_publish.html`
+  - Result: focus-style detection now passes on all 6 signoff pages in automated audit runs
+  - Remaining manual accessibility checks: keyboard-only Tab-order walkthrough for high-density pages, screen reader pass, and 200% zoom validation
+- [x] **Mobile Readiness Evidence Refresh (2026-04-10)**:
+  - Verified viewport meta tags present on all 6 signoff pages
+  - Reconfirmed responsive breakpoint coverage in shared/global CSS (1200, 1024, 900, 768, 480)
+  - Remaining manual checks: visual emulator pass at 320px, 768px, 1024px for final signoff
+- [x] **Shopping List Action-Category Exclusion (2026-04-10)**:
+  - Updated shopping list generation endpoints to exclude any rows whose aisle category resolves to `Action`
+  - Applied in both `by_teacher` and `by_category` API paths so UI tables and print outputs stay consistent
+  - Implemented as a DB-level category-name filter (`LEFT JOIN aisle_category` + skip when category is `Action`, case-insensitive)
+- [x] **Title Extractor Uploaded-PDF Numeric Tail Cleanup (2026-04-10)**:
+  - Tightened URL-slug title normalization to remove trailing long numeric upload stamps (e.g. `..._1775706668021`)
+  - Preserves legitimate short title numbers (e.g. `Recipe 1`) by only trimming trailing numeric tokens of 6+ digits
+  - Applied in both manual title extractor strategy (`title_extractor.js`) and shared auto extractor core (`extractor_auto_core.js`)
+- [x] **Recipe Book Landing Redesign + Dish Image Showcase (2026-04-10)**:
+  - Reworked `index.html` into a student/parent-friendly showcase layout (hero banner, improved card gallery, category chips, recipe-count badge)
+  - Enhanced `display_recipe_book.js` cards with dish-type tagging and short educational subtitles
+  - Added stock-image integration per dish title using royalty-free image endpoints with deterministic fallback (`source.unsplash.com` primary, `picsum.photos` fallback)
+  - Preserved existing navigation and click-through behavior to recipe detail pages
+- [x] **Recipe Detail Page Redesign (2026-04-10)**:
+  - Rebuilt `recipe_display.html` with the same visual language as Recipe Book (hero, metadata pills, featured image, card-based content panels)
+  - Updated `display_recipe_details.js` to populate new layout with cleaned ingredient/instruction rendering and source metadata
+  - Added category-matched royalty-free dish imagery for detail pages with stable fallback image handling
+- [x] **Teacher/Technician Add Recipes Page Redesign (Page 1 Only) (2026-04-10)**:
+  - Scoped redesign to `quick_add.html` only (no cross-page combination)
+  - Reframed screen into a single task flow: Load Source -> Save + Sync -> Extract + Confirm -> Publish + Shopping Sync
+  - Added workflow header chips, step cards, and clearer operations copy while preserving all existing IDs and backend actions
+  - Kept right-side recipe matrix as a sticky "Recipe Snapshot" validation panel
 
 | File | Type | Size | Purpose |
 |------|------|------|---------|

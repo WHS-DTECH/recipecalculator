@@ -3,10 +3,116 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quick Add</title>
+  <title>Recipe</title>
   <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <link rel="stylesheet" href="shared/design_tokens.css">
+  <link rel="stylesheet" href="shared/base.css">
+  <link rel="stylesheet" href="shared/components.css">
   <link rel="stylesheet" href="admin_styles.css">
   <style>
+    .quickadd-shell {
+      background: #ffffff;
+      border: 1px solid #dbe6f2;
+      border-radius: 14px;
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+      padding: 1rem;
+    }
+
+    .quickadd-header {
+      margin-bottom: 0.9rem;
+    }
+
+    .quickadd-title {
+      margin: 0;
+      color: #15508a;
+      font-size: 1.7rem;
+      line-height: 1.2;
+    }
+
+    .quickadd-intro {
+      margin: 0.32rem 0 0;
+      color: #4f6477;
+      font-size: 0.95rem;
+    }
+
+    .workflow-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+      margin: 0.7rem 0 0.15rem;
+    }
+
+    .workflow-chip {
+      border: 1px solid #bfd8ef;
+      background: #eef7ff;
+      color: #145083;
+      border-radius: 999px;
+      padding: 0.28rem 0.6rem;
+      font-size: 0.77rem;
+      font-weight: 700;
+    }
+
+    .step-card {
+      border: 1px solid #d9e7f5;
+      border-radius: 12px;
+      background: #fbfdff;
+      padding: 0.8rem 0.85rem;
+    }
+
+    .step-title-row {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .step-num {
+      width: 1.5rem;
+      height: 1.5rem;
+      border-radius: 999px;
+      background: #1976d2;
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.78rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .step-caption {
+      font-size: 0.82rem;
+      color: #5c7388;
+      margin: 0 0 0.55rem;
+    }
+
+    .ops-card {
+      border: 1px solid #d7e3f4;
+      border-radius: 12px;
+      background: #ffffff;
+      padding: 0.75rem;
+    }
+
+    .ops-title {
+      margin: 0 0 0.45rem;
+      color: #143f6a;
+      font-size: 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .ops-note {
+      font-size: 0.84rem;
+      color: #4b6380;
+      margin: 0 0 0.6rem;
+    }
+
+    .full-width-btn {
+      width: 100%;
+      justify-content: center;
+    }
+
     @media (max-width: 1100px) {
       #quickAddWorkspace {
         grid-template-columns: 1fr !important;
@@ -21,36 +127,59 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
-  <div class="main-content-margins">
-    <h2 style="margin:0 0 0.8rem 0;">Quick Add</h2>
+  <div class="main-content-margins quickadd-shell">
+    <header class="quickadd-header">
+      <h2 class="quickadd-title">Add Recipes Workflow</h2>
+      <p class="quickadd-intro">Single-page workflow for Teacher/Technician: choose source, save recipe, extract content, then publish + sync for class shopping.</p>
+      <div class="workflow-strip">
+        <span class="workflow-chip">1. Load Source</span>
+        <span class="workflow-chip">2. Save + Sync</span>
+        <span class="workflow-chip">3. Extract + Accept</span>
+        <span class="workflow-chip">4. Publish + Async Sync</span>
+      </div>
+    </header>
 
     <div id="quickAddWorkspace" style="display:grid;grid-template-columns:minmax(0, 1.6fr) minmax(360px, 1fr);gap:1rem;align-items:start;">
       <div id="quickAddLeftColumn" style="min-width:0;">
 
-    <div class="setup-section">
-      <div class="setup-section-title">Load Recipe (URL)</div>
+    <div class="setup-section step-card">
+      <div class="step-title-row">
+        <span class="step-num">1</span>
+        <div class="setup-section-title" style="margin:0;">Load Recipe (URL)</div>
+      </div>
+      <div class="step-caption">Use either URL or PDF for each recipe intake run.</div>
       <div class="setup-section-desc">Import recipe from a website URL.</div>
       <label for="recipeUrlInput" class="recipe-url-label standout-label">Recipe URL:</label>
       <input type="text" id="recipeUrlInput" class="setup-url-input wide-url-input super-wide-url-input" placeholder="e.g., https://www.chelsea.co.nz/browse-recipes/...">
     </div>
 
-    <div class="setup-section" style="margin-top:1.1rem;">
-      <div class="setup-section-title">Load Recipe (PDF)</div>
+    <div class="setup-section step-card" style="margin-top:0.75rem;">
+      <div class="setup-section-title" style="margin:0;">Load Recipe (PDF)</div>
       <div class="setup-section-desc">Upload a PDF recipe and optionally sync it into the Recipes table from the same page.</div>
       <label for="teacherPdfInput" class="recipe-url-label standout-label">Source File:</label>
       <div id="teacherPdfUploadArea" style="display:inline-block;min-width:320px;max-width:520px;margin-right:0.6rem;vertical-align:middle;padding:1rem 1.2rem;border:1.5px dashed #1a73e8;border-radius:8px;background:#f8fbff;color:#1a73e8;text-align:center;cursor:pointer;">Drag & drop or click to select PDF</div>
       <input type="file" id="teacherPdfInput" accept=".pdf" style="display:none;">
     </div>
 
-    <div class="setup-section">
-      <button id="teacherSaveRecipeBtn" class="btn btn-primary">Save Recipe (Upload + Sync + Extract + Save Raw)</button>
+    <div class="setup-section step-card" style="margin-top:0.75rem;">
+      <div class="step-title-row">
+        <span class="step-num">2</span>
+        <div class="setup-section-title" style="margin:0;">Save + Sync</div>
+      </div>
+      <p class="step-caption">Creates/updates recipe record, runs visible text extraction, and saves raw content.</p>
+      <button id="teacherSaveRecipeBtn" class="btn btn-primary full-width-btn">Save Recipe (Upload + Sync + Extract + Save Raw)</button>
       <div id="teacherSaveRecipeProgressBar" class="ui-progress" style="display:none;margin-top:0.6rem;">
         <div id="teacherSaveRecipeProgressFill" class="ui-progress-bar" style="width:0;"></div>
       </div>
       <div id="teacherSaveRecipeStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
     </div>
 
-    <div class="setup-section">
+    <div class="setup-section step-card" style="margin-top:0.75rem;">
+      <div class="step-title-row">
+        <span class="step-num">3</span>
+        <div class="setup-section-title" style="margin:0;">Extract + Confirm</div>
+      </div>
+      <p class="step-caption">Run all extractors, then commit accepted values in one action.</p>
       <div class="ui-action-bar">
         <button id="teacherExtractAllBtn" class="btn btn-success">Extract All</button>
         <button id="teacherAcceptAllExtractsBtn" class="btn btn-primary">Accept ALL Extracts</button>
@@ -61,8 +190,13 @@
       <div id="teacherExtractAllStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
     </div>
 
-    <div class="setup-section">
-      <button id="teacherAutoPublishAsyncSyncBtn" class="btn btn-primary">Auto Publish + Async Sync</button>
+    <div class="setup-section step-card" style="margin-top:0.75rem;">
+      <div class="step-title-row">
+        <span class="step-num">4</span>
+        <div class="setup-section-title" style="margin:0;">Publish + Shopping Sync</div>
+      </div>
+      <p class="step-caption">Cleans display fields, publishes recipe, and runs async inventory sync from this RecipeID onward.</p>
+      <button id="teacherAutoPublishAsyncSyncBtn" class="btn btn-primary full-width-btn">Auto Publish + Async Sync</button>
       <span id="teacherAutoPublishStatus" style="margin-left:0.6rem;font-size:0.92rem;color:var(--color-info);"></span>
       <div id="teacherAutoPublishQuickProgressPanel" style="display:none;margin-top:0.55rem;max-width:560px;">
         <div style="font-size:0.85rem;color:#1b1b1b;margin-bottom:4px;">Cleanup Instructions</div>
@@ -81,9 +215,9 @@
 
       <div id="quickAddRightColumn" style="min-width:0;position:sticky;top:8px;">
 
-    <div class="setup-section" style="margin-top:0;max-height:78vh;overflow:auto;">
-      <div class="setup-section-title">Recipe Database Table (Filtered)</div>
-      <div class="setup-section-desc">Portrait matrix view. Row headers are recipe fields and columns are recipes. Filter is locked to the selected recipe on this page.</div>
+    <div class="setup-section ops-card" style="margin-top:0;max-height:78vh;overflow:auto;">
+      <h3 class="ops-title">Recipe Snapshot</h3>
+      <p class="ops-note">Live database matrix filtered to the selected recipe for quick validation before publish.</p>
       <div id="recipeMatrixStatus" style="font-size:0.9rem;color:#3949ab;margin-bottom:0.6rem;">Select a recipe to load database details.</div>
       <div style="overflow:auto;border:1px solid #d7e3f4;border-radius:8px;background:#fff;">
         <table id="recipeMatrixTable" style="width:100%;border-collapse:collapse;min-width:380px;">
@@ -98,7 +232,7 @@
   </div>
 
   <script src="extractor_serving_size.js?v=20260408a"></script>
-  <script src="extractor_auto_core.js?v=20260408g"></script>
+  <script src="extractor_auto_core.js?v=20260410a"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const uploadArea = document.getElementById('teacherPdfUploadArea');
@@ -200,6 +334,30 @@
           extractAllStatus.style.border = '1px solid #1e88e5';
           extractAllStatus.style.color = '#0d47a1';
         }
+      }
+
+      function notify(message, type = 'info', duration = 4200) {
+        if (typeof window.showToast === 'function') {
+          window.showToast(message, type, duration);
+          return;
+        }
+        // Fallback only when toast helper is not available.
+        if (type === 'error') console.error(message);
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function setRecipeMatrixError(message) {
+        if (!recipeMatrixStatus) return;
+        const safe = escapeHtml(message || 'Failed to load recipe table.');
+        recipeMatrixStatus.innerHTML = `<div class="ui-error-callout"><strong>Recipe table failed to load.</strong><span>${safe}</span></div>`;
       }
 
       function setExtractProgress(percent) {
@@ -306,8 +464,8 @@
             selectedRecipeId = String(allRecipeRowsCache[0].id || '');
           }
           applyRecipeMatrixFilter();
-        } catch (_) {
-          if (recipeMatrixStatus) recipeMatrixStatus.textContent = 'Failed to load recipe table.';
+        } catch (err) {
+          setRecipeMatrixError(err && err.message ? err.message : 'Failed to load recipe table.');
         }
       }
 
@@ -581,14 +739,19 @@
 
       async function publishRecipeToDisplay(recipeId) {
         const resp = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
-        const data = await resp.json();
-        if (!data || !data.success) {
-          throw new Error((data && data.error) || 'Unknown publish error');
+        let data = null;
+        try { data = await resp.json(); } catch (_) { data = null; }
+        if (!resp.ok || !data || !data.success) {
+          const detail = (data && (data.error || data.message)) || `${resp.status} ${resp.statusText}`;
+          throw new Error(`Publish failed: ${detail}`);
         }
       }
 
       async function runAsyncSyncFromRecipeId(startRecipeId, statusCallback) {
         const dropdownResp = await fetch('/api/recipes/display-dropdown');
+        if (!dropdownResp.ok) {
+          throw new Error(`Failed to load recipe list: ${dropdownResp.status} ${dropdownResp.statusText}`);
+        }
         const dropdownData = await dropdownResp.json();
         const recipes = Array.isArray(dropdownData && dropdownData.recipes) ? dropdownData.recipes : [];
         const recipeIds = recipes
@@ -678,8 +841,10 @@
             setSaveProgress(100);
 
             setSaveRecipeStatus(`Saved successfully. RecipeID ${recipeId} is now shown in the table.`, 'success');
+            notify(`Saved successfully. RecipeID ${recipeId} is now shown in the table.`, 'success');
           } catch (err) {
             setSaveRecipeStatus(`Save Recipe failed: ${err && err.message ? err.message : err}`, 'error');
+            notify(`Save Recipe failed: ${err && err.message ? err.message : err}`, 'error', 6500);
           } finally {
             window.setTimeout(function() {
               hideSaveProgress();
@@ -723,8 +888,10 @@
             setExtractProgress(100);
             const foundCount = [extractedServingSize, extractedTitle, extractedInstructions, extractedIngredients].filter(Boolean).length;
             setExtractAllStatus(`Extract All complete for RecipeID ${selectedRecipeId}. Found ${foundCount}/4 extracts.`, 'success');
+            notify(`Extract All complete for RecipeID ${selectedRecipeId}. Found ${foundCount}/4 extracts.`, 'success');
           } catch (err) {
             setExtractAllStatus(`Extract All failed: ${err && err.message ? err.message : err}`, 'error');
+            notify(`Extract All failed: ${err && err.message ? err.message : err}`, 'error', 6500);
           } finally {
             window.setTimeout(function() {
               hideExtractProgress();
@@ -766,8 +933,10 @@
 
             await refreshRecipeMatrix(selectedRecipeId);
             setExtractAllStatus(`Accept ALL complete. Saved: ${saved}, Failed: ${failed}, Skipped: ${skipped}.`, failed > 0 ? 'error' : 'success');
+            notify(`Accept ALL complete. Saved: ${saved}, Failed: ${failed}, Skipped: ${skipped}.`, failed > 0 ? 'warning' : 'success');
           } catch (err) {
             setExtractAllStatus(`Accept ALL failed: ${err && err.message ? err.message : err}`, 'error');
+            notify(`Accept ALL failed: ${err && err.message ? err.message : err}`, 'error', 6500);
           } finally {
             acceptAllExtractsBtn.disabled = false;
           }
@@ -791,11 +960,29 @@
           if (autoPublishQuickIngredientsFill) autoPublishQuickIngredientsFill.style.width = '0%';
 
           try {
-            await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
-            await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', autoPublishQuickInstructionsFill);
+            const warnings = [];
 
-            await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
-            await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', autoPublishQuickIngredientsFill);
+            try {
+              await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+              await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', autoPublishQuickInstructionsFill);
+            } catch (cleanupInstructionsErr) {
+              if (autoPublishQuickInstructionsFill) autoPublishQuickInstructionsFill.style.width = '100%';
+              const message = cleanupInstructionsErr && cleanupInstructionsErr.message ? cleanupInstructionsErr.message : String(cleanupInstructionsErr);
+              warnings.push(`Cleanup Instructions skipped: ${message}`);
+            }
+
+            try {
+              await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+              await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', autoPublishQuickIngredientsFill);
+            } catch (cleanupIngredientsErr) {
+              if (autoPublishQuickIngredientsFill) autoPublishQuickIngredientsFill.style.width = '100%';
+              const message = cleanupIngredientsErr && cleanupIngredientsErr.message ? cleanupIngredientsErr.message : String(cleanupIngredientsErr);
+              warnings.push(`Cleanup Ingredients skipped: ${message}`);
+            }
+
+            if (warnings.length) {
+              notify(`Auto Publish warnings for RecipeID ${recipeId}: ${warnings.join(' ')}`, 'warning', 6500);
+            }
 
             setAutoPublishStatus(`Cleanup complete for RecipeID ${recipeId}. Publishing...`, 'info');
             await publishRecipeToDisplay(recipeId);
@@ -809,8 +996,15 @@
               `Done. Success: ${syncResult.successCount}, Failed: ${syncResult.failCount}. Table refreshed.`,
               syncResult.failCount > 0 ? 'error' : 'success'
             );
+            notify(
+              `Auto Publish + Async Sync done. Success: ${syncResult.successCount}, Failed: ${syncResult.failCount}.`,
+              syncResult.failCount > 0 ? 'warning' : 'success',
+              syncResult.failCount > 0 ? 6500 : 4200
+            );
           } catch (err) {
-            setAutoPublishStatus(`Auto Publish + Async Sync failed: ${err && err.message ? err.message : err}`, 'error');
+            const message = err && err.message ? err.message : String(err);
+            setAutoPublishStatus(`Auto Publish + Async Sync failed: ${message}`, 'error');
+            notify(`Auto Publish + Async Sync failed: ${message}`, 'error', 6500);
           } finally {
             autoPublishBtn.disabled = false;
             autoPublishBtn.textContent = 'Auto Publish + Async Sync';

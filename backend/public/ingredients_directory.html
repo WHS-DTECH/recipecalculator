@@ -154,23 +154,40 @@
                       return match ? match.aisle_category : '';
                     }
 
-                    // Sort so that rows with no assigned category ("--Assign--") are at the top
-                    const sortedIngredients = ingredients.slice().sort((a, b) => {
-                      // Determine if a row is unassigned
-                      function isUnassigned(row) {
-                        // If aisle_category_id is missing or 0 or null, or keyword match fails
-                        if (!row.aisle_category_id) {
-                          // Try keyword match
-                          const cat = findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
-                          return !cat;
-                        }
-                        return false;
+                    window.ingredientsDirectorySort = window.ingredientsDirectorySort || { key: 'aisleCategory', direction: 'asc' };
+                    const sortState = window.ingredientsDirectorySort;
+                    const sortDir = sortState.direction === 'desc' ? -1 : 1;
+
+                    function getAssignedCategoryName(row) {
+                      if (row.aisle_category_id) {
+                        const catObj = categories.find(c => String(c.id) === String(row.aisle_category_id));
+                        return catObj ? catObj.name : '';
                       }
-                      const aUnassigned = isUnassigned(a);
-                      const bUnassigned = isUnassigned(b);
-                      if (aUnassigned && !bUnassigned) return -1;
-                      if (!aUnassigned && bUnassigned) return 1;
-                      return 0;
+                      return findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
+                    }
+
+                    function getStripFoodDisplay(row) {
+                      return (row.stripFoodItem || stripFoodItemDynamic(row.fooditem || '') || row.fooditem || '').trim();
+                    }
+
+                    function sortIndicator(key) {
+                      if (sortState.key !== key) return '↕';
+                      return sortState.direction === 'asc' ? '▲' : '▼';
+                    }
+
+                    const sortedIngredients = ingredients.slice().sort((a, b) => {
+                      let cmp = 0;
+                      if (sortState.key === 'recipeId') {
+                        cmp = (Number(a.recipe_id) || 0) - (Number(b.recipe_id) || 0);
+                      } else if (sortState.key === 'stripFoodItem') {
+                        cmp = getStripFoodDisplay(a).toLowerCase().localeCompare(getStripFoodDisplay(b).toLowerCase(), undefined, { sensitivity: 'base' });
+                      } else {
+                        cmp = (getAssignedCategoryName(a) || 'zzz_unassigned').toLowerCase().localeCompare((getAssignedCategoryName(b) || 'zzz_unassigned').toLowerCase(), undefined, { sensitivity: 'base' });
+                      }
+                      if (cmp === 0) {
+                        cmp = String(a.ingredient_name || '').localeCompare(String(b.ingredient_name || ''), undefined, { sensitivity: 'base' });
+                      }
+                      return cmp * sortDir;
                     });
 
                     const table = document.createElement('table');
@@ -186,12 +203,12 @@
                         <tr style="background:#f5f5f5;">
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
+                          <th class="ingredients-sort-header" data-sort-key="recipeId" style="border:1px solid #eee;padding:0.5rem 0.7rem;cursor:pointer;user-select:none;">Recipe ID ${sortIndicator('recipeId')}</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
-                          <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
+                          <th class="ingredients-sort-header" data-sort-key="stripFoodItem" style="border:1px solid #eee;padding:0.5rem 0.7rem;cursor:pointer;user-select:none;">StripFoodItem ${sortIndicator('stripFoodItem')}</th>
+                          <th class="ingredients-sort-header" data-sort-key="aisleCategory" style="border:1px solid #eee;padding:0.5rem 0.7rem;cursor:pointer;user-select:none;">Aisle Category ${sortIndicator('aisleCategory')}</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
                           <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Actions</th>
                         </tr>
@@ -200,13 +217,7 @@
                         ${sortedIngredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
                           sortedIngredients.map(row => {
                             let stripFood = stripFoodItemDynamic(row.fooditem || '');
-                            let assignedCategory = '';
-                            if (row.aisle_category_id) {
-                              const catObj = categories.find(c => c.id === row.aisle_category_id);
-                              assignedCategory = catObj ? catObj.name : '';
-                            } else {
-                              assignedCategory = findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
-                            }
+                            let assignedCategory = getAssignedCategoryName(row);
                             return `<tr>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.id)}</td>
                               <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
@@ -237,6 +248,22 @@
                     // console.log('[DEBUG] Table HTML:', table.innerHTML);
                     container.innerHTML = '';
                     container.appendChild(table);
+
+                    table.querySelectorAll('.ingredients-sort-header').forEach(th => {
+                      th.onclick = function() {
+                        const key = this.getAttribute('data-sort-key');
+                        const current = window.ingredientsDirectorySort || { key: 'aisleCategory', direction: 'asc' };
+                        if (current.key === key) {
+                          current.direction = current.direction === 'asc' ? 'desc' : 'asc';
+                        } else {
+                          current.key = key;
+                          current.direction = 'asc';
+                        }
+                        window.ingredientsDirectorySort = current;
+                        window.renderIngredientsInventoryTable(ingredients);
+                      };
+                    });
+
                     // Do NOT send to backend on change. Only update local state (the dropdown value is already changed in the DOM).
                     // Backend update will be triggered by Save All Assignments button only.
                     // No code needed here for onchange.
@@ -329,6 +356,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Ingredients Directory</title>
   <link rel="stylesheet" href="../shared/style.css">
+  <link rel="stylesheet" href="shared/design_tokens.css">
+  <link rel="stylesheet" href="shared/base.css">
+  <link rel="stylesheet" href="shared/components.css">
   <link rel="icon" type="image/x-icon" href="images/favicon.ico">
   <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
 </head>
@@ -609,6 +639,8 @@
     <!-- Move all main scripts to end of body for reliability -->
     </div>
       <script>
+      window.ingredientsDirectorySort = window.ingredientsDirectorySort || { key: 'aisleCategory', direction: 'asc' };
+
       // --- MOVE TABLE RENDER FUNCTION DEFINITION TO TOP ---
       window.renderIngredientsInventoryTable = function(ingredients) {
         const container = document.getElementById('ingredients-inventory-table');
@@ -658,11 +690,38 @@
               return findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
             }
 
+            function getStripFoodDisplay(row) {
+              return (row.stripFoodItem || stripFoodItemDynamic(row.fooditem || '') || row.fooditem || '').trim();
+            }
+
+            const sortState = window.ingredientsDirectorySort || { key: 'aisleCategory', direction: 'asc' };
+            const sortDir = sortState.direction === 'desc' ? -1 : 1;
+
+            function sortIndicator(key) {
+              if (sortState.key !== key) return '↕';
+              return sortState.direction === 'asc' ? '▲' : '▼';
+            }
+
             const sortedIngredients = (Array.isArray(ingredients) ? ingredients.slice() : []).sort((a, b) => {
-              const categoryA = (getAssignedCategoryName(a) || 'zzz_unassigned').toLowerCase();
-              const categoryB = (getAssignedCategoryName(b) || 'zzz_unassigned').toLowerCase();
-              if (categoryA !== categoryB) return categoryA.localeCompare(categoryB);
-              return String(a.ingredient_name || '').localeCompare(String(b.ingredient_name || ''));
+              let cmp = 0;
+              if (sortState.key === 'recipeId') {
+                const recipeA = Number(a.recipe_id) || 0;
+                const recipeB = Number(b.recipe_id) || 0;
+                cmp = recipeA - recipeB;
+              } else if (sortState.key === 'stripFoodItem') {
+                const stripA = getStripFoodDisplay(a).toLowerCase();
+                const stripB = getStripFoodDisplay(b).toLowerCase();
+                cmp = stripA.localeCompare(stripB, undefined, { sensitivity: 'base' });
+              } else {
+                const categoryA = (getAssignedCategoryName(a) || 'zzz_unassigned').toLowerCase();
+                const categoryB = (getAssignedCategoryName(b) || 'zzz_unassigned').toLowerCase();
+                cmp = categoryA.localeCompare(categoryB, undefined, { sensitivity: 'base' });
+              }
+
+              if (cmp === 0) {
+                cmp = String(a.ingredient_name || '').localeCompare(String(b.ingredient_name || ''), undefined, { sensitivity: 'base' });
+              }
+              return cmp * sortDir;
             });
 
             const table = document.createElement('table');
@@ -674,12 +733,12 @@
                 <tr style="background:#f5f5f5;">
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">ID</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Ingredient Name</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Recipe ID</th>
+                  <th class="ingredients-sort-header" data-sort-key="recipeId" style="border:1px solid #eee;padding:0.5rem 0.7rem;cursor:pointer;user-select:none;">Recipe ID ${sortIndicator('recipeId')}</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Qty</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Measure Unit</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">FoodItem</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">StripFoodItem</th>
-                  <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Aisle Category</th>
+                  <th class="ingredients-sort-header" data-sort-key="stripFoodItem" style="border:1px solid #eee;padding:0.5rem 0.7rem;cursor:pointer;user-select:none;">StripFoodItem ${sortIndicator('stripFoodItem')}</th>
+                  <th class="ingredients-sort-header" data-sort-key="aisleCategory" style="border:1px solid #eee;padding:0.5rem 0.7rem;cursor:pointer;user-select:none;">Aisle Category ${sortIndicator('aisleCategory')}</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Assign</th>
                   <th style="border:1px solid #eee;padding:0.5rem 0.7rem;">Actions</th>
                 </tr>
@@ -713,6 +772,22 @@
             `;
             container.innerHTML = '';
             container.appendChild(table);
+
+            table.querySelectorAll('.ingredients-sort-header').forEach(th => {
+              th.onclick = function() {
+                const key = this.getAttribute('data-sort-key');
+                const current = window.ingredientsDirectorySort || { key: 'aisleCategory', direction: 'asc' };
+                if (current.key === key) {
+                  current.direction = current.direction === 'asc' ? 'desc' : 'asc';
+                } else {
+                  current.key = key;
+                  current.direction = 'asc';
+                }
+                window.ingredientsDirectorySort = current;
+                window.renderIngredientsInventoryTable(ingredients);
+              };
+            });
+
             table.querySelectorAll('.aisle-category-select').forEach(select => {
               select.onchange = function() {
                 const ingredientId = this.getAttribute('data-id');

@@ -2,6 +2,7 @@
 import urllib.request
 import re
 from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 class AccessibilityAnalyzer(HTMLParser):
     def __init__(self):
@@ -46,8 +47,38 @@ pages = [
     'http://localhost:4000/quick_add.html',
     'http://localhost:4000/add_recipe.html',
     'http://localhost:4000/book_a_class.html',
-    'http://localhost:4000/book_the_shopping.html'
+    'http://localhost:4000/book_the_shopping.html',
+    'http://localhost:4000/ingredients_directory.html',
+    'http://localhost:4000/recipe_publish.html'
 ]
+
+
+def get_stylesheet_urls(html, page_url):
+    # Extract href values for local linked stylesheets.
+    hrefs = re.findall(r'<link[^>]*rel=["\']stylesheet["\'][^>]*href=["\']([^"\']+)["\']', html, re.IGNORECASE)
+    urls = []
+    for href in hrefs:
+        if href.startswith('http://') or href.startswith('https://'):
+            continue
+        urls.append(urljoin(page_url, href))
+    return urls
+
+
+def has_focus_styles(html, page_url):
+    if ':focus-visible' in html or ':focus' in html:
+        return True
+
+    for stylesheet_url in get_stylesheet_urls(html, page_url):
+        try:
+            with urllib.request.urlopen(stylesheet_url) as response:
+                css = response.read().decode('utf-8', errors='ignore')
+            if ':focus-visible' in css or ':focus' in css:
+                return True
+        except Exception:
+            # Ignore stylesheet read failures so audit can continue.
+            continue
+
+    return False
 
 print("=== ACCESSIBILITY AUDIT: KEYBOARD NAV & SEMANTIC HTML ===\n")
 
@@ -60,8 +91,8 @@ for url in pages:
         analyzer = AccessibilityAnalyzer()
         analyzer.feed(html)
         
-        # Check for focus styles in CSS
-        has_focus = ':focus-visible' in html or ':focus-visible' in html
+        # Check focus selectors in inline HTML and linked stylesheets.
+        has_focus = has_focus_styles(html, url)
         
         print(f"=== {page_name} ===")
         print(f"Interactive elements: {analyzer.buttons} buttons, {analyzer.inputs} inputs, {analyzer.selects} selects, {analyzer.links} links")

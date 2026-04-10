@@ -206,7 +206,17 @@ router.post('/sync', async (req, res) => {
       const row = rows[i];
       let measure_qty = null, measure_unit = null;
       let nextFoodItem = (row.fooditem || '').trim();
-      const sourceText = (row.quantity || row.ingredient_name || '').trim();
+      let sourceText = (row.quantity || row.ingredient_name || '').trim();
+      
+      // If quantity and ingredient_name are in separate fields, combine them to help pattern matching
+      // e.g., quantity="½" + ingredient_name="banana peeled" => "½ banana peeled"
+      if (sourceText && row.quantity && row.ingredient_name && sourceText === row.quantity.trim()) {
+        const ingredientPart = row.ingredient_name.trim();
+        // Only combine if ingredient_name doesn't start with a quantity/fraction (would be duplicate)
+        if (!/^[\d\s\/.¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/.test(ingredientPart)) {
+          sourceText = `${sourceText} ${ingredientPart}`;
+        }
+      }
 
       if (sourceText) {
         const match = sourceText.match(regex);

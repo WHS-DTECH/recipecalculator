@@ -115,3 +115,62 @@ All 8 semantic colors tested against white background for 4.5:1 requirement:
 - test_a11y.py: Automated HTML structure analysis
 - check_contrast.js: WCAG AA contrast ratio calculations
 - Browser manual testing: http://localhost:4000/quick_add.html (and other pages)
+
+## Delta Update (2026-04-10)
+
+### Automated Re-Checks Run Today
+
+- `node check_contrast.js`: PASS for all semantic text colors on white (`primary`, `secondary`, `success`, `warning`, `danger`, `info`, `neutral-700`, `neutral-900` all >= 4.5:1)
+- `node test_keyboard_nav.js`: structural keyboard/form analysis completed on core pages; flagged only one risk note (`add_recipe.html` has many interactive elements, manual Tab-order walk still required)
+
+### Runtime Smoke Verification
+
+Backend started successfully from workspace root using `node backend/server.js`.
+
+HTTP 200 verified for:
+- `http://localhost:4000/quick_add.html`
+- `http://localhost:4000/add_recipe.html`
+- `http://localhost:4000/book_a_class.html`
+- `http://localhost:4000/book_the_shopping.html`
+- `http://localhost:4000/ingredients_directory.html`
+- `http://localhost:4000/recipe_publish.html`
+
+### Still Manual-Only (Not Yet Executed)
+
+- Viewport behavior checks at 320px / 768px / 1024px
+- 200% browser zoom checks
+- Print preview checks for Shopping + Ingredients flows
+- Screen reader pass (optional but recommended)
+
+## Phase 3d/3e Manual Signoff Runbook (Ready)
+
+Use this checklist to complete final responsive + zoom + print signoff.
+
+### A) Book the Shopping: Responsive + Zoom
+
+- [ ] Open `http://localhost:4000/book_the_shopping.html`
+- [ ] **320px viewport**: calendar remains readable via horizontal scroll, bottom action bar buttons wrap without overlap
+- [ ] **768px viewport**: tabs wrap cleanly, print panel remains usable, no clipped controls
+- [ ] **1024px viewport**: two-column/stack transition remains visually stable
+- [ ] **200% browser zoom**: no blocked buttons; shopping bottom bar still usable without content hiding
+
+### B) Ingredients Directory: Responsive + Zoom
+
+- [ ] Open `http://localhost:4000/ingredients_directory.html`
+- [ ] **320px viewport**: top action row and filter row stack vertically with full-width controls
+- [ ] **768px viewport**: action and filter controls stay aligned and tappable
+- [ ] **1024px viewport**: table region remains stable with intentional horizontal scroll
+- [ ] **200% browser zoom**: Save Assignments progress bar and controls remain visible and readable
+
+### C) Print Preview Validation
+
+- [ ] On Book the Shopping, generate data then use `Print` in each tab and confirm wrapped table cells in preview
+- [ ] On Ingredients Directory, open print preview and confirm control chrome is hidden and inventory table is printable
+
+### D) Signoff Notes (fill in)
+
+- Tester:
+- Date:
+- Browser/version:
+- Issues found:
+- Final status: PASS / PASS WITH NOTES / FAIL

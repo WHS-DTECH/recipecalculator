@@ -17,7 +17,11 @@ function normalizeInstructionLine(line) {
     .replace(/&amp;/gi, '&')
     .replace(/[Â]/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    // Strip pre-existing step numbers like "2 Preheat..." or "12 Serve..." at the
+    // start of a line. Only match 1–2 digit numbers followed by a space and an
+    // uppercase letter so that quantities like "350 degrees" are not stripped.
+    .replace(/^\d{1,2}\s+(?=[A-Z])/, '');
 }
 
 function cleanInstructionsForDisplay(raw) {

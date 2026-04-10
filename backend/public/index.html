@@ -7,73 +7,281 @@
   <link rel="stylesheet" href="style.css">
   <style>
     body {
-      background: #f7fafd;
+      background:
+        radial-gradient(circle at 15% 10%, #dff2ff 0%, transparent 42%),
+        radial-gradient(circle at 85% 0%, #ffeecf 0%, transparent 45%),
+        #f4f8fc;
     }
-    .main-center-card {
-      max-width: 900px;
-      margin: 2.5rem auto 0 auto;
-      background: #fff;
-      border-radius: 14px;
-      box-shadow: 0 2px 16px rgba(0,0,0,0.08);
-      padding: 2.5rem 2.5rem 2rem 2.5rem;
+
+    .showcase-shell {
+      width: min(1160px, calc(100vw - 1.4rem));
+      margin: 1.2rem auto 2rem;
     }
-    .main-title {
-      text-align: center;
-      font-size: 2.2rem;
+
+    .showcase-hero {
+      position: relative;
+      overflow: hidden;
+      border-radius: 20px;
+      color: #ffffff;
+      padding: 2rem 2rem 1.6rem;
+      background:
+        linear-gradient(130deg, rgba(17, 72, 137, 0.95), rgba(29, 125, 197, 0.92) 48%, rgba(255, 139, 59, 0.88));
+      box-shadow: 0 20px 38px rgba(15, 23, 42, 0.21);
+      isolation: isolate;
+      animation: heroFadeUp 0.55s ease-out;
+    }
+
+    .showcase-hero::before,
+    .showcase-hero::after {
+      content: '';
+      position: absolute;
+      border-radius: 999px;
+      opacity: 0.25;
+      z-index: -1;
+    }
+
+    .showcase-hero::before {
+      width: 380px;
+      height: 380px;
+      right: -120px;
+      top: -170px;
+      background: #ffffff;
+    }
+
+    .showcase-hero::after {
+      width: 280px;
+      height: 280px;
+      left: -110px;
+      bottom: -170px;
+      background: #ffd9a4;
+    }
+
+    .hero-kicker {
+      margin: 0;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      opacity: 0.9;
       font-weight: 700;
-      margin-bottom: 0.8rem;
-      color: #1976d2;
-      letter-spacing: 1px;
     }
-    .main-subaction {
-      text-align: center;
-      margin-bottom: 1.8rem;
+
+    .main-title {
+      margin: 0.35rem 0 0.4rem;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #ffffff;
     }
-    .main-subaction button {
-      padding: 0.65rem 1.25rem;
-      border-radius: 8px;
+
+    .hero-subtitle {
+      margin: 0;
+      max-width: 680px;
+      font-size: 1.05rem;
+      line-height: 1.45;
+      opacity: 0.95;
+    }
+
+    .hero-actions {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .hero-cta {
+      padding: 0.6rem 1.1rem;
+      border-radius: 10px;
       border: none;
-      background: #1976d2;
-      color: #fff;
+      background: #ffffff;
+      color: #0c4f8a;
+      font-weight: 700;
       cursor: pointer;
-      font-weight: 600;
+      box-shadow: 0 10px 22px rgba(9, 30, 66, 0.22);
     }
+
+    .hero-count {
+      padding: 0.4rem 0.7rem;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.16);
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+
+    .gallery-shell {
+      margin-top: 1rem;
+      background: #ffffff;
+      border-radius: 18px;
+      border: 1px solid #dce6f0;
+      box-shadow: 0 14px 28px rgba(15, 23, 42, 0.08);
+      padding: 1rem;
+    }
+
+    .gallery-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.8rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .gallery-title {
+      margin: 0;
+      font-size: 1.1rem;
+      color: #17324a;
+      font-weight: 700;
+    }
+
     .recipe-card-list {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 2.2rem;
-      margin-top: 2rem;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 0.9rem;
     }
-    @media (max-width: 900px) {
+
+    @media (max-width: 1080px) {
+      .recipe-card-list {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    .main-subaction {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin: 0;
+    }
+
+    .recipe-chip {
+      border: 1px solid #c4d8eb;
+      background: #f2f8ff;
+      color: #1d4f79;
+      border-radius: 999px;
+      font-size: 0.73rem;
+      font-weight: 700;
+      padding: 0.28rem 0.58rem;
+    }
+
+    .recipe-card {
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      border: 1px solid #d7e2ef;
+      background: #fbfdff;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 6px 16px rgba(18, 54, 91, 0.08);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      min-height: 280px;
+      animation: cardFade 0.4s ease both;
+    }
+
+    .recipe-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 24px rgba(18, 54, 91, 0.17);
+    }
+
+    .recipe-thumb {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      display: block;
+      background: linear-gradient(135deg, #cadff3, #e8f1f9);
+    }
+
+    .recipe-card-body {
+      padding: 0.75rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 1;
+    }
+
+    .recipe-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .recipe-card-id {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2.1rem;
+      padding: 0.18rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: #0f4f88;
+      border: 1px solid #b8d7f3;
+      background: #e9f5ff;
+    }
+
+    .recipe-card-title {
+      font-size: 1rem;
+      font-weight: 600;
+      color: #162c43;
+      line-height: 1.35;
+      word-break: break-word;
+      min-height: 2.7rem;
+    }
+
+    .recipe-card-sub {
+      color: #4a667f;
+      font-size: 0.82rem;
+      line-height: 1.35;
+      min-height: 2.15rem;
+    }
+
+    .card-disclaimer {
+      margin-top: 0.75rem;
+      color: #607a92;
+      font-size: 0.78rem;
+      text-align: right;
+    }
+
+    @media (max-width: 760px) {
+      .showcase-shell {
+        width: calc(100vw - 0.7rem);
+      }
+
+      .showcase-hero {
+        padding: 1.2rem;
+      }
+
       .recipe-card-list {
         grid-template-columns: 1fr;
       }
+
+      .gallery-shell {
+        padding: 0.65rem;
+      }
     }
-    .recipe-card {
-      display: flex;
-      align-items: center;
-      gap: 2.2rem;
-      background: #f5f8fa;
-      border-radius: 12px;
-      box-shadow: 0 1px 6px #0001;
-      padding: 1.7rem 2.2rem;
-      min-height: 120px;
+
+    @keyframes heroFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
-    .recipe-id {
-      font-size: 2.8rem;
-      font-weight: 800;
-      color: #1976d2;
-      min-width: 70px;
-      text-align: center;
-      letter-spacing: 2px;
-      flex-shrink: 0;
-    }
-    .recipe-name {
-      font-size: 1.45rem;
-      font-weight: 600;
-      color: #222;
-      word-break: break-word;
-      flex: 1 1 auto;
+
+    @keyframes cardFade {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
     }
   </style>
 </head>
@@ -81,18 +289,32 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
-  <div class="main-center-card">
-    <h1 class="main-title">Recipe Book</h1>
-    <div class="main-subaction">
-      <button onclick="window.location.href='suggest_recipe.html'">Suggest a Recipe</button>
-    </div>
-    <div id="recipeCardList" class="recipe-card-list"></div>
-  </div>
+  <div class="showcase-shell">
+    <section class="showcase-hero">
+      <p class="hero-kicker">Food Room Inventory</p>
+      <h1 class="main-title">Recipe Book</h1>
+      <p class="hero-subtitle">Explore the dishes students are learning to cook, from confident weeknight meals to celebration baking projects.</p>
+      <div class="hero-actions">
+        <button class="hero-cta" onclick="window.location.href='suggest_recipe.html'">Suggest a Recipe</button>
+        <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
+      </div>
+    </section>
 
-  <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <div id="globalLoading" class="loading-spinner" style="display:none;"></div>
-  <div id="errorState" class="text-muted" style="display:none;">An error occurred. Please try again later.</div>
-  <div id="emptyState" class="text-muted" style="display:none;">No data available.</div>
+    <section class="gallery-shell">
+      <div class="gallery-toolbar">
+        <h2 class="gallery-title">What Students Are Cooking</h2>
+        <div id="recipeCategoryChips" class="main-subaction"></div>
+      </div>
+      <div id="recipeCardList" class="recipe-card-list"></div>
+      <p class="card-disclaimer">Dish photos are curated from royalty-free stock images (Pexels) and matched by recipe type.</p>
+    </section>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="globalLoading" class="loading-spinner" style="display:none;"></div>
+    <div id="errorState" class="text-muted" style="display:none;">An error occurred. Please try again later.</div>
+    <div id="emptyState" class="text-muted" style="display:none;">No data available.</div>
+    </div>
+  </div>
 
   <script src="display_recipe_book.js"></script>
 </body>

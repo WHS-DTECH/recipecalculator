@@ -6,6 +6,49 @@ const path = require('path');
 const dbPath = path.join(__dirname, '../database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
+function formatQty(value) {
+  if (!Number.isFinite(value)) return '';
+  if (Number.isInteger(value)) return value;
+  return Math.round(value * 1000) / 1000;
+}
+
+function normalizeUnit(unit) {
+  const u = String(unit || '').trim().toLowerCase();
+  if (!u) return '';
+  if (['cup', 'cups'].includes(u)) return 'cup';
+  if (['tablespoons', 'tablespoon', 'tbsp', 'tbs', 'tblsp'].includes(u)) return 'tbsp';
+  if (['teaspoons', 'teaspoon', 'tsp'].includes(u)) return 'tsp';
+  if (['gram', 'grams', 'g'].includes(u)) return 'g';
+  if (['kilogram', 'kilograms', 'kg'].includes(u)) return 'kg';
+  if (['milliliter', 'milliliters', 'millilitre', 'millilitres', 'ml'].includes(u)) return 'ml';
+  if (['liter', 'liters', 'litre', 'litres', 'l'].includes(u)) return 'l';
+  return u;
+}
+
+function normalizeIngredientKey(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ');
+}
+
+function toCanonicalQty(qtyValue, unitValue) {
+  const qty = Number(qtyValue);
+  if (!Number.isFinite(qty)) {
+    return { qty: NaN, unit: normalizeUnit(unitValue), family: normalizeUnit(unitValue) };
+  }
+
+  const unit = normalizeUnit(unitValue);
+  if (unit === 'tbsp') {
+    return { qty: qty * 3, unit: 'tsp', family: 'spoon' };
+  }
+  if (unit === 'tsp') {
+    return { qty, unit: 'tsp', family: 'spoon' };
+  }
+
+  return { qty, unit, family: unit };
+}
+
 // Generate shopping list grouped by category for selected bookings
 router.get('/by_category', function(req, res) {
   let bookingIds = req.query.booking_ids;
@@ -16,7 +59,18 @@ router.get('/by_category', function(req, res) {
     bookingIds = bookingIds.split(',').map(id => id.trim());
   }
   const placeholders = bookingIds.map(() => '?').join(',');
-  const sql = `SELECT ingredient_name, measure_qty, measure_unit, stripFoodItem, calculated_qty FROM desired_servings_ingredients WHERE booking_id IN (${placeholders})`;
+  const sql = `
+    SELECT
+      dsi.ingredient_name,
+      dsi.measure_qty,
+      dsi.measure_unit,
+      dsi.stripFoodItem,
+      dsi.calculated_qty,
+      COALESCE(ac.name, '') AS aisle_category_name
+    FROM desired_servings_ingredients dsi
+    LEFT JOIN aisle_category ac ON ac.id = dsi.aisle_category_id
+    WHERE dsi.booking_id IN (${placeholders})
+  `;
   db.all(sql, bookingIds, (err, rows) => {
     if (err) {
       return res.status(500).json({ success: false, error: err.message });
@@ -48,6 +102,9 @@ router.get('/by_category', function(req, res) {
       }
       const combined = {};
       rows.forEach(row => {
+        if (String(row.aisle_category_name || '').trim().toLowerCase() === 'action') {
+          return;
+        }
         const cat = categorize(row);
         if (!combined[cat]) combined[cat] = {};
         // Strip parenthesis and brands for display
@@ -62,11 +119,13 @@ router.get('/by_category', function(req, res) {
       });
       const result = {};
       for (const cat of Object.keys(categories)) {
-        result[cat] = Object.values(combined[cat] || {}).map(item => ({
-          display: item.display,
-          qty: item.qty,
-          unit: item.unit
-        }));
+        result[cat] = Object.values(combined[cat] || {})
+          .map(item => ({
+            display: item.display,
+            qty: item.qty,
+            unit: item.unit
+          }))
+          .sort((a, b) => String(a.display || '').localeCompare(String(b.display || ''), undefined, { sensitivity: 'base' }));
       }
       res.json({ success: true, data: result });
     });
@@ -83,26 +142,73 @@ router.get('/by_teacher', (req, res) => {
     bookingIds = bookingIds.split(',').map(id => id.trim());
   }
   const placeholders = bookingIds.map(() => '?').join(',');
-  const sql = `SELECT staff_id, teacher, ingredient_name, measure_qty, measure_unit, fooditem, stripFoodItem, calculated_qty FROM desired_servings_ingredients WHERE booking_id IN (${placeholders})`;
+  const sql = `
+    SELECT
+      dsi.staff_id,
+      dsi.teacher,
+      dsi.ingredient_name,
+      dsi.measure_qty,
+      dsi.measure_unit,
+      dsi.fooditem,
+      dsi.stripFoodItem,
+      dsi.calculated_qty,
+      COALESCE(ac.name, '') AS aisle_category_name
+    FROM desired_servings_ingredients dsi
+    LEFT JOIN aisle_category ac ON ac.id = dsi.aisle_category_id
+    WHERE dsi.booking_id IN (${placeholders})
+  `;
   db.all(sql, bookingIds, (err, rows) => {
     if (err) {
       return res.status(500).json({ success: false, error: err.message });
     }
-    const result = {};
+    const grouped = {};
     rows.forEach(row => {
-      const key = row.staff_id ? `Staff ${row.staff_id} - ${row.teacher}` : row.teacher;
-      if (!result[key]) result[key] = [];
-      const displayIngredient = row.stripFoodItem || row.fooditem || row.ingredient_name || '';
-      result[key].push({
-        ingredient: displayIngredient,
-        qty: row.measure_qty,
-        unit: row.measure_unit,
-        fooditem: row.fooditem,
-        stripFoodItem: row.stripFoodItem,
-        calculated_qty: row.calculated_qty,
-        staff_id: row.staff_id
-      });
+      if (String(row.aisle_category_name || '').trim().toLowerCase() === 'action') {
+        return;
+      }
+      const teacherKey = row.staff_id ? `Staff ${row.staff_id} - ${row.teacher}` : row.teacher;
+      if (!grouped[teacherKey]) grouped[teacherKey] = {};
+
+      const displayIngredient = (row.stripFoodItem || row.fooditem || row.ingredient_name || '').trim();
+      if (!displayIngredient) return;
+
+      const qtyCanonical = toCanonicalQty(row.measure_qty, row.measure_unit);
+      const calcCanonical = toCanonicalQty(row.calculated_qty, row.measure_unit);
+      const unitKey = qtyCanonical.family || normalizeUnit(row.measure_unit) || '';
+      const itemKey = `${normalizeIngredientKey(displayIngredient)}||${unitKey}`;
+
+      if (!grouped[teacherKey][itemKey]) {
+        grouped[teacherKey][itemKey] = {
+          ingredient: displayIngredient,
+          qty: 0,
+          unit: qtyCanonical.unit || row.measure_unit || '',
+          fooditem: row.fooditem,
+          stripFoodItem: row.stripFoodItem,
+          calculated_qty: 0,
+          staff_id: row.staff_id
+        };
+      }
+
+      if (!Number.isNaN(qtyCanonical.qty)) grouped[teacherKey][itemKey].qty += qtyCanonical.qty;
+
+      if (!Number.isNaN(calcCanonical.qty)) grouped[teacherKey][itemKey].calculated_qty += calcCanonical.qty;
+
+      if (!grouped[teacherKey][itemKey].unit && (qtyCanonical.unit || row.measure_unit)) {
+        grouped[teacherKey][itemKey].unit = qtyCanonical.unit || row.measure_unit;
+      }
     });
+
+    const result = {};
+    Object.keys(grouped).forEach(teacherKey => {
+      result[teacherKey] = Object.values(grouped[teacherKey]).sort((a, b) => {
+        return String(a.ingredient || '').localeCompare(String(b.ingredient || ''));
+      }).map(item => ({
+        ...item,
+        qty: formatQty(item.qty),
+        calculated_qty: formatQty(item.calculated_qty)
+      }));
+    });
+
     res.json({ success: true, data: result });
   });
 });

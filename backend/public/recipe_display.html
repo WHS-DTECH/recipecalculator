@@ -5,25 +5,204 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Recipe Details</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      background:
+        radial-gradient(circle at 8% 10%, #dff2ff 0%, transparent 40%),
+        radial-gradient(circle at 92% 5%, #ffe8cd 0%, transparent 46%),
+        #f4f8fc;
+    }
+
+    .recipe-detail-shell {
+      width: min(1180px, calc(100vw - 1.2rem));
+      margin: 1rem auto 2rem;
+    }
+
+    .recipe-hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+      gap: 1rem;
+      background: linear-gradient(135deg, #0f4f8b 0%, #2f84ca 60%, #fbab59 100%);
+      border-radius: 18px;
+      box-shadow: 0 18px 34px rgba(15, 23, 42, 0.22);
+      overflow: hidden;
+      color: #fff;
+    }
+
+    .recipe-hero-copy {
+      padding: 1.3rem 1.4rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.8rem;
+      min-width: 0;
+    }
+
+    .recipe-kicker {
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      font-size: 0.78rem;
+      font-weight: 700;
+      opacity: 0.94;
+    }
+
+    .recipe-title {
+      margin: 0;
+      font-size: clamp(1.45rem, 2.2vw, 2.25rem);
+      line-height: 1.15;
+      word-break: break-word;
+      color: #ffffff;
+    }
+
+    .recipe-meta-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: center;
+    }
+
+    .recipe-pill {
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.45);
+      background: rgba(255,255,255,0.16);
+      padding: 0.28rem 0.62rem;
+      font-size: 0.8rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .recipe-hero-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: fit-content;
+      border-radius: 10px;
+      border: 1px solid rgba(255,255,255,0.65);
+      color: #fff;
+      text-decoration: none;
+      font-weight: 700;
+      padding: 0.5rem 0.8rem;
+      background: rgba(255,255,255,0.12);
+    }
+
+    .recipe-hero-image-wrap {
+      min-height: 250px;
+    }
+
+    .recipe-hero-image {
+      width: 100%;
+      height: 100%;
+      display: block;
+      object-fit: cover;
+      background: #d8e8f7;
+    }
+
+    .recipe-content-grid {
+      margin-top: 1rem;
+      display: grid;
+      grid-template-columns: minmax(260px, 0.8fr) minmax(0, 1.2fr);
+      gap: 1rem;
+    }
+
+    .recipe-panel {
+      background: #fff;
+      border: 1px solid #d9e5f0;
+      border-radius: 14px;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.09);
+      padding: 1rem;
+      min-width: 0;
+    }
+
+    .panel-title {
+      margin: 0 0 0.55rem;
+      font-size: 1.07rem;
+      color: #15324c;
+      letter-spacing: 0.02em;
+    }
+
+    .panel-subtitle {
+      margin: 0 0 0.65rem;
+      font-size: 0.84rem;
+      color: #5d748c;
+    }
+
+    .ingredient-list,
+    .instruction-list {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: #1f2f3f;
+      line-height: 1.45;
+      font-size: 0.94rem;
+      white-space: normal;
+    }
+
+    .ingredient-list li,
+    .instruction-list li {
+      margin: 0.34rem 0;
+    }
+
+    .instruction-text-fallback {
+      margin: 0;
+      color: #1f2f3f;
+      line-height: 1.5;
+      font-size: 0.94rem;
+      white-space: pre-line;
+    }
+
+    @media (max-width: 920px) {
+      .recipe-hero {
+        grid-template-columns: 1fr;
+      }
+
+      .recipe-hero-image-wrap {
+        min-height: 200px;
+      }
+
+      .recipe-content-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
 </head>
 <body>
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
-  <div class="main-center-card" style="margin-left: 5vw; margin-right: 5vw;">
-    <h1 class="main-title">Recipe Details</h1>
-    <div style="display:flex;gap:2rem;align-items:flex-start;">
-      <div style="flex:1;">
-        <h3>INGREDIENTS</h3>
-        <div id="ingredients" style="white-space:pre-line;"></div>
+
+  <main class="recipe-detail-shell">
+    <section class="recipe-hero">
+      <div class="recipe-hero-copy">
+        <p class="recipe-kicker">Student Kitchen Recipe</p>
+        <h1 id="recipeTitle" class="recipe-title">Recipe Details</h1>
+        <div class="recipe-meta-row">
+          <span id="recipeIdPill" class="recipe-pill">RecipeID: -</span>
+          <span id="recipeCategory" class="recipe-pill">Student Favourites</span>
+          <span id="recipeServings" class="recipe-pill">Serving Size: -</span>
+          <span id="recipeSource" class="recipe-pill">Source: -</span>
+        </div>
+        <a id="recipeUrlLink" class="recipe-hero-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Original Recipe</a>
       </div>
-      <div style="flex:2;">
-        <h3>INSTRUCTIONS</h3>
-        <div id="instructions" style="white-space:pre-line;"></div>
-        <div style="margin-top:1rem;"><b>Serving Size:</b> <span id="serving_size"></span></div>
-        <div style="margin-top:1rem;"><b>URL:</b> <span id="url"></span></div>
+
+      <div class="recipe-hero-image-wrap">
+        <img id="recipeHeroImg" class="recipe-hero-image" alt="Recipe image" loading="lazy">
       </div>
-    </div>
-  </div>
+    </section>
+
+    <section class="recipe-content-grid">
+      <article class="recipe-panel">
+        <h2 class="panel-title">Ingredients</h2>
+        <p class="panel-subtitle">What students prepare for this dish.</p>
+        <ul id="ingredientsList" class="ingredient-list"></ul>
+      </article>
+
+      <article class="recipe-panel">
+        <h2 class="panel-title">Instructions</h2>
+        <p class="panel-subtitle">Step-by-step cooking method.</p>
+        <ol id="instructionsList" class="instruction-list"></ol>
+        <p id="instructionsFallback" class="instruction-text-fallback" style="display:none;"></p>
+      </article>
+    </section>
+  </main>
+
   <script src="display_recipe_details.js"></script>
 </body>
 </html>

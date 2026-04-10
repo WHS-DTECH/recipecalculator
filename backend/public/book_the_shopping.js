@@ -158,18 +158,21 @@ function renderCategoryListHtmlByData(data) {
     let html = '';
     for (const cat of aisleOrder) {
         if (data.data[cat] && data.data[cat].length > 0) {
+            const sortedItems = data.data[cat]
+                .slice()
+                .sort((a, b) => String(a.display || '').localeCompare(String(b.display || ''), undefined, { sensitivity: 'base' }));
             html += `<h4 style="margin-bottom:0.3em;">${cat}</h4>`;
-            html += '<table style="margin-bottom:1em;width:100%;border-collapse:collapse;">';
+            html += '<table class="shopping-category-table" style="margin-bottom:1em;width:100%;border-collapse:collapse;">';
             html += '<thead><tr style="background:#e3e3e3;">';
-            html += '<th style="text-align:left;padding:0.5em 1em;min-width:140px;">SplitFoodItem</th>';
-            html += '<th style="text-align:right;padding:0.5em 1em;min-width:60px;">Qty</th>';
-            html += '<th style="text-align:left;padding:0.5em 1em;min-width:80px;">Unit</th>';
+            html += '<th style="text-align:left;padding:0.5em 0.8em;">Item</th>';
+            html += '<th style="text-align:right;padding:0.5em 0.6em;">Qty</th>';
+            html += '<th style="text-align:left;padding:0.5em 0.6em;">Unit</th>';
             html += '</tr></thead><tbody>';
-            data.data[cat].forEach((item, idx) => {
+            sortedItems.forEach((item, idx) => {
                 html += `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f6f8fa'};">`;
-                html += `<td style="padding:0.5em 1em;">${item.display}</td>`;
-                html += `<td style="padding:0.5em 1em;text-align:right;">${item.qty}</td>`;
-                html += `<td style="padding:0.5em 1em;">${item.unit}</td>`;
+                html += `<td style="padding:0.5em 0.8em;">${item.display}</td>`;
+                html += `<td style="padding:0.5em 0.6em;text-align:right;">${item.qty}</td>`;
+                html += `<td style="padding:0.5em 0.6em;">${item.unit}</td>`;
                 html += '</tr>';
             });
             html += '</tbody></table>';
@@ -371,18 +374,21 @@ document.addEventListener('DOMContentLoaded',()=>{
                         const aisleOrder = ['Produce','Dairy','Pantry','Other','Action'];
                         for (const cat of aisleOrder) {
                             if (data.data[cat] && data.data[cat].length > 0) {
+                                const sortedItems = data.data[cat]
+                                    .slice()
+                                    .sort((a, b) => String(a.display || '').localeCompare(String(b.display || ''), undefined, { sensitivity: 'base' }));
                                 html += `<h4 style="margin-bottom:0.3em;">${cat}</h4>`;
-                                html += `<table style="margin-bottom:1em;width:100%;border-collapse:collapse;">`;
+                                html += `<table class="shopping-category-table" style="margin-bottom:1em;width:100%;border-collapse:collapse;">`;
                                 html += `<thead><tr style="background:#e3e3e3;">`;
-                                html += '<th style="text-align:left;padding:0.5em 1em;min-width:140px;">SplitFoodItem</th>';
-                                html += '<th style="text-align:right;padding:0.5em 1em;min-width:60px;">Qty</th>';
-                                html += '<th style="text-align:left;padding:0.5em 1em;min-width:80px;">Unit</th>';
+                                html += '<th style="text-align:left;padding:0.5em 0.8em;">Item</th>';
+                                html += '<th style="text-align:right;padding:0.5em 0.6em;">Qty</th>';
+                                html += '<th style="text-align:left;padding:0.5em 0.6em;">Unit</th>';
                                 html += '</tr></thead><tbody>';
-                                data.data[cat].forEach((item, idx) => {
+                                sortedItems.forEach((item, idx) => {
                                     html += `<tr style="background:${idx % 2 === 0 ? '#fff' : '#f6f8fa'};">`;
-                                    html += `<td style="padding:0.5em 1em;">${item.display}</td>`;
-                                    html += `<td style="padding:0.5em 1em;text-align:right;">${item.qty}</td>`;
-                                    html += `<td style="padding:0.5em 1em;">${item.unit}</td>`;
+                                    html += `<td style="padding:0.5em 0.8em;">${item.display}</td>`;
+                                    html += `<td style="padding:0.5em 0.6em;text-align:right;">${item.qty}</td>`;
+                                    html += `<td style="padding:0.5em 0.6em;">${item.unit}</td>`;
                                     html += '</tr>';
                                 });
                                 html += '</tbody></table>';

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Add Recipe</title>
   <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+  <link rel="stylesheet" href="shared/design_tokens.css">
+  <link rel="stylesheet" href="shared/base.css">
+  <link rel="stylesheet" href="shared/components.css">
   <link rel="stylesheet" href="admin_styles.css">
   <style>
     @media (max-width: 1100px) {
@@ -276,7 +279,7 @@
   <script src="upload_url.js?v=20260408d"></script>
   <script src="extractor_raw.js?v=20260408a"></script>
   <script src="extractor_serving_size.js?v=20260408a"></script>
-  <script src="extractor_auto_core.js?v=20260408g"></script>
+  <script src="extractor_auto_core.js?v=20260410a"></script>
   <script>
     document.addEventListener('DOMContentLoaded', function() {
       const stepByStepBtn = document.getElementById('teacherServingStepByStepBtn');
@@ -870,9 +873,7 @@
           allRecipeRowsCache = Array.isArray(recipes) ? recipes : [];
           applyRecipeMatrixFilter();
         } catch (err) {
-          if (recipeMatrixStatus) {
-            recipeMatrixStatus.textContent = 'Failed to load recipe table.';
-          }
+          setRecipeMatrixError(err && err.message ? err.message : 'Failed to load recipe table.');
         }
       }
 
@@ -908,6 +909,29 @@
         const msg = String((err && err.message) || err || '').toLowerCase();
         return msg.includes('exceeded the data transfer quota')
           || msg.includes('quota');
+      }
+
+      function notify(message, type = 'info', duration = 4200) {
+        if (typeof window.showToast === 'function') {
+          window.showToast(message, type, duration);
+          return;
+        }
+        alert(message);
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function setRecipeMatrixError(message) {
+        if (!recipeMatrixStatus) return;
+        const safe = escapeHtml(message || 'Failed to load recipe table.');
+        recipeMatrixStatus.innerHTML = `<div class="ui-error-callout"><strong>Recipe table failed to load.</strong><span>${safe}</span></div>`;
       }
 
       async function verifyApiReachable() {
@@ -1055,14 +1079,23 @@
 
       async function publishRecipeToDisplay(recipeId) {
         const resp = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
-        const data = await resp.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Unknown publish error');
+        let data = null;
+        try {
+          data = await resp.json();
+        } catch (_) {
+          data = null;
+        }
+        if (!resp.ok || !data || !data.success) {
+          const detail = (data && (data.error || data.message)) || `${resp.status} ${resp.statusText}`;
+          throw new Error(`Publish failed: ${detail}`);
         }
       }
 
       async function runAsyncSyncFromRecipeId(startRecipeId, statusEl) {
         const dropdownResp = await fetch('/api/recipes/display-dropdown');
+        if (!dropdownResp.ok) {
+          throw new Error(`Failed to load recipe list: ${dropdownResp.status} ${dropdownResp.statusText}`);
+        }
         const dropdownData = await dropdownResp.json();
         const recipes = Array.isArray(dropdownData && dropdownData.recipes) ? dropdownData.recipes : [];
         const recipeIds = recipes
@@ -1112,7 +1145,7 @@
 
           const startRecipeId = Number(String(startInput).trim());
           if (!Number.isInteger(startRecipeId) || startRecipeId <= 0) {
-            alert('Please enter a valid numeric RecipeID.');
+            notify('Please enter a valid numeric RecipeID.', 'warning');
             return;
           }
 
@@ -1123,10 +1156,10 @@
           try {
             const result = await runAsyncSyncFromRecipeId(startRecipeId, teacherAsyncSyncStatus);
             if (result.total === 0) {
-              alert('No recipes found from RecipeID ' + startRecipeId + ' onward.');
+              notify('No recipes found from RecipeID ' + startRecipeId + ' onward.', 'warning');
             }
           } catch (err) {
-            alert('Async sync failed: ' + (err && err.message ? err.message : err));
+            notify('Async sync failed: ' + (err && err.message ? err.message : err), 'error', 6500);
             if (teacherAsyncSyncStatus) teacherAsyncSyncStatus.textContent = 'Async sync failed.';
           } finally {
             teacherAsyncSyncBtn.disabled = false;
@@ -1269,7 +1302,7 @@
         teacherExtractAllBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? String(recipeSelect.value || '').trim() : '';
           if (!recipeId) {
-            alert('Please select a recipe first.');
+            notify('Please select a recipe first.', 'warning');
             return;
           }
 
@@ -1286,7 +1319,7 @@
             setExtractAllBusy(false, 'Extract All', 'All auto extractors completed. Accept only the ones you want.');
           } catch (err) {
             setExtractAllBusy(false, 'Extract All', 'Extract All stopped.');
-            alert('Extract All failed: ' + (err && err.message ? err.message : err));
+            notify('Extract All failed: ' + (err && err.message ? err.message : err), 'error', 6500);
           }
         });
       }
@@ -1295,7 +1328,7 @@
         teacherAcceptAllExtractsBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? String(recipeSelect.value || '').trim() : '';
           if (!recipeId) {
-            alert('Please select a recipe first.');
+            notify('Please select a recipe first.', 'warning');
             return;
           }
 
@@ -1368,7 +1401,10 @@
       if (autoBtn) {
         autoBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
           setExtractorStatus(servingStatusMsg, '');
           await runServingAutoExtract(recipeId);
         });
@@ -1376,8 +1412,14 @@
       if (confirmBtn) {
         confirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
-          if (!extractedServingSize) return alert('No auto extract result to send.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
+          if (!extractedServingSize) {
+            notify('No auto extract result to send.', 'warning');
+            return;
+          }
           const result = await acceptExtractorSolution(recipeId, extractedServingSize, '/api/serving-size/solution', servingStatusMsg, 'serving');
           if (result.success) {
             await refreshRecipeMatrix();
@@ -1393,7 +1435,10 @@
       if (titleAutoBtn) {
         titleAutoBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
           setExtractorStatus(titleStatusMsg, '');
           await runTitleAutoExtract(recipeId);
         });
@@ -1401,8 +1446,14 @@
       if (titleConfirmBtn) {
         titleConfirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
-          if (!extractedTitle) return alert('No auto extract result to send.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
+          if (!extractedTitle) {
+            notify('No auto extract result to send.', 'warning');
+            return;
+          }
           const result = await acceptExtractorSolution(recipeId, extractedTitle, '/api/title-extractor/solution', titleStatusMsg, 'title');
           if (result.success) {
             await refreshRecipeMatrix();
@@ -1420,7 +1471,10 @@
       if (instructionAutoExtractBtn) {
         instructionAutoExtractBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
           setExtractorStatus(instructionStatusMsg, '');
           await runInstructionAutoExtract(recipeId);
         });
@@ -1428,8 +1482,14 @@
       if (instructionConfirmBtn) {
         instructionConfirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
-          if (!extractedInstructions) return alert('No auto extract result to send.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
+          if (!extractedInstructions) {
+            notify('No auto extract result to send.', 'warning');
+            return;
+          }
           const result = await acceptExtractorSolution(recipeId, extractedInstructions, '/api/instructions-extractor/solution', instructionStatusMsg, 'instructions');
           if (result.success) {
             await refreshRecipeMatrix();
@@ -1445,7 +1505,10 @@
       if (ingredientsAutoBtn) {
         ingredientsAutoBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
           setExtractorStatus(ingredientsStatusMsg, '');
           await runIngredientsAutoExtract(recipeId);
         });
@@ -1453,8 +1516,14 @@
       if (ingredientsConfirmBtn) {
         ingredientsConfirmBtn.addEventListener('click', async function() {
           const recipeId = recipeSelect ? recipeSelect.value : '';
-          if (!recipeId) return alert('Please select a recipe first.');
-          if (!extractedIngredients) return alert('No auto extract result to send.');
+          if (!recipeId) {
+            notify('Please select a recipe first.', 'warning');
+            return;
+          }
+          if (!extractedIngredients) {
+            notify('No auto extract result to send.', 'warning');
+            return;
+          }
           const result = await acceptExtractorSolution(recipeId, extractedIngredients, '/api/ingredients-extractor/solution', ingredientsStatusMsg, 'ingredients');
           if (result.success) {
             await refreshRecipeMatrix();
@@ -1538,6 +1607,13 @@
                 ? `RecipeID ${recipeId} is ready. ${warnings.join(' ')} You can still Accept and Publish.`
                 : `RecipeID ${recipeId} cleanup complete. Choose Accept to publish or Decline to return.`;
             }
+            if (!autoPublishAsyncSyncPending) {
+              if (warnings.length) {
+                notify(`Auto Publish for RecipeID ${recipeId} completed with warnings.`, 'warning', 5200);
+              } else {
+                notify(`Auto Publish cleanup complete for RecipeID ${recipeId}.`, 'success', 2600);
+              }
+            }
 
             if (autoPublishAsyncSyncPending) {
               try {
@@ -1585,10 +1661,14 @@
                 autoPublishAsyncSyncBtn.textContent = 'Auto Publish + Async Sync';
               }
               setAutoPublishStatus('Auto Publish + Async Sync failed.', 'error');
+              notify('Auto Publish + Async Sync failed.', 'error', 6200);
             } else if (isBackendUnavailableError(err)) {
               setAutoPublishStatus('Auto Publish could not reach backend API. Start backend/server.js and try again.', 'error');
+              notify('Auto Publish could not reach backend API. Start backend/server.js and try again.', 'error', 6200);
             } else {
-              setAutoPublishStatus('Auto Publish failed: ' + (err && err.message ? err.message : err), 'error');
+              const message = err && err.message ? err.message : String(err);
+              setAutoPublishStatus('Auto Publish failed: ' + message, 'error');
+              notify('Auto Publish failed: ' + message, 'error', 6200);
             }
           } finally {
             autoPublishBtn.disabled = false;
@@ -1639,10 +1719,13 @@
           try {
             await publishRecipeToDisplay(recipeId);
             setAutoPublishStatus(`RecipeID ${recipeId} published.`, 'success');
+            notify(`RecipeID ${recipeId} published.`, 'success', 2600);
             if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
             pendingAutoPublishRecipeId = null;
           } catch (err) {
-            setAutoPublishStatus('Publish failed: ' + (err && err.message ? err.message : err), 'error');
+            const message = err && err.message ? err.message : String(err);
+            setAutoPublishStatus('Publish failed: ' + message, 'error');
+            notify('Publish failed: ' + message, 'error', 6200);
           } finally {
             autoPublishAcceptBtn.disabled = false;
           }
@@ -1668,6 +1751,7 @@
           pendingAutoPublishRecipeId = null;
           if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
           setAutoPublishStatus('Auto Publish review declined.', 'info');
+          notify('Auto Publish review declined.', 'info', 2400);
         });
       }
     });

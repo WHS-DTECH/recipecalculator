@@ -362,30 +362,86 @@ async function renderScheduleCalendar() {
   renderSelectedBookings();
 
   // Add click handlers to booking cells for selection
-  window.selectedBookingIds = window.selectedBookingIds || [];
+  window.selectedBookingIds = Array.isArray(window.selectedBookingIds)
+    ? window.selectedBookingIds.map(id => parseInt(id, 10)).filter(id => Number.isInteger(id) && id > 0)
+    : [];
+
+  function applySelectionStyles() {
+    const selectedIds = new Set(window.selectedBookingIds || []);
+    bookings.forEach(cell => {
+      const bookingDiv = document.getElementById(`booking-${cell.id}`);
+      if (!bookingDiv) return;
+      if (selectedIds.has(parseInt(cell.id, 10))) {
+        bookingDiv.style.boxShadow = '0 0 0 3px #1976d2, 0 1px 4px #0001';
+        bookingDiv.style.background = '#bbdefb';
+      } else {
+        bookingDiv.style.boxShadow = '0 1px 4px #0001';
+        bookingDiv.style.background = '#e8f5e9';
+      }
+    });
+  }
+
+  function setupTeacherQuickSelect() {
+    const teacherSelect = document.getElementById('quickSelectTeacher');
+    const selectBtn = document.getElementById('selectTeacherBookingsBtn');
+    const clearBtn = document.getElementById('clearTeacherSelectionBtn');
+    if (!teacherSelect) return;
+
+    const teacherNames = [...new Set(
+      bookings
+        .map(b => String(b.staff_name || '').trim())
+        .filter(Boolean)
+    )].sort((a, b) => a.localeCompare(b));
+
+    teacherSelect.innerHTML = '<option value="">-- Select teacher --</option>' +
+      teacherNames.map(name => `<option value="${name.replace(/"/g, '&quot;')}">${name}</option>`).join('');
+
+    if (selectBtn) {
+      selectBtn.onclick = function() {
+        const teacher = String(teacherSelect.value || '').trim();
+        if (!teacher) {
+          if (window.QC) window.QC.toast('Choose a teacher first', 'warn');
+          return;
+        }
+        window.selectedBookingIds = bookings
+          .filter(b => String(b.staff_name || '').trim() === teacher)
+          .map(b => parseInt(b.id, 10))
+          .filter(id => Number.isInteger(id) && id > 0);
+        applySelectionStyles();
+        renderSelectedBookings();
+        if (window.QC) window.QC.toast(`Selected all bookings for ${teacher}`, 'success');
+      };
+    }
+
+    if (clearBtn) {
+      clearBtn.onclick = function() {
+        window.selectedBookingIds = [];
+        applySelectionStyles();
+        renderSelectedBookings();
+      };
+    }
+  }
+
   bookings.forEach(cell => {
     const bookingDiv = document.getElementById(`booking-${cell.id}`);
     if (bookingDiv) {
       bookingDiv.onclick = function() {
-        const idx = window.selectedBookingIds.indexOf(cell.id);
+        const bookingId = parseInt(cell.id, 10);
+        const idx = window.selectedBookingIds.indexOf(bookingId);
         if (idx === -1) {
-          window.selectedBookingIds.push(cell.id);
-          bookingDiv.style.boxShadow = '0 0 0 3px #1976d2, 0 1px 4px #0001';
-          bookingDiv.style.background = '#bbdefb';
+          window.selectedBookingIds.push(bookingId);
         } else {
           window.selectedBookingIds.splice(idx, 1);
-          bookingDiv.style.boxShadow = '0 1px 4px #0001';
-          bookingDiv.style.background = '#e8f5e9';
         }
+        window.selectedBookingIds = [...new Set(window.selectedBookingIds)];
+        applySelectionStyles();
         renderSelectedBookings();
       };
-      // Initial state
-      if (window.selectedBookingIds.includes(cell.id)) {
-        bookingDiv.style.boxShadow = '0 0 0 3px #1976d2, 0 1px 4px #0001';
-        bookingDiv.style.background = '#bbdefb';
-      }
     }
   });
+
+  applySelectionStyles();
+  setupTeacherQuickSelect();
 
   // Update week label
   const weekStart = new Date(currentMonday);

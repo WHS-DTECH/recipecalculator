@@ -7,6 +7,13 @@ function renderIngredientsInventory() {
     .then(data => {
       // Support both {data: [...]} and legacy {ingredients: [...]} and raw array
       const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+
+      // If a page defines its own renderer (for sort controls/custom columns), use it.
+      if (typeof window.renderIngredientsInventoryTable === 'function') {
+        window.renderIngredientsInventoryTable(ingredients);
+        return;
+      }
+
       const table = document.createElement('table');
       table.style.width = '100%';
       table.style.marginTop = '2rem';

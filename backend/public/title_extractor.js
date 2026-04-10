@@ -36,6 +36,29 @@ document.addEventListener('DOMContentLoaded', function () {
     return false;
   }
 
+  function titleCase(text) {
+    return String(text || '')
+      .split(' ')
+      .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
+      .join(' ')
+      .trim();
+  }
+
+  function cleanTitleFromSlug(slug) {
+    const cleaned = decodeURIComponent(String(slug || ''))
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleaned) return '';
+
+    // Remove trailing upload stamps added by SavedPDF upload naming (e.g. _1775706668021).
+    const withoutUploadSuffix = cleaned.replace(/\s+\d{6,}\s*$/i, '').trim();
+
+    return titleCase(withoutUploadSuffix || cleaned);
+  }
+
   async function fetchVisibleTextByRecipeId(recipeId) {
     const recipe = recipesById.get(String(recipeId));
     const url = recipe && recipe.url ? String(recipe.url).trim() : '';
@@ -176,19 +199,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (!slug) return '';
 
-        const cleaned = decodeURIComponent(slug)
-          .replace(/\.[a-z0-9]+$/i, '')
-          .replace(/[-_]+/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        if (!cleaned) return '';
-
-        return cleaned
-          .split(' ')
-          .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
-          .join(' ')
-          .trim();
+        return cleanTitleFromSlug(slug);
       }
     },
     {

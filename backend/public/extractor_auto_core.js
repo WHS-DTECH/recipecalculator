@@ -11,6 +11,29 @@
     return String(result || '').trim();
   }
 
+  function titleCase(text) {
+    return String(text || '')
+      .split(' ')
+      .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
+      .join(' ')
+      .trim();
+  }
+
+  function cleanTitleFromSlug(slug) {
+    const cleaned = decodeURIComponent(String(slug || ''))
+      .replace(/\.[a-z0-9]+$/i, '')
+      .replace(/[-_]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (!cleaned) return '';
+
+    // Remove trailing upload stamps added by SavedPDF upload naming (e.g. _1775706668021).
+    const withoutUploadSuffix = cleaned.replace(/\s+\d{6,}\s*$/i, '').trim();
+
+    return titleCase(withoutUploadSuffix || cleaned);
+  }
+
   function extractTitleFromUrlSlug(url) {
     if (!url) return '';
     let slug = '';
@@ -25,19 +48,7 @@
 
     if (!slug) return '';
 
-    const cleaned = decodeURIComponent(slug)
-      .replace(/\.[a-z0-9]+$/i, '')
-      .replace(/[-_]+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (!cleaned) return '';
-
-    return cleaned
-      .split(' ')
-      .map(word => word ? (word.charAt(0).toUpperCase() + word.slice(1)) : '')
-      .join(' ')
-      .trim();
+    return cleanTitleFromSlug(slug);
   }
 
   function runServingSizeAuto(raw) {
@@ -265,7 +276,20 @@
   }
 
   function parseIngredientLinesFromRaw(fileText) {
-    const source = String(fileText || '');
+    const source = String(fileText || '')
+      // Normalize common mojibake seen in imported recipe text so fraction quantities
+      // still match ingredient quantity regexes.
+      .replace(/Â/g, ' ')
+      .replace(/Â¼/g, '¼')
+      .replace(/Â½/g, '½')
+      .replace(/Â¾/g, '¾')
+      .replace(/â…“/g, '⅓')
+      .replace(/â…”/g, '⅔')
+      .replace(/â…›/g, '⅛')
+      .replace(/â…œ/g, '⅜')
+      .replace(/â…�/g, '⅝')
+      .replace(/â€“/g, '-')
+      .replace(/â€”/g, '-');
     const lines = source.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
     // Merge OCR/PDF split fractions such as "1" + "/2 cup milk" into "1/2 cup milk".
@@ -284,6 +308,8 @@
     const workingLines = normalizedLines;
     const qtyRegex = /^((\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))\s*([a-zA-Z]+)?/i;
     const unitRegex = /\b(cups?|cup|tbsp|tsp|g|kg|mg|ml|l|oz|lb|pinch|cloves?|slices?|eggs?)\b/i;
+    const trailingQtyRegex = /^[a-z][a-z0-9'()&\s,\/.\-]*\s-\s*(?:\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\s*(?:cups?|cup|tbsp|tsp|g|kg|mg|ml|l|oz|lb|pinch(?:es)?|cloves?|slices?|eggs?|bunch(?:es)?))?\s*$/i;
+    const seasoningRegex = /\bto\s+taste\b/i;
     const instructionVerbRegex = /\b(place|bring|reduce|cover|remove|transfer|stir|use|slice|serve|rinse|preheat|bake|cook|mix|whisk)\b/i;
     const stopRegex = /^(videos?|method\b|instructions?\b|can you|try one of these recipes|products|home recipes|comments|review|favourites|join|newsletter|contact|privacy|terms|school visits|tour|cafe|related recipes|you may like these|chelsea products in recipe)/i;
     const splitPacked = (line) => String(line || '')
@@ -303,6 +329,8 @@
         if (instructionVerbRegex.test(line)) return false;
         if (!unitRegex.test(line)) return false;
       }
+      if (trailingQtyRegex.test(line)) return true;
+      if (seasoningRegex.test(line) && /\b(salt|pepper|seasoning|herbs?)\b/i.test(line)) return true;
       if (qtyRegex.test(line)) return true;
       return unitRegex.test(line) && (/^\d/.test(line) || /^[¼½¾⅓⅔⅛⅜⅝⅞]/.test(line));
     };
@@ -331,6 +359,15 @@
         }
 
         if (started && !addedThisLine) {
+          const isSectionHeading = /^[A-Z][A-Z\s()\/-]{2,30}$/.test(rawLine)
+            && !stopRegex.test(rawLine)
+            && !instructionVerbRegex.test(rawLine);
+          if (isSectionHeading && out.length) {
+            out.push(rawLine);
+            nonIngredientAfterStart = 0;
+            continue;
+          }
+
           // A short, lowercase-starting line is a preparation descriptor (e.g. "sliced", "chopped",
           // "sliced into strips"). Append it to the last collected ingredient rather than stopping.
           const isSkippableMetaLine = /^(equipment|preparation and cooking skills|nutrition|tips)\b/i.test(rawLine)
@@ -371,7 +408,25 @@
     }
 
     let bestCandidates = [];
-    let firstValidCandidates = [];
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    function scoreCandidate(linesForCandidate, sourceType) {
+      const count = Array.isArray(linesForCandidate) ? linesForCandidate.length : 0;
+      if (!count) return Number.NEGATIVE_INFINITY;
+
+      let score = 0;
+      // Prefer explicit Ingredients -> Method ranges over looser after-Method fallback.
+      if (sourceType === 'between') score += 100;
+
+      // Typical ingredient blocks are modest in size; heavily penalize giant spillover blocks.
+      if (count >= 4 && count <= 24) score += 40;
+      if (count > 40) score -= (count - 40) * 2;
+
+      // Slight preference for blocks close to ~12 lines (common recipe ingredient size).
+      score += Math.max(0, 20 - Math.abs(count - 12));
+
+      return score;
+    }
 
     for (const ingredientsIdx of ingredientHeadingIndices) {
       const nextHeadingCandidates = [...methodHeadingIndices, ...instructionHeadingIndices]
@@ -387,22 +442,21 @@
         afterMethod = collectIngredientBlock(firstMethodAfter + 1, firstMethodAfter + 120);
       }
 
-      // Prefer the explicit Ingredients -> Method window when available.
-      const candidate = between.length ? between : afterMethod;
-      if (!firstValidCandidates.length && candidate.length) {
-        firstValidCandidates = candidate;
+      const betweenScore = scoreCandidate(between, 'between');
+      if (betweenScore > bestScore) {
+        bestScore = betweenScore;
+        bestCandidates = between;
       }
-      if (candidate.length > bestCandidates.length) {
-        bestCandidates = candidate;
+
+      const afterMethodScore = scoreCandidate(afterMethod, 'afterMethod');
+      if (afterMethodScore > bestScore) {
+        bestScore = afterMethodScore;
+        bestCandidates = afterMethod;
       }
     }
 
-    const selectedCandidates = firstValidCandidates.length ? firstValidCandidates : bestCandidates;
-
-    if (!selectedCandidates.length) {
+    if (!bestCandidates.length) {
       bestCandidates = collectIngredientBlock(0, Math.min(workingLines.length, 200));
-    } else {
-      bestCandidates = selectedCandidates;
     }
 
     const deduped = [];

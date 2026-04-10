@@ -18,8 +18,30 @@ document.addEventListener('DOMContentLoaded', () => {
 		return;
 	}
 
+	function escapeHtml(value) {
+		return String(value || '')
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;');
+	}
+
+	function notify(message, type = 'info', duration = 4200) {
+		if (typeof window.showToast === 'function') {
+			window.showToast(message, type, duration);
+			return;
+		}
+		alert(message);
+	}
+
+	function renderApiErrorCallout(message) {
+		const safeMessage = escapeHtml(message || 'Unknown error');
+		tbody.innerHTML = `<tr><td colspan="7"><div class="ui-error-callout"><strong>Error loading recipes.</strong><span>${safeMessage}</span></div></td></tr>`;
+	}
+
 function renderRecipesTableMessage(message) {
-	tbody.innerHTML = `<tr><td colspan="7">${message}</td></tr>`;
+	renderApiErrorCallout(message);
 }
 
 function extractApiErrorMessage(payload, fallback) {
@@ -157,6 +179,11 @@ function setPublishStatusFilterSelection(value) {
 	return valid;
 }
 
+function resetViewFilterToAll(selectedRecipeId = '') {
+	const selectedStatus = setPublishStatusFilterSelection('all');
+	filterAndRenderRecipesById(allRecipesCache, selectedRecipeId, selectedStatus);
+}
+
 function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') {
 	const table = document.getElementById('recipesTable');
 	const tbody = table ? table.querySelector('tbody') : null;
@@ -233,7 +260,7 @@ let allRecipesCache = [];
 		filterAndRenderRecipesById(recipes, selectedRecipeId, selectedStatusFilter);
 		if (error) {
 			console.error('[DEBUG] /api/recipes error:', error);
-			renderRecipesTableMessage(`Error loading recipes: ${error}`);
+			renderRecipesTableMessage(error);
 		}
 	})();
 
@@ -306,7 +333,8 @@ let allRecipesCache = [];
 			throw new Error(data.error || 'Unknown publish error');
 		}
 		publishedRecipeIds.add(Number(recipeId));
-		await refreshRecipesFromApi(String(recipeId));
+			await refreshRecipesFromApi(String(recipeId), 'all');
+			resetViewFilterToAll(String(recipeId));
 	}
 
 	if (autoPublishBtn) {
@@ -319,7 +347,7 @@ let allRecipesCache = [];
 				recipeId = Number(String(recipeIdInput).trim());
 			}
 			if (!Number.isInteger(recipeId) || recipeId <= 0) {
-				alert('Please enter a valid numeric RecipeID.');
+				notify('Please enter a valid numeric RecipeID.', 'warning');
 				return;
 			}
 
@@ -392,7 +420,7 @@ let allRecipesCache = [];
 					ingredientsProgressFill.style.width = '0%';
 				}
 				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
-				alert('Auto Publish failed: ' + (err?.message || err));
+				notify('Auto Publish failed: ' + (err?.message || err), 'error', 6500);
 			} finally {
 				autoPublishBtn.disabled = false;
 			}
@@ -403,18 +431,18 @@ let allRecipesCache = [];
 		autoPublishAcceptBtn.addEventListener('click', async () => {
 			const recipeId = Number(pendingAutoPublishRecipeId);
 			if (!Number.isInteger(recipeId) || recipeId <= 0) {
-				alert('No recipe is ready to publish. Please run Auto Publish first.');
+				notify('No recipe is ready to publish. Please run Auto Publish first.', 'warning');
 				return;
 			}
 
 			autoPublishAcceptBtn.disabled = true;
 			try {
 				await publishRecipeById(recipeId);
-				alert(`RecipeID ${recipeId} published.`);
+				notify(`RecipeID ${recipeId} published.`, 'success');
 				if (autoPublishReviewBox) autoPublishReviewBox.style.display = 'none';
 				pendingAutoPublishRecipeId = null;
 			} catch (err) {
-				alert('Publish failed: ' + err.message);
+				notify('Publish failed: ' + err.message, 'error', 6500);
 			} finally {
 				autoPublishAcceptBtn.disabled = false;
 			}
@@ -442,13 +470,13 @@ let allRecipesCache = [];
 			if (data.success) {
 				publishedRecipeIds.add(Number(recipeId));
 				const selectedId = (document.getElementById('recipeIdFilter') || {}).value || '';
-				filterAndRenderRecipesById(allRecipesCache, selectedId, getSelectedPublishStatusFilter());
-				alert(`RecipeID ${recipeId} published.`);
+				resetViewFilterToAll(selectedId);
+				notify(`RecipeID ${recipeId} published.`, 'success');
 			} else {
-				alert('Publish failed: ' + (data.error || 'Unknown error'));
+				notify('Publish failed: ' + (data.error || 'Unknown error'), 'error', 6500);
 			}
 		} catch (err) {
-			alert('Publish failed: ' + err.message);
+			notify('Publish failed: ' + err.message, 'error', 6500);
 		}
 		btn.disabled = false;
 	});
@@ -477,11 +505,11 @@ let allRecipesCache = [];
 			filterAndRenderRecipesById(allRecipesCache, selectedId, selectedStatusFilter);
 			if (error) {
 				console.error('[DEBUG] Failed to refresh recipes from API:', error);
-				renderRecipesTableMessage(`Error loading recipes: ${error}`);
+				renderRecipesTableMessage(error);
 			}
 		} catch (err) {
 			console.error('[DEBUG] Failed to refresh recipes after cleanup:', err);
-			renderRecipesTableMessage('Error loading recipes.');
+			renderRecipesTableMessage(err?.message || 'Error loading recipes.');
 		}
 	}
 
@@ -535,7 +563,7 @@ let allRecipesCache = [];
 			if (recipeIdInput === null) return;
 			const recipeId = Number(String(recipeIdInput).trim());
 			if (!Number.isInteger(recipeId) || recipeId <= 0) {
-				alert('Please enter a valid numeric RecipeID.');
+				notify('Please enter a valid numeric RecipeID.', 'warning');
 				return;
 			}
 			sessionStorage.setItem(cleanupSelectedRecipeKey, String(recipeId));
@@ -556,33 +584,33 @@ let allRecipesCache = [];
 				if (ingredientsProgressBar) ingredientsProgressBar.style.display = 'none';
 			}
 
-			await fetch('/api/recipes/cleanup-instructions-stepwise', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ recipeId })
-			});
+			try {
+				await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+				await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', progressFill);
 
-			await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress', progressFill);
-
-			if (progressBar && progressFill) {
-				progressBar.style.display = 'none';
-				progressFill.style.width = '0%';
-				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
+				await refreshRecipesFromApi(String(recipeId));
+				await new Promise(resolve => setTimeout(resolve, 250));
+				await refreshRecipesFromApi(String(recipeId));
+				const refreshedInstructionsDisplay = getRecipeColumnValue(
+					allRecipesCache.find(r => Number(r.id) === recipeId),
+					'instructions_display'
+				);
+				if (String(refreshedInstructionsDisplay || '').trim() === String(previousInstructionsDisplay || '').trim()) {
+					console.warn('[DEBUG] Instructions display unchanged after cleanup refresh; forcing page reload.');
+					window.location.reload();
+					return;
+				}
+				notify(`Instructions cleanup finished for RecipeID ${recipeId}.`, 'success');
+			} catch (err) {
+				notify('Instructions cleanup failed: ' + (err?.message || err), 'error', 6500);
+			} finally {
+				if (progressBar && progressFill) {
+					progressBar.style.display = 'none';
+					progressFill.style.width = '0%';
+					if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
+				}
+				cleanupInstructionsBtnActive.disabled = false;
 			}
-			cleanupInstructionsBtnActive.disabled = false;
-			await refreshRecipesFromApi(String(recipeId));
-			await new Promise(resolve => setTimeout(resolve, 250));
-			await refreshRecipesFromApi(String(recipeId));
-			const refreshedInstructionsDisplay = getRecipeColumnValue(
-				allRecipesCache.find(r => Number(r.id) === recipeId),
-				'instructions_display'
-			);
-			if (String(refreshedInstructionsDisplay || '').trim() === String(previousInstructionsDisplay || '').trim()) {
-				console.warn('[DEBUG] Instructions display unchanged after cleanup refresh; forcing page reload.');
-				window.location.reload();
-				return;
-			}
-			alert(`Instructions cleanup finished for RecipeID ${recipeId}.`);
 		});
 	}
 
@@ -593,7 +621,7 @@ let allRecipesCache = [];
 			if (recipeIdInput === null) return;
 			const recipeId = Number(String(recipeIdInput).trim());
 			if (!Number.isInteger(recipeId) || recipeId <= 0) {
-				alert('Please enter a valid numeric RecipeID.');
+				notify('Please enter a valid numeric RecipeID.', 'warning');
 				return;
 			}
 			sessionStorage.setItem(cleanupSelectedRecipeKey, String(recipeId));
@@ -615,437 +643,43 @@ let allRecipesCache = [];
 				if (instructionsProgressBar) instructionsProgressBar.style.display = 'none';
 			}
 
-			await fetch('/api/recipes/cleanup-ingredients-stepwise', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ recipeId })
-			});
-
-			await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', progressFill);
-
 			try {
-				const inventorySyncResp = await fetch('/api/ingredients/inventory/sync', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ recipeId, reseed: true })
-				});
-				const inventorySyncData = await inventorySyncResp.json();
-				console.log(`[DEBUG][Cleanup Ingredients] Inventory reseed sync for RecipeID ${recipeId}:`, inventorySyncData);
-			} catch (syncErr) {
-				console.warn(`[DEBUG][Cleanup Ingredients] Inventory reseed sync failed for RecipeID ${recipeId}:`, syncErr);
-			}
+				await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+				await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress', progressFill);
 
-			if (progressBar && progressFill) {
-				progressBar.style.display = 'none';
-				progressFill.style.width = '0%';
-				if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
+				try {
+					await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
+				} catch (syncErr) {
+					console.warn(`[DEBUG][Cleanup Ingredients] Inventory reseed sync failed for RecipeID ${recipeId}:`, syncErr);
+				}
+
+				await refreshRecipesFromApi(String(recipeId));
+				await new Promise(resolve => setTimeout(resolve, 250));
+				await refreshRecipesFromApi(String(recipeId));
+				const refreshedIngredientsDisplay = getRecipeColumnValue(
+					allRecipesCache.find(r => Number(r.id) === recipeId),
+					'ingredients_display'
+				);
+				console.log(`[DEBUG][Cleanup Ingredients] RecipeID ${recipeId} refreshed ingredients_display:`, String(refreshedIngredientsDisplay || '').slice(0, 500));
+				if (String(refreshedIngredientsDisplay || '').trim() === String(previousIngredientsDisplay || '').trim()) {
+					console.warn('[DEBUG] Ingredients display unchanged after cleanup refresh; forcing page reload.');
+					window.location.reload();
+					return;
+				}
+				notify(`Ingredients cleanup finished for RecipeID ${recipeId}.`, 'success');
+			} catch (err) {
+				notify('Ingredients cleanup failed: ' + (err?.message || err), 'error', 6500);
+			} finally {
+				if (progressBar && progressFill) {
+					progressBar.style.display = 'none';
+					progressFill.style.width = '0%';
+					if (cleanupProgressPanel) cleanupProgressPanel.style.display = 'none';
+				}
+				cleanupIngredientsBtnActive.disabled = false;
 			}
-			cleanupIngredientsBtnActive.disabled = false;
-			await refreshRecipesFromApi(String(recipeId));
-			await new Promise(resolve => setTimeout(resolve, 250));
-			await refreshRecipesFromApi(String(recipeId));
-			const refreshedIngredientsDisplay = getRecipeColumnValue(
-				allRecipesCache.find(r => Number(r.id) === recipeId),
-				'ingredients_display'
-			);
-			console.log(`[DEBUG][Cleanup Ingredients] RecipeID ${recipeId} refreshed ingredients_display:`, String(refreshedIngredientsDisplay || '').slice(0, 500));
-			if (String(refreshedIngredientsDisplay || '').trim() === String(previousIngredientsDisplay || '').trim()) {
-				console.warn('[DEBUG] Ingredients display unchanged after cleanup refresh; forcing page reload.');
-				window.location.reload();
-				return;
-			}
-			alert(`Ingredients cleanup finished for RecipeID ${recipeId}.`);
 		});
 	}
 
 	// Stop here: legacy code below this point is kept for reference only and must not run on recipe_publish.html.
 	return;
-// Only logic for Upload URL and Uploaded Recipes table remains
-document.addEventListener('DOMContentLoaded', () => {
-	// Upload URL button
-	const uploadUrlBtn = document.getElementById('uploadUrlBtn');
-	const uploadUrlInput = document.querySelector('input[type="text"]');
-	if (uploadUrlBtn && uploadUrlInput) {
-		uploadUrlBtn.addEventListener('click', async () => {
-			const url = uploadUrlInput.value.trim();
-			if (!url) {
-				alert('Please enter a Recipe URL.');
-				return;
-			}
-			uploadUrlBtn.disabled = true;
-			try {
-				const resp = await fetch('/api/recipes/upload-url', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ url })
-				});
-				const data = await resp.json();
-				if (data.success) {
-					alert('Recipe uploaded successfully!');
-					fetchAndRenderUploads();
-				} else {
-					alert('Failed to upload recipe: ' + (data.error || 'Unknown error'));
-				}
-			} catch (err) {
-				alert('Error uploading recipe: ' + err.message);
-			}
-			uploadUrlBtn.disabled = false;
-		});
-	}
-	fetchAndRenderUploads();
 });
-
-function fetchAndRenderUploads() {
-	fetch('/api/uploads')
-		.then(res => res.json())
-		.then(data => {
-			const tbody = document.querySelector('#uploadedRecipesTable tbody');
-			if (!tbody) return;
-			tbody.innerHTML = '';
-			data.forEach(upload => {
-				const tr = document.createElement('tr');
-				tr.innerHTML = `
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${upload.id}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${upload.recipe_title}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${upload.upload_type}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${upload.source_url ? `<a href='${upload.source_url}' target='_blank'>Link</a>` : ''}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${upload.uploaded_by}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${upload.upload_date}</td>
-					<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>
-						<button class='delete-upload-btn' data-id='${upload.id}' style='background:#e53935;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;'>Delete</button>
-					</td>
-				`;
-				tbody.appendChild(tr);
-			});
-			document.querySelectorAll('.delete-upload-btn').forEach(btn => {
-				btn.addEventListener('click', function() {
-					const id = this.getAttribute('data-id');
-					if (confirm('Are you sure you want to delete this upload record?')) {
-						fetch(`/api/uploads/${id}`, { method: 'DELETE' })
-							.then(res => res.json())
-							.then(result => {
-								if (result.success) {
-									fetchAndRenderUploads();
-								} else {
-									alert('Failed to delete upload record.');
-								}
-							});
-					}
-				});
-			});
-		});
-}
-
-// Handle Upload URL button and table rendering for upload_url.html
-
-document.addEventListener('DOMContentLoaded', () => {
-
-	// Add event listener for Upload URL button
-	const uploadUrlBtn = document.getElementById('uploadUrlBtn');
-	const uploadUrlInput = document.getElementById('uploadUrlInput') || document.querySelector('input[type="text"]');
-	if (uploadUrlBtn && uploadUrlInput) {
-		uploadUrlBtn.addEventListener('click', async () => {
-			const url = uploadUrlInput.value.trim();
-			if (!url) {
-				alert('Please enter a Recipe URL.');
-				return;
-			}
-			uploadUrlBtn.disabled = true;
-			try {
-				const resp = await fetch('/api/recipes/upload-url', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ url })
-				});
-				const data = await resp.json();
-				if (data.success) {
-					alert('Recipe uploaded successfully!');
-					fetchAndRenderRecipes();
-				} else {
-					alert('Failed to upload recipe: ' + (data.error || 'Unknown error'));
-				}
-			} catch (err) {
-				alert('Error uploading recipe: ' + err.message);
-			}
-			uploadUrlBtn.disabled = false;
-		});
-	}
-
-	// Add event listener for Cleanup Instructions button (stepwise with progress bar)
-	const cleanupInstructionsBtn = document.getElementById('cleanupInstructionsBtn');
-	if (cleanupInstructionsBtn) {
-		cleanupInstructionsBtn.addEventListener('click', async () => {
-			const recipeIdInput = prompt('Enter the RecipeID to clean for Instructions Display:');
-			if (recipeIdInput === null) return;
-			const recipeId = Number(String(recipeIdInput).trim());
-			if (!Number.isInteger(recipeId) || recipeId <= 0) {
-				alert('Please enter a valid numeric RecipeID.');
-				return;
-			}
-			if (!confirm(`Clean Instructions Display for RecipeID ${recipeId}?`)) return;
-			cleanupInstructionsBtn.disabled = true;
-			const progressBar = document.getElementById('cleanupProgressBar');
-			const progressFill = document.getElementById('cleanupProgressFill');
-			progressBar.style.display = 'block';
-			progressFill.style.width = '0%';
-
-			let polling = true;
-			let lastProgress = 0;
-
-			// Start the stepwise cleanup (POST)
-			fetch('/api/recipes/cleanup-instructions-stepwise', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ recipeId })
-			});
-
-			async function pollProgress() {
-				try {
-					const resp = await fetch('/api/recipes/cleanup-instructions-progress');
-					const data = await resp.json();
-					if (data && typeof data.progress === 'number' && typeof data.total === 'number') {
-						const percent = data.total > 0 ? Math.round((data.progress / data.total) * 100) : 0;
-						progressFill.style.width = percent + '%';
-						lastProgress = percent;
-						if (data.progress >= data.total && data.total > 0) {
-							polling = false;
-							setTimeout(() => {
-								progressBar.style.display = 'none';
-								progressFill.style.width = '0%';
-								alert(`Cleaned up instructions for ${data.total} recipe(s).`);
-								fetchAndRenderRecipes();
-								cleanupInstructionsBtn.disabled = false;
-							}, 500);
-							return;
-						}
-					}
-				} catch (err) {
-					// ignore errors, keep polling
-				}
-				if (polling) setTimeout(pollProgress, 400);
-			}
-			pollProgress();
-		});
-	}
-
-	// Add event listener for Cleanup Ingredients button (stepwise with progress bar)
-	const cleanupIngredientsBtn = document.getElementById('cleanupIngredientsBtn');
-	if (cleanupIngredientsBtn) {
-		cleanupIngredientsBtn.addEventListener('click', async () => {
-			const recipeIdInput = prompt('Enter the RecipeID to clean for Ingredients Display:');
-			if (recipeIdInput === null) return;
-			const recipeId = Number(String(recipeIdInput).trim());
-			if (!Number.isInteger(recipeId) || recipeId <= 0) {
-				alert('Please enter a valid numeric RecipeID.');
-				return;
-			}
-			if (!confirm(`Clean Ingredients Display for RecipeID ${recipeId}?`)) return;
-			cleanupIngredientsBtn.disabled = true;
-			const progressBar = document.getElementById('cleanupProgressBar');
-			const progressFill = document.getElementById('cleanupProgressFill');
-			progressBar.style.display = 'block';
-			progressFill.style.width = '0%';
-
-			let polling = true;
-			let lastProgress = 0;
-
-			// Start the stepwise cleanup (POST)
-			fetch('/api/recipes/cleanup-ingredients-stepwise', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ recipeId })
-			});
-
-			async function pollProgress() {
-				try {
-					const resp = await fetch('/api/recipes/cleanup-ingredients-progress');
-					const data = await resp.json();
-					if (data && typeof data.progress === 'number' && typeof data.total === 'number') {
-						const percent = data.total > 0 ? Math.round((data.progress / data.total) * 100) : 0;
-						progressFill.style.width = percent + '%';
-						lastProgress = percent;
-						if (data.progress >= data.total && data.total > 0) {
-							polling = false;
-							setTimeout(() => {
-								progressBar.style.display = 'none';
-								progressFill.style.width = '0%';
-								alert(`Cleaned up ingredients for ${data.total} recipe(s).`);
-								fetchAndRenderRecipes();
-								cleanupIngredientsBtn.disabled = false;
-							}, 500);
-							return;
-						}
-					}
-				} catch (err) {
-					// ignore errors, keep polling
-				}
-				if (polling) setTimeout(pollProgress, 400);
-			}
-			pollProgress();
-		});
-	}
-
-	// Auto-fill URL input if ?url=... is present in query string
-
-// --- Sorting for Extracted Recipes Table ---
-let sortDescending = true; // Default: newest first
-function sortRecipes(data) {
-    data.sort((a, b) => sortDescending ? b.id - a.id : a.id - b.id);
-}
-	// Sync All Recipes to Display
-	const syncBtn = document.getElementById('syncAllToDisplayBtn');
-		if (syncBtn) {
-			syncBtn.addEventListener('click', async () => {
-				if (!confirm('Sync ALL recipes to the display table? This will overwrite existing display records. Continue?')) return;
-				syncBtn.disabled = true;
-				try {
-					const resp = await fetch('/api/recipes/sync-all-to-display', { method: 'POST' });
-					const data = await resp.json();
-					if (data.success) {
-						alert(`Synced ${data.count} recipes to display table!`);
-						fetchAndRenderRecipes();
-					} else {
-						alert('Failed to sync recipes: ' + (data.error || 'Unknown error'));
-					}
-				} catch (err) {
-					alert('Error syncing recipes: ' + err.message);
-				}
-				syncBtn.disabled = false;
-			});
-		}
-
-		// Display button (put recipe into recipe_display table)
-		document.body.addEventListener('click', async function(e) {
-			if (e.target && e.target.classList.contains('display-recipe-btn')) {
-				const recipeId = e.target.getAttribute('data-id');
-				if (!recipeId) return;
-				if (!confirm('Display this recipe? This will copy it to the recipe_display table.')) return;
-				const resp = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
-				const data = await resp.json();
-				if (data.success) {
-					alert('Recipe sent to display table!');
-				} else {
-					alert('Failed to display recipe: ' + (data.error || 'Unknown error'));
-				}
-			}
-		});
-	
-		// ...other event listeners and initializations...
-		fetchAndRenderAllFieldsRecipes();
-		fetchAndRenderRecipes();
-		fetchAndRenderUploads();
-
-	function fetchAndRenderAllFieldsRecipes() {
-		fetch('/api/recipes')
-			.then(res => res.json())
-			.then(data => {
-				const tbody = document.querySelector('#allFieldsRecipesTable tbody');
-				if (!tbody) return;
-				tbody.innerHTML = '';
-				data.forEach(recipe => {
-					const tr = document.createElement('tr');
-					tr.innerHTML = `
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.id}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.uploaded_recipe_id || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.name || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.description || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.ingredients || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.serving_size !== undefined && recipe.serving_size !== null ? recipe.serving_size : ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.url || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.instructions || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.instructions_extracted || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.ingredients_display || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.extracted_ingredients || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.extracted_serving_size || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.extracted_instructions || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.instructions_display || ''}</td>
-						<td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.ingredients_inventories || ''}</td>
-					`;
-					tbody.appendChild(tr);
-				});
-			})
-			.catch(err => {
-				const tbody = document.querySelector('#allFieldsRecipesTable tbody');
-				if (tbody) tbody.innerHTML = `<tr><td colspan="15" style="color:red;">Failed to load recipes: ${err.message}</td></tr>`;
-			});
-	}
-		});
-		
-		function fetchAndRenderRecipes() {
-			fetch('/api/recipes')
-				.then(res => res.json())
-				.then(data => {
-					const tbody = document.querySelector('#mainRecipesTable tbody');
-					tbody.innerHTML = '';
-					sortRecipes(data);
-					data.forEach(recipe => {
-						const tr = document.createElement('tr');
-						   tr.innerHTML = `
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.id}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.uploaded_recipe_id || ''}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.url ? `<a href='${recipe.url}' target='_blank'>Link</a>` : ''}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.name || ''}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:#009688; max-width:120px; text-align:center; background:#f8f8ff;'>
-								   <button class="view-raw-btn" data-id="${recipe.id}" style="background:#1976d2;color:#fff;border:none;padding:0.3rem 0.8rem;border-radius:4px;cursor:pointer;">View</button>
-							   </td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>${recipe.serving_size !== undefined && recipe.serving_size !== null ? recipe.serving_size : ''}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:indigo;'>${recipe.extracted_ingredients || ''}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem; color:indigo;'>${recipe.instructions_extracted || ''}</td>
-							   <td style='border:1px solid #eee;padding:0.5rem 0.7rem;'>
-								   <button class='delete-recipe-btn' data-id='${recipe.id}' style='background:#e53935;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;'>Delete</button>
-								   <button class='display-recipe-btn' data-id='${recipe.id}' style='background:#1976d2;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;margin-left:0.5rem;'>Display</button>
-								   <button class='transfer-instructions-btn' data-id='${recipe.id}' style='background:#8e24aa;color:#fff;border:none;padding:0.4rem 0.8rem;border-radius:4px;cursor:pointer;margin-left:0.5rem;display:none;'>Transfer Instructions</button>
-							   </td>
-						   `;
-						tbody.appendChild(tr);
-					});
-					document.querySelectorAll('.view-raw-btn').forEach(btn => {
-						btn.addEventListener('click', function(e) {
-							e.preventDefault();
-							const recipeId = this.getAttribute('data-id');
-							if (!recipeId) return;
-							window.open(`RawDataTXT/${recipeId}.txt`, '_blank');
-						});
-					});
-					document.querySelectorAll('.delete-recipe-btn').forEach(btn => {
-						btn.addEventListener('click', function() {
-							const id = this.getAttribute('data-id');
-							if (confirm('Are you sure you want to delete this recipe?')) {
-								fetch(`/api/recipes/${id}`, { method: 'DELETE' })
-									.then(res => res.json())
-									.then(result => {
-										if (result.success) {
-											fetchAndRenderRecipes();
-										} else {
-											alert('Failed to delete recipe.');
-										}
-									});
-							}
-						});
-					});
-					document.querySelectorAll('.transfer-instructions-btn').forEach(btn => {
-						btn.addEventListener('click', function() {
-							const recipeId = this.getAttribute('data-id');
-							if (!recipeId) return;
-							if (!confirm('Copy extracted instructions to the main instructions field for this recipe?')) return;
-							fetch(`/api/recipes/${recipeId}/transfer-instructions`, { method: 'POST' })
-								.then(res => res.json())
-								.then(data => {
-									if (data.success) {
-										alert('Instructions transferred!');
-										fetchAndRenderRecipes();
-									} else {
-										alert('Failed to transfer instructions.');
-									}
-								})
-								.catch(() => alert('Error contacting server.'));
-						});
-					});
-				})
-				.catch(err => {
-					console.error('Error fetching recipes:', err);
-					const tbody = document.querySelector('#mainRecipesTable tbody');
-					if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="color:red;">Failed to load recipes: ' + err.message + '</td></tr>';
-				});
-		}
-	});

@@ -1360,6 +1360,25 @@
 .shopping-calendar-nav {
     justify-content: center;
 }
+.shopping-teacher-quick-select {
+    margin-top: 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+.shopping-teacher-quick-select label {
+    font-weight: 600;
+    color: #344054;
+}
+.shopping-teacher-quick-select select {
+    min-width: 220px;
+    margin-right: 0;
+}
+.shopping-teacher-quick-select .btn {
+    min-height: auto;
+    padding: 0.42rem 0.75rem;
+}
 .shopping-tabs {
     margin-bottom: 0.85rem;
     border-bottom: 1px solid #dfe5eb;
@@ -1401,6 +1420,30 @@
 #by-teacher-ingredients table,
 #by-category-ingredients table {
     min-width: 720px;
+}
+
+#by-category-ingredients .shopping-category-table {
+    min-width: 420px;
+    table-layout: fixed;
+}
+
+#by-category-ingredients .shopping-category-table th:nth-child(1),
+#by-category-ingredients .shopping-category-table td:nth-child(1) {
+    width: 230px;
+    max-width: 230px;
+    white-space: normal;
+    word-break: break-word;
+}
+
+#by-category-ingredients .shopping-category-table th:nth-child(2),
+#by-category-ingredients .shopping-category-table td:nth-child(2) {
+    width: 72px;
+    text-align: right;
+}
+
+#by-category-ingredients .shopping-category-table th:nth-child(3),
+#by-category-ingredients .shopping-category-table td:nth-child(3) {
+    width: 74px;
 }
 .shopping-panel-title {
     font-weight: 700;
@@ -1803,6 +1846,19 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
     .shopping-calendar-nav .btn {
         flex: 1 1 140px;
         justify-content: center;
+    }
+
+    .shopping-teacher-quick-select {
+        align-items: stretch;
+    }
+
+    .shopping-teacher-quick-select label {
+        width: 100%;
+    }
+
+    .shopping-teacher-quick-select select,
+    .shopping-teacher-quick-select .btn {
+        width: 100%;
     }
 
     .shopping-week-label {

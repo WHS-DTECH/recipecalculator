@@ -8,7 +8,9 @@ const pages = [
   'http://localhost:4000/quick_add.html',
   'http://localhost:4000/add_recipe.html',
   'http://localhost:4000/book_a_class.html',
-  'http://localhost:4000/book_the_shopping.html'
+  'http://localhost:4000/book_the_shopping.html',
+  'http://localhost:4000/ingredients_directory.html',
+  'http://localhost:4000/recipe_publish.html'
 ];
 
 async function fetchPage(url) {
@@ -19,6 +21,35 @@ async function fetchPage(url) {
       res.on('end', () => resolve(data));
     }).on('error', reject);
   });
+}
+
+function getStylesheetUrls($, pageUrl) {
+  return $('link[rel="stylesheet"]')
+    .map((_, el) => $(el).attr('href'))
+    .get()
+    .filter(Boolean)
+    .filter(href => !href.startsWith('http://') && !href.startsWith('https://'))
+    .map(href => new URL(href, pageUrl).href);
+}
+
+async function pageHasFocusStyles(html, $, pageUrl) {
+  if (html.includes(':focus-visible') || html.includes(':focus')) {
+    return true;
+  }
+
+  const stylesheets = getStylesheetUrls($, pageUrl);
+  for (const stylesheetUrl of stylesheets) {
+    try {
+      const css = await fetchPage(stylesheetUrl);
+      if (css.includes(':focus-visible') || css.includes(':focus')) {
+        return true;
+      }
+    } catch (_) {
+      // Ignore stylesheet fetch failures so audit can continue.
+    }
+  }
+
+  return false;
 }
 
 async function analyzeAccessibility(url) {
@@ -43,8 +74,8 @@ async function analyzeAccessibility(url) {
       return !id || !$(`label[for="${id}"]`).length;
     }).length;
     
-    // Check focus handling
-    const focusStyles = html.includes(':focus-visible') || html.includes(':focus');
+    // Check focus handling in inline HTML and linked CSS.
+    const focusStyles = await pageHasFocusStyles(html, $, url);
     
     // Check semantic HTML
     const tables = $('table').length;

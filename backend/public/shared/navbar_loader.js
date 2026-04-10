@@ -1,35 +1,46 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
   var NAVBAR_URL = '/navbar_enhanced.html';
+  var ASSET_VERSION = '20260410a';
   var STYLE_HREFS = [
     'https://www.w3schools.com/w3css/4/w3.css',
     '/navbar.css'
   ];
   var SCRIPT_SRCS = [
     '/navbar_user.js',
-    '/navbar_roles.js'
+    '/navbar_roles.js',
+    '/shared/toast.js'
   ];
+
+  function versionedAssetPath(path) {
+    if (!path) return path;
+    if (/^https?:\/\//i.test(path) || path.indexOf('//') === 0) return path;
+    var separator = path.indexOf('?') === -1 ? '?' : '&';
+    return path + separator + 'v=' + ASSET_VERSION;
+  }
 
   function ensureStyles() {
     STYLE_HREFS.forEach(function(href) {
-      var existing = document.querySelector('link[data-navbar-asset="' + href + '"]');
+      var assetHref = versionedAssetPath(href);
+      var existing = document.querySelector('link[data-navbar-asset="' + assetHref + '"]');
       if (existing) return;
       var link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = href;
-      link.setAttribute('data-navbar-asset', href);
+      link.href = assetHref;
+      link.setAttribute('data-navbar-asset', assetHref);
       document.head.appendChild(link);
     });
   }
 
   function ensureScripts() {
     SCRIPT_SRCS.forEach(function(src) {
-      var existing = document.querySelector('script[data-navbar-asset="' + src + '"]');
+      var assetSrc = versionedAssetPath(src);
+      var existing = document.querySelector('script[data-navbar-asset="' + assetSrc + '"]');
       if (existing) return;
       var script = document.createElement('script');
-      script.src = src;
+      script.src = assetSrc;
       script.defer = true;
-      script.setAttribute('data-navbar-asset', src);
+      script.setAttribute('data-navbar-asset', assetSrc);
       document.body.appendChild(script);
     });
   }
