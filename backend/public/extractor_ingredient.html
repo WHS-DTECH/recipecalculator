@@ -10,6 +10,7 @@
 <body>
   <!-- Shared Navigation Bar -->
   <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
   <div class="extractor-card" style="margin-left:40px;margin-right:40px;">
     <h2>Ingredients Extraction Strategies</h2>
     <!-- Move recipe selector above columns -->
@@ -84,14 +85,6 @@
       </div>
     </div>
   </div>
-  <script>
-    // Dynamically load the shared navbar
-    fetch('_navbar.html')
-      .then(res => res.text())
-      .then(html => {
-        document.getElementById('navbar-include').innerHTML = html;
-      });
-  </script>
   <script src="extractor_auto_core.js?v=20260408g"></script>
   <script src="extractor_ingredient.js"></script>
 </body>

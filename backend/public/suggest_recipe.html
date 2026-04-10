@@ -18,11 +18,7 @@
 </head>
 <body>
         <div id="navbar-include"></div>
-        <script>
-            fetch('_navbar.html').then(r=>r.text()).then(html=>{
-                document.getElementById('navbar-include').innerHTML = html;
-            });
-        </script>
+        <script src="shared/navbar_loader.js"></script>
     <div class="suggest-box">
         <h2><span class="icon">💡</span> Suggest a Recipe</h2>
         <div class="desc">Have a recipe you'd like added to our collection? Share your suggestion with the VP!</div>

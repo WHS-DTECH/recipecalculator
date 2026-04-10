@@ -101,7 +101,8 @@
     </style>
 </head>
 <body>
-    <div id="navbar-container"></div>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
     <div class="extractor-app">
         <div style="margin-bottom:1.5rem;">
             <label for="recipeUrlSelect" style="font-weight:bold;">Choose Recipe URL:</label>
@@ -398,12 +399,6 @@
             });
         }
 
-        fetch('/_navbar.html')
-            .then(res => res.text())
-            .then(html => {
-                const container = document.getElementById('navbar-container');
-                if (container) container.innerHTML = html;
-            });
     });
     </script>
 </body>

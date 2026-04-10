@@ -5,13 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Calculate Servings</title>
   <link rel="stylesheet" href="style.css">
-  <!-- Navbar include -->
-  <div id="navbar-include"></div>
-  <script>
-    fetch('_navbar.html').then(r => r.text()).then(html => {
-      document.getElementById('navbar-include').outerHTML = html;
-    });
-  </script>
   <style>
         .servings-card {
           background: #fff;
@@ -75,6 +68,8 @@
       </style>
     </head>
     <body>
+      <div id="navbar-include"></div>
+      <script src="shared/navbar_loader.js"></script>
       <div style="display:flex;justify-content:center;align-items:flex-start;gap:2.5rem;margin-top:2.5rem;">
         <div style="min-width:320px;max-width:340px;background:#fff;border-radius:12px;box-shadow:0 2px 8px #0001;padding:1.2rem 1.2rem 1.5rem 1.2rem;border:1px solid #e0e0e0;">
           <div id="scheduled-bookings-dropdowns"></div>
@@ -199,6 +194,16 @@
               const classSelect = document.getElementById('class-select');
               const studentsMeta = document.getElementById('calc-class-students-meta');
               const studentsBody = document.getElementById('calc-class-students-body');
+              const pageParams = new URLSearchParams(window.location.search);
+              const prefill = {
+                bookingId: pageParams.get('booking_id') || '',
+                teacher: pageParams.get('teacher') || '',
+                date: pageParams.get('date') || '',
+                className: pageParams.get('class_name') || '',
+                recipeId: pageParams.get('recipe_id') || '',
+                autoRun: pageParams.get('auto') === '1',
+                groups: pageParams.get('groups') || '1'
+              };
 
               function setClassSizeFromStudents(count) {
                 const classSizeInput = document.getElementById('class-size-input');
@@ -351,9 +356,9 @@
               function preloadRecipeIngredientsForCalculation(recipeId) {
                 if (!recipeId) {
                   window.filteredIngredientsForCalculation = [];
-                  return;
+                  return Promise.resolve();
                 }
-                fetch('/api/ingredients/inventory/all')
+                return fetch('/api/ingredients/inventory/all')
                   .then(res => res.json())
                   .then(data => {
                     const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
@@ -388,6 +393,74 @@
                   });
               }
 
+              function runAutoCalculateIfRequested() {
+                if (!prefill.autoRun) return;
+                const desiredBtn = document.getElementById('calculate-desired-serving-btn');
+                const groupsInput = document.getElementById('groups-input');
+                if (!desiredBtn || !groupsInput) return;
+
+                const waitForIngredients = window.currentRecipePreloadPromise || Promise.resolve();
+                waitForIngredients.finally(() => {
+                  const groups = parseInt(String(prefill.groups || '1').trim(), 10);
+                  groupsInput.value = (!isNaN(groups) && groups > 0) ? String(groups) : '1';
+                  if (typeof window.recalcDesiredServings === 'function') {
+                    window.recalcDesiredServings();
+                  }
+                  desiredBtn.click();
+                  if (window.QC) window.QC.toast('Master Save: auto-calculate completed', 'success');
+                });
+              }
+
+              function applyPrefillSelection() {
+                if (!prefill.bookingId && !prefill.teacher) return;
+
+                let targetBooking = null;
+                if (prefill.bookingId) {
+                  targetBooking = bookings.find(b => String(b.id) === String(prefill.bookingId));
+                }
+                if (!targetBooking && prefill.teacher && prefill.date) {
+                  targetBooking = bookings.find(b =>
+                    String(b.staff_name || '') === String(prefill.teacher) &&
+                    getDateKey(b.booking_date) === getDateKey(prefill.date)
+                  );
+                }
+
+                const teacherValue = targetBooking ? (targetBooking.staff_name || '') : prefill.teacher;
+                const dateValue = targetBooking ? getDateKey(targetBooking.booking_date) : getDateKey(prefill.date);
+
+                if (teacherValue) {
+                  teacherSelect.value = teacherValue;
+                  populateDateOptions(teacherValue);
+                }
+                if (dateValue) {
+                  dateSelect.value = dateValue;
+                  populateClassOptions(teacherSelect.value, dateValue);
+                }
+
+                let classOption = null;
+                if (targetBooking) {
+                  classOption = Array.from(classSelect.options).find(opt =>
+                    String(opt.getAttribute('data-booking-id') || '') === String(targetBooking.id)
+                  );
+                }
+                if (!classOption && prefill.className) {
+                  classOption = Array.from(classSelect.options).find(opt =>
+                    String(opt.getAttribute('data-class-name') || '').toUpperCase() === String(prefill.className).toUpperCase()
+                  );
+                }
+                if (!classOption && prefill.recipeId) {
+                  classOption = Array.from(classSelect.options).find(opt =>
+                    String(opt.getAttribute('data-recipe-id') || '') === String(prefill.recipeId)
+                  );
+                }
+
+                if (classOption) {
+                  classSelect.value = classOption.value;
+                  classSelect.dispatchEvent(new Event('change'));
+                  setTimeout(runAutoCalculateIfRequested, 200);
+                }
+              }
+
               // Populate teacher dropdown
               teacherSelect.innerHTML = '<option value="">Select teacher...</option>' +
                 Object.keys(grouped).sort().map(t => `<option value="${t}">${t}</option>`).join('');
@@ -417,12 +490,13 @@
                   classSizeInput.value = classSize || '';
                   classSizeInput.dispatchEvent(new Event('input'));
                 }
-                preloadRecipeIngredientsForCalculation(recipeId);
+                window.currentRecipePreloadPromise = preloadRecipeIngredientsForCalculation(recipeId);
                 fetchStudentsForScheduledClass(classCode);
               });
 
               // Optionally, trigger change to clear class dropdown on load
               teacherSelect.dispatchEvent(new Event('change'));
+              applyPrefillSelection();
             });
           // Render Desired Serving calculation box
           const desiredCol = document.getElementById('desired-serving-col');
@@ -452,6 +526,7 @@
                 desiredServingsInput.value = '';
               }
             }
+            window.recalcDesiredServings = recalcDesiredServings;
             classSizeInput.addEventListener('input', recalcDesiredServings);
             groupsInput.addEventListener('input', recalcDesiredServings);
             if (autoCalcBtn) {

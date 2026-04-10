@@ -1,5 +1,5 @@
 let permissionsData = [];
-let ROUTES = ['recipes', 'inventory', 'shopping', 'booking', 'admin'];
+let ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'admin'];
 
 // Fetch permissions from backend on page load
 window.addEventListener('DOMContentLoaded', () => {
@@ -30,7 +30,7 @@ function fetchPermissions() {
 function renderPermissionsTable(roles = []) {
   const body = document.getElementById('permissionsBody');
   if (!roles.length) {
-    body.innerHTML = '<tr><td colspan="6">No roles found.</td></tr>';
+    body.innerHTML = `<tr><td colspan="${ROUTES.length + 1}">No roles found.</td></tr>`;
     return;
   }
   

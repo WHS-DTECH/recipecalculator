@@ -1,3 +1,7 @@
+@import url('./shared/design_tokens.css');
+@import url('./shared/base.css');
+@import url('./shared/components.css');
+
 /* --- Schedule Calendar Grid Styles --- */
 .calendar-table {
     width: 100%;
@@ -6,6 +10,15 @@
     margin-top: 1rem;
     margin-bottom: 1rem;
 }
+
+.calendar-wrap,
+.shopping-calendar-wrap,
+.calendar-grid,
+.calendar-grid-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
 .calendar-table th, .calendar-table td {
     border: 1px solid #888;
     padding: 1.1rem 0.7rem;
@@ -17,160 +30,137 @@
     background: #f5f8fa;
     font-weight: 600;
 }
-/* --- Base Styles --- */
-body {
-    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-    font-size: 1.08rem;
-    color: #23272f;
-    background: #f9f9f9;
-    margin: 0;
-    padding-top: 56px; /* Height of navbar, adjust if needed */
-    padding: 0;
-}
-h1, .main-title {
-    font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
-    font-size: 2.2rem;
-    font-weight: 700;
-    color: #1976d2;
-    margin-bottom: 1.2rem;
-    letter-spacing: 0.01em;
-}
-h2 {
-    font-size: 1.5rem;
-    font-weight: 600;
-    color: #1976d2;
-    margin-bottom: 1rem;
-    margin-top: 0;
-}
-h3 {
-    font-size: 1.18rem;
-    font-weight: 500;
-    color: #333;
-    margin-bottom: 0.7rem;
-    margin-top: 0;
-}
-label, .setup-section-title {
-    font-size: 1.05rem;
-    font-weight: 500;
-    color: #222;
-}
-input, select, textarea, button {
-    font-family: inherit;
-    font-size: 1.05rem;
-}
 
-/* --- Navbar Dropdown */
-.navbar-dropdown {
-    position: relative;
-    display: inline-block;
+.add-booking-page {
+    max-width: 2100px;
+    width: min(100%, calc(100vw - 12px));
+    margin: 18px auto 32px;
+    padding: 0.85rem 0.35rem 1.25rem;
+    box-sizing: border-box;
 }
-.navbar-dropbtn {
-    background: none;
-    border: none;
-    color: #0074d9;
-    font-size: 1rem;
-    cursor: pointer;
-    padding: 0;
-    margin-right: 0.5rem;
-}
-.navbar-dropdown-content {
-    display: none;
-    position: absolute;
-    background-color: #fff;
-    min-width: 160px;
-    box-shadow: 0 8px 16px rgba(0,0,0,0.08);
-    z-index: 1100;
-    border: 1px solid #e0e0e0;
-    border-radius: 4px;
-    margin-top: 0.5rem;
-}
-.navbar-dropdown-content a {
-    color: #0074d9;
-    padding: 0.7rem 1.2rem;
-    text-decoration: none;
-    display: block;
-    font-size: 1rem;
-}
-.navbar-dropdown-content a:hover {
-    background-color: #f1f1f1;
-}
-.navbar-dropdown:hover .navbar-dropdown-content {
-    display: block;
-}
-.navbar-dropdown:focus-within .navbar-dropdown-content {
-    display: block;
-}
-
-/* --- Dropdowns & Menus UI/UX Improvements (Jan 2026) --- */
-.navbar-dropdown-content {
-  opacity: 0;
-  transform: translateY(10px) scale(0.98);
-  pointer-events: none;
-  transition: opacity 0.22s cubic-bezier(.4,0,.2,1), transform 0.22s cubic-bezier(.4,0,.2,1);
-}
-.navbar-dropdown:hover .navbar-dropdown-content,
-.navbar-dropdown:focus-within .navbar-dropdown-content {
-  opacity: 1;
-  transform: translateY(0) scale(1);
-  pointer-events: auto;
-}
-
-.navbar-dropbtn {
-  position: relative;
-}
-.navbar-dropbtn:after {
-  content: '\25BC';
-  font-size: 0.7em;
-  margin-left: 0.4em;
-  vertical-align: middle;
-  color: #1976d2;
-  transition: transform 0.18s;
-}
-.navbar-dropdown[aria-expanded="true"] .navbar-dropbtn:after {
-  transform: rotate(-180deg);
-}
-
-.navbar-dropdown-content {
-  min-width: 180px;
-}
-
-/* Accessibility: focus ring for dropdown */
-.navbar-dropbtn:focus {
-  outline: 2px solid #1976d2;
-  outline-offset: 2px;
-}
-
-.navbar-dropdown-content a:focus {
-  background: #e3f0ff;
-  color: #1976d2;
-  outline: none;
-}
-
-/* --- Book the Shopping Main Page Styles --- */
-.shopping-app {
-    max-width: 1200px;
-    margin: 40px auto;
-    background: #fff;
-    padding: 2rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-}
-.shopping-week {
-    font-size: 1.15rem;
-    margin-bottom: 0.7rem;
-}
-.shopping-nav {
-    margin-bottom: 2rem;
-    display: flex;
+.add-booking-shell {
+    display: grid;
+    grid-template-columns: minmax(320px, 0.95fr) minmax(0, 2.25fr) minmax(420px, 1.1fr);
     gap: 1rem;
+    align-items: stretch;
 }
-.shopping-nav button {
-    padding: 0.4rem 1.2rem;
-    border: 1px solid #ccc;
-    background: #f5f5f5;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 1rem;
+.add-booking-left-panel,
+.add-booking-right-panel {
+    min-width: 0;
+}
+.add-booking-left-panel {
+    display: flex;
+    align-self: stretch;
+}
+.add-booking-main-panel,
+.add-booking-side-card {
+    background: #fff;
+    border: 1px solid #d8dee6;
+    border-radius: 14px;
+    box-shadow: 0 16px 34px rgba(15, 23, 42, 0.08);
+}
+.add-booking-main-panel {
+    padding: 1.35rem;
+    min-width: 0;
+}
+.add-booking-main-panel h1 {
+    margin: 0 0 1rem;
+}
+.add-booking-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.add-booking-week-label {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2937;
+}
+.add-booking-toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    justify-content: flex-end;
+}
+.add-booking-toolbar-actions button,
+.add-booking-print-btn {
+    margin: 0;
+}
+.add-booking-print-btn {
+    background: #1976d2;
+    color: #fff;
+    border: none;
+    border-radius: 5px;
+    padding: 0.45rem 1rem;
+}
+.add-booking-calendar-wrap {
+    margin-top: 0;
+}
+.add-booking-side-card {
+    padding: 1rem;
+    background: #f7fafc;
+    height: 100%;
+    box-sizing: border-box;
+}
+.add-booking-side-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 0.3rem;
+}
+.add-booking-side-copy {
+    font-size: 0.95rem;
+    color: #4a5568;
+    margin-bottom: 0.75rem;
+}
+.add-booking-bottom-card {
+    margin-top: 1.15rem;
+    background: #fff;
+    border: 1px solid #d8dee6;
+    border-radius: 14px;
+    box-shadow: 0 14px 28px rgba(15, 23, 42, 0.06);
+    padding: 1rem;
+}
+.add-booking-bottom-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1f2937;
+    margin-bottom: 0.3rem;
+}
+.add-booking-bottom-copy {
+    font-size: 0.95rem;
+    color: #4a5568;
+    margin-bottom: 0.75rem;
+}
+.add-booking-form-iframe {
+    width: 100%;
+    height: 920px;
+    border: 1px solid #d0d7de;
+    border-radius: 10px;
+    background: #fff;
+}
+.add-booking-students-card {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+.add-booking-students-iframe {
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 1px solid #d0d7de;
+    border-radius: 10px;
+    background: #fff;
+}
+.add-booking-timetable-iframe {
+    width: 100%;
+    height: 360px;
+    border: 1px solid #d0d7de;
+    border-radius: 10px;
+    background: #fff;
 }
 .shopping-top-row {
     display: flex;
@@ -959,6 +949,44 @@ input, select, textarea, button {
 }
 
 @media (max-width: 980px) {
+    .add-booking-page {
+        width: min(100%, calc(100vw - 12px));
+        padding: 0.8rem 0.35rem 1.25rem;
+    }
+
+    .add-booking-main-panel,
+    .add-booking-side-card {
+        border-radius: 10px;
+    }
+
+    .add-booking-main-panel {
+        padding: 0.9rem;
+    }
+
+    .add-booking-toolbar {
+        align-items: stretch;
+    }
+
+    .add-booking-toolbar-actions {
+        justify-content: flex-start;
+    }
+
+    .add-booking-toolbar-actions button {
+        flex: 1 1 140px;
+    }
+
+    .add-booking-form-iframe {
+        height: 520px;
+    }
+
+    .add-booking-students-iframe {
+        height: 320px;
+    }
+
+    .add-booking-timetable-iframe {
+        height: 320px;
+    }
+
     .admin-user-roles-grid {
         grid-template-columns: 1fr;
     }
@@ -1296,6 +1324,137 @@ input, select, textarea, button {
     font-size: 0.95rem;
 }
 
+/* Refactored shopping page layout (Phase 3d) */
+.shopping-page {
+    text-align: left;
+    padding-bottom: 7.5rem;
+}
+.shopping-app.shopping-page {
+    width: calc(100vw - 32px);
+    max-width: 1480px;
+    margin: 24px auto 40px auto;
+    padding: 1.6rem;
+    gap: 1.2rem;
+}
+.shopping-layout-wrap {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(320px, 1fr);
+    gap: 1.6rem;
+    align-items: start;
+}
+.shopping-calendar-column,
+.shopping-list-column {
+    min-width: 0;
+}
+.shopping-list-column {
+    max-width: 100%;
+}
+.shopping-calendar-header {
+    margin-bottom: 1rem;
+}
+.shopping-week-label {
+    font-size: 1.28rem;
+    font-weight: 700;
+    margin-bottom: 0.65rem;
+}
+.shopping-calendar-nav {
+    justify-content: center;
+}
+.shopping-tabs {
+    margin-bottom: 0.85rem;
+    border-bottom: 1px solid #dfe5eb;
+    gap: 0.55rem;
+}
+.shopping-tabs .shopping-tab {
+    padding: 0.48rem 0.75rem;
+    font-size: 0.93rem;
+    min-height: auto;
+    margin-bottom: 0;
+}
+.shopping-tabs .shopping-tab.active,
+.shopping-tabs .shopping-tab-active {
+    border-bottom: 3px solid #1976d2;
+}
+.shopping-calendar-nav .btn {
+    padding: 0.45rem 0.8rem;
+    font-size: 0.92rem;
+    min-height: auto;
+}
+.shopping-print-action {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 0.8rem;
+}
+.shopping-print-area {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+}
+
+#by-teacher-ingredients,
+#by-category-ingredients {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+#by-teacher-ingredients table,
+#by-category-ingredients table {
+    min-width: 720px;
+}
+.shopping-panel-title {
+    font-weight: 700;
+    font-size: 1.15rem;
+    margin-bottom: 0.65rem;
+}
+.shopping-bottom-bar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    width: 100%;
+    border-top: 1px solid #dfe5eb;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.12);
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(6px);
+    justify-content: center;
+    gap: 0.8rem;
+    padding: 0.7rem 0.9rem;
+}
+.shopping-bottom-btn {
+    min-width: 260px;
+    max-width: 360px;
+    flex: 1 1 280px;
+    margin-bottom: 0;
+}
+#autoWeekListBtn.shopping-bottom-btn {
+    background: #6a1b9a;
+}
+
+@media (max-width: 1400px) {
+    .add-booking-shell {
+        grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.6fr) minmax(360px, 0.95fr);
+    }
+
+    .add-booking-form-iframe {
+        height: 820px;
+    }
+
+    .add-booking-students-iframe {
+        height: 820px;
+    }
+
+    .add-booking-timetable-iframe {
+        height: 340px;
+    }
+
+    .shopping-layout-wrap {
+        grid-template-columns: 1fr;
+        gap: 1.2rem;
+    }
+}
+
 /* --- Layout & Spacing Improvements (Jan 2026) --- */
 .shopping-app, .catering-app, #app {
   max-width: 900px;
@@ -1481,6 +1640,19 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
     padding: 1.2rem 0.5rem 1.2rem 0.5rem;
     border-radius: 8px;
   }
+    .shopping-app.shopping-page {
+        width: auto;
+        max-width: 98vw;
+        margin: 18px auto 22px auto;
+        padding: 1rem 0.65rem;
+    }
+        .shopping-page {
+                padding-bottom: 10rem;
+        }
+        .shopping-layout-wrap {
+                grid-template-columns: 1fr;
+                gap: 1.1rem;
+        }
     .book-class-layout {
         grid-template-columns: 1fr;
     }
@@ -1489,6 +1661,16 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
     gap: 1.2rem;
     align-items: stretch;
   }
+    .calendar-table th,
+    .calendar-table td,
+    .shopping-calendar-table th,
+    .shopping-calendar-table td,
+    .calendar-grid-table th,
+    .calendar-grid-table td {
+        min-width: 96px;
+        font-size: 0.92rem;
+        padding: 0.55rem 0.35rem;
+    }
     .book-form-grid {
         grid-template-columns: 1fr;
     }
@@ -1504,6 +1686,47 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
     border-radius: 8px;
     padding: 1.1rem 0.7rem 1.1rem 0.7rem;
   }
+    #shoppingListButtonBar,
+    .shopping-bottom-bar {
+        flex-wrap: wrap;
+        gap: 0.6rem;
+        padding: 0.6em;
+    }
+
+    .shopping-tabs {
+        flex-wrap: wrap;
+    }
+
+    .shopping-tabs .shopping-tab {
+        flex: 1 1 220px;
+        justify-content: center;
+    }
+
+    #by-teacher-ingredients table th,
+    #by-teacher-ingredients table td,
+    #by-category-ingredients table th,
+    #by-category-ingredients table td {
+        white-space: normal !important;
+        word-break: break-word;
+        min-width: 0 !important;
+        padding: 0.45rem 0.5rem !important;
+        font-size: 0.9rem;
+    }
+
+    #ingredients-inventory-table {
+        margin-left: 0 !important;
+    }
+
+    #ingredients-inventory-table table {
+        min-width: 940px;
+    }
+
+    #shoppingListButtonBar .btn,
+    .shopping-bottom-btn {
+        min-width: 0 !important;
+        width: 100%;
+        max-width: none !important;
+    }
   .recipe-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -1529,6 +1752,62 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
   .navbar-links.open {
     display: flex;
   }
+}
+
+@media (max-width: 1200px) {
+    .add-booking-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .add-booking-form-iframe {
+        height: 520px;
+    }
+
+    .add-booking-students-iframe {
+        height: 320px;
+    }
+
+    .add-booking-timetable-iframe {
+        height: 340px;
+    }
+
+    .shopping-layout-wrap {
+        grid-template-columns: 1fr;
+        gap: 1.2rem;
+    }
+
+    .shopping-bottom-bar {
+        flex-wrap: wrap;
+        justify-content: stretch;
+    }
+
+    .shopping-bottom-btn {
+        min-width: 210px;
+        flex: 1 1 240px;
+        max-width: none;
+    }
+
+    .shopping-print-area {
+        min-width: 0 !important;
+        max-width: 100% !important;
+    }
+}
+
+@media (max-width: 1024px) {
+    .shopping-app.shopping-page {
+        width: auto;
+        max-width: 98vw;
+        padding: 1rem 0.75rem;
+    }
+
+    .shopping-calendar-nav .btn {
+        flex: 1 1 140px;
+        justify-content: center;
+    }
+
+    .shopping-week-label {
+        font-size: 1.12rem;
+    }
 }
 
 /* Hamburger icon (hidden on desktop) */

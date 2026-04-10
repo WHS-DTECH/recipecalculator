@@ -2,5 +2,8 @@
   "dependencies": {
     "node-fetch": "^2.7.0",
     "sqlite3": "^5.1.7"
+  },
+  "devDependencies": {
+    "cheerio": "^1.2.0"
   }
 }

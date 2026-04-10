@@ -181,6 +181,7 @@
 </head>
 <body>
         <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
         <div class="extractor-card" style="margin-left:40px;margin-right:40px;">
             <h2>Title Extraction Strategies</h2>
             <div class="extractor-section">
@@ -247,15 +248,5 @@
             </div>
         </div>
         <script src="title_extractor.js"></script>
-        <script>
-            // Load shared navbar
-            document.addEventListener('DOMContentLoaded', function() {
-                fetch('_navbar.html')
-                    .then(res => res.text())
-                    .then(html => {
-                        document.getElementById('navbar-include').innerHTML = html;
-                    });
-            });
-        </script>
 </body>
 </html>

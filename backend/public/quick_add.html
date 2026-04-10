@@ -30,38 +30,40 @@
     <div class="setup-section">
       <div class="setup-section-title">Load Recipe (URL)</div>
       <div class="setup-section-desc">Import recipe from a website URL.</div>
-      <label class="recipe-url-label standout-label">Recipe URL:</label>
+      <label for="recipeUrlInput" class="recipe-url-label standout-label">Recipe URL:</label>
       <input type="text" id="recipeUrlInput" class="setup-url-input wide-url-input super-wide-url-input" placeholder="e.g., https://www.chelsea.co.nz/browse-recipes/...">
     </div>
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Load Recipe (PDF)</div>
       <div class="setup-section-desc">Upload a PDF recipe and optionally sync it into the Recipes table from the same page.</div>
-      <label class="recipe-url-label standout-label">Source File:</label>
+      <label for="teacherPdfInput" class="recipe-url-label standout-label">Source File:</label>
       <div id="teacherPdfUploadArea" style="display:inline-block;min-width:320px;max-width:520px;margin-right:0.6rem;vertical-align:middle;padding:1rem 1.2rem;border:1.5px dashed #1a73e8;border-radius:8px;background:#f8fbff;color:#1a73e8;text-align:center;cursor:pointer;">Drag & drop or click to select PDF</div>
       <input type="file" id="teacherPdfInput" accept=".pdf" style="display:none;">
     </div>
 
-    <div class="setup-section" style="margin-top:1.1rem;">
-      <button id="teacherSaveRecipeBtn" style="background:#1565c0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.1rem;font-size:0.98rem;cursor:pointer;">Save Recipe (Upload + Sync + Extract + Save Raw)</button>
-      <div id="teacherSaveRecipeProgressBar" style="display:none;width:100%;max-width:520px;height:6px;background:#e3f2fd;border-radius:6px;overflow:hidden;margin-top:0.45rem;">
-        <div id="teacherSaveRecipeProgressFill" style="height:100%;width:0;background:#1565c0;transition:width 0.2s;"></div>
+    <div class="setup-section">
+      <button id="teacherSaveRecipeBtn" class="btn btn-primary">Save Recipe (Upload + Sync + Extract + Save Raw)</button>
+      <div id="teacherSaveRecipeProgressBar" class="ui-progress" style="display:none;margin-top:0.6rem;">
+        <div id="teacherSaveRecipeProgressFill" class="ui-progress-bar" style="width:0;"></div>
       </div>
-      <div id="teacherSaveRecipeStatus" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
+      <div id="teacherSaveRecipeStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
     </div>
 
-    <div class="setup-section" style="margin-top:1.1rem;">
-      <button id="teacherExtractAllBtn" style="background:#00695c;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Extract All</button>
-      <button id="teacherAcceptAllExtractsBtn" style="background:#1565c0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Accept ALL Extracts</button>
-      <div id="teacherExtractAllProgressBar" style="display:none;width:100%;max-width:520px;height:6px;background:#e0f2f1;border-radius:6px;overflow:hidden;margin-top:0.45rem;">
-        <div id="teacherExtractAllProgressFill" style="height:100%;width:0;background:#00695c;transition:width 0.2s;"></div>
+    <div class="setup-section">
+      <div class="ui-action-bar">
+        <button id="teacherExtractAllBtn" class="btn btn-success">Extract All</button>
+        <button id="teacherAcceptAllExtractsBtn" class="btn btn-primary">Accept ALL Extracts</button>
       </div>
-      <div id="teacherExtractAllStatus" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
+      <div id="teacherExtractAllProgressBar" class="ui-progress" style="display:none;margin-top:0.6rem;">
+        <div id="teacherExtractAllProgressFill" class="ui-progress-bar" style="width:0;"></div>
+      </div>
+      <div id="teacherExtractAllStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
     </div>
 
-    <div class="setup-section" style="margin-top:1.1rem;">
-      <button id="teacherAutoPublishAsyncSyncBtn" style="background:#3949ab;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Auto Publish + Async Sync</button>
-      <span id="teacherAutoPublishStatus" style="margin-left:0.6rem;font-size:0.92rem;color:#3949ab;"></span>
+    <div class="setup-section">
+      <button id="teacherAutoPublishAsyncSyncBtn" class="btn btn-primary">Auto Publish + Async Sync</button>
+      <span id="teacherAutoPublishStatus" style="margin-left:0.6rem;font-size:0.92rem;color:var(--color-info);"></span>
       <div id="teacherAutoPublishQuickProgressPanel" style="display:none;margin-top:0.55rem;max-width:560px;">
         <div style="font-size:0.85rem;color:#1b1b1b;margin-bottom:4px;">Cleanup Instructions</div>
         <div id="teacherAutoPublishQuickInstructionsBar" style="width:100%;height:10px;background:#e6e6e6;border-radius:999px;overflow:hidden;">

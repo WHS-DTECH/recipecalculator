@@ -21,8 +21,8 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
-  <div id="cleanupProgressBar" style="display:none;position:fixed;top:0;left:0;width:100vw;height:6px;z-index:9999;background:#eee;">
-    <div id="cleanupProgressFill" style="height:100%;width:0;background:#008080;transition:width 0.2s;"></div>
+  <div id="cleanupProgressBar" class="ui-progress" style="display:none;position:fixed;top:0;left:0;width:100vw;z-index:9999;">
+    <div id="cleanupProgressFill" class="ui-progress-bar" style="width:0;"></div>
   </div>
 
   <div class="main-content-margins">
@@ -35,33 +35,33 @@
     <div class="setup-section">
       <div class="setup-section-title">Load Recipe (URL)</div>
       <div class="setup-section-desc">Import recipe from a website URL.</div>
-      <label class="recipe-url-label standout-label">Recipe URL:</label>
+      <label for="recipeUrlInput" class="recipe-url-label standout-label">Recipe URL:</label>
       <input type="text" id="recipeUrlInput" class="setup-url-input wide-url-input super-wide-url-input" placeholder="e.g., https://www.chelsea.co.nz/browse-recipes/...">
-      <button id="smartUploadBtn" class="setup-btn" style="margin-top:0.6rem;background:#0d47a1;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">SMART Upload (Upload + Sync)</button>
-      <div id="smartUploadBtnProgressBar" style="display:none;width:220px;height:6px;background:#e8eaf6;border-radius:6px;overflow:hidden;margin:0.35rem 0 0 0;">
-        <div id="smartUploadBtnProgressFill" style="height:100%;width:0;background:#0d47a1;transition:width 0.2s;"></div>
+      <button id="smartUploadBtn" class="btn btn-primary" style="margin-top:0.6rem;">SMART Upload (Upload + Sync)</button>
+      <div id="smartUploadBtnProgressBar" class="ui-progress" style="display:none;width:220px;margin:0.4rem 0 0 0;">
+        <div id="smartUploadBtnProgressFill" class="ui-progress-bar" style="width:0;"></div>
       </div>
-      <div id="uploadStatusBanner" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
-      <div id="uploadProgressText" style="margin-top:0.6rem;font-size:0.92rem;color:#0d47a1;display:none;"></div>
+      <div id="uploadStatusBanner" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
+      <div id="uploadProgressText" style="margin-top:0.6rem;font-size:var(--font-size-helper);display:none;"></div>
     </div>
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Load Recipe (PDF)</div>
       <div class="setup-section-desc">Upload a PDF recipe and optionally sync it into the Recipes table from the same page.</div>
-      <label class="recipe-url-label standout-label">Source File:</label>
+      <label for="teacherPdfInput" class="recipe-url-label standout-label">Source File:</label>
       <div id="teacherPdfUploadArea" style="display:inline-block;min-width:320px;max-width:520px;margin-right:0.6rem;vertical-align:middle;padding:1rem 1.2rem;border:1.5px dashed #1a73e8;border-radius:8px;background:#f8fbff;color:#1a73e8;text-align:center;cursor:pointer;">Drag & drop or click to select PDF</div>
       <input type="file" id="teacherPdfInput" accept=".pdf" style="display:none;">
       <div style="display:flex;gap:0.6rem;flex-wrap:wrap;margin-top:0.8rem;align-items:center;">
-        <button id="teacherUploadAndSyncPdfBtn" class="setup-btn" style="background:#5e35b1;color:#fff;border:none;padding:0.45rem 1rem;border-radius:4px;cursor:pointer;">Upload + Sync</button>
+        <button id="teacherUploadAndSyncPdfBtn" class="btn btn-primary">Upload + Sync</button>
       </div>
-      <div id="teacherPdfStatusBanner" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
+      <div id="teacherPdfStatusBanner" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
     </div>
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Save Recipe</div>
       <div class="setup-section-desc">Runs Upload + Sync for the selected source, then Extract Visible Text and Save Raw Data.</div>
-      <button id="teacherSaveRecipeBtn" style="background:#1565c0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.1rem;font-size:0.98rem;cursor:pointer;">Save Recipe (Upload + Sync + Extract + Save Raw)</button>
-      <div id="teacherSaveRecipeStatus" style="display:none;margin-top:0.6rem;padding:0.55rem 0.7rem;border-radius:4px;font-size:0.92rem;"></div>
+      <button id="teacherSaveRecipeBtn" class="btn btn-primary">Save Recipe (Upload + Sync + Extract + Save Raw)</button>
+      <div id="teacherSaveRecipeStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
     </div>
 
     <div class="setup-section" style="margin-top:1.1rem;">
@@ -72,25 +72,27 @@
       <button id="teacherAsyncSyncBtn" style="margin-left:0.6rem;background:#3949ab;color:#fff;border:none;border-radius:4px;padding:0.45rem 0.9rem;cursor:pointer;">Async Sync (From RecipeID)</button>
       <span id="teacherAsyncSyncStatus" style="margin-left:0.6rem;font-size:0.92rem;color:#3949ab;"></span>
       <div style="margin-top:0.8rem;">
-        <button class="extractor-btn" id="extractVisibleTextBtn" style="margin-bottom:1rem; background:#00897b; color:#fff; border:none; border-radius:5px; padding:0.6rem 1.5rem; font-size:1rem; cursor:pointer;">Extract Visible Text (Browser View)</button>
-        <div id="extractVisibleTextBtnProgressBar" style="display:none;width:220px;height:6px;background:#e0f2f1;border-radius:6px;overflow:hidden;margin-top:-0.7rem;margin-bottom:0.9rem;">
-          <div id="extractVisibleTextBtnProgressFill" style="height:100%;width:0;transition:width 0.2s;background:#00695c;"></div>
-        </div>
+      <button class="extractor-btn btn btn-success" id="extractVisibleTextBtn" style="margin-bottom:1rem;">Extract Visible Text (Browser View)</button>
+      <div id="extractVisibleTextBtnProgressBar" class="ui-progress" style="display:none;margin-top:-0.7rem;margin-bottom:0.9rem;">
+        <div id="extractVisibleTextBtnProgressFill" class="ui-progress-bar" style="width:0;"></div>
+      </div>
       </div>
       <textarea id="rawDataInput" style="width:100%;min-height:160px;border-radius:6px;border:1px solid #bbb;font-size:1rem;padding:0.7rem;" placeholder="Visible text output will appear here..."></textarea>
-      <button id="saveRawDataBtn" style="background:#8000b0;color:#fff;margin-top:1rem;width:100%;border:none;border-radius:6px;font-size:1.1rem;padding:0.7rem;cursor:pointer;">Save Raw Data</button>
-      <div id="saveRawDataBtnProgressBar" style="display:none;width:100%;height:6px;background:#f3e5f5;border-radius:6px;overflow:hidden;margin-top:0.4rem;">
-        <div id="saveRawDataBtnProgressFill" style="height:100%;width:0;transition:width 0.2s;background:#6a1b9a;"></div>
+      <button id="saveRawDataBtn" class="btn btn-primary" style="width:100%;margin-top:1rem;">Save Raw Data</button>
+      <div id="saveRawDataBtnProgressBar" class="ui-progress" style="display:none;margin-top:0.4rem;">
+        <div id="saveRawDataBtnProgressFill" class="ui-progress-bar" style="width:0;"></div>
       </div>
     </div>
 
     <div class="setup-section" style="margin-top:1.1rem;">
       <div class="setup-section-title">Extract All</div>
       <div class="setup-section-desc">Run all auto extractors in one click, then accept only the ones you want.</div>
-      <button id="teacherExtractAllBtn" style="background:#00695c;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;">Extract All</button>
-      <button id="teacherAcceptAllExtractsBtn" style="background:#1565c0;color:#fff;border:none;border-radius:5px;padding:0.6rem 1.2rem;font-size:1rem;cursor:pointer;margin-left:0.5rem;">Accept ALL Extracts</button>
-      <span id="teacherExtractAllProgress" style="margin-left:0.6rem;font-size:0.92rem;color:#00695c;"></span>
-      <div id="teacherAcceptAllExtractsStatus" style="margin-top:0.45rem;font-size:0.92rem;color:#1565c0;"></div>
+      <div class="ui-action-bar">
+        <button id="teacherExtractAllBtn" class="btn btn-success">Extract All</button>
+        <button id="teacherAcceptAllExtractsBtn" class="btn btn-primary">Accept ALL Extracts</button>
+      </div>
+      <span id="teacherExtractAllProgress" style="margin-left:0.6rem;font-size:var(--font-size-helper);"></span>
+      <div id="teacherAcceptAllExtractsStatus" style="margin-top:0.4rem;font-size:var(--font-size-helper);"></div>
       <div style="margin-top:0.75rem;overflow:auto;border:1px solid #d7e3f4;border-radius:8px;background:#fff;max-width:680px;">
         <table style="width:100%;border-collapse:collapse;min-width:460px;">
           <thead>

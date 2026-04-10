@@ -6,15 +6,8 @@
   <link rel="stylesheet" href="admin_styles.css">
 </head>
 <body>
-  <!-- Include shared navigation bar -->
-  <div id="navbar-container"></div>
-  <script>
-    fetch('_navbar.html')
-      .then(res => res.text())
-      .then(html => {
-        document.getElementById('navbar-container').innerHTML = html;
-      });
-  </script>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
   <h2>Manage Aisle Categories</h2>
   <div id="aisle-category-table-container"></div>
   <button id="add-aisle-btn">Add Category</button>

@@ -6,15 +6,8 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-        <!-- Navbar Include -->
-        <div id="navbar-include"></div>
-        <script>
-            fetch('_navbar.html')
-                .then(response => response.text())
-                .then(html => {
-                    document.getElementById('navbar-include').innerHTML = html;
-                });
-        </script>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
     <div class="container" style="max-width:900px;margin:2em auto;">
         <h1>Suggestions List</h1>
         <table id="suggestionsTable" style="width:100%;border-collapse:collapse;margin-bottom:2em;">

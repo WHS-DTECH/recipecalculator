@@ -7,8 +7,8 @@
   <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
 </head>
 <body>
-  <!-- Navbar include -->
-  <div w3-include-html="_navbar.html"></div>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
   <div class="w3-container w3-padding-32">
     <h2>Calculate Quantity</h2>
     <p>This page will allow you to calculate ingredient quantities for catering.</p>
@@ -31,8 +31,6 @@
       </div>
     </div>
   </div>
-  <script src="https://www.w3schools.com/lib/w3.js"></script>
-  <script>w3.includeHTML();</script>
   <script src="calculate_qty.js"></script>
 </body>
 </html>

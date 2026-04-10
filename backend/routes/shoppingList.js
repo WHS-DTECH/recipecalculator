@@ -92,8 +92,9 @@ router.get('/by_teacher', (req, res) => {
     rows.forEach(row => {
       const key = row.staff_id ? `Staff ${row.staff_id} - ${row.teacher}` : row.teacher;
       if (!result[key]) result[key] = [];
+      const displayIngredient = row.stripFoodItem || row.fooditem || row.ingredient_name || '';
       result[key].push({
-        ingredient: row.ingredient_name,
+        ingredient: displayIngredient,
         qty: row.measure_qty,
         unit: row.measure_unit,
         fooditem: row.fooditem,

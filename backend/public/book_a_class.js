@@ -1,6 +1,45 @@
 
 // --- Populate Staff Dropdown ---
 
+const userLocale = (navigator.languages && navigator.languages[0]) || navigator.language || undefined;
+const shortWeekdayFormatter = new Intl.DateTimeFormat(userLocale, { weekday: 'short' });
+const localDateFormatter = new Intl.DateTimeFormat(userLocale, {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+const bookClassPageParams = new URLSearchParams(window.location.search);
+const isTeacherEmbedView = bookClassPageParams.get('view') === 'teacher_embed';
+const isFormOnlyView = bookClassPageParams.get('form_only') === '1';
+const isStudentListOnlyView = bookClassPageParams.get('student_list_only') === '1';
+const isTimetableOnlyView = bookClassPageParams.get('hide_booking_form') === '1' && bookClassPageParams.get('hide_student_panel') === '1';
+const canPublishSharedEmbedState = !isTeacherEmbedView || isFormOnlyView;
+const bookClassSharedStateKey = 'bookClassEmbedSharedState';
+const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
+const bookClassEmbedSourceId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+const bookClassSharedChannel = isTeacherEmbedView && 'BroadcastChannel' in window
+  ? new BroadcastChannel(bookClassSharedChannelName)
+  : null;
+let isApplyingSharedState = false;
+let lastSharedStateAppliedAt = 0;
+
+function toLocalIsoDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseLocalIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function parseBookingDate(value) {
+  return parseLocalIsoDate(value) || new Date(value);
+}
+
 function getTopSelections(key) {
   try {
     return JSON.parse(localStorage.getItem(key) || '[]');
@@ -15,45 +54,41 @@ function setTopSelection(key, value) {
   localStorage.setItem(key, JSON.stringify(arr));
 }
 
-function populateStaffDropdown() {
-  fetch('/api/staff_upload/dropdown')
-    .then(res => res.json())
-    .then(data => {
-      const select = document.getElementById('staffSelect');
-      if (!select) return;
-      select.innerHTML = '';
-        // Add default option
-        const defaultOption = document.createElement('option');
-        defaultOption.value = '';
-        defaultOption.textContent = 'Choose Staff member';
-        defaultOption.disabled = true;
-        defaultOption.selected = true;
-        select.appendChild(defaultOption);
-      const staffArr = data.staff || [];
-      const topStaff = getTopSelections('topStaff');
-      const topList = topStaff.map(id => staffArr.find(s => String(s.id) === String(id))).filter(Boolean);
-      const restList = staffArr.filter(s => !topStaff.includes(String(s.id)));
-      // Sort: topStaff first, then rest
-      const sorted = [...topList, ...restList];
-      sorted.forEach((staff, idx) => {
-        // Add a separator between top (recent) and remaining staff
-        if (topList.length > 0 && idx === topList.length) {
-          const sep = document.createElement('option');
-          sep.disabled = true;
-          sep.textContent = '──────────────';
-          select.appendChild(sep);
-        }
-        const opt = document.createElement('option');
-        opt.value = staff.id;
-        // Always show staff code if available
-        if (staff.code) {
-          opt.textContent = `${staff.last_name}, ${staff.first_name} (${staff.code})`;
-        } else {
-          opt.textContent = `${staff.last_name}, ${staff.first_name}`;
-        }
-        select.appendChild(opt);
-      });
+function populateStaffDropdown(staffList = null) {
+  const loadStaff = Array.isArray(staffList)
+    ? Promise.resolve({ staff: staffList })
+    : fetch('/api/staff_upload/dropdown').then(res => res.json());
+
+  return loadStaff.then(data => {
+    const select = document.getElementById('staffSelect');
+    if (!select) return;
+    select.innerHTML = '';
+    const defaultOption = document.createElement('option');
+    defaultOption.value = '';
+    defaultOption.textContent = 'Choose Staff member';
+    defaultOption.disabled = true;
+    defaultOption.selected = true;
+    select.appendChild(defaultOption);
+    const staffArr = data.staff || [];
+    const topStaff = getTopSelections('topStaff');
+    const topList = topStaff.map(id => staffArr.find(s => String(s.id) === String(id))).filter(Boolean);
+    const restList = staffArr.filter(s => !topStaff.includes(String(s.id)));
+    const sorted = [...topList, ...restList];
+    sorted.forEach((staff, idx) => {
+      if (topList.length > 0 && idx === topList.length) {
+        const sep = document.createElement('option');
+        sep.disabled = true;
+        sep.textContent = '──────────────';
+        select.appendChild(sep);
+      }
+      const opt = document.createElement('option');
+      opt.value = staff.id;
+      opt.textContent = staff.code
+        ? `${staff.last_name}, ${staff.first_name} (${staff.code})`
+        : `${staff.last_name}, ${staff.first_name}`;
+      select.appendChild(opt);
     });
+  });
 }
 
 // --- Populate Class Dropdown ---
@@ -65,6 +100,114 @@ function getStaffCodeById(staffId, staffArr) {
 
 let _staffArrCache = [];
 let _currentTeacherTimetablePeriods = [];
+
+function readSharedEmbedState() {
+  if (!isTeacherEmbedView) return null;
+  try {
+    return JSON.parse(localStorage.getItem(bookClassSharedStateKey) || 'null');
+  } catch {
+    return null;
+  }
+}
+
+function writeSharedEmbedState(partialState = {}, options = {}) {
+  const forcePublish = !!options.force;
+  if (!isTeacherEmbedView || (!canPublishSharedEmbedState && !forcePublish) || isApplyingSharedState) return;
+  const nextState = {
+    ...(readSharedEmbedState() || {}),
+    ...partialState,
+    sourceId: bookClassEmbedSourceId,
+    updatedAt: Date.now()
+  };
+  lastSharedStateAppliedAt = nextState.updatedAt;
+  localStorage.setItem(bookClassSharedStateKey, JSON.stringify(nextState));
+  if (bookClassSharedChannel) {
+    bookClassSharedChannel.postMessage(nextState);
+  }
+}
+
+function ensureClassOption(select, className) {
+  if (!select || !className) return;
+  const hasOption = Array.from(select.options).some(opt => String(opt.value) === String(className));
+  if (hasOption) return;
+  const option = document.createElement('option');
+  option.value = className;
+  option.textContent = `${className} (shared)`;
+  option.setAttribute('data-shared-option', '1');
+  select.appendChild(option);
+}
+
+function getCurrentEmbedState() {
+  return {
+    staffId: document.getElementById('staffSelect')?.value || '',
+    className: document.getElementById('classSelect')?.value || '',
+    bookingDate: document.getElementById('dateInput')?.value || '',
+    period: document.getElementById('periodSelect')?.value || '',
+    recipeId: document.getElementById('recipeSelect')?.value || '',
+    classSize: document.getElementById('classSizeInput')?.value || ''
+  };
+}
+
+function applySharedEmbedState(state = {}) {
+  if (!isTeacherEmbedView || !state) return Promise.resolve();
+  if (state.sourceId && state.sourceId === bookClassEmbedSourceId) {
+    return Promise.resolve();
+  }
+  if (state.updatedAt && state.updatedAt <= lastSharedStateAppliedAt) {
+    return Promise.resolve();
+  }
+
+  const staffSelect = document.getElementById('staffSelect');
+  const classSelect = document.getElementById('classSelect');
+  const dateInput = document.getElementById('dateInput');
+  const periodSelect = document.getElementById('periodSelect');
+  const recipeSelect = document.getElementById('recipeSelect');
+  const classSizeInput = document.getElementById('classSizeInput');
+  const targetStaffId = state.staffId || '';
+  const targetClassName = state.className || '';
+  const targetDate = state.bookingDate || '';
+  const targetPeriod = state.period || '';
+  const targetRecipeId = state.recipeId || '';
+  const targetClassSize = state.classSize || '';
+  lastSharedStateAppliedAt = state.updatedAt || Date.now();
+
+  isApplyingSharedState = true;
+
+  if (dateInput && targetDate) {
+    dateInput.value = targetDate;
+    updateBookingDateDayLabel();
+  }
+  if (periodSelect && targetPeriod) {
+    periodSelect.value = targetPeriod;
+  }
+  if (recipeSelect && targetRecipeId) {
+    recipeSelect.value = targetRecipeId;
+  }
+  if (classSizeInput && targetClassSize) {
+    classSizeInput.value = targetClassSize;
+  }
+
+  const finalize = () => {
+    if (classSelect) {
+      if (targetClassName) {
+        ensureClassOption(classSelect, targetClassName);
+        classSelect.value = targetClassName;
+      }
+      fetchStudentsForClass(classSelect.value || '');
+    }
+    fetchTeacherTimetableForSelectedDate();
+    isApplyingSharedState = false;
+  };
+
+  if (staffSelect && targetStaffId) {
+    staffSelect.value = targetStaffId;
+    const staffCode = getStaffCodeById(targetStaffId, _staffArrCache);
+    return populateClassDropdown(staffCode).then(() => finalize());
+  }
+
+  finalize();
+  return Promise.resolve();
+}
 
 function normalizeClassToken(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -240,13 +383,12 @@ function updateBookingDateDayLabel() {
     dayLabel.textContent = '';
     return;
   }
-  const parsed = new Date(value + 'T00:00:00');
-  if (isNaN(parsed.getTime())) {
+  const parsed = parseLocalIsoDate(value);
+  if (!parsed || isNaN(parsed.getTime())) {
     dayLabel.textContent = '';
     return;
   }
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  dayLabel.textContent = `(${dayNames[parsed.getDay()]})`;
+  dayLabel.textContent = `(${shortWeekdayFormatter.format(parsed)})`;
 }
 
 function renderTeacherTimetable(periods, teacherCode, date, weekday) {
@@ -301,6 +443,7 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
       if (!wasMatched) {
         autoSelectClassFromSelectedPeriod();
       }
+      writeSharedEmbedState(getCurrentEmbedState(), { force: true });
     });
   });
 }
@@ -388,7 +531,7 @@ function fetchStudentsForClass(classCode) {
 function populateClassDropdown(staffCode) {
   let url = '/api/classes/dropdown';
   if (staffCode) url += '?staffCode=' + encodeURIComponent(staffCode);
-  fetch(url)
+  return fetch(url)
     .then(res => res.json())
     .then(data => {
       const select = document.getElementById('classSelect');
@@ -460,9 +603,88 @@ function populateRecipeDropdown() {
     });
 }
 
+function buildDesiredServingsIngredients(rows, desiredServings) {
+  return (Array.isArray(rows) ? rows : []).map(row => {
+    const baseQty = row.measure_qty;
+    let calculatedQty = baseQty;
+
+    if (baseQty && !isNaN(parseFloat(baseQty))) {
+      calculatedQty = (parseFloat(baseQty) * desiredServings).toString();
+    }
+
+    return {
+      ingredient_id: row.id,
+      ingredient_name: row.ingredient_name,
+      measure_qty: row.measure_qty,
+      measure_unit: row.measure_unit,
+      fooditem: row.fooditem,
+      calculated_qty: calculatedQty,
+      stripFoodItem: row.strip_fooditem || row.stripFoodItem || '',
+      aisle_category_id: row.aisle_category_id || ''
+    };
+  });
+}
+
+function saveDesiredServingsInBackground(details = {}) {
+  const recipeId = String(details.recipeId || '').trim();
+  const classSize = parseInt(String(details.classSize || '').trim(), 10);
+  const groups = parseInt(String(details.groups || '').trim(), 10);
+
+  if (!recipeId) {
+    return Promise.reject(new Error('Recipe is required for desired servings calculation.'));
+  }
+  if (isNaN(classSize) || classSize <= 0) {
+    return Promise.reject(new Error('Class size is required for desired servings calculation.'));
+  }
+  if (isNaN(groups) || groups <= 0) {
+    return Promise.reject(new Error('Groups is required for desired servings calculation.'));
+  }
+
+  const desiredServings = Math.ceil(classSize / groups);
+
+  return fetch('/api/ingredients/inventory/all')
+    .then(res => res.json())
+    .then(data => {
+      const ingredients = Array.isArray(data)
+        ? data
+        : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
+      const filteredIngredients = ingredients.filter(row => String(row.recipe_id) === recipeId);
+
+      if (!filteredIngredients.length) {
+        throw new Error('No recipe ingredients were found to calculate desired servings.');
+      }
+
+      return fetch('/api/ingredients/desired_servings_ingredients/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          booking_id: details.bookingId || '',
+          teacher: details.teacher || '',
+          staff_id: details.staffId || '',
+          class_name: details.className || '',
+          class_date: details.bookingDate || '',
+          class_size: classSize,
+          groups,
+          desired_servings: desiredServings,
+          recipe_id: recipeId,
+          ingredients: buildDesiredServingsIngredients(filteredIngredients, desiredServings)
+        })
+      });
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) {
+        throw new Error(data && data.error ? data.error : 'Failed to save desired serving ingredients.');
+      }
+      return data;
+    });
+}
+
 // --- Save Booking ---
 
-function saveBooking() {
+function saveBooking(options = {}) {
+  const shouldAutoCalculate = !!options.autoCalculate;
+  let groupsForAutoCalculate = '';
   const staffSelect = document.getElementById('staffSelect');
   const classSelect = document.getElementById('classSelect');
   const dateInput = document.getElementById('dateInput');
@@ -483,13 +705,31 @@ function saveBooking() {
     recipeId = selectedRecipeOption.getAttribute('data-recipe-id') || selectedRecipeOption.value || '';
     recipeName = selectedRecipeOption.getAttribute('data-recipe-name') || '';
   }
+
+  if (shouldAutoCalculate) {
+    const suggestedGroups = Math.max(1, parseInt(String(options.groups || '').trim(), 10) || 1);
+    const groupAnswer = prompt('How many groups do you want?', String(suggestedGroups));
+    if (groupAnswer === null) {
+      return Promise.resolve({ cancelled: true });
+    }
+
+    const parsedGroups = parseInt(String(groupAnswer).trim(), 10);
+    if (isNaN(parsedGroups) || parsedGroups <= 0) {
+      if (window.QC) window.QC.toast('Please enter a valid number of groups', 'warn');
+      else alert('Please enter a valid number of groups.');
+      return Promise.resolve({ cancelled: true, invalidGroups: true });
+    }
+
+    groupsForAutoCalculate = String(parsedGroups);
+  }
+
   // Track most selected
   setTopSelection('topStaff', staffId);
   setTopSelection('topClasses', className);
   const editId = document.getElementById('saveBookingBtn').dataset.editId;
   const method = editId ? 'PUT' : 'POST';
   const url = editId ? `/api/bookings/${editId}` : '/api/bookings';
-  fetch(url, {
+  return fetch(url, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -507,18 +747,49 @@ function saveBooking() {
     .then(result => {
       if (result.success) {
         if (window.QC) window.QC.toast('Booking saved successfully', 'success');
+        const savedBookingId = result.booking_id || editId || '';
+
+        if (shouldAutoCalculate) {
+          return saveDesiredServingsInBackground({
+            bookingId: savedBookingId,
+            teacher: staffName,
+            staffId,
+            className,
+            bookingDate,
+            classSize,
+            groups: groupsForAutoCalculate || '1',
+            recipeId
+          }).then(() => {
+            if (window.QC) window.QC.toast('Desired serving ingredients saved', 'success');
+            document.getElementById('saveBookingBtn').textContent = 'Save booking';
+            delete document.getElementById('saveBookingBtn').dataset.editId;
+            document.getElementById('resetBtn').click();
+            fetchAndRenderBookings();
+            return result;
+          }).catch(err => {
+            if (window.QC) window.QC.toast('Booking saved, but desired servings failed', 'warn');
+            else alert('Booking saved, but desired servings failed.');
+            console.error('Desired servings background save failed:', err);
+            fetchAndRenderBookings();
+            return { ...result, desiredServingsSaved: false, desiredServingsError: err.message || String(err) };
+          });
+        }
+
         document.getElementById('saveBookingBtn').textContent = 'Save booking';
         delete document.getElementById('saveBookingBtn').dataset.editId;
         document.getElementById('resetBtn').click();
         fetchAndRenderBookings();
+        return result;
       } else {
         if (window.QC) window.QC.toast('Failed to save booking', 'error');
         else alert('Failed to save booking.');
+        throw new Error('Failed to save booking.');
       }
     })
-    .catch(() => {
+    .catch((err) => {
       if (window.QC) window.QC.toast('Failed to save booking', 'error');
       else alert('Failed to save booking.');
+      throw err;
     });
 }
 
@@ -545,12 +816,12 @@ function renderBookings(bookings = []) {
     return;
   }
   tbody.innerHTML = bookings.map(b => {
-    // Format date to NZ locale (en-NZ)
+    // Format date using the browser locale.
     let formattedDate = '';
     if (b.booking_date) {
       try {
-        const dateObj = new Date(b.booking_date);
-        formattedDate = dateObj.toLocaleDateString('en-NZ', { year: 'numeric', month: '2-digit', day: '2-digit' });
+        const dateObj = parseBookingDate(b.booking_date);
+        formattedDate = localDateFormatter.format(dateObj);
       } catch {
         formattedDate = b.booking_date;
       }
@@ -634,27 +905,40 @@ window.addEventListener('DOMContentLoaded', () => {
     .then(res => res.json())
     .then(data => {
       _staffArrCache = data.staff || [];
-      populateStaffDropdown();
-      // On initial load, use first staff code
-      const firstStaffId = _staffArrCache.length ? _staffArrCache[0].id : '';
-      const staffCode = getStaffCodeById(firstStaffId, _staffArrCache);
-      populateClassDropdown(staffCode);
+      return populateStaffDropdown(_staffArrCache).then(() => {
+        const sharedState = readSharedEmbedState();
+        const firstStaffId = sharedState && sharedState.staffId ? sharedState.staffId : (_staffArrCache.length ? _staffArrCache[0].id : '');
+        const staffSelect = document.getElementById('staffSelect');
+        if (staffSelect && firstStaffId) {
+          staffSelect.value = firstStaffId;
+        }
+        const staffCode = getStaffCodeById(firstStaffId, _staffArrCache);
+        return populateClassDropdown(staffCode).then(() => applySharedEmbedState(sharedState || getCurrentEmbedState()));
+      });
     });
 
   const dateInput = document.getElementById('dateInput');
   if (dateInput && !dateInput.value) {
-    dateInput.value = new Date().toISOString().slice(0, 10);
+    dateInput.value = toLocalIsoDate(new Date());
   }
   updateBookingDateDayLabel();
 
   populateRecipeDropdown();
   fetchAndRenderBookings();
-  document.getElementById('saveBookingBtn').addEventListener('click', saveBooking);
+  document.getElementById('saveBookingBtn').addEventListener('click', () => {
+    saveBooking({ autoCalculate: false }).catch(() => {});
+  });
+  const masterSaveBtn = document.getElementById('masterSaveBtn');
+  if (masterSaveBtn) {
+    masterSaveBtn.addEventListener('click', () => {
+      saveBooking({ autoCalculate: true }).catch(() => {});
+    });
+  }
   document.getElementById('resetBtn').addEventListener('click', () => {
     document.getElementById('classSizeInput').value = 1;
     document.getElementById('recipeSelect').selectedIndex = 0;
     document.getElementById('periodSelect').selectedIndex = 0;
-    document.getElementById('dateInput').value = new Date().toISOString().slice(0, 10);
+    document.getElementById('dateInput').value = toLocalIsoDate(new Date());
     updateBookingDateDayLabel();
     document.getElementById('classSelect').selectedIndex = 0;
     document.getElementById('staffSelect').selectedIndex = 0;
@@ -663,25 +947,45 @@ window.addEventListener('DOMContentLoaded', () => {
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
     populateClassDropdown(staffCode);
     fetchTeacherTimetableForSelectedDate();
+    writeSharedEmbedState(getCurrentEmbedState());
   });
   document.getElementById('staffSelect').addEventListener('change', function() {
     const staffId = this.value;
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
     populateClassDropdown(staffCode);
     fetchTeacherTimetableForSelectedDate();
+    writeSharedEmbedState({ ...getCurrentEmbedState(), staffId, className: '' });
   });
   document.getElementById('dateInput').addEventListener('change', function() {
     updateBookingDateDayLabel();
     fetchTeacherTimetableForSelectedDate();
+    writeSharedEmbedState(getCurrentEmbedState());
   });
   document.getElementById('periodSelect').addEventListener('change', function() {
     autoSelectClassFromSelectedPeriod();
+    writeSharedEmbedState(getCurrentEmbedState());
   });
   document.getElementById('classSelect').addEventListener('change', function() {
     fetchStudentsForClass(this.value);
+    writeSharedEmbedState(getCurrentEmbedState());
   });
   fetchStudentsForClass('');
   fetchTeacherTimetableForSelectedDate();
+
+  if (isTeacherEmbedView) {
+    if (bookClassSharedChannel) {
+      bookClassSharedChannel.addEventListener('message', event => {
+        if (!event || !event.data) return;
+        applySharedEmbedState(event.data);
+      });
+    }
+
+    if (canPublishSharedEmbedState) {
+      window.setTimeout(() => {
+        writeSharedEmbedState(getCurrentEmbedState());
+      }, 250);
+    }
+  }
 
   if (window.QC) {
     window.QC.addSanityButton('Book a Class', [

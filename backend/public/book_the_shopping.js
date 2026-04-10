@@ -5,15 +5,27 @@ function getNormalizedSelectedBookingIds() {
                 .filter(id => Number.isInteger(id) && id > 0))];
 }
 
+const shoppingUserLocale = (navigator.languages && navigator.languages[0]) || navigator.language || undefined;
+const shoppingDateFormatter = new Intl.DateTimeFormat(shoppingUserLocale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit'
+});
+
 function toIsoDate(dateObj) {
-    return new Date(dateObj).toISOString().slice(0, 10);
+    const date = new Date(dateObj);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
 }
 
 function formatDateDMY(dateObj) {
-    const d = dateObj.getDate().toString().padStart(2, '0');
-    const m = (dateObj.getMonth() + 1).toString().padStart(2, '0');
-    const y = dateObj.getFullYear().toString().slice(-2);
-    return `${d}/${m}/${y}`;
+    return shoppingDateFormatter.format(new Date(dateObj));
+}
+
+function getTeacherListDisplayIngredient(item) {
+    return item.stripFoodItem || item.ingredient || item.fooditem || '';
 }
 
 function mondayToIsoWeekValue(mondayDate) {
@@ -124,7 +136,7 @@ function renderTeacherListHtmlByData(data) {
         let rowNum = 0;
         for (const item of data.data[teacherKey]) {
             html += `<tr style="background:${rowNum % 2 === 0 ? '#fff' : '#f6f8fa'};">`;
-            html += `<td style="padding:0.5em 1.5em;min-width:180px;white-space:nowrap;">${item.ingredient || ''}</td>`;
+            html += `<td style="padding:0.5em 1.5em;min-width:180px;white-space:nowrap;">${getTeacherListDisplayIngredient(item)}</td>`;
             html += `<td style="padding:0.5em 1em;min-width:60px;white-space:nowrap;">${item.qty || ''}</td>`;
             html += `<td style="padding:0.5em 1em;min-width:80px;white-space:nowrap;">${item.unit || ''}</td>`;
             html += `<td style="padding:0.5em 1em;min-width:140px;white-space:nowrap;">${item.stripFoodItem || ''}</td>`;
@@ -306,7 +318,7 @@ document.addEventListener('DOMContentLoaded',()=>{
                             let rowNum = 0;
                             for (const item of data.data[teacherKey]) {
                                 html += `<tr style="background:${rowNum % 2 === 0 ? '#fff' : '#f6f8fa'};">`;
-                                html += `<td style="padding:0.5em 1.5em;min-width:180px;white-space:nowrap;">${item.ingredient || ''}</td>`;
+                                html += `<td style="padding:0.5em 1.5em;min-width:180px;white-space:nowrap;">${getTeacherListDisplayIngredient(item)}</td>`;
                                 html += `<td style="padding:0.5em 1em;min-width:60px;white-space:nowrap;">${item.qty || ''}</td>`;
                                 html += `<td style="padding:0.5em 1em;min-width:80px;white-space:nowrap;">${item.unit || ''}</td>`;
                                 html += `<td style="padding:0.5em 1em;min-width:140px;white-space:nowrap;">${item.stripFoodItem || ''}</td>`;

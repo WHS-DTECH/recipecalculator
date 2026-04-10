@@ -1,3 +1,7 @@
+@import url('./shared/design_tokens.css');
+@import url('./shared/base.css');
+@import url('./shared/components.css');
+
 /* Add margin to main content area */
 .main-content-margins {
   margin-left: 3vw;
@@ -15,14 +19,13 @@
 
 /* Super wide URL input */
 .super-wide-url-input {
-  width: 2400px;
-  max-width: 99vw;
+  width: min(100%, 72rem);
   font-size: 1.3rem;
   padding: 0.5em 1em;
-  border: 2px solid #1976d2;
-  border-radius: 6px;
+  border: 2px solid var(--color-primary);
+  border-radius: var(--radius-md);
   background: #f7fbff;
-  color: #222;
+  color: var(--color-neutral-900);
   box-shadow: 0 2px 8px #1976d222;
 }
 
@@ -76,50 +79,4 @@
 .upload-url-btn:hover {
   background-color: #388e3c;
 }
-/* Basic styles for admin pages */
-body {
-  font-family: Arial, sans-serif;
-  background: #fff;
-  color: #222;
-  margin: 0;
-  padding: 0;
-}
-h2 {
-  margin-top: 1.5rem;
-  color: #222;
-}
-table {
-  border-collapse: collapse;
-  width: 100%;
-  margin-top: 1rem;
-}
-th, td {
-  border: 1px solid #eee;
-  padding: 0.5rem 0.7rem;
-  text-align: left;
-}
-th {
-  background: #f5f5f5;
-}
-button {
-  background: #1976d2;
-  color: #fff;
-  border: none;
-  padding: 0.4rem 0.8rem;
-  border-radius: 4px;
-  cursor: pointer;
-  margin-right: 0.3rem;
-}
-button.delete-btn {
-  background: #e53935;
-}
-button.edit-btn {
-  background: #ffa726;
-  color: #222;
-}
-input[type="text"], input[type="number"] {
-  padding: 0.3rem;
-  margin-right: 0.5rem;
-  border: 1px solid #ccc;
-  border-radius: 3px;
-}
+/* Basic styles for admin pages (consolidated in base.css) */

@@ -335,11 +335,88 @@
 <body>
   <input type="hidden" id="recipe-id" value="">
   <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+  <style>
+    .ingredients-directory-card {
+      margin: 40px;
+    }
+
+    @media (max-width: 900px) {
+      .ingredients-directory-card {
+        margin: 18px 10px;
+      }
+
+      #ingredients-top-action-row,
+      #ingredients-filter-row {
+        align-items: stretch !important;
+      }
+
+      #ingredients-top-action-row select,
+      #ingredients-filter-row select,
+      #ingredients-top-action-row button,
+      #ingredients-filter-row button {
+        width: 100%;
+        min-width: 0 !important;
+      }
+
+      #save-status,
+      #filter-status {
+        margin-left: 0 !important;
+        display: block;
+      }
+
+      #insert-progress-wrapper,
+      #ingredients-input-panel,
+      #save-assignments-progress-wrap {
+        max-width: 100% !important;
+      }
+    }
+
+    @media print {
+      @page { margin: 10mm; }
+
+      #navbar-include,
+      #ingredients-top-action-row,
+      #insert-progress-wrapper,
+      #ingredients-input-panel,
+      #ingredients-filter-row,
+      #save-assignments-btn,
+      #save-assignments-status,
+      #save-assignments-progress-wrap,
+      #published-recipes-table-container,
+      #reformat-status {
+        display: none !important;
+      }
+
+      .ingredients-directory-card {
+        margin: 0 !important;
+        box-shadow: none !important;
+      }
+
+      #ingredients-inventory-table {
+        margin: 0 !important;
+        overflow: visible !important;
+      }
+
+      #ingredients-inventory-table table {
+        width: 100% !important;
+        border-collapse: collapse;
+      }
+
+      #ingredients-inventory-table th,
+      #ingredients-inventory-table td {
+        white-space: normal !important;
+        word-break: break-word;
+        font-size: 10pt;
+        padding: 5px 6px !important;
+      }
+    }
+  </style>
   <div class="ingredients-directory-card" style="margin:40px;">
     <h2>Ingredients Directory</h2>
     <p>This page will list all ingredients used in recipes, with search and filter options.</p>
 
-    <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+    <div id="ingredients-top-action-row" style="display:flex;align-items:center;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
       <button id="deleteAllIngredientsBtn" style="background:#e53935;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">DELETE ALL</button>
       <select id="recipeSelectForText" style="min-width:180px;"></select>
       <button id="insertIngredientsBtn" style="background:#6a1b9a;color:#fff;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">Insert ingredients</button>
@@ -355,7 +432,7 @@
     </div>
 
     <!-- Paste and Preview UI moved up here -->
-    <div style="margin-bottom:1.5rem;max-width:650px;">
+    <div id="ingredients-input-panel" style="margin-bottom:1.5rem;max-width:650px;">
       <label for="textConvertArea" style="font-weight:bold;">Paste or enter ingredients here:</label>
       <textarea id="textConvertArea" rows="4" style="width:100%;max-width:600px;margin:1rem 0;display:block;" placeholder="e.g. 2 cups flour\n1 tsp salt\n..."></textarea>
       <div style="margin-bottom:1rem;"></div>
@@ -371,7 +448,7 @@
 
 
     <!-- Recipe Filter Dropdown -->
-    <div style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;">
+    <div id="ingredients-filter-row" style="margin-bottom:1rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
       <label for="filter-recipe-select" style="font-weight:bold;">Filter by Recipe:</label>
       <select id="filter-recipe-select" style="min-width:180px;"></select>
       <button id="trigger-recipe-filter-btn" style="background:#1976d2;color:#fff;border:none;padding:0.4rem 1rem;border-radius:4px;cursor:pointer;">Filter</button>
@@ -384,17 +461,40 @@
     <div style="margin-bottom:1rem;">
       <button id="save-assignments-btn" style="background:#388e3c;color:#fff;border:none;padding:0.5rem 1.2rem;border-radius:4px;cursor:pointer;font-weight:bold;">Save All Assignments</button>
       <span id="save-assignments-status" style="margin-left:1rem;color:#388e3c;font-weight:bold;"></span>
+      <div id="save-assignments-progress-wrap" style="display:none;max-width:320px;margin-top:0.6rem;">
+        <div style="height:10px;background:#e8f5e9;border:1px solid #c8e6c9;border-radius:999px;overflow:hidden;">
+          <div id="save-assignments-progress-fill" style="height:100%;width:0%;background:#2e7d32;transition:width 0.2s ease;"></div>
+        </div>
+        <div id="save-assignments-progress-text" style="font-size:0.85rem;color:#2e7d32;margin-top:0.25rem;"></div>
+      </div>
     </div>
     <!-- Table container for dynamic rendering -->
       <script>
         // Save all assignments button logic
         document.addEventListener('DOMContentLoaded', function() {
           const saveBtn = document.getElementById('save-assignments-btn');
+          const progressWrap = document.getElementById('save-assignments-progress-wrap');
+          const progressFill = document.getElementById('save-assignments-progress-fill');
+          const progressText = document.getElementById('save-assignments-progress-text');
+
+          function setSaveProgress(percent, message, type) {
+            if (progressWrap) progressWrap.style.display = 'block';
+            if (progressFill) {
+              progressFill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+              progressFill.style.background = type === 'error' ? '#c62828' : '#2e7d32';
+            }
+            if (progressText) {
+              progressText.textContent = message || '';
+              progressText.style.color = type === 'error' ? '#c62828' : '#2e7d32';
+            }
+          }
+
           if (saveBtn) {
             saveBtn.addEventListener('click', function() {
               saveBtn.disabled = true;
               saveBtn.textContent = 'Saving...';
               document.getElementById('save-assignments-status').textContent = '';
+              setSaveProgress(0, 'Preparing assignments...');
               // Collect all dropdowns and their values
               const selects = document.querySelectorAll('.aisle-category-select');
               const updates = [];
@@ -407,11 +507,13 @@
               });
               if (updates.length === 0) {
                 document.getElementById('save-assignments-status').textContent = 'No assignments to save.';
+                setSaveProgress(0, 'No assignments to save.');
                 saveBtn.disabled = false;
                 saveBtn.textContent = 'Save All Assignments';
                 return;
               }
               // Send all updates in parallel
+              let completed = 0;
               Promise.all(updates.map(async u => {
                 const res = await fetch('/api/ingredients/inventory/assign-aisle', {
                   method: 'POST',
@@ -422,10 +524,13 @@
                 if (!res.ok || !data.success) {
                   throw new Error(data.error || `Failed to save assignment for ingredient ${u.ingredient_id}`);
                 }
+                completed += 1;
+                setSaveProgress(Math.round((completed / updates.length) * 100), `Saving ${completed}/${updates.length} assignments...`);
                 return data;
               }))
               .then(() => {
                 document.getElementById('save-assignments-status').textContent = 'Assignments saved!';
+                setSaveProgress(100, `Saved ${updates.length}/${updates.length} assignments.`);
                 // Refresh table with latest data
                 fetch('/api/ingredients/inventory/all')
                   .then(res => res.json())
@@ -436,6 +541,7 @@
               })
               .catch((err) => {
                 document.getElementById('save-assignments-status').textContent = 'Error saving assignments: ' + (err.message || err);
+                setSaveProgress(Math.round((completed / updates.length) * 100), 'Save failed before completion.', 'error');
               })
               .finally(() => {
                 saveBtn.disabled = false;
@@ -543,6 +649,22 @@
               const match = keywords.find(k => lower.includes((k.keyword || '').toLowerCase()));
               return match ? match.aisle_category : '';
             }
+
+            function getAssignedCategoryName(row) {
+              if (row.aisle_category_id) {
+                const catObj = categories.find(c => String(c.id) === String(row.aisle_category_id));
+                return catObj ? catObj.name : '';
+              }
+              return findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
+            }
+
+            const sortedIngredients = (Array.isArray(ingredients) ? ingredients.slice() : []).sort((a, b) => {
+              const categoryA = (getAssignedCategoryName(a) || 'zzz_unassigned').toLowerCase();
+              const categoryB = (getAssignedCategoryName(b) || 'zzz_unassigned').toLowerCase();
+              if (categoryA !== categoryB) return categoryA.localeCompare(categoryB);
+              return String(a.ingredient_name || '').localeCompare(String(b.ingredient_name || ''));
+            });
+
             const table = document.createElement('table');
             table.style.width = '100%';
             table.style.marginTop = '2rem';
@@ -563,16 +685,10 @@
                 </tr>
               </thead>
               <tbody>
-                ${ingredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
-                  ingredients.map(row => {
+                ${sortedIngredients.length === 0 ? `<tr><td colspan='10' style='text-align:center;color:#888;padding:1rem;'>No ingredients in inventory.</td></tr>` :
+                  sortedIngredients.map(row => {
                     let stripFood = stripFoodItemDynamic(row.fooditem || '');
-                    let assignedCategory = '';
-                    if (row.aisle_category_id) {
-                      const catObj = categories.find(c => c.id === row.aisle_category_id);
-                      assignedCategory = catObj ? catObj.name : '';
-                    } else {
-                      assignedCategory = findCategoryByKeyword(row.fooditem || row.ingredient_name || '');
-                    }
+                    let assignedCategory = getAssignedCategoryName(row);
                     return `<tr>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.id)}</td>
                       <td style="border:1px solid #eee;padding:0.5rem 0.7rem;">${safe(row.ingredient_name)}</td>
@@ -1065,14 +1181,6 @@
       });
     </script>
   </div>
-  <script>
-    // Dynamically load the shared navbar
-    fetch('_navbar.html')
-      .then(res => res.text())
-      .then(html => {
-        document.getElementById('navbar-include').innerHTML = html;
-      });
-  </script>
   <script src="ingredients_inventory_table.js"></script>
   <script src="ingredients_parse.js"></script>
   <script src="text_conversion.js"></script>

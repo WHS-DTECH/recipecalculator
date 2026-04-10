@@ -22,7 +22,8 @@
     </style>
 </head>
 <body>
-        <div id="navbar-container"></div>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
         <div style="margin-bottom:1.2rem; text-align:right;">
         </div>
         <div class="extractor-app">
@@ -64,12 +65,6 @@
             </div>
         </div>
     </div>
-    <script>
-    // Navbar include logic
-    fetch('_navbar.html')
-      .then(res => res.text())
-      .then(html => { document.getElementById('navbar-container').innerHTML = html; });
-    </script>
     <script src="extractor_raw.js"></script>
 </body>
 </html>

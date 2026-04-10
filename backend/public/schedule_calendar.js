@@ -1,18 +1,67 @@
 
+// Locale-aware date formatting using the browser's regional settings
+const userLocale = (navigator.languages && navigator.languages[0]) || navigator.language || undefined;
+const shortDateFormatter = new Intl.DateTimeFormat(userLocale, {
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit'
+});
+const longDateFormatter = new Intl.DateTimeFormat(userLocale, {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric'
+});
+const weekdayFormatter = new Intl.DateTimeFormat(userLocale, { weekday: 'long' });
+const WEEK_DAYS_COUNT = 7;
+const bookingPageLabel = (window && window.bookingPageLabel) ? String(window.bookingPageLabel) : 'Load Booking';
 
+function toLocalIsoDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseLocalIsoDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+  if (!match) return null;
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function getRegionalWeekStartDay() {
+  try {
+    const locale = new Intl.Locale(userLocale || 'en');
+    const firstDay = locale.weekInfo && locale.weekInfo.firstDay;
+    if (typeof firstDay === 'number') {
+      return firstDay % 7;
+    }
+  } catch {
+    // Ignore and fall back below.
+  }
+  return 1; // Monday fallback for older browsers.
+}
+
+function getStartOfWeek(referenceDate) {
+  const date = new Date(referenceDate);
+  date.setHours(0, 0, 0, 0);
+  const firstDay = getRegionalWeekStartDay();
+  const diff = (date.getDay() - firstDay + 7) % 7;
+  date.setDate(date.getDate() - diff);
+  return date;
+}
 
 // Days and periods for the calendar grid
-const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const periods = [1, 2, 3, 4, 5, 6];
 
 function getWeekDatesFromMonday(monday) {
   const weekDates = [];
-  for (let i = 0; i < 7; ++i) {
+  for (let i = 0; i < WEEK_DAYS_COUNT; ++i) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     weekDates.push({
-      display: formatDateDMY(d),
-      iso: getISODate(d)
+      display: formatDateShort(d),
+      iso: getISODate(d),
+      weekday: weekdayFormatter.format(d)
     });
   }
   return weekDates;
@@ -57,7 +106,7 @@ function askWeekToPrint(defaultMonday) {
     box.style.cssText = 'background:#fff;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.2);padding:1rem 1.1rem;min-width:320px;max-width:90vw;';
     const defaultWeek = mondayToWeekInputValue(defaultMonday);
     box.innerHTML = `
-      <div style="font-weight:700;font-size:1.05rem;margin-bottom:0.65rem;">Print Add Booking Schedule</div>
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:0.65rem;">Print ${bookingPageLabel} Schedule</div>
       <label for="weekToPrintInput" style="display:block;margin-bottom:0.35rem;">Which week do you want to print?</label>
       <input id="weekToPrintInput" type="week" value="${defaultWeek}" style="width:100%;padding:0.4rem;margin-bottom:0.8rem;" />
       <div style="display:flex;justify-content:flex-end;gap:0.5rem;">
@@ -94,7 +143,7 @@ function askWeekToPrint(defaultMonday) {
 }
 
 function buildPrintGrid(bookings, weekDates) {
-  const grid = Array.from({ length: periods.length }, () => Array(days.length).fill(null));
+  const grid = Array.from({ length: periods.length }, () => Array(weekDates.length).fill(null));
   bookings.forEach(b => {
     const dayIdx = weekDates.findIndex(wd => wd.iso === b.booking_date);
     const periodIdx = periods.indexOf(Number(b.period));
@@ -119,7 +168,7 @@ async function printScheduleForWeek(printMonday) {
 
   let tableHtml = '<table class="print-calendar-table"><thead>';
   tableHtml += '<tr><th class="period-col"></th>';
-  tableHtml += days.map(day => `<th>${day}</th>`).join('');
+  tableHtml += weekDates.map(d => `<th>${d.weekday}</th>`).join('');
   tableHtml += '</tr>';
   tableHtml += '<tr><th class="period-col"></th>';
   tableHtml += weekDates.map(d => `<th class="date-head">${d.display}</th>`).join('');
@@ -127,7 +176,7 @@ async function printScheduleForWeek(printMonday) {
 
   for (let p = 0; p < periods.length; ++p) {
     tableHtml += `<tr><td class="period-col">P${periods[p]}</td>`;
-    for (let d = 0; d < days.length; ++d) {
+    for (let d = 0; d < weekDates.length; ++d) {
       const cell = grid[p][d];
       if (cell) {
         tableHtml += `<td><div class="booking-box"><div class="booking-title">Class: ${cell.class_name || ''}</div><div class="booking-teacher">Teacher: ${cell.staff_name || ''}</div></div></td>`;
@@ -147,9 +196,9 @@ async function printScheduleForWeek(printMonday) {
   }
 
   win.document.write(`
-    <html>
+    <html lang="${userLocale}">
       <head>
-        <title>Add Booking ${formatDateDMY(weekStart)} to ${formatDateDMY(weekEnd)}</title>
+        <title>${bookingPageLabel} ${formatDateLong(weekStart)} to ${formatDateLong(weekEnd)}</title>
         <style>
           @page { size: A4 landscape; margin: 10mm; }
           * { box-sizing: border-box; }
@@ -177,8 +226,8 @@ async function printScheduleForWeek(printMonday) {
             <div class="print-brand">
               <img src="${logoUrl}" alt="School Logo" />
               <div>
-                <h1 class="print-title">Add Booking</h1>
-                <p class="print-subtitle">Week of ${formatDateDMY(weekStart)} to ${formatDateDMY(weekEnd)}</p>
+                <h1 class="print-title">${bookingPageLabel}</h1>
+                <p class="print-subtitle">Week of ${formatDateLong(weekStart)} to ${formatDateLong(weekEnd)}</p>
               </div>
             </div>
             <div class="print-meta">
@@ -200,7 +249,7 @@ async function printScheduleForWeek(printMonday) {
 
 // Helper to get ISO date string (yyyy-mm-dd) for a given date
 function getISODate(date) {
-  return date.toISOString().slice(0, 10);
+  return toLocalIsoDate(date);
 }
 
 // Fetch bookings for the current week
@@ -209,42 +258,29 @@ async function fetchBookingsForWeek(monday) {
   const res = await fetch('/api/bookings/all');
   const data = await res.json();
   if (!data.bookings) return [];
-  // Robustly calculate the Monday for the week containing the reference date
-  const refDate = new Date(monday);
-  const refDay = refDate.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-  // Calculate how many days to subtract to get to Monday
-  // If Sunday (0), subtract 6; else subtract (refDay - 1)
-  const daysToMonday = refDay === 0 ? 6 : refDay - 1;
-  const mondayDate = new Date(refDate);
-  mondayDate.setDate(refDate.getDate() - daysToMonday);
-  mondayDate.setHours(0,0,0,0);
+  // Align filtering to the user's regional week start.
+  const weekStartDate = getStartOfWeek(monday);
   let weekDates = [];
-  for (let i = 0; i < 7; ++i) {
-    const d = new Date(mondayDate);
-    d.setDate(mondayDate.getDate() + i);
+  for (let i = 0; i < WEEK_DAYS_COUNT; ++i) {
+    const d = new Date(weekStartDate);
+    d.setDate(weekStartDate.getDate() + i);
     weekDates.push(getISODate(d));
   }
   // Filter bookings for this week
   return data.bookings.filter(b => weekDates.includes(b.booking_date));
 }
 
-// Helper to format date as dd/mm/yy
-function formatDateDMY(date) {
-  const d = date.getDate().toString().padStart(2, '0');
-  const m = (date.getMonth()+1).toString().padStart(2, '0');
-  const y = date.getFullYear().toString().slice(-2);
-  return `${d}/${m}/${y}`;
+function formatDateShort(date) {
+  return shortDateFormatter.format(date);
+}
+
+function formatDateLong(date) {
+  return longDateFormatter.format(date);
 }
 
 // Track the current week start (Monday)
 let currentMonday = (() => {
-  const today = new Date();
-  const day = today.getDay();
-  const diff = (day === 0 ? -6 : 1) - day; // Monday as start
-  const monday = new Date(today);
-  monday.setDate(today.getDate() + diff);
-  monday.setHours(0,0,0,0);
-  return monday;
+  return getStartOfWeek(new Date());
 })();
 
 
@@ -259,14 +295,14 @@ async function renderScheduleCalendar() {
 
   // Header rows
     let html = `<thead><tr style='background:#1976d2;color:#fff;'>
-      <th style='width:48px;background:#1976d2;'></th>` + days.map((d) => `<th style='padding:0.35rem 0.1rem;font-size:0.98em;background:#1976d2;color:#fff;'>${d}</th>`).join('') + '</tr>';
+      <th style='width:48px;background:#1976d2;'></th>` + weekDates.map((d) => `<th style='padding:0.35rem 0.1rem;font-size:0.98em;background:#1976d2;color:#fff;'>${d.weekday}</th>`).join('') + '</tr>';
     html += `<tr style='background:#e3eafc;color:#222;'>
       <th style='width:48px;'></th>` + weekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${date.display}</th>`).join('') + '</tr></thead>';
 
   // Periods and cells (make bookings clickable)
   for (let p = 0; p < periods.length; ++p) {
     html += `<tr><td style='background:#f5f5f5;font-weight:bold;text-align:center;'>P${periods[p]}</td>`;
-      for (let d = 0; d < days.length; ++d) {
+      for (let d = 0; d < weekDates.length; ++d) {
       const cell = grid[p][d];
         if (cell) {
           // Add a unique id for each booking cell
@@ -355,10 +391,13 @@ async function renderScheduleCalendar() {
   const weekStart = new Date(currentMonday);
   const weekEnd = new Date(currentMonday);
   weekEnd.setDate(weekStart.getDate() + 6);
-  document.getElementById('calendarWeekLabel').textContent = `Week of ${formatDateDMY(weekStart)} to ${formatDateDMY(weekEnd)}`;
+  document.getElementById('calendarWeekLabel').textContent = `Week of ${formatDateLong(weekStart)} to ${formatDateLong(weekEnd)}`;
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  if (document.documentElement) {
+    document.documentElement.lang = String(userLocale || 'en');
+  }
   renderScheduleCalendar();
   // Add click handler for compare button
   const compareBtn = document.getElementById('compareStripFoodItemBtn');
@@ -377,13 +416,8 @@ document.addEventListener('DOMContentLoaded', () => {
     renderScheduleCalendar();
   };
   document.getElementById('todayBtn').onclick = () => {
-    // Reset to this week's Monday
-    const today = new Date();
-    const day = today.getDay();
-    const diff = (day === 0 ? -6 : 1) - day;
-    currentMonday = new Date(today);
-    currentMonday.setDate(today.getDate() + diff);
-    currentMonday.setHours(0, 0, 0, 0);
+    // Reset to this week's regional start day
+    currentMonday = getStartOfWeek(new Date());
     renderScheduleCalendar();
   };
   document.getElementById('nextWeekBtn').onclick = () => {

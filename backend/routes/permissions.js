@@ -7,6 +7,7 @@ const DEFAULT_ROLES = {
   admin: {
     inventory: true,
     recipes: true,
+    add_recipes: true,
     shopping: true,
     booking: true,
     admin: true
@@ -14,13 +15,15 @@ const DEFAULT_ROLES = {
   teacher: {
     inventory: true,
     recipes: true,
+    add_recipes: true,
     shopping: true,
     booking: true,
     admin: false
   },
   technician: {
-    inventory: false,
+    inventory: true,
     recipes: true,
+    add_recipes: false,
     shopping: true,
     booking: false,
     admin: false
@@ -28,33 +31,33 @@ const DEFAULT_ROLES = {
   student: {
     inventory: true,
     recipes: true,
+    add_recipes: false,
     shopping: false,
     booking: false,
     admin: false
   },
   public_access: {
     inventory: true,
-    recipes: true,
+    recipes: false,
+    add_recipes: false,
     shopping: false,
     booking: false,
     admin: false
   }
 };
 
-const ROUTES = ['recipes', 'inventory', 'shopping', 'booking', 'admin'];
+const ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'admin'];
 
 // Initialize permissions table
 const schemaReady = (async () => {
   try {
-    // Drop the table if it exists with old schema (recipes before inventory)
-    await pool.query(`DROP TABLE IF EXISTS role_permissions`);
-    
-    // Create fresh table with correct column order (inventory first)
+    // Create table once and preserve existing permission rows across restarts.
     await pool.query(`
-      CREATE TABLE role_permissions (
+      CREATE TABLE IF NOT EXISTS role_permissions (
         id SERIAL PRIMARY KEY,
         role_name VARCHAR(50) UNIQUE NOT NULL,
         recipes BOOLEAN DEFAULT false,
+        add_recipes BOOLEAN DEFAULT false,
         inventory BOOLEAN DEFAULT false,
         shopping BOOLEAN DEFAULT false,
         booking BOOLEAN DEFAULT false,
@@ -63,6 +66,24 @@ const schemaReady = (async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Ensure all known roles exist without overwriting custom values.
+    for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
+      await pool.query(`
+        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (role_name) DO NOTHING
+      `, [
+        roleName,
+        permissions.recipes,
+        permissions.add_recipes,
+        permissions.inventory,
+        permissions.shopping,
+        permissions.booking,
+        permissions.admin
+      ]);
+    }
+
     console.log('[PERMISSIONS] Schema ready');
   } catch (err) {
     console.error('[PERMISSIONS] Schema initialization error:', err);
@@ -75,7 +96,7 @@ router.get('/all', async (req, res) => {
   try {
     await schemaReady;
     const result = await pool.query(`
-      SELECT role_name, recipes, inventory, shopping, booking, admin
+      SELECT role_name, recipes, add_recipes, inventory, shopping, booking, admin
       FROM role_permissions
       ORDER BY CASE 
         WHEN role_name = 'admin' THEN 1
@@ -85,37 +106,6 @@ router.get('/all', async (req, res) => {
         WHEN role_name = 'public_access' THEN 5
       END
     `);
-
-    if (result.rows.length === 0) {
-      // Initialize with default permissions if table is empty
-      for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
-        await pool.query(`
-          INSERT INTO role_permissions (role_name, recipes, inventory, shopping, booking, admin)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `, [
-          roleName,
-          permissions.recipes,
-          permissions.inventory,
-          permissions.shopping,
-          permissions.booking,
-          permissions.admin
-        ]);
-      }
-      
-      // Fetch again
-      const freshResult = await pool.query(`
-        SELECT role_name, recipes, inventory, shopping, booking, admin
-        FROM role_permissions
-        ORDER BY CASE 
-          WHEN role_name = 'admin' THEN 1
-          WHEN role_name = 'teacher' THEN 2
-          WHEN role_name = 'technician' THEN 3
-          WHEN role_name = 'student' THEN 4
-          WHEN role_name = 'public_access' THEN 5
-        END
-      `);
-      return res.json({ success: true, roles: freshResult.rows, routes: ROUTES });
-    }
 
     res.json({ success: true, roles: result.rows, routes: ROUTES });
   } catch (err) {
@@ -138,11 +128,12 @@ router.put('/:roleName', async (req, res) => {
     
     await pool.query(`
       UPDATE role_permissions
-      SET recipes = $1, inventory = $2, shopping = $3, booking = $4, admin = $5,
+      SET recipes = $1, add_recipes = $2, inventory = $3, shopping = $4, booking = $5, admin = $6,
           updated_at = CURRENT_TIMESTAMP
-      WHERE role_name = $6
+      WHERE role_name = $7
     `, [
       permissions.recipes || false,
+      permissions.add_recipes || false,
       permissions.inventory || false,
       permissions.shopping || false,
       permissions.booking || false,
@@ -165,11 +156,12 @@ router.post('/reset', async (req, res) => {
 
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, inventory, shopping, booking, admin)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
       `, [
         roleName,
         permissions.recipes,
+        permissions.add_recipes,
         permissions.inventory,
         permissions.shopping,
         permissions.booking,

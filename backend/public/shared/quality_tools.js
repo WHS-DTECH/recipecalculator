@@ -64,7 +64,8 @@
     btn.id = 'qc-sanity-btn';
     btn.textContent = 'Run Sanity Check';
     btn.style.position = 'fixed';
-    btn.style.bottom = '16px';
+    const fixedBar = document.getElementById('shoppingListButtonBar');
+    btn.style.bottom = fixedBar ? '92px' : '16px';
     btn.style.right = '16px';
     btn.style.zIndex = '99998';
     btn.style.background = '#1565c0';
