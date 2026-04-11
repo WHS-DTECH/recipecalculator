@@ -231,12 +231,14 @@ document.addEventListener('DOMContentLoaded', function() {
       return fetch('/api/recipes/display-table')
         .then(res => res.json())
         .then(rows => {
-          allRecipes = rows;
+          allRecipes = rows.slice().sort((a, b) =>
+            String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+          );
           const recipe = rows.find(r => String(r.id) === String(id));
           if (!recipe) return;
 
-          updateRecipeList(rows, id);
-          updateNavButtons(rows, id);
+          updateRecipeList(allRecipes, id);
+          updateNavButtons(allRecipes, id);
 
           const searchInput = document.getElementById('recipeSearchInput');
           if (searchInput) {
