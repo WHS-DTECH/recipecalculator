@@ -1,7 +1,7 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
   var NAVBAR_URL = '/navbar_enhanced.html';
-  var ASSET_VERSION = '20260410a';
+  var ASSET_VERSION = '20260411b';
   var STYLE_HREFS = [
     'https://www.w3schools.com/w3css/4/w3.css',
     '/navbar.css'
@@ -150,6 +150,26 @@
           first.focus();
         }
       }
+    });
+
+    // Fallback logout handler to guarantee logout works even if another script fails.
+    document.querySelectorAll('.navbar-logout-btn').forEach(function(btn) {
+      if (btn.getAttribute('data-logout-bound') === '1') return;
+      btn.setAttribute('data-logout-bound', '1');
+      btn.addEventListener('click', function(event) {
+        event.preventDefault();
+        fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+          .catch(function() { return null; })
+          .finally(function() {
+            try {
+              sessionStorage.removeItem('currentStaffUser');
+              sessionStorage.removeItem('navbar_user_role');
+            } catch (_) {
+              // Ignore storage errors and still redirect.
+            }
+            window.location.href = 'google_login.html';
+          });
+      });
     });
   }
 
