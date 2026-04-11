@@ -4,6 +4,7 @@
 document.addEventListener('DOMContentLoaded', function() {
   let canOpenRecipeDetails = false;
   let inlineLoginBooted = false;
+  let pendingRecipeDetailUrl = '';
   const ROLE_STORAGE_KEY = 'navbar_user_role';
 
   function rememberRole(user) {
@@ -109,6 +110,11 @@ document.addEventListener('DOMContentLoaded', function() {
         broadcastAuthSession(user);
         setInlineLoginStatus('Signed in successfully.', 'success');
         setInlineLoginVisible(false);
+        if (pendingRecipeDetailUrl) {
+          const destination = pendingRecipeDetailUrl;
+          pendingRecipeDetailUrl = '';
+          window.location.href = destination;
+        }
       })
       .catch((err) => {
         setInlineLoginStatus((err && err.message) || 'Sign-in failed.', 'error');
@@ -179,9 +185,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const willShow = panel.hidden;
     if (willShow) {
-      setInlineLoginStatus('', '');
-      setInlineLoginVisible(true);
-      bootInlineLogin();
+      openInlineLoginPanel('');
     } else {
       setInlineLoginVisible(false);
     }
@@ -196,6 +200,13 @@ document.addEventListener('DOMContentLoaded', function() {
     if (willShow && typeof panel.scrollIntoView === 'function') {
       panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+  }
+
+  function openInlineLoginPanel(message) {
+    setInlineSuggestVisible(false);
+    setInlineLoginStatus(message || '', '');
+    setInlineLoginVisible(true);
+    bootInlineLogin();
   }
 
   function refreshAuthState() {
@@ -457,11 +468,13 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     card.onclick = () => {
+      const detailUrl = `recipe_display.html?id=${row.id}`;
       if (!canOpenRecipeDetails) {
-        window.location.href = `google_login.html?next=${encodeURIComponent(`recipe_display.html?id=${row.id}`)}`;
+        pendingRecipeDetailUrl = detailUrl;
+        openInlineLoginPanel('Sign in with Google to open this recipe.');
         return;
       }
-      window.location.href = `recipe_display.html?id=${row.id}`;
+      window.location.href = detailUrl;
     };
 
     return card;
