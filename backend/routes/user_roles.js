@@ -11,6 +11,8 @@ const DEFAULT_ROLE_OPTIONS = [
   'public_access'
 ];
 
+const ROLE_PRIORITY = ['admin', 'teacher', 'technician', 'student', 'public_access'];
+
 const WEEKDAY_MAP = [
   { day: 'Monday', key: 'D1' },
   { day: 'Tuesday', key: 'D2' },
@@ -71,6 +73,26 @@ function buildStudentWeeklyTimetable(row) {
 
 function normalizeUserType(userType) {
   return String(userType || 'staff').trim().toLowerCase() === 'student' ? 'student' : 'staff';
+}
+
+function normalizeAppRole(role, userType) {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (DEFAULT_ROLE_OPTIONS.includes(normalized)) return normalized;
+  if (userType === 'student') return 'student';
+  if (normalized === 'staff' || !normalized) return 'teacher';
+  return 'public_access';
+}
+
+function uniqueRoles(roles) {
+  return Array.from(new Set((roles || []).map(r => String(r || '').trim().toLowerCase()).filter(Boolean)));
+}
+
+function highestRole(roles, fallbackRole, userType) {
+  const normalizedRoles = uniqueRoles(roles).map((role) => normalizeAppRole(role, userType));
+  for (const preferred of ROLE_PRIORITY) {
+    if (normalizedRoles.includes(preferred)) return preferred;
+  }
+  return normalizeAppRole(fallbackRole, userType);
 }
 
 const schemaReady = (async () => {
@@ -280,7 +302,7 @@ router.get('/profile', async (req, res) => {
     const email = identifier.toLowerCase();
 
     const staffResult = await pool.query(
-      `SELECT id, code, first_name, last_name, title, email_school, status
+      `SELECT id, code, first_name, last_name, title, email_school, status, primary_role
        FROM staff_upload
        WHERE lower(trim(email_school)) = lower(trim($1))
        LIMIT 1`,
@@ -297,6 +319,18 @@ router.get('/profile', async (req, res) => {
     }
 
     const staff = staffResult.rows[0];
+
+    const additionalRolesResult = await pool.query(
+      `SELECT role_name
+       FROM user_additional_roles
+       WHERE user_type = 'staff'
+         AND lower(trim(email)) = lower(trim($1))
+       ORDER BY role_name`,
+      [email]
+    );
+    const additionalRoles = additionalRolesResult.rows.map((row) => String(row.role_name || '').trim().toLowerCase()).filter(Boolean);
+    const baseRole = normalizeAppRole(staff.primary_role, 'staff');
+    const effectiveRole = highestRole([baseRole, ...additionalRoles], baseRole, 'staff');
 
     let department = null;
     if (staff.code) {
@@ -352,7 +386,14 @@ router.get('/profile', async (req, res) => {
         last_name: staff.last_name || '',
         title: staff.title || '',
         email_school: staff.email_school || '',
-        status: staff.status || 'Current'
+        status: staff.status || 'Current',
+        primary_role: staff.primary_role || 'staff'
+      },
+      roles: {
+        effective_role: effectiveRole,
+        base_role: baseRole,
+        additional_roles: uniqueRoles(additionalRoles),
+        assigned_roles: uniqueRoles([baseRole, ...additionalRoles])
       },
       department: department
         ? {

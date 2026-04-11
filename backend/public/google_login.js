@@ -1,5 +1,6 @@
 (function() {
   var statusEl = null;
+  var ROLE_STORAGE_KEY = 'navbar_user_role';
 
   function setStatus(message, type) {
     if (!statusEl) statusEl = document.getElementById('loginStatus');
@@ -14,6 +15,15 @@
         return { ok: res.ok, status: res.status, data: data };
       });
     });
+  }
+
+  function rememberRole(user) {
+    try {
+      var role = String((user && user.role) || '').trim().toLowerCase();
+      if (role) sessionStorage.setItem(ROLE_STORAGE_KEY, role);
+    } catch (_) {
+      // Ignore session storage failures.
+    }
   }
 
   function loadGoogleScript(onLoad) {
@@ -54,6 +64,7 @@
       if (!result.ok || !result.data || !result.data.success) {
         throw new Error((result.data && result.data.error) || 'Sign-in failed.');
       }
+      rememberRole(result.data.user);
       setStatus('Signed in successfully. Redirecting...', 'success');
       window.location.href = 'index.html';
     }).catch(function(err) {
@@ -82,15 +93,25 @@
   }
 
   function boot() {
-    fetchJson('/api/auth/google/config', { credentials: 'include' })
-      .then(function(result) {
-        if (!result.ok || !result.data || !result.data.clientId) {
-          throw new Error((result.data && result.data.error) || 'Google sign-in is not configured yet.');
+    fetchJson('/api/auth/me', { credentials: 'include' })
+      .then(function(meResult) {
+        if (meResult.ok && meResult.data && meResult.data.authenticated && meResult.data.user) {
+          rememberRole(meResult.data.user);
+          setStatus('Already signed in. Redirecting to Recipe Book...', 'success');
+          window.location.href = 'index.html';
+          return null;
         }
 
-        var clientId = result.data.clientId;
+        return fetchJson('/api/auth/google/config', { credentials: 'include' });
+      })
+      .then(function(configResult) {
+        if (!configResult) return;
+        if (!configResult.ok || !configResult.data || !configResult.data.clientId) {
+          throw new Error((configResult.data && configResult.data.error) || 'Google sign-in is not configured yet.');
+        }
+
         loadGoogleScript(function() {
-          startGoogleSignin(clientId);
+          startGoogleSignin(configResult.data.clientId);
         });
       })
       .catch(function(err) {

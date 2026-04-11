@@ -37,6 +37,75 @@ function getGoogleClientId() {
   return String(process.env.GOOGLE_CLIENT_ID || '').trim();
 }
 
+function getBootstrapAdminEmails() {
+  const configured = String(process.env.ADMIN_BOOTSTRAP_EMAILS || '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
+
+  const preferred = normalizeEmail(process.env.PREFERRED_ADMIN_EMAIL || '');
+  if (preferred && !configured.includes(preferred)) configured.push(preferred);
+
+  return new Set(configured);
+}
+
+async function resolveEffectiveRoleForEmail(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return { role: 'public_access', staffLinked: false };
+
+  if (getBootstrapAdminEmails().has(normalizedEmail)) {
+    return { role: 'admin', staffLinked: true };
+  }
+
+  const staffResult = await pool.query(
+    `SELECT COALESCE(NULLIF(lower(trim(primary_role)), ''), 'staff') AS primary_role
+     FROM staff_upload
+     WHERE COALESCE(status, 'Current') = 'Current'
+       AND lower(trim(email_school)) = lower(trim($1))
+     LIMIT 1`,
+    [normalizedEmail]
+  );
+
+  const staffLinked = staffResult.rowCount > 0;
+  const primaryRole = staffLinked ? String(staffResult.rows[0].primary_role || 'staff') : 'public_access';
+
+  const additionalRolesResult = await pool.query(
+    `SELECT lower(trim(role_name)) AS role_name
+     FROM user_additional_roles
+     WHERE user_type = 'staff'
+       AND lower(trim(email)) = lower(trim($1))`,
+    [normalizedEmail]
+  );
+
+  const roleSet = new Set();
+  roleSet.add(primaryRole);
+  additionalRolesResult.rows.forEach((row) => {
+    const role = String(row.role_name || '').trim().toLowerCase();
+    if (role) roleSet.add(role);
+  });
+
+  const orderedPriority = ['admin', 'teacher', 'technician', 'student', 'public_access'];
+  let role = 'public_access';
+  for (const candidate of orderedPriority) {
+    if (roleSet.has(candidate)) {
+      role = candidate;
+      break;
+    }
+  }
+
+  if (role === 'public_access' && staffLinked) {
+    role = 'teacher';
+  }
+
+  return { role, staffLinked };
+}
+
+function isApprovedGoogleDomain(email) {
+  const allowed = String(process.env.GOOGLE_ALLOWED_DOMAIN || 'westlandhigh.school.nz').trim().toLowerCase();
+  const normalizedEmail = normalizeEmail(email);
+  return Boolean(allowed && normalizedEmail.endsWith(`@${allowed}`));
+}
+
 function getSuggestionNotifyRecipients() {
   const configured = String(process.env.SUGGESTION_NOTIFY_TO || process.env.ADMIN_NOTIFICATION_EMAIL || '')
     .split(',')
@@ -275,6 +344,8 @@ app.post('/api/auth/google/login', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Google account email is required.' });
     }
 
+    const roleInfo = await resolveEffectiveRoleForEmail(email);
+
     issueSessionCookie(res, {
       email,
       name: payload.name || email,
@@ -286,7 +357,10 @@ app.post('/api/auth/google/login', async (req, res) => {
       user: {
         email,
         name: payload.name || email,
-        picture: payload.picture || ''
+        picture: payload.picture || '',
+        role: roleInfo.role,
+        staffLinked: roleInfo.staffLinked,
+        domainApproved: isApprovedGoogleDomain(email)
       }
     });
   } catch (err) {
@@ -297,17 +371,38 @@ app.post('/api/auth/google/login', async (req, res) => {
 
 app.get('/api/auth/me', (req, res) => {
   if (!req.authUserEmail) {
-    return res.json({ success: true, authenticated: false });
+    return res.json({ success: true, authenticated: false, user: null });
   }
-  return res.json({
-    success: true,
-    authenticated: true,
-    user: {
-      email: req.authUserEmail,
-      name: (req.authUser && req.authUser.name) || req.authUserEmail,
-      picture: (req.authUser && req.authUser.picture) || ''
-    }
-  });
+
+  return resolveEffectiveRoleForEmail(req.authUserEmail)
+    .then((roleInfo) => {
+      return res.json({
+        success: true,
+        authenticated: true,
+        user: {
+          email: req.authUserEmail,
+          name: (req.authUser && req.authUser.name) || req.authUserEmail,
+          picture: (req.authUser && req.authUser.picture) || '',
+          role: roleInfo.role,
+          staffLinked: roleInfo.staffLinked,
+          domainApproved: isApprovedGoogleDomain(req.authUserEmail)
+        }
+      });
+    })
+    .catch(() => {
+      return res.json({
+        success: true,
+        authenticated: true,
+        user: {
+          email: req.authUserEmail,
+          name: (req.authUser && req.authUser.name) || req.authUserEmail,
+          picture: (req.authUser && req.authUser.picture) || '',
+          role: 'public_access',
+          staffLinked: false,
+          domainApproved: isApprovedGoogleDomain(req.authUserEmail)
+        }
+      });
+    });
 });
 
 app.post('/api/auth/logout', (req, res) => {

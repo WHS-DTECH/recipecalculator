@@ -281,66 +281,63 @@
                     <span class="profile-chip status-ready">Google Login preparation</span>
                 </div>
             </div>
-            <button type="button" class="profile-action profile-action-muted" disabled>Google Sign-In Coming Soon</button>
+            <button id="profileAuthAction" type="button" class="profile-action profile-action-muted" disabled>Loading account status...</button>
         </section>
 
         <section class="profile-grid">
             <div class="profile-stack">
                 <section class="profile-card">
                     <h2>Account Overview</h2>
-                    <p class="profile-card-note">This page works with current staff data now and reserves identity/account sections for a future Google-based sign-in flow.</p>
+                    <p class="profile-card-note">Profile details are linked from Google session identity and your uploaded Staff/Department CSV data.</p>
                     <div id="profileContainer"></div>
                 </section>
 
                 <section class="profile-card integration-card">
-                    <h2>Google Login Readiness</h2>
+                    <h2>Google Sign-In Connection</h2>
                     <div class="integration-state">
-                        <span class="integration-dot" aria-hidden="true"></span>
+                        <span id="googleStateDot" class="integration-dot" aria-hidden="true"></span>
                         <div>
-                            <div class="integration-title">Google account is not connected yet</div>
-                            <div class="integration-copy">This placeholder state keeps the profile page ready for Google Sign-In without changing the current staff/profile workflow.</div>
+                            <div id="googleStateTitle" class="integration-title">Checking Google account status...</div>
+                            <div id="googleStateCopy" class="integration-copy">Reading active session and profile link information.</div>
                         </div>
                     </div>
-                    <ul class="placeholder-list">
-                        <li>Reserved spot for Google profile photo and verified email</li>
-                        <li>Reserved sign-in status for domain approval and session details</li>
-                        <li>Reserved permission sync area for future role mapping</li>
-                    </ul>
+                    <ul id="googleChecklist" class="placeholder-list"></ul>
+                </section>
+
+                <section class="profile-card">
+                    <h2>Weekly Timetable</h2>
+                    <p class="profile-card-note">Pulled from timetable CSV upload for your teacher code/profile.</p>
+                    <div id="profileTimetable"></div>
                 </section>
             </div>
 
             <div class="profile-stack">
                 <section class="profile-card">
                     <h2>Sign-In Settings</h2>
-                    <p class="profile-card-note">Planned authentication details for staff using Google Login.</p>
+                    <p class="profile-card-note">Live authentication and role details for this account.</p>
                     <div class="profile-facts">
                         <div class="profile-fact">
                             <div class="profile-fact-label">Auth Provider</div>
-                            <div class="profile-fact-value">Google Workspace</div>
+                            <div id="factAuthProvider" class="profile-fact-value">Google Workspace</div>
                         </div>
                         <div class="profile-fact">
                             <div class="profile-fact-label">Status</div>
-                            <div class="profile-fact-value">Not Connected</div>
+                            <div id="factAuthStatus" class="profile-fact-value">Checking...</div>
                         </div>
                         <div class="profile-fact">
                             <div class="profile-fact-label">Approved Domain</div>
-                            <div class="profile-fact-value">To be configured</div>
+                            <div id="factDomainStatus" class="profile-fact-value">Checking...</div>
                         </div>
                         <div class="profile-fact">
                             <div class="profile-fact-label">Session Source</div>
-                            <div class="profile-fact-value">Current demo/profile lookup</div>
+                            <div id="factSessionSource" class="profile-fact-value">Google session</div>
                         </div>
                     </div>
                 </section>
 
                 <section class="profile-card">
-                    <h2>Planned Profile Actions</h2>
-                    <ul class="placeholder-list">
-                        <li>Review classroom-facing permissions</li>
-                        <li>Confirm school email and display name</li>
-                        <li>Manage future Google sign-in connection</li>
-                        <li>View department and role assignments</li>
-                    </ul>
+                    <h2>CSV Data Links</h2>
+                    <div id="profileDataLinks"></div>
                 </section>
             </div>
         </section>
