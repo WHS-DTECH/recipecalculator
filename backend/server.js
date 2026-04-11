@@ -146,9 +146,50 @@ function isApprovedGoogleDomain(email) {
 function getSuggestionNotifyRecipients() {
   const configured = String(process.env.SUGGESTION_NOTIFY_TO || process.env.ADMIN_NOTIFICATION_EMAIL || '')
     .split(',')
-    .map((entry) => String(entry || '').trim())
+    .map((entry) => normalizeEmail(entry))
     .filter(Boolean);
   return configured;
+}
+
+async function getSuggestionRoleRecipients() {
+  const recipients = new Set();
+
+  const configured = getSuggestionNotifyRecipients();
+  configured.forEach((entry) => {
+    if (isValidEmailFormat(entry)) recipients.add(entry);
+  });
+
+  getBootstrapAdminEmails().forEach((email) => {
+    if (isValidEmailFormat(email)) recipients.add(email);
+  });
+
+  const teacherAdminResult = await pool.query(
+    `SELECT DISTINCT lower(trim(email_school)) AS email
+     FROM staff_upload
+     WHERE COALESCE(status, 'Current') = 'Current'
+       AND lower(trim(COALESCE(primary_role, ''))) IN ('teacher', 'admin')
+       AND trim(COALESCE(email_school, '')) <> ''`
+  );
+
+  teacherAdminResult.rows.forEach((row) => {
+    const email = normalizeEmail(row.email);
+    if (isValidEmailFormat(email)) recipients.add(email);
+  });
+
+  const additionalRolesResult = await pool.query(
+    `SELECT DISTINCT lower(trim(uar.email)) AS email
+     FROM user_additional_roles uar
+     WHERE lower(trim(uar.user_type)) = 'staff'
+       AND lower(trim(uar.role_name)) IN ('teacher', 'admin')
+       AND trim(COALESCE(uar.email, '')) <> ''`
+  );
+
+  additionalRolesResult.rows.forEach((row) => {
+    const email = normalizeEmail(row.email);
+    if (isValidEmailFormat(email)) recipients.add(email);
+  });
+
+  return Array.from(recipients);
 }
 
 function createSuggestionMailer() {
@@ -168,7 +209,14 @@ function createSuggestionMailer() {
 }
 
 async function sendSuggestionNotificationEmail(suggestion) {
-  const recipients = getSuggestionNotifyRecipients();
+  let recipients = [];
+  try {
+    recipients = await getSuggestionRoleRecipients();
+  } catch (recipientErr) {
+    console.error('[SUGGESTIONS] Failed to resolve teacher/admin recipients:', recipientErr.message);
+    recipients = getSuggestionNotifyRecipients();
+  }
+
   if (!recipients.length) return;
 
   const transporter = createSuggestionMailer();
