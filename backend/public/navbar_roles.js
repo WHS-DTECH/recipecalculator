@@ -125,6 +125,12 @@
     });
   }
 
+  function handleAuthSessionChanged(event) {
+    const user = event && event.detail ? event.detail.user : null;
+    const role = normalizeRole(user && user.role);
+    setUserRole(role || 'public_access');
+  }
+
   /**
    * Initialize navbar role detection on page load
    */
@@ -144,6 +150,8 @@
   } else {
     initializeNavbarRoles();
   }
+
+  document.addEventListener('auth-session-changed', handleAuthSessionChanged);
 
   // Expose role functions globally for testing/debugging
   window.navbarRoles = {
