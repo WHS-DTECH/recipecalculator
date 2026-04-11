@@ -581,8 +581,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   document.addEventListener('click', toggleInlineLoginFromNavbar);
 
-  const suggestButton = document.getElementById('heroSuggestRecipeButton');
-  if (suggestButton) {
-    suggestButton.addEventListener('click', toggleInlineSuggestPanel);
-  }
+  ['heroSuggestRecipeButton', 'heroSuggestRecipeButtonHero'].forEach(function(id) {
+    const btn = document.getElementById(id);
+    if (btn) btn.addEventListener('click', toggleInlineSuggestPanel);
+  });
 });
