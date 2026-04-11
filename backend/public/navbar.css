@@ -117,6 +117,27 @@
   margin-left: 0.2rem;
 }
 
+.navbar-school-logo-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 0.4rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  background: rgba(255, 255, 255, 0.14);
+  width: 38px;
+  height: 38px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.navbar-school-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+}
+
 .navbar-user-link {
   color: #1f1f1f;
   text-decoration: none;
@@ -317,5 +338,16 @@
 
   .navbar-brand {
     font-size: 0.9rem;
+  }
+
+  .navbar-school-logo-link {
+    width: 34px;
+    height: 34px;
+    margin-left: 0.25rem;
+  }
+
+  .navbar-school-logo {
+    width: 28px;
+    height: 28px;
   }
 }
