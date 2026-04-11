@@ -130,6 +130,11 @@ async function setNavbarFromAuthSession() {
   }
 }
 
+function handleAuthSessionChanged(event) {
+  const user = event && event.detail ? event.detail.user : null;
+  setNavbarAccountDisplay(user);
+}
+
 function selectPreloginUser(staffRows) {
   if (!Array.isArray(staffRows) || staffRows.length === 0) return null;
   return staffRows.find((user) => normalizeEmail(user.email_school) === PREFERRED_ADMIN_EMAIL) || staffRows[0];
@@ -149,3 +154,5 @@ if (document.readyState === 'loading') {
 } else {
   setNavbarUsername();
 }
+
+document.addEventListener('auth-session-changed', handleAuthSessionChanged);

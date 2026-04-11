@@ -28,6 +28,12 @@ document.addEventListener('DOMContentLoaded', function() {
     panel.hidden = !visible;
   }
 
+  function broadcastAuthSession(user) {
+    document.dispatchEvent(new CustomEvent('auth-session-changed', {
+      detail: { user: user || null }
+    }));
+  }
+
   function verifySession() {
     return fetch('/api/auth/me', { credentials: 'include' })
       .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
@@ -94,6 +100,7 @@ document.addEventListener('DOMContentLoaded', function() {
       .then((user) => {
         canOpenRecipeDetails = true;
         rememberRole(user);
+        broadcastAuthSession(user);
         setInlineLoginStatus('Signed in successfully.', 'success');
         setInlineLoginVisible(false);
       })
@@ -181,6 +188,7 @@ document.addEventListener('DOMContentLoaded', function() {
         canOpenRecipeDetails = Boolean(data && data.authenticated && data.user && data.user.email);
         if (canOpenRecipeDetails) {
           rememberRole(data.user);
+          broadcastAuthSession(data.user);
           setInlineLoginVisible(false);
         }
       })

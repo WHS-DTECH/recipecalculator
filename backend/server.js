@@ -6,6 +6,11 @@ const cookieParser = require('cookie-parser');
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
+app.use((req, res, next) => {
+  // Allow popup auth providers (Google GIS) to communicate with opener windows.
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin-allow-popups');
+  next();
+});
 const fs = require('fs');
 const path = require('path');
 // --- DEBUG: Log all requests to /api/ingredients/inventory/* ---
