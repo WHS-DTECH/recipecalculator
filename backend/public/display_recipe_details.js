@@ -91,29 +91,42 @@ document.addEventListener('DOMContentLoaded', function() {
       .filter(Boolean);
   }
 
+  function sanitizeListHtml(value) {
+    return String(value || '')
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/\son\w+="[^"]*"/gi, '')
+      .replace(/\son\w+='[^']*'/gi, '');
+  }
+
+  function extractItemsFromListHtml(value) {
+    const cleaned = sanitizeListHtml(value);
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = cleaned;
+    const liNodes = wrapper.querySelectorAll('li');
+    if (!liNodes.length) return [];
+    return Array.from(liNodes)
+      .map((li) => String(li.textContent || '').trim())
+      .filter(Boolean);
+  }
+
   function splitIngredientItems(value) {
-    let text = htmlToPlainText(value)
-      .replace(/\s*[•\u2022]\s*/g, '\n')
-      .replace(/\s*;\s*/g, '\n');
+    const htmlItems = extractItemsFromListHtml(value);
+    if (htmlItems.length) return htmlItems;
 
-    if (!/\n/.test(text)) {
-      text = text
-        .replace(/\)\s*(?=(?:\d+|[¼½¾]))/g, ')\n')
-        .replace(/\s+(?=(?:\d+\/?\d*|[¼½¾])\s*(?:cups?|cup|tbsp|tsp|g|kg|ml|l|oz|pinch|cloves?|eggs?|cans?|slices?))/gi, '\n');
-    }
-
+    const text = htmlToPlainText(value)
+      .replace(/\s*[•\u2022]\s*/g, '\n');
     const items = splitLines(text);
     return items.length ? items : (text ? [text] : []);
   }
 
   function splitInstructionItems(value) {
-    let text = htmlToPlainText(value)
-      .replace(/\s*;\s*/g, '. ')
-      .replace(/\s+(?=\d+[.)]?\s*[A-Z])/g, '\n');
+    const htmlItems = extractItemsFromListHtml(value)
+      .map((line) => line.replace(/^\d+[.)]?\s*/, '').trim())
+      .filter(Boolean);
+    if (htmlItems.length) return htmlItems;
 
-    if (!/\n/.test(text)) {
-      text = text.replace(/\.\s+(?=[A-Z])/g, '.\n');
-    }
+    const text = htmlToPlainText(value)
+      .replace(/\s+(?=\d+[.)]\s*)/g, '\n');
 
     const items = splitLines(text)
       .map(line => line.replace(/^\d+[.)]?\s*/, '').trim())
