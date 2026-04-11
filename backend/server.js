@@ -214,6 +214,30 @@ function createSuggestionMailer() {
   });
 }
 
+function getSuggestionSmtpConfigSummary() {
+  const host = String(process.env.SMTP_HOST || '').trim() || '(missing)';
+  const port = String(process.env.SMTP_PORT || '587').trim();
+  const secure = String(process.env.SMTP_SECURE || '').trim() === '1' ? 'true' : 'false';
+  const user = String(process.env.SMTP_USER || '').trim() || '(missing)';
+  const fromAddress = String(process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim() || '(missing)';
+  return `host=${host} port=${port} secure=${secure} user=${user} from=${fromAddress}`;
+}
+
+async function logSuggestionMailerHealthCheck() {
+  const transporter = createSuggestionMailer();
+  if (!transporter) {
+    console.warn('[SUGGESTIONS] SMTP health check skipped. Missing SMTP_HOST/SMTP_USER/SMTP_PASS.');
+    return;
+  }
+
+  try {
+    await transporter.verify();
+    console.log('[SUGGESTIONS] SMTP health check passed.', getSuggestionSmtpConfigSummary());
+  } catch (err) {
+    console.error('[SUGGESTIONS] SMTP health check failed:', err.message, getSuggestionSmtpConfigSummary());
+  }
+}
+
 async function sendSuggestionNotificationEmail(suggestion) {
   let recipients = [];
   try {
@@ -1997,4 +2021,7 @@ app.use((req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
+  logSuggestionMailerHealthCheck().catch((err) => {
+    console.error('[SUGGESTIONS] SMTP health check error:', err.message);
+  });
 });
