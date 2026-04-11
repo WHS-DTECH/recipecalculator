@@ -17,6 +17,25 @@
     });
   }
 
+  function verifySession() {
+    return fetchJson('/api/auth/me', { credentials: 'include' }).then(function(meResult) {
+      var isAuthenticated = Boolean(
+        meResult &&
+        meResult.ok &&
+        meResult.data &&
+        meResult.data.authenticated &&
+        meResult.data.user &&
+        meResult.data.user.email
+      );
+
+      if (!isAuthenticated) {
+        throw new Error('Login did not persist. Please allow cookies for this site and try again.');
+      }
+
+      return meResult.data.user;
+    });
+  }
+
   function rememberRole(user) {
     try {
       var role = String((user && user.role) || '').trim().toLowerCase();
@@ -64,7 +83,9 @@
       if (!result.ok || !result.data || !result.data.success) {
         throw new Error((result.data && result.data.error) || 'Sign-in failed.');
       }
-      rememberRole(result.data.user);
+      return verifySession();
+    }).then(function(user) {
+      rememberRole(user);
       setStatus('Signed in successfully. Redirecting...', 'success');
       window.location.href = 'index.html';
     }).catch(function(err) {

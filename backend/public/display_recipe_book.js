@@ -28,6 +28,27 @@ document.addEventListener('DOMContentLoaded', function() {
     panel.hidden = !visible;
   }
 
+  function verifySession() {
+    return fetch('/api/auth/me', { credentials: 'include' })
+      .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
+      .then((result) => {
+        const isAuthenticated = Boolean(
+          result &&
+          result.ok &&
+          result.data &&
+          result.data.authenticated &&
+          result.data.user &&
+          result.data.user.email
+        );
+
+        if (!isAuthenticated) {
+          throw new Error('Login did not persist. Please allow cookies for this site and try again.');
+        }
+
+        return result.data.user;
+      });
+  }
+
   function loadGoogleScript(onLoad) {
     if (window.google && window.google.accounts && window.google.accounts.id) {
       onLoad();
@@ -68,8 +89,11 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!result.ok || !result.data || !result.data.success) {
           throw new Error((result.data && result.data.error) || 'Sign-in failed.');
         }
+        return verifySession();
+      })
+      .then((user) => {
         canOpenRecipeDetails = true;
-        rememberRole(result.data.user);
+        rememberRole(user);
         setInlineLoginStatus('Signed in successfully.', 'success');
         setInlineLoginVisible(false);
       })
@@ -108,7 +132,6 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
-    setInlineLoginVisible(true);
     if (inlineLoginBooted) return;
     inlineLoginBooted = true;
 
@@ -128,6 +151,29 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
+  function toggleInlineLoginFromNavbar(event) {
+    const link = event.target && event.target.closest ? event.target.closest('#navbarUsername') : null;
+    if (!link) return;
+    if (canOpenRecipeDetails) return;
+
+    const href = String(link.getAttribute('href') || '').trim().toLowerCase();
+    if (href !== 'google_login.html') return;
+
+    event.preventDefault();
+
+    const panel = document.getElementById('inlineLoginPanel');
+    if (!panel) return;
+
+    const willShow = panel.hidden;
+    if (willShow) {
+      setInlineLoginStatus('', '');
+      setInlineLoginVisible(true);
+      bootInlineLogin();
+    } else {
+      setInlineLoginVisible(false);
+    }
+  }
+
   function refreshAuthState() {
     return fetch('/api/auth/me', { credentials: 'include' })
       .then((res) => res.json())
@@ -135,6 +181,7 @@ document.addEventListener('DOMContentLoaded', function() {
         canOpenRecipeDetails = Boolean(data && data.authenticated && data.user && data.user.email);
         if (canOpenRecipeDetails) {
           rememberRole(data.user);
+          setInlineLoginVisible(false);
         }
       })
       .catch(() => {
@@ -411,7 +458,6 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
   ])
     .then(([, displayRows, allRecipes, bookingsPayload]) => {
-      bootInlineLogin();
       const rows = Array.isArray(displayRows) ? displayRows : [];
       if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
@@ -480,6 +526,8 @@ document.addEventListener('DOMContentLoaded', function() {
       if (chips) {
         const counts = rows.reduce((acc, row) => {
           const key = getDishCategory(row.name || '');
+
+  document.addEventListener('click', toggleInlineLoginFromNavbar);
           acc[key] = (acc[key] || 0) + 1;
           return acc;
         }, {});

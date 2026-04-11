@@ -16,13 +16,26 @@ function toBool(value) {
   return normalized === '1' || normalized === 'true' || normalized === 'yes';
 }
 
+function normalizeSameSite(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'strict' || normalized === 'none' || normalized === 'lax') {
+    return normalized;
+  }
+  return 'lax';
+}
+
 function sessionCookieOptions() {
   const isProd = String(process.env.NODE_ENV || '').trim().toLowerCase() === 'production';
-  const sameSite = String(process.env.SESSION_COOKIE_SAMESITE || (isProd ? 'none' : 'lax')).trim().toLowerCase();
+  const configuredSameSite = normalizeSameSite(process.env.SESSION_COOKIE_SAMESITE || (isProd ? 'lax' : 'lax'));
+  const secureConfigured = String(process.env.SESSION_COOKIE_SECURE || '').trim();
+  const secure = secureConfigured ? toBool(secureConfigured) : isProd;
+
+  // Browsers reject SameSite=None cookies unless Secure is also true.
+  const sameSite = configuredSameSite === 'none' && !secure ? 'lax' : configuredSameSite;
 
   return {
     httpOnly: true,
-    secure: isProd,
+    secure,
     sameSite,
     path: '/',
     maxAge: 7 * 24 * 60 * 60 * 1000
