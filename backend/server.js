@@ -247,6 +247,31 @@ const db = {
   }
 };
 
+let recipeDisplayImageColumnEnsured = false;
+
+async function ensureRecipeDisplayImageColumn() {
+  if (recipeDisplayImageColumnEnsured) return;
+  await pool.query('ALTER TABLE recipe_display ADD COLUMN IF NOT EXISTS image_url TEXT');
+  recipeDisplayImageColumnEnsured = true;
+}
+
+function parseImageDataUrl(dataUrl) {
+  const raw = String(dataUrl || '');
+  const match = /^data:image\/(png|jpeg|jpg|webp|gif)(?:;charset=[^;,]+)?;base64,(.+)$/i.exec(raw);
+  if (!match) return null;
+  const type = String(match[1] || '').toLowerCase();
+  const ext = type === 'jpeg' || type === 'jpg' ? 'jpg' : type;
+  return {
+    ext,
+    buffer: Buffer.from(match[2], 'base64')
+  };
+}
+
+function sanitizeImageFileBase(name) {
+  const base = String(name || 'recipe-image').trim();
+  return base.replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'recipe-image';
+}
+
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
 // Mount aisleKeywords router (Postgres)
@@ -1407,10 +1432,11 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
     // --- Recipes ---
     // Return all recipes in recipe_display table for frontend
     app.get('/api/recipes/display-table', async (req, res) => {
-      const sql = `SELECT id, name, description, ingredients, serving_size, url, instructions, recipeid FROM recipe_display ORDER BY id DESC`;
+      const sql = `SELECT id, name, description, ingredients, serving_size, url, instructions, recipeid, image_url FROM recipe_display ORDER BY id DESC`;
       console.log('[DISPLAY_TABLE][HIT] /api/recipes/display-table endpoint called');
       console.log('[DISPLAY_TABLE][SQL]', sql);
       try {
+        await ensureRecipeDisplayImageColumn();
         const result = await pool.query(sql);
         res.json(result.rows);
       } catch (err) {
@@ -1423,21 +1449,23 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
     app.post('/api/recipes/:id/display', async (req, res) => {
       const { id } = req.params;
       try {
+        await ensureRecipeDisplayImageColumn();
         // Fetch recipe by ID
         const recipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [id]);
         if (recipeResult.rows.length === 0) return res.status(404).json({ error: 'Recipe not found.' });
         const recipe = recipeResult.rows[0];
         // Upsert into recipe_display table (update if exists, insert if not)
         const upsertSql = `
-          INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid, image_url)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
           ON CONFLICT (recipeid) DO UPDATE SET
             name = EXCLUDED.name,
             description = EXCLUDED.description,
             ingredients = EXCLUDED.ingredients,
             serving_size = EXCLUDED.serving_size,
             url = EXCLUDED.url,
-            instructions = EXCLUDED.instructions
+            instructions = EXCLUDED.instructions,
+            image_url = COALESCE(recipe_display.image_url, EXCLUDED.image_url)
           RETURNING id`;
         const upsertResult = await pool.query(upsertSql, [
           recipe.name,
@@ -1446,12 +1474,104 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
           recipe.serving_size,
           recipe.url,
           recipe.instructions,
-          recipe.id // recipeID
+          recipe.id, // recipeID
+          recipe.image_url || null
         ]);
         res.json({ success: true, display_id: upsertResult.rows[0].id });
       } catch (err) {
         console.error('[DISPLAY][ERROR]', err);
         res.status(500).json({ error: err.message });
+      }
+    });
+
+    // Admin image management for recipe_display cards/details.
+    app.get('/api/admin/recipe-images', requireAdmin, async (req, res) => {
+      try {
+        await ensureRecipeDisplayImageColumn();
+        const result = await pool.query(
+          `SELECT id, recipeid, name, url, image_url
+           FROM recipe_display
+           ORDER BY lower(name), id`
+        );
+        res.json({ success: true, recipes: result.rows });
+      } catch (err) {
+        console.error('[ADMIN_RECIPE_IMAGES][LIST][ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.put('/api/admin/recipe-images/:id', requireAdmin, async (req, res) => {
+      const { id } = req.params;
+      const imageUrl = String((req.body && req.body.image_url) || '').trim();
+
+      if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl)) {
+        return res.status(400).json({ success: false, error: 'Image URL must start with http(s):// or /images/.' });
+      }
+
+      try {
+        await ensureRecipeDisplayImageColumn();
+        const result = await pool.query(
+          `UPDATE recipe_display
+           SET image_url = $1
+           WHERE id = $2
+           RETURNING id, recipeid, name, url, image_url`,
+          [imageUrl || null, id]
+        );
+
+        if (!result.rowCount) {
+          return res.status(404).json({ success: false, error: 'Recipe not found in display table.' });
+        }
+
+        res.json({ success: true, recipe: result.rows[0] });
+      } catch (err) {
+        console.error('[ADMIN_RECIPE_IMAGES][SET_URL][ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.post('/api/admin/recipe-images/:id/upload', requireAdmin, async (req, res) => {
+      const { id } = req.params;
+      const imageData = req.body && req.body.image_data;
+      const parsed = parseImageDataUrl(imageData);
+
+      if (!parsed || !parsed.buffer || !parsed.buffer.length) {
+        return res.status(400).json({ success: false, error: 'Invalid image payload. Expected PNG/JPG/WEBP/GIF data URL.' });
+      }
+
+      if (parsed.buffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ success: false, error: 'Image is too large. Use an image under 8MB.' });
+      }
+
+      try {
+        await ensureRecipeDisplayImageColumn();
+
+        const dir = path.join(__dirname, 'public', 'images', 'recipe_user_uploads');
+        await fs.promises.mkdir(dir, { recursive: true });
+
+        const baseName = sanitizeImageFileBase(req.body && req.body.file_name);
+        const stamp = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        const fileName = `${baseName}_${stamp}.${parsed.ext}`;
+        const filePath = path.join(dir, fileName);
+
+        await fs.promises.writeFile(filePath, parsed.buffer);
+
+        const publicImageUrl = `/images/recipe_user_uploads/${encodeURIComponent(fileName)}`;
+        const updateResult = await pool.query(
+          `UPDATE recipe_display
+           SET image_url = $1
+           WHERE id = $2
+           RETURNING id, recipeid, name, url, image_url`,
+          [publicImageUrl, id]
+        );
+
+        if (!updateResult.rowCount) {
+          return res.status(404).json({ success: false, error: 'Recipe not found in display table.' });
+        }
+
+        res.json({ success: true, recipe: updateResult.rows[0] });
+      } catch (err) {
+        console.error('[ADMIN_RECIPE_IMAGES][UPLOAD][ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
       }
     });
     app.get('/api/recipes', async (req, res) => {

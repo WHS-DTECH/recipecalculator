@@ -209,7 +209,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = row.name || '(No Name)';
     const recipeNumber = row.recipeid || row.recipe_id || row.id;
     const category = getDishCategory(name);
-    const imageUrl = getDishImage(name, row.id, category, index);
+    const imageUrl = String(row.image_url || '').trim() || getDishImage(name, row.id, category, index);
     const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
     const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
     const categoryChipHtml = category === 'Student Favourites'

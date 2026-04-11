@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const title = recipe.name || '(No Name)';
           const recipeNumber = recipe.recipeid || recipe.recipe_id || recipe.id;
           const category = getDishCategory(title);
-          const imageUrl = getDishImage(title, recipe.id, category);
+          const imageUrl = String(recipe.image_url || '').trim() || getDishImage(title, recipe.id, category);
 
           const titleEl = document.getElementById('recipeTitle');
           const recipeIdEl = document.getElementById('recipeIdPill');
