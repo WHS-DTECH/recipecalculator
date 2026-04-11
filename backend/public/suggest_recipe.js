@@ -124,6 +124,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         no_recipients: 'No Teacher/Admin recipients were found.',
                         smtp_not_configured: 'Email is not configured yet (SMTP settings missing).',
                         sender_not_configured: 'Email sender address is not configured.',
+                        resend_not_configured: 'Email API is not configured (RESEND_API_KEY missing).',
+                        resend_failed: 'Email API delivery failed.',
+                        fetch_unavailable: 'Server fetch support unavailable for email API.',
                         not_accepted: 'Email server did not accept recipients.',
                         send_failed: 'Email sending failed. Please check server logs.',
                         send_timeout: 'Email delivery timed out while contacting SMTP. Suggestion was still saved.'

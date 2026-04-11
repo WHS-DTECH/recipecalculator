@@ -192,6 +192,114 @@ async function getSuggestionRoleRecipients() {
   return Array.from(recipients);
 }
 
+function getResendConfig() {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const fromAddress = String(
+    process.env.RESEND_FROM ||
+    process.env.SUGGESTION_EMAIL_FROM ||
+    process.env.SMTP_FROM ||
+    process.env.SMTP_USER ||
+    ''
+  ).trim();
+  return { apiKey, fromAddress };
+}
+
+async function sendSuggestionNotificationViaResend(suggestion, recipients) {
+  const cfg = getResendConfig();
+  if (!cfg.apiKey) {
+    return {
+      sent: false,
+      reason: 'resend_not_configured',
+      recipients,
+      recipientCount: recipients.length
+    };
+  }
+
+  if (!cfg.fromAddress) {
+    return {
+      sent: false,
+      reason: 'sender_not_configured',
+      recipients,
+      recipientCount: recipients.length
+    };
+  }
+
+  if (typeof fetch !== 'function') {
+    return {
+      sent: false,
+      reason: 'fetch_unavailable',
+      recipients,
+      recipientCount: recipients.length
+    };
+  }
+
+  const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
+  const suggester = suggestion.suggested_by || 'Unknown';
+  const email = suggestion.email || 'Not provided';
+  const date = suggestion.date || '';
+  const reason = suggestion.reason || '';
+  const url = suggestion.url || '';
+
+  const text = [
+    'New recipe suggestion submitted.',
+    '',
+    `Date: ${date}`,
+    `Recipe: ${recipeName}`,
+    `Suggested By: ${suggester}`,
+    `Email: ${email}`,
+    `URL: ${url || 'N/A'}`,
+    '',
+    'Reason:',
+    reason || 'N/A'
+  ].join('\n');
+
+  try {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        from: cfg.fromAddress,
+        to: recipients,
+        subject: `[Recipe Suggestion] ${recipeName}`,
+        text
+      })
+    });
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      return {
+        sent: false,
+        reason: 'resend_failed',
+        recipients,
+        recipientCount: recipients.length,
+        error: `HTTP ${response.status} ${response.statusText} ${bodyText}`.trim()
+      };
+    }
+
+    const payload = await response.json().catch(() => ({}));
+    return {
+      sent: true,
+      reason: 'sent',
+      channel: 'resend',
+      recipients,
+      recipientCount: recipients.length,
+      acceptedCount: recipients.length,
+      messageId: payload && payload.id ? String(payload.id) : ''
+    };
+  } catch (err) {
+    return {
+      sent: false,
+      reason: 'resend_failed',
+      recipients,
+      recipientCount: recipients.length,
+      error: err && err.message ? err.message : String(err)
+    };
+  }
+}
+
 function createSuggestionMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = String(process.env.SMTP_USER || '').trim();
@@ -254,6 +362,13 @@ async function sendSuggestionNotificationEmail(suggestion) {
       recipients: [],
       recipientCount: 0
     };
+  }
+
+  // Prefer API-based delivery when configured, as it is often more reliable on hosted platforms.
+  if (String(process.env.RESEND_API_KEY || '').trim()) {
+    const resendResult = await sendSuggestionNotificationViaResend(suggestion, recipients);
+    if (resendResult.sent) return resendResult;
+    console.error('[SUGGESTIONS] Resend delivery failed, falling back to SMTP:', resendResult.error || resendResult.reason);
   }
 
   const transporter = createSuggestionMailer();
