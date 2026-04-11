@@ -1,6 +1,25 @@
 let permissionsData = [];
 let ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'admin'];
 
+function getCurrentStaffEmail() {
+  try {
+    const raw = sessionStorage.getItem('currentStaffUser');
+    const parsed = raw ? JSON.parse(raw) : null;
+    return String(parsed && parsed.email_school ? parsed.email_school : '').trim().toLowerCase();
+  } catch (err) {
+    return '';
+  }
+}
+
+function withAdminIdentityHeaders(headers = {}) {
+  const merged = { ...headers };
+  const staffEmail = getCurrentStaffEmail();
+  const role = String(sessionStorage.getItem('navbar_user_role') || '').trim().toLowerCase();
+  if (staffEmail) merged['x-user-email'] = staffEmail;
+  if (role) merged['x-user-role'] = role;
+  return merged;
+}
+
 // Fetch permissions from backend on page load
 window.addEventListener('DOMContentLoaded', () => {
   fetchPermissions();
@@ -87,7 +106,7 @@ function savePermissions() {
 
     fetch(`/api/permissions/${roleName}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: withAdminIdentityHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(permissions)
     })
       .then(res => res.json())
@@ -134,7 +153,7 @@ function resetPermissions() {
 
   fetch('/api/permissions/reset', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' }
+    headers: withAdminIdentityHeaders({ 'Content-Type': 'application/json' })
   })
     .then(res => res.json())
     .then(data => {

@@ -310,13 +310,28 @@
     const unitRegex = /\b(cups?|cup|tbsp|tsp|g|kg|mg|ml|l|oz|lb|pinch|cloves?|slices?|eggs?)\b/i;
     const trailingQtyRegex = /^[a-z][a-z0-9'()&\s,\/.\-]*\s-\s*(?:\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞])(?:\s*(?:cups?|cup|tbsp|tsp|g|kg|mg|ml|l|oz|lb|pinch(?:es)?|cloves?|slices?|eggs?|bunch(?:es)?))?\s*$/i;
     const seasoningRegex = /\bto\s+taste\b/i;
+    const standaloneMeasurementRegex = /^(?:teaspoons?|tablespoons?|tbsp|tsp|cups?|cup|g|kg|mg|ml|l|oz|lb|pinch(?:es)?|cloves?|slices?|eggs?)$/i;
     const instructionVerbRegex = /\b(place|bring|reduce|cover|remove|transfer|stir|use|slice|serve|rinse|preheat|bake|cook|mix|whisk)\b/i;
+    const methodStartRegex = /^(?:heat|add|cook|simmer|serve|bring|once|if|place|stir|mix|reduce|cover|remove)\b/i;
     const stopRegex = /^(videos?|method\b|instructions?\b|can you|try one of these recipes|products|home recipes|comments|review|favourites|join|newsletter|contact|privacy|terms|school visits|tour|cafe|related recipes|you may like these|chelsea products in recipe)/i;
     const splitPacked = (line) => String(line || '')
       .split(/\s*,\s*(?=(?:\d+(?:[/.]\d+)?(?:\s*-\s*\d+(?:[/.]\d+)?)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]))/)
       .map(part => part.trim())
       .filter(Boolean);
     const equipmentLineRegex = /\b(baking paper|baking tray|roasting dish|cutting board|kitchen scales?|measuring cups?|measuring spoons?|\btongs?\b|\bspoons?\b|equipment)\b/i;
+
+    const isIngredientNameLike = (line) => {
+      const text = String(line || '').trim();
+      if (!text) return false;
+      if (stopRegex.test(text)) return false;
+      if (isBareStepNumber(text)) return false;
+      if (qtyRegex.test(text)) return false;
+      if (instructionVerbRegex.test(text)) return false;
+      if (methodStartRegex.test(text)) return false;
+      if (/^(weight|ingredient|measurement|tags|serving sizes|see all weight requirements)$/i.test(text)) return false;
+      if (/^(year\s*\d|or)$/i.test(text)) return false;
+      return /[a-z]/i.test(text);
+    };
 
     const isBareStepNumber = (line) => /^\d+[.)]?$/.test(String(line || '').trim());
 
@@ -352,7 +367,38 @@
         for (const part of parts) {
           if (stopRegex.test(part) && started) return out;
           if (isIngredientLike(part)) {
-            out.push(part);
+            let combinedPart = part;
+            if (/^\d/.test(part) && i + 1 < maxEnd) {
+              const nextLine = String(workingLines[i + 1] || '').trim();
+              const nextNextLine = String(workingLines[i + 2] || '').trim();
+              const looksLikeSplitTableRow = isIngredientNameLike(nextLine)
+                && (
+                  !nextNextLine
+                  || isIngredientLike(nextNextLine)
+                  || stopRegex.test(nextNextLine)
+                  || standaloneMeasurementRegex.test(nextNextLine)
+                  // Handle the final table ingredient where the next line starts method text,
+                  // e.g. "1.4kg" + "Water" + "Heat cooking oil...".
+                  || instructionVerbRegex.test(nextNextLine)
+                  || methodStartRegex.test(nextNextLine)
+                  || /^(home|contact|privacy|copyright|feedback)\b/i.test(nextNextLine)
+                );
+              if (looksLikeSplitTableRow) {
+                combinedPart = `${part} ${nextLine}`;
+                if (standaloneMeasurementRegex.test(nextNextLine) && i + 3 < maxEnd) {
+                  const afterMeasurement = String(workingLines[i + 3] || '').trim();
+                  if (!afterMeasurement || isIngredientLike(afterMeasurement) || stopRegex.test(afterMeasurement)) {
+                    i += 2;
+                  } else {
+                    i += 1;
+                  }
+                } else {
+                  i += 1;
+                }
+              }
+            }
+
+            out.push(combinedPart);
             started = true;
             addedThisLine = true;
           }

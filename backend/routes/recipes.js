@@ -137,7 +137,12 @@ function isMeaningfulIngredientLine(line) {
 function isLikelyInstructionToken(line) {
   const token = String(line || '').trim();
   if (!token) return false;
-  if (/[.!?]/.test(token)) return true;
+  // Keep quantity/measurement ingredient lines even when they contain decimal dots
+  // such as "3.7kg Rice".
+  if (/^\d+(?:\.\d+)?\s*(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)\b/i.test(token)) {
+    return false;
+  }
+  if (/[!?]/.test(token) || /\.(?:\s|$)/.test(token)) return true;
   if (/^for\s+the\s+doughboys\b/i.test(token)) return true;
   if (/\b(bring|add|boil|simmer|cook|serve|mix|top up|form|divide|mould|continue cooking)\b/i.test(token)) return true;
   return false;
@@ -285,6 +290,22 @@ function formatIngredientsAsMeasureFooditem(cleanedLines) {
       return merged.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
     })
     .filter(Boolean);
+}
+
+function splitExtractedIngredientsPreserveOrder(rawExtractedIngredients) {
+  const raw = String(rawExtractedIngredients || '').trim();
+  if (!raw) return [];
+
+  const qtyToken = `${INGREDIENT_QTY_PATTERN}(?:\\s*[-–]\\s*${INGREDIENT_QTY_PATTERN})?`;
+  const qtyFirstBoundary = new RegExp(`\\s*,\\s*(?=${qtyToken}\\s*${INGREDIENT_UNITS_PATTERN}\\b)`, 'gi');
+
+  return raw
+    .replace(/<br\s*\/?>/gi, '\n')
+    .split(/\r?\n/)
+    .flatMap((line) => splitCompressedIngredientText(String(line || '')).split(/\r?\n/))
+    .flatMap((line) => String(line || '').split(qtyFirstBoundary))
+    .map(normalizeIngredientLine)
+    .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
 }
 
 // PUT /api/recipes/:id/raw - Save raw data for a recipe (file only)
@@ -494,11 +515,14 @@ router.post('/cleanup-ingredients-stepwise', async (req, res) => {
       const rawExtractedIngredients = row.extracted_ingredients;
       const rawIngredients = row.ingredients;
       const rawSource = rawExtractedIngredients || rawIngredients || '';
-      const cleaned = cleanIngredientsForDisplay(rawSource);
-      const cleanedLines = cleaned
-        .split('\n')
-        .map(line => line.trim())
-        .filter(Boolean);
+      const extractedOrderedLines = splitExtractedIngredientsPreserveOrder(rawExtractedIngredients);
+      const cleaned = extractedOrderedLines.length ? '' : cleanIngredientsForDisplay(rawSource);
+      const cleanedLines = extractedOrderedLines.length
+        ? extractedOrderedLines
+        : cleaned
+            .split('\n')
+            .map(line => line.trim())
+            .filter(Boolean);
       const formattedLines = formatIngredientsAsMeasureFooditem(cleanedLines);
       const listItems = formattedLines
         .map(line => String(line || '').trim())

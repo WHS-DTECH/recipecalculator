@@ -9,15 +9,188 @@
   <link rel="stylesheet" href="shared/base.css">
   <link rel="stylesheet" href="shared/components.css">
   <link rel="stylesheet" href="admin_styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --teacher-bg: #f3f7fb;
+      --teacher-surface: #ffffff;
+      --teacher-border: #d4deea;
+      --teacher-heading: #18324a;
+      --teacher-text: #233648;
+      --teacher-muted: #5d7186;
+      --teacher-primary: #1f4e79;
+      --teacher-primary-strong: #173a5b;
+      --teacher-success: #2e7d32;
+      --teacher-success-strong: #1f5a24;
+      --teacher-accent: #2b7a78;
+    }
+
+    body {
+      font-family: 'Nunito', sans-serif;
+      color: var(--teacher-text);
+      background:
+        radial-gradient(1200px 420px at 0% -20%, #dce9f8 0%, transparent 60%),
+        radial-gradient(860px 360px at 100% -25%, #d5efe7 0%, transparent 56%),
+        var(--teacher-bg);
+    }
+
+    .main-content-margins {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 0.9rem 1rem 1.2rem;
+    }
+
+    .main-content-margins > div:first-child {
+      background: linear-gradient(120deg, #ffffff 0%, #eef4fb 100%);
+      border: 1px solid var(--teacher-border);
+      border-left: 6px solid var(--teacher-primary);
+      border-radius: 14px;
+      padding: 0.8rem 0.95rem;
+      box-shadow: 0 8px 24px rgba(23, 58, 91, 0.08);
+      margin-bottom: 0.95rem;
+    }
+
+    .main-content-margins h2 {
+      color: var(--teacher-heading);
+      letter-spacing: 0.01em;
+    }
+
+    .setup-section {
+      background: var(--teacher-surface);
+      border: 1px solid var(--teacher-border);
+      border-radius: 12px;
+      padding: 0.75rem 0.85rem;
+      box-shadow: 0 3px 12px rgba(21, 54, 88, 0.06);
+    }
+
+    .setup-section-title {
+      color: var(--teacher-heading);
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    .setup-section-desc {
+      color: var(--teacher-muted);
+    }
+
+    .btn,
+    button[id$='Btn'] {
+      border-radius: 8px;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      min-height: 40px;
+      transition: transform 0.08s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+    }
+
+    .btn:active,
+    button[id$='Btn']:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary,
+    #smartUploadBtn,
+    #teacherUploadAndSyncPdfBtn,
+    #teacherSaveRecipeBtn,
+    #saveRawDataBtn,
+    #teacherAcceptAllExtractsBtn,
+    #teacherAutoPublishAsyncSyncBtn,
+    #teacherAutoPublishAcceptBtn,
+    #teacherAutoPublishRefreshTableBtn,
+    #teacherAsyncSyncBtn {
+      background: var(--teacher-primary) !important;
+      border-color: var(--teacher-primary-strong) !important;
+      color: #fff !important;
+      box-shadow: 0 4px 10px rgba(31, 78, 121, 0.24);
+    }
+
+    .btn-primary:hover,
+    #smartUploadBtn:hover,
+    #teacherUploadAndSyncPdfBtn:hover,
+    #teacherSaveRecipeBtn:hover,
+    #saveRawDataBtn:hover,
+    #teacherAcceptAllExtractsBtn:hover,
+    #teacherAutoPublishAsyncSyncBtn:hover,
+    #teacherAutoPublishAcceptBtn:hover,
+    #teacherAutoPublishRefreshTableBtn:hover,
+    #teacherAsyncSyncBtn:hover {
+      background: var(--teacher-primary-strong) !important;
+    }
+
+    .btn-success,
+    #teacherExtractAllBtn,
+    #teacherAutoPublishBtn {
+      background: var(--teacher-success) !important;
+      border-color: var(--teacher-success-strong) !important;
+      color: #fff !important;
+      box-shadow: 0 4px 10px rgba(46, 125, 50, 0.25);
+    }
+
+    .btn-success:hover,
+    #teacherExtractAllBtn:hover,
+    #teacherAutoPublishBtn:hover {
+      background: var(--teacher-success-strong) !important;
+    }
+
+    #teacherPdfUploadArea {
+      border-color: var(--teacher-accent) !important;
+      color: var(--teacher-accent) !important;
+      background: #eef9f7 !important;
+      border-radius: 10px !important;
+      font-weight: 700;
+    }
+
+    #teacherAddRecipeWorkspace {
+      gap: 1.15rem !important;
+    }
+
+    #teacherAddRecipeRightColumn .setup-section {
+      border-left: 4px solid var(--teacher-primary);
+      background: linear-gradient(180deg, #ffffff 0%, #f7fbff 100%);
+    }
+
+    #recipeMatrixStatus {
+      color: #2c5f8a !important;
+      font-weight: 700;
+    }
+
+    #teacherApiStatusBadge {
+      background: #eef4fb !important;
+      border-color: #bfd1e6 !important;
+      color: #2a4f72 !important;
+    }
+
+    .ui-progress {
+      border: 1px solid #cddae8;
+      background: #edf3f9;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .ui-progress-bar {
+      background: linear-gradient(90deg, #1f4e79 0%, #2b7a78 100%) !important;
+    }
+
+    #teacherAutoPublishReviewBox {
+      background: #f4f8ff !important;
+      border-color: #c8d7ed !important;
+    }
+
     @media (max-width: 1100px) {
+      .main-content-margins {
+        padding: 0.72rem;
+      }
+
       #teacherAddRecipeWorkspace {
         grid-template-columns: 1fr !important;
       }
+
       #teacherAddRecipeRightColumn {
         position: static !important;
       }
     }
+
   </style>
 </head>
 <body>
@@ -348,6 +521,20 @@
       let autoPublishAsyncSyncInProgress = false;
       let allRecipeRowsCache = [];
       let selectedPdfFile = null;
+
+      function getPreferredRecipeIdFromLocation() {
+        const params = new URLSearchParams(window.location.search);
+        const queryRecipeId = String(params.get('recipeId') || '').trim();
+        const hashMatch = /^#recipe-(.+)$/.exec(window.location.hash || '');
+        const hashRecipeId = hashMatch ? decodeURIComponent(hashMatch[1]) : '';
+        let storedRecipeId = '';
+        try {
+          storedRecipeId = String(sessionStorage.getItem('selectedRecipeId') || '').trim();
+        } catch (_) {
+          storedRecipeId = '';
+        }
+        return queryRecipeId || hashRecipeId || storedRecipeId;
+      }
       const extractAllCells = {
         serving: {
           extracted: document.getElementById('extractAllServingExtracted'),
@@ -1022,7 +1209,7 @@
           throw new Error(result.error || 'Sync failed.');
         }
         setTeacherPdfStatus(`Sync complete: ${result.inserted} recipes added.`, 'success');
-        await repopulateRecipeSelect();
+        await repopulateRecipeSelect(getPreferredRecipeIdFromLocation());
         await refreshRecipeMatrix();
         return result;
       }

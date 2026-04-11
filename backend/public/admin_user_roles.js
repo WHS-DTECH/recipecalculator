@@ -6,6 +6,25 @@ let optionsCache = {
 const USER_USAGE_KEY = 'adminUserRolesEmailUsage';
 const MAX_MOST_USED = 8;
 
+function getCurrentStaffEmail() {
+  try {
+    const raw = sessionStorage.getItem('currentStaffUser');
+    const parsed = raw ? JSON.parse(raw) : null;
+    return String(parsed && parsed.email_school ? parsed.email_school : '').trim().toLowerCase();
+  } catch (err) {
+    return '';
+  }
+}
+
+function withAdminIdentityHeaders(headers = {}) {
+  const merged = { ...headers };
+  const staffEmail = getCurrentStaffEmail();
+  const role = String(sessionStorage.getItem('navbar_user_role') || '').trim().toLowerCase();
+  if (staffEmail) merged['x-user-email'] = staffEmail;
+  if (role) merged['x-user-role'] = role;
+  return merged;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   const userTypeSelect = document.getElementById('userTypeSelect');
   const userIdentifierLabel = document.getElementById('userIdentifierLabel');
@@ -433,7 +452,7 @@ function addRoleToUser() {
 
   fetch('/api/user_roles/add', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: withAdminIdentityHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify({ user_type: userType, user_identifier: userIdentifier, role_name: roleName })
   })
     .then(res => res.json())
@@ -462,7 +481,8 @@ function removeRolesForUser(userType, userIdentifier) {
   }
 
   fetch(`/api/user_roles/${encodeURIComponent(userType)}/${encodeURIComponent(userIdentifier)}`, {
-    method: 'DELETE'
+    method: 'DELETE',
+    headers: withAdminIdentityHeaders()
   })
     .then(res => res.json())
     .then(data => {

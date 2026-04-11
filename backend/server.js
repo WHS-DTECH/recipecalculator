@@ -13,6 +13,48 @@ app.use('/api/ingredients/inventory', (req, res, next) => {
 });
 
 const pool = require('./db');
+const { requireAdmin } = require('./middleware/requireAdmin');
+
+// Compatibility wrapper for legacy SQLite-style db.* calls that still exist in this file.
+// This keeps legacy endpoints from throwing ReferenceError while the remaining handlers are migrated.
+function normalizeLegacySql(sql) {
+  const base = String(sql || '').replace(/\s+COLLATE\s+NOCASE/gi, '');
+  let index = 0;
+  return base.replace(/\?/g, () => {
+    index += 1;
+    return `$${index}`;
+  });
+}
+
+const db = {
+  all(sql, params, callback) {
+    const cb = typeof params === 'function' ? params : callback;
+    const values = Array.isArray(params) ? params : [];
+    pool.query(normalizeLegacySql(sql), values)
+      .then((result) => cb && cb(null, result.rows || []))
+      .catch((err) => cb && cb(err));
+  },
+  get(sql, params, callback) {
+    const cb = typeof params === 'function' ? params : callback;
+    const values = Array.isArray(params) ? params : [];
+    pool.query(normalizeLegacySql(sql), values)
+      .then((result) => cb && cb(null, (result.rows && result.rows[0]) || undefined))
+      .catch((err) => cb && cb(err));
+  },
+  run(sql, params, callback) {
+    const cb = typeof params === 'function' ? params : callback;
+    const values = Array.isArray(params) ? params : [];
+    pool.query(normalizeLegacySql(sql), values)
+      .then((result) => {
+        if (!cb) return;
+        cb.call({
+          changes: result.rowCount || 0,
+          lastID: result.rows && result.rows[0] && result.rows[0].id ? result.rows[0].id : undefined
+        }, null);
+      })
+      .catch((err) => cb && cb.call({ changes: 0, lastID: undefined }, err));
+  }
+};
 
 // Load extracted ingredients utility
 const { loadExtractedIngredients } = require('./public/load_extracted_ingredients');
@@ -141,7 +183,7 @@ app.post('/api/suggestions', async (req, res) => {
 });
 
 // --- Cleanup Instructions API ---
-app.post('/api/recipes/cleanup-instructions', async (req, res) => {
+app.post('/api/recipes/cleanup-instructions', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query('SELECT id, instructions FROM recipes');
     let updated = 0;
@@ -553,7 +595,7 @@ app.get('/api/class_upload/all', async (req, res) => {
 });
 
 // DELETE /api/class-upload/all: Delete all class records
-app.delete('/api/class-upload/all', async (req, res) => {
+app.delete('/api/class-upload/all', requireAdmin, async (req, res) => {
   try {
     await pool.query('DELETE FROM class_upload');
     res.json({ success: true });
@@ -721,7 +763,7 @@ app.get('/api/timetable/all', async (req, res) => {
     });
 
     // DELETE all ingredients inventory
-    app.delete('/api/ingredients-inventory', async (req, res) => {
+    app.delete('/api/ingredients-inventory', requireAdmin, async (req, res) => {
       try {
         await pool.query('DELETE FROM ingredients_inventory');
         res.json({ success: true });
@@ -791,8 +833,8 @@ app.get('/api/timetable/all', async (req, res) => {
     });
 
 
-// Update raw_data for an upload and split ingredient quantities
-app.put('/api/uploads/:id/raw', (req, res) => {
+// Legacy duplicate endpoint retained under a non-production path for reference only.
+app.put('/api/_legacy/uploads/:id/raw', (req, res) => {
   const { id } = req.params;
   const { recipe_id, raw_data } = req.body;
   // (Removed old db.run call, now using pool.query above)
@@ -1296,7 +1338,8 @@ app.post('/api/serving-size/solution', (req, res) => {
 });
 
 // --- Uploads ---
-app.put('/api/uploads/:id/raw', async (req, res) => {
+// Deprecated duplicate route kept under explicit deprecated path to avoid collisions.
+app.put('/api/_deprecated/uploads/:id/raw', async (req, res) => {
   const { id } = req.params;
   const { recipe_id, raw_data } = req.body;
   console.log('[DEBUG /api/uploads/:id/raw] Called with:', { id, recipe_id, raw_data_length: raw_data ? raw_data.length : undefined });

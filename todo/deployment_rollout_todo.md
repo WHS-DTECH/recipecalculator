@@ -1,5 +1,9 @@
 # Deployment And Rollout TODO
 
+## Fast Track Reference
+
+- Use the focused pre-deploy list in todo/render_predeploy_checklist.md before pushing to Render.
+
 ## Phase 1: Finish UI And Design Pass
 
 - Apply the agreed design improvements across the main tester-facing pages.

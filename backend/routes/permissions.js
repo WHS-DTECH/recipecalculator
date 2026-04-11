@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
 // Default permissions structure
 const DEFAULT_ROLES = {
@@ -115,7 +116,7 @@ router.get('/all', async (req, res) => {
 });
 
 // PUT /api/permissions/:roleName - Update permissions for a role
-router.put('/:roleName', async (req, res) => {
+router.put('/:roleName', requireAdmin, async (req, res) => {
   const roleName = req.params.roleName;
   const permissions = req.body;
 
@@ -149,7 +150,7 @@ router.put('/:roleName', async (req, res) => {
 });
 
 // POST /api/permissions/reset - Reset to default permissions
-router.post('/reset', async (req, res) => {
+router.post('/reset', requireAdmin, async (req, res) => {
   try {
     await schemaReady;
     await pool.query('TRUNCATE TABLE role_permissions RESTART IDENTITY');

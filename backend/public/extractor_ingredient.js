@@ -79,6 +79,72 @@ document.addEventListener('DOMContentLoaded', function () {
     return [];
   }
 
+  function normalizeIngredientWhitespace(value) {
+    return String(value || '')
+      .replace(/\r/g, '\n')
+      .replace(/\u00a0/g, ' ')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\s*\n\s*/g, '\n')
+      .trim();
+  }
+
+  function looksLikeIngredientStart(fragment) {
+    return /^(?:\d+(?:[.,]\d+)?|\d+\s+\d+\/\d+|[¼½¾⅓⅔⅛⅜⅝⅞]|one|two|three|four|five|six|seven|eight|nine|ten|a|an)\b/i.test(String(fragment || '').trim());
+  }
+
+  function splitCommaJoinedIngredientLine(line) {
+    const text = normalizeIngredientWhitespace(line);
+    if (!text) return [];
+
+    const segments = [];
+    let startIndex = 0;
+
+    for (let index = 0; index < text.length; index += 1) {
+      if (text[index] !== ',') continue;
+      const nextPart = text.slice(index + 1).trim();
+      if (!looksLikeIngredientStart(nextPart)) continue;
+      segments.push(text.slice(startIndex, index).trim());
+      startIndex = index + 1;
+    }
+
+    segments.push(text.slice(startIndex).trim());
+    return segments.filter(Boolean);
+  }
+
+  function cleanupIngredientLines(result) {
+    const rawItems = Array.isArray(result)
+      ? result
+      : String(result || '').split(/\r?\n/);
+
+    const cleaned = [];
+    rawItems.forEach((item) => {
+      const normalized = normalizeIngredientWhitespace(item)
+        .replace(/^\s*[-•*]+\s*/g, '')
+        .replace(/\bhttps?:\/\/\S+/gi, '')
+        .replace(/\bheartfoundation\.org\.nz\b/gi, '')
+        .replace(/\|\s*\d{4}\b/g, '')
+        .replace(/\s+,/g, ',')
+        .replace(/,\s*,+/g, ', ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      splitCommaJoinedIngredientLine(normalized).forEach((segment) => {
+        const finalLine = segment
+          .replace(/\s+,/g, ',')
+          .replace(/,\s*,+/g, ', ')
+          .replace(/\s{2,}/g, ' ')
+          .trim();
+        if (finalLine) cleaned.push(finalLine);
+      });
+    });
+
+    return cleaned;
+  }
+
+  function formatIngredientResultForDisplay(result) {
+    return cleanupIngredientLines(result).join('\n');
+  }
+
   // Load Raw Data button event handler
   if (loadRawBtn) {
     loadRawBtn.addEventListener('click', async function () {
@@ -303,12 +369,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
       },
       {
-        name: 'Extract ingredient-like quantity lines',
+        name: 'Extract ingredient-like quantity lines and clean punctuation',
         applied: false,
         result: '',
         solved: false,
         run: async function(recipeId) {
-          this.result = parseIngredientLinesFromRaw(rawData);
+          this.result = cleanupIngredientLines(parseIngredientLinesFromRaw(rawData));
           this.applied = true;
           this.solved = !!this.result.length;
           return this.result;
@@ -347,11 +413,14 @@ document.addEventListener('DOMContentLoaded', function () {
     console.log('[DEBUG] renderStepTable called');
     strategyTable.innerHTML = '';
     stepStrategies.forEach((s, i) => {
+      const renderedResult = Array.isArray(s.result)
+        ? formatIngredientResultForDisplay(s.result)
+        : String(s.result || '');
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${s.name}</td>
         <td>${s.applied ? '✓' : '—'}</td>
-        <td>${s.result ? `<span style='font-size:0.95em;'>${s.result}</span>` : '<span style="color:#aaa;">(no result)</span>'}</td>
+        <td>${renderedResult ? `<span style='font-size:0.95em;white-space:pre-wrap;'>${renderedResult}</span>` : '<span style="color:#aaa;">(no result)</span>'}</td>
         <td>${s.solved ? '✓' : '✗'}</td>
       `;
       strategyTable.appendChild(tr);
@@ -379,7 +448,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       renderStepTable();
     }
-    currentStrategyResult.textContent = step.result || '(no result)';
+    currentStrategyResult.textContent = formatIngredientResultForDisplay(step.result) || '(no result)';
     acceptResultBtn.style.display = '';
     continueBtn.style.display = stepIndex < stepStrategies.length - 1 ? '' : 'none';
   }
@@ -392,7 +461,7 @@ document.addEventListener('DOMContentLoaded', function () {
     stepStrategies[stepIndex].applied = true;
     stepStrategies[stepIndex].solved = true;
     if (stepStrategies[stepIndex].result) {
-      solutionBox.value = stepStrategies[stepIndex].result;
+      solutionBox.value = formatIngredientResultForDisplay(stepStrategies[stepIndex].result);
     }
     renderStepTable();
     showCurrentStep();
@@ -419,7 +488,7 @@ document.addEventListener('DOMContentLoaded', function () {
         alert('Please select a recipe. [Debug: recipeIdToSend not found]');
         return;
       }
-      let solution = solutionBox.value.trim();
+      let solution = formatIngredientResultForDisplay(solutionBox.value).trim();
       console.log('[SEND SOLUTION] recipeIdToSend:', recipeIdToSend, 'solution:', solution);
       // Clean up: remove bullet points, text boxes, and borders
       // Remove common bullet characters and leading whitespace
@@ -493,7 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
     result = parseIngredientLinesFromRaw(rawData);
     if (result.length) strategyUsed = 'Extract ingredient lines from raw text';
 
-    autoExtractSolution = result.join('\n');
+    autoExtractSolution = formatIngredientResultForDisplay(result);
     if (autoExtractResultText) {
       autoExtractResultText.textContent = autoExtractSolution
         ? `Ingredients found (${strategyUsed || 'Auto Extract'}):\n${autoExtractSolution}`

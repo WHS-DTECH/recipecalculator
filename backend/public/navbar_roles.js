@@ -26,17 +26,16 @@
         return res.json();
       })
       .then(data => {
-        if (!data) return '';
-        const permissions = Array.isArray(data.permissions) ? data.permissions : [];
-        const hasAdminRole = permissions.some(p => normalizeRole(p && p.role_name) === 'admin');
-        return hasAdminRole ? 'admin' : '';
+        // This endpoint describes global role definitions, not the current user identity.
+        // Do not infer a user role from it.
+        return '';
       })
       .catch(() => '');
   }
   
   /**
-   * Fetch current user's role from the backend
-   * Until real auth identity is available, keep Admin visible by default.
+  * Fetch current user's role from available identity hints.
+  * Never default to admin when identity is unknown.
    */
   function detectUserRole() {
     const urlRole = roleFromUrlOverride();
@@ -53,20 +52,20 @@
         }
 
         const storedRole = getStoredUserRole();
-        if (storedRole === 'admin') {
+        if (storedRole) {
           updateNavbarVisibility(storedRole);
           return;
         }
 
-        setUserRole('admin');
+        setUserRole('teacher');
       })
       .catch(() => {
         const storedRole = getStoredUserRole();
-        if (storedRole === 'admin') {
+        if (storedRole) {
           updateNavbarVisibility(storedRole);
           return;
         }
-        setUserRole('admin');
+        setUserRole('teacher');
       });
   }
 
@@ -74,7 +73,7 @@
    * Set the user's role and update navbar visibility
    */
   function setUserRole(role) {
-    const normalized = normalizeRole(role) || 'admin';
+    const normalized = normalizeRole(role) || 'teacher';
     sessionStorage.setItem(ROLE_STORAGE_KEY, normalized);
     updateNavbarVisibility(normalized);
   }
@@ -90,7 +89,7 @@
    * Update navbar sections based on user role
    */
   function updateNavbarVisibility(role) {
-    const normalized = normalizeRole(role) || 'admin';
+    const normalized = normalizeRole(role) || 'teacher';
     document.documentElement.setAttribute('data-navbar-role', normalized);
 
     // Hide admin sections if user is not admin
@@ -120,11 +119,11 @@
    */
   function initializeNavbarRoles() {
     const existingRole = getStoredUserRole();
-    if (existingRole === 'admin') {
+    if (existingRole) {
       updateNavbarVisibility(existingRole);
     }
 
-    // Re-check from backend, but never auto-hide admin based on weak identity heuristics.
+    // Re-check from backend hints, but do not auto-promote admin.
     detectUserRole();
   }
 

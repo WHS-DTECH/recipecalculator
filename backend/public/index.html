@@ -207,6 +207,13 @@
       gap: 0.5rem;
     }
 
+    .recipe-card-top-left {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      min-width: 0;
+    }
+
     .recipe-card-id {
       display: inline-flex;
       align-items: center;
@@ -219,6 +226,52 @@
       color: #0f4f88;
       border: 1px solid #b8d7f3;
       background: #e9f5ff;
+    }
+
+    .recipe-source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.28rem;
+      text-decoration: none;
+      min-width: 0;
+      max-width: 7.7rem;
+    }
+
+    .recipe-source-link:focus-visible .recipe-source-logo,
+    .recipe-source-link:hover .recipe-source-logo {
+      border-color: #7aa7cf;
+      background: #e7f1fb;
+    }
+
+    .recipe-source-link-disabled {
+      cursor: default;
+      opacity: 0.75;
+      pointer-events: none;
+    }
+
+    .recipe-source-logo {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 2.1rem;
+      padding: 0.18rem 0.4rem;
+      border-radius: 999px;
+      font-size: 0.71rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      color: #18456b;
+      border: 1px solid #b9cfe5;
+      background: #f1f7fd;
+      text-transform: uppercase;
+    }
+
+    .recipe-source-name {
+      color: #3e607f;
+      font-size: 0.74rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .recipe-card-title {
@@ -306,7 +359,7 @@
         <div id="recipeCategoryChips" class="main-subaction"></div>
       </div>
       <div id="recipeCardList" class="recipe-card-list"></div>
-      <p class="card-disclaimer">Dish photos are curated from royalty-free stock images (Pexels) and matched by recipe type.</p>
+      <p class="card-disclaimer">Tap the source badge next to each RecipeID to open the original recipe website.</p>
     </section>
 
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: recipe-calculator-backend
+    env: node
+    rootDir: backend
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/recipes
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: ADMIN_BOOTSTRAP_EMAILS
+        sync: false
+      - key: PGSSL_REJECT_UNAUTHORIZED
+        value: "false"

@@ -2,6 +2,17 @@
 // Fetches and displays the Recipe Book from recipe_display table instead of recipes
 
 document.addEventListener('DOMContentLoaded', function() {
+  const SOURCE_BRAND_MAP = [
+    { match: /chelsea/i, label: 'Chelsea', monogram: 'CH' },
+    { match: /edmonds/i, label: 'Edmonds', monogram: 'ED' },
+    { match: /heartfoundation/i, label: 'Heart Foundation', monogram: 'HF' },
+    { match: /healthyfood|healthyfood\.com/i, label: 'Healthy Food', monogram: 'HF' },
+    { match: /foodinaminute/i, label: 'Food In A Minute', monogram: 'FM' },
+    { match: /annabel[-\s]?langbein/i, label: 'Annabel Langbein', monogram: 'AL' },
+    { match: /recipetineats/i, label: 'RecipeTin Eats', monogram: 'RT' },
+    { match: /bbcgoodfood/i, label: 'BBC Good Food', monogram: 'BG' }
+  ];
+
   const STOCK_IMAGES = {
     'Baking': [
       'https://images.pexels.com/photos/3026808/pexels-photo-3026808.jpeg?auto=compress&cs=tinysrgb&w=1200',
@@ -83,14 +94,79 @@ document.addEventListener('DOMContentLoaded', function() {
     return 'Practical kitchen confidence and food literacy';
   }
 
-  fetch('/api/recipes/display-table')
-    .then(res => res.json())
-    .then(rows => {
-      if (!Array.isArray(rows) || rows.length === 0) return;
+  function safeRecipeUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    return `https://${raw}`;
+  }
+
+  function hostFromUrl(value) {
+    try {
+      const host = new URL(value).hostname.replace(/^www\./i, '');
+      return host;
+    } catch (_) {
+      return '';
+    }
+  }
+
+  function titleCase(text) {
+    return String(text || '')
+      .split(/[^a-zA-Z0-9]+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ')
+      .trim();
+  }
+
+  function sourceInfo(recipeUrl, recipeName) {
+    const href = safeRecipeUrl(recipeUrl);
+    if (!href) {
+      return {
+        href: '',
+        label: 'Source',
+        monogram: 'SR'
+      };
+    }
+
+    const host = hostFromUrl(href);
+    const sourceSeed = `${host} ${recipeName || ''}`;
+    const known = SOURCE_BRAND_MAP.find(item => item.match.test(sourceSeed));
+    if (known) {
+      return {
+        href,
+        label: known.label,
+        monogram: known.monogram
+      };
+    }
+
+    const hostCore = host.split('.')[0] || host;
+    const label = titleCase(hostCore) || 'Source';
+    const letters = label.replace(/[^A-Za-z]/g, '').toUpperCase();
+    const monogram = (letters.slice(0, 2) || 'SR');
+    return {
+      href,
+      label,
+      monogram
+    };
+  }
+
+  Promise.all([
+    fetch('/api/recipes/display-table').then(res => res.json()).catch(() => []),
+    fetch('/api/recipes').then(res => res.json()).catch(() => [])
+  ])
+    .then(([displayRows, allRecipes]) => {
+      const rows = Array.isArray(displayRows) ? displayRows : [];
+      if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
       const badge = document.getElementById('recipeCountBadge');
       const chips = document.getElementById('recipeCategoryChips');
       if (!cardList) return;
+
+      const recipeById = new Map(
+        (Array.isArray(allRecipes) ? allRecipes : []).map(recipe => [String(recipe.id), recipe])
+      );
 
       if (badge) {
         badge.textContent = `${rows.length} recipes in the student showcase`;
@@ -116,6 +192,18 @@ document.addEventListener('DOMContentLoaded', function() {
         const recipeNumber = row.recipeid || row.recipe_id || row.id;
         const category = getDishCategory(name);
         const imageUrl = getDishImage(name, row.id, category, index);
+        const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
+        const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
+        const src = sourceInfo(recipeUrl, name);
+        const sourceLink = src.href
+          ? `<a class="recipe-source-link" href="${src.href}" target="_blank" rel="noopener noreferrer" title="Open original recipe on ${src.label}">
+               <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
+               <span class="recipe-source-name">${src.label}</span>
+             </a>`
+          : `<span class="recipe-source-link recipe-source-link-disabled" title="No source URL">
+               <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
+               <span class="recipe-source-name">${src.label}</span>
+             </span>`;
 
         const card = document.createElement('div');
         card.className = 'recipe-card';
@@ -124,7 +212,10 @@ document.addEventListener('DOMContentLoaded', function() {
           <img class="recipe-thumb" src="${imageUrl}" alt="${String(name).replace(/"/g, '&quot;')}" loading="lazy">
           <div class="recipe-card-body">
             <div class="recipe-card-top">
-              <div class="recipe-card-id">#${recipeNumber}</div>
+              <div class="recipe-card-top-left">
+                <div class="recipe-card-id">#${recipeNumber}</div>
+                ${sourceLink}
+              </div>
               <span class="recipe-chip">${category}</span>
             </div>
             <div class="recipe-card-title">${name}</div>
@@ -138,6 +229,12 @@ document.addEventListener('DOMContentLoaded', function() {
             this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
           };
         }
+
+        card.querySelectorAll('.recipe-source-link').forEach((linkEl) => {
+          linkEl.addEventListener('click', (event) => {
+            event.stopPropagation();
+          });
+        });
 
         card.onclick = () => {
           window.location.href = `recipe_display.html?id=${row.id}`;

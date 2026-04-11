@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
 const DEFAULT_ROLE_OPTIONS = [
   'admin',
@@ -376,7 +377,7 @@ router.get('/profile', async (req, res) => {
   }
 });
 
-router.post('/add', async (req, res) => {
+router.post('/add', requireAdmin, async (req, res) => {
   const userType = normalizeUserType(req.body.user_type);
   const userIdentifier = (req.body.user_identifier || req.body.email || '').trim();
   const roleName = (req.body.role_name || '').trim().toLowerCase();
@@ -441,7 +442,7 @@ router.post('/add', async (req, res) => {
   }
 });
 
-router.delete('/:userType/:identifier', async (req, res) => {
+router.delete('/:userType/:identifier', requireAdmin, async (req, res) => {
   const userType = normalizeUserType(req.params.userType);
   const identifier = decodeURIComponent(req.params.identifier || '').trim().toLowerCase();
 
@@ -459,7 +460,7 @@ router.delete('/:userType/:identifier', async (req, res) => {
   }
 });
 
-router.delete('/:email', async (req, res) => {
+router.delete('/:email', requireAdmin, async (req, res) => {
   const email = decodeURIComponent(req.params.email || '').trim().toLowerCase();
 
   if (!email) {
