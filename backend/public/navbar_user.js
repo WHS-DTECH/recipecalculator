@@ -118,4 +118,8 @@ async function setNavbarUsername() {
   setNavbarAccountDisplay(null);
 }
 
-window.addEventListener('DOMContentLoaded', setNavbarUsername);
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', setNavbarUsername);
+} else {
+  setNavbarUsername();
+}

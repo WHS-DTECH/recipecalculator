@@ -92,6 +92,17 @@
     const normalized = normalizeRole(role) || 'public_access';
     document.documentElement.setAttribute('data-navbar-role', normalized);
 
+    const authenticatedSections = document.querySelectorAll('[data-role="authenticated"]');
+    authenticatedSections.forEach(section => {
+      if (normalized === 'public_access') {
+        section.style.display = 'none';
+        section.setAttribute('aria-hidden', 'true');
+      } else {
+        section.style.display = '';
+        section.removeAttribute('aria-hidden');
+      }
+    });
+
     // Hide admin sections if user is not admin
     const adminSections = document.querySelectorAll('[data-role="admin"]');
     adminSections.forEach(section => {
