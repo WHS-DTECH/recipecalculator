@@ -221,9 +221,43 @@
     xhr.send();
   }
 
+  function injectFooter() {
+    if (document.getElementById('site-footer-global')) return;
+
+    if (!document.querySelector('style[data-footer-styles]')) {
+      var style = document.createElement('style');
+      style.setAttribute('data-footer-styles', '1');
+      style.textContent =
+        '.site-footer{text-align:center;padding:1.5rem 1rem;border-top:1px solid #e2e8f0;margin-top:2rem;}' +
+        '.footer-suggest-btn{background:#2563eb;color:#fff;border:none;border-radius:8px;padding:.65rem 1.5rem;font-size:1rem;font-weight:600;cursor:pointer;transition:background .18s,transform .12s;}' +
+        '.footer-suggest-btn:hover{background:#1d4ed8;transform:translateY(-1px);}' +
+        '.footer-suggest-btn:active{transform:translateY(1px);}';
+      document.head.appendChild(style);
+    }
+
+    var footer = document.createElement('footer');
+    footer.id = 'site-footer-global';
+    footer.className = 'site-footer';
+    footer.innerHTML = '<button id="heroSuggestRecipeButton" class="footer-suggest-btn" type="button">💡 Suggest a Recipe</button>';
+    document.body.appendChild(footer);
+
+    var btn = document.getElementById('heroSuggestRecipeButton');
+    if (btn) {
+      btn.addEventListener('click', function() {
+        // On index.html, display_recipe_book.js attaches its own handler — let it handle this.
+        if (document.getElementById('inlineSuggestPanel')) return;
+        window.location.href = 'suggest_recipe.html';
+      });
+    }
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', loadNavbar);
+    document.addEventListener('DOMContentLoaded', function() {
+      loadNavbar();
+      injectFooter();
+    });
   } else {
     loadNavbar();
+    injectFooter();
   }
 })();
