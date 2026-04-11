@@ -153,7 +153,28 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 0.35rem;
   transition: background-color 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.navbar-user-name {
+  display: inline-flex;
+  align-items: center;
+}
+
+.navbar-user-role {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid #c8d7e9;
+  background: #eef3fa;
+  color: #244c72;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 0.08rem 0.42rem;
+  line-height: 1.2;
 }
 
 .navbar-user-link:hover,

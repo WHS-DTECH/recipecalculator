@@ -34,6 +34,31 @@ function deriveNameFromEmail(email) {
     .join(' ');
 }
 
+function roleLabel(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (!normalized) return 'User';
+  return normalized
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function setLinkNameWithRole(link, displayName, role) {
+  if (!link) return;
+  link.textContent = '';
+
+  const nameSpan = document.createElement('span');
+  nameSpan.className = 'navbar-user-name';
+  nameSpan.textContent = displayName;
+
+  const roleSpan = document.createElement('span');
+  roleSpan.className = 'navbar-user-role';
+  roleSpan.textContent = roleLabel(role);
+
+  link.appendChild(nameSpan);
+  link.appendChild(roleSpan);
+}
+
 function setNavbarAccountDisplay(user) {
   const link = document.getElementById('navbarUsername');
   const logoutBtn = document.querySelector('.navbar-logout-btn');
@@ -41,7 +66,7 @@ function setNavbarAccountDisplay(user) {
 
   if (user && user.email) {
     const displayName = String(user.name || '').trim() || deriveNameFromEmail(user.email);
-    link.textContent = displayName;
+    setLinkNameWithRole(link, displayName, user.role);
     link.href = 'user_profile.html';
 
     persistCurrentStaffUser({
@@ -58,7 +83,8 @@ function setNavbarAccountDisplay(user) {
       attachLogoutHandler(logoutBtn);
     }
     try {
-      sessionStorage.setItem(ROLE_STORAGE_KEY, 'teacher');
+      const role = String(user.role || '').trim().toLowerCase() || 'teacher';
+      sessionStorage.setItem(ROLE_STORAGE_KEY, role);
     } catch (_) {}
     return;
   }
