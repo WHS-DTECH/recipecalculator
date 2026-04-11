@@ -18,6 +18,14 @@
       margin: 1.2rem auto 2rem;
     }
 
+    .top-login-strip {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+      padding: 0.45rem 0.75rem 0;
+      box-sizing: border-box;
+    }
+
     .showcase-hero {
       position: relative;
       overflow: hidden;
@@ -36,13 +44,6 @@
     }
 
     .hero-main {
-      min-width: 0;
-    }
-
-    .hero-side {
-      display: flex;
-      justify-content: flex-end;
-      align-items: flex-start;
       min-width: 0;
     }
 
@@ -106,7 +107,7 @@
 
     .hero-login-panel {
       margin-top: 0;
-      width: min(420px, 100%);
+      width: min(420px, calc(100vw - 1.5rem));
       background: rgba(247, 251, 255, 0.95);
       border: 1px solid rgba(207, 226, 243, 0.95);
       border-radius: 12px;
@@ -400,14 +401,14 @@
         width: calc(100vw - 0.7rem);
       }
 
+      .top-login-strip {
+        padding: 0.4rem 0.45rem 0;
+      }
+
       .showcase-hero {
         grid-template-columns: 1fr;
         align-items: stretch;
         padding: 1.2rem;
-      }
-
-      .hero-side {
-        justify-content: stretch;
       }
 
       .hero-login-panel {
@@ -451,6 +452,15 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
+  <div class="top-login-strip">
+    <div id="inlineLoginPanel" class="hero-login-panel" hidden>
+      <h2 class="hero-login-title">Sign In With Google</h2>
+      <p class="hero-login-help">Use your school Google account to sign in.</p>
+      <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
+      <div id="heroLoginStatus" class="hero-login-status"></div>
+    </div>
+  </div>
+
   <div class="showcase-shell">
     <section class="showcase-hero">
       <div class="hero-main">
@@ -460,14 +470,6 @@
         <div class="hero-actions">
           <button class="hero-cta" onclick="window.location.href='suggest_recipe.html'">Suggest a Recipe</button>
           <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
-        </div>
-      </div>
-      <div class="hero-side">
-        <div id="inlineLoginPanel" class="hero-login-panel" hidden>
-          <h2 class="hero-login-title">Sign In With Google</h2>
-          <p class="hero-login-help">Use your school Google account to sign in.</p>
-          <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
-          <div id="heroLoginStatus" class="hero-login-status"></div>
         </div>
       </div>
     </section>
