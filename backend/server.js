@@ -217,18 +217,35 @@ async function sendSuggestionNotificationEmail(suggestion) {
     recipients = getSuggestionNotifyRecipients();
   }
 
-  if (!recipients.length) return;
+  if (!recipients.length) {
+    return {
+      sent: false,
+      reason: 'no_recipients',
+      recipients: [],
+      recipientCount: 0
+    };
+  }
 
   const transporter = createSuggestionMailer();
   if (!transporter) {
     console.warn('[SUGGESTIONS] Email skipped: SMTP_HOST/SMTP_USER/SMTP_PASS not configured.');
-    return;
+    return {
+      sent: false,
+      reason: 'smtp_not_configured',
+      recipients,
+      recipientCount: recipients.length
+    };
   }
 
   const fromAddress = String(process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
   if (!fromAddress) {
     console.warn('[SUGGESTIONS] Email skipped: no sender address configured.');
-    return;
+    return {
+      sent: false,
+      reason: 'sender_not_configured',
+      recipients,
+      recipientCount: recipients.length
+    };
   }
 
   const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
@@ -251,12 +268,21 @@ async function sendSuggestionNotificationEmail(suggestion) {
     reason || 'N/A'
   ].join('\n');
 
-  await transporter.sendMail({
+  const info = await transporter.sendMail({
     from: fromAddress,
     to: recipients.join(','),
     subject: `[Recipe Suggestion] ${recipeName}`,
     text
   });
+
+  const accepted = Array.isArray(info && info.accepted) ? info.accepted.length : 0;
+  return {
+    sent: accepted > 0,
+    reason: accepted > 0 ? 'sent' : 'not_accepted',
+    recipients,
+    recipientCount: recipients.length,
+    acceptedCount: accepted
+  };
 }
 
 // Compatibility wrapper for legacy SQLite-style db.* calls that still exist in this file.
@@ -569,15 +595,41 @@ app.post('/api/suggestions', async (req, res) => {
   );
   try {
     const result = await doInsert();
-    sendSuggestionNotificationEmail({ date, recipe_name, suggested_by, email, url: normalizedUrl, reason })
-      .catch((mailErr) => console.error('[SUGGESTIONS] Email notification failed:', mailErr.message));
-    res.json({ success: true, id: result.rows[0].id });
+    let notification = { sent: false, reason: 'unknown', recipients: [], recipientCount: 0 };
+    try {
+      notification = await sendSuggestionNotificationEmail({ date, recipe_name, suggested_by, email, url: normalizedUrl, reason });
+    } catch (mailErr) {
+      console.error('[SUGGESTIONS] Email notification failed:', mailErr.message);
+      notification = {
+        sent: false,
+        reason: 'send_failed',
+        recipients: [],
+        recipientCount: 0,
+        error: mailErr.message
+      };
+    }
+
+    res.json({ success: true, id: result.rows[0].id, notification });
   } catch (err) {
     if (err.code === '23505' && err.constraint === 'suggestions_pkey') {
       try {
         await pool.query(`SELECT setval(pg_get_serial_sequence('suggestions','id'), COALESCE((SELECT MAX(id) FROM suggestions), 0))`);
         const result = await doInsert();
-        return res.json({ success: true, id: result.rows[0].id });
+        let notification = { sent: false, reason: 'unknown', recipients: [], recipientCount: 0 };
+        try {
+          notification = await sendSuggestionNotificationEmail({ date, recipe_name, suggested_by, email, url: normalizedUrl, reason });
+        } catch (mailErr) {
+          console.error('[SUGGESTIONS] Email notification failed:', mailErr.message);
+          notification = {
+            sent: false,
+            reason: 'send_failed',
+            recipients: [],
+            recipientCount: 0,
+            error: mailErr.message
+          };
+        }
+
+        return res.json({ success: true, id: result.rows[0].id, notification });
       } catch (retryErr) {
         return res.status(500).json({ error: retryErr.message });
       }

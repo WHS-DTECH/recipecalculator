@@ -81,6 +81,7 @@ document.addEventListener('DOMContentLoaded', () => {
             body: JSON.stringify(data)
         });
         if (res.ok) {
+            const result = await res.json().catch(() => ({}));
             if (authUser) {
                 form.recipe_name.value = '';
                 form.url.value = '';
@@ -88,7 +89,21 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 form.reset();
             }
-            msg.innerHTML = '<span style="color:green;font-weight:bold;">Thank you for your suggestion!</span>';
+
+            const notification = result.notification || {};
+            if (notification.sent) {
+                msg.innerHTML = `<span style="color:green;font-weight:bold;">Thank you for your suggestion! Email sent to Teachers/Admin (${notification.recipientCount || 0} recipients).</span>`;
+            } else {
+                const reasonTextMap = {
+                    no_recipients: 'No Teacher/Admin recipients were found.',
+                    smtp_not_configured: 'Email is not configured yet (SMTP settings missing).',
+                    sender_not_configured: 'Email sender address is not configured.',
+                    not_accepted: 'Email server did not accept recipients.',
+                    send_failed: 'Email sending failed. Please check server logs.'
+                };
+                const reasonText = reasonTextMap[notification.reason] || 'Email status is unknown.';
+                msg.innerHTML = `<span style="color:#0b5394;font-weight:bold;">Suggestion saved to list. Email notification not sent: ${reasonText}</span>`;
+            }
         } else {
             const result = await res.json().catch(() => ({}));
             msg.innerHTML = `<span style="color:red;">${result.error || 'Failed to send suggestion. Please try again later.'}</span>`;
