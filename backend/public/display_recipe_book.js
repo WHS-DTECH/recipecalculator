@@ -3,12 +3,139 @@
 
 document.addEventListener('DOMContentLoaded', function() {
   let canOpenRecipeDetails = false;
+  let inlineLoginBooted = false;
+  const ROLE_STORAGE_KEY = 'navbar_user_role';
+
+  function rememberRole(user) {
+    try {
+      const role = String((user && user.role) || '').trim().toLowerCase();
+      if (role) sessionStorage.setItem(ROLE_STORAGE_KEY, role);
+    } catch (_) {
+      // Ignore session storage failures.
+    }
+  }
+
+  function setInlineLoginStatus(message, type) {
+    const statusEl = document.getElementById('heroLoginStatus');
+    if (!statusEl) return;
+    statusEl.textContent = message || '';
+    statusEl.className = 'hero-login-status' + (type ? ` ${type}` : '');
+  }
+
+  function setInlineLoginVisible(visible) {
+    const panel = document.getElementById('inlineLoginPanel');
+    if (!panel) return;
+    panel.hidden = !visible;
+  }
+
+  function loadGoogleScript(onLoad) {
+    if (window.google && window.google.accounts && window.google.accounts.id) {
+      onLoad();
+      return;
+    }
+
+    const existing = document.querySelector('script[data-google-identity="1"]');
+    if (existing) {
+      existing.addEventListener('load', onLoad, { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://accounts.google.com/gsi/client';
+    script.async = true;
+    script.defer = true;
+    script.setAttribute('data-google-identity', '1');
+    script.addEventListener('load', onLoad, { once: true });
+    document.head.appendChild(script);
+  }
+
+  function handleInlineCredentialResponse(response) {
+    if (!response || !response.credential) {
+      setInlineLoginStatus('Google login failed. Please try again.', 'error');
+      return;
+    }
+
+    setInlineLoginStatus('Signing you in...', '');
+
+    fetch('/api/auth/google/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ idToken: response.credential })
+    })
+      .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
+      .then((result) => {
+        if (!result.ok || !result.data || !result.data.success) {
+          throw new Error((result.data && result.data.error) || 'Sign-in failed.');
+        }
+        canOpenRecipeDetails = true;
+        rememberRole(result.data.user);
+        setInlineLoginStatus('Signed in successfully.', 'success');
+        setInlineLoginVisible(false);
+      })
+      .catch((err) => {
+        setInlineLoginStatus((err && err.message) || 'Sign-in failed.', 'error');
+      });
+  }
+
+  function startInlineGoogleSignin(clientId) {
+    const mount = document.getElementById('heroGoogleSigninMount');
+    if (!mount) return;
+
+    window.google.accounts.id.initialize({
+      client_id: clientId,
+      callback: handleInlineCredentialResponse,
+      ux_mode: 'popup'
+    });
+
+    mount.innerHTML = '';
+    window.google.accounts.id.renderButton(mount, {
+      theme: 'outline',
+      size: 'large',
+      type: 'standard',
+      shape: 'pill',
+      text: 'signin_with',
+      width: 280
+    });
+  }
+
+  function bootInlineLogin() {
+    const panel = document.getElementById('inlineLoginPanel');
+    if (!panel) return;
+
+    if (canOpenRecipeDetails) {
+      setInlineLoginVisible(false);
+      return;
+    }
+
+    setInlineLoginVisible(true);
+    if (inlineLoginBooted) return;
+    inlineLoginBooted = true;
+
+    fetch('/api/auth/google/config', { credentials: 'include' })
+      .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
+      .then((result) => {
+        if (!result.ok || !result.data || !result.data.clientId) {
+          throw new Error((result.data && result.data.error) || 'Google sign-in is not configured yet.');
+        }
+
+        loadGoogleScript(() => {
+          startInlineGoogleSignin(result.data.clientId);
+        });
+      })
+      .catch((err) => {
+        setInlineLoginStatus((err && err.message) || 'Unable to load Google sign-in.', 'error');
+      });
+  }
 
   function refreshAuthState() {
     return fetch('/api/auth/me', { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         canOpenRecipeDetails = Boolean(data && data.authenticated && data.user && data.user.email);
+        if (canOpenRecipeDetails) {
+          rememberRole(data.user);
+        }
       })
       .catch(() => {
         canOpenRecipeDetails = false;
@@ -284,6 +411,7 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
   ])
     .then(([, displayRows, allRecipes, bookingsPayload]) => {
+      bootInlineLogin();
       const rows = Array.isArray(displayRows) ? displayRows : [];
       if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
