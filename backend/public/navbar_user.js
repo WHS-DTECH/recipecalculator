@@ -57,11 +57,18 @@ function setNavbarAccountDisplay(user) {
       logoutBtn.style.display = '';
       attachLogoutHandler(logoutBtn);
     }
+    try {
+      sessionStorage.setItem(ROLE_STORAGE_KEY, 'teacher');
+    } catch (_) {}
     return;
   }
 
   link.textContent = 'Login';
   link.href = 'google_login.html';
+  try {
+    sessionStorage.removeItem(CURRENT_STAFF_USER_KEY);
+    sessionStorage.setItem(ROLE_STORAGE_KEY, 'public_access');
+  } catch (_) {}
   if (logoutBtn) logoutBtn.style.display = 'none';
 }
 
@@ -108,24 +115,7 @@ async function setNavbarUsername() {
   const hasAuth = await setNavbarFromAuthSession();
   if (hasAuth) return;
 
-  fetch('/api/staff_upload/all')
-    .then(res => res.json())
-    .then(result => {
-      if (result && Array.isArray(result.staff) && result.staff.length > 0) {
-        const user = selectPreloginUser(result.staff);
-        if (!user) return;
-        const username = user.first_name + ' ' + user.last_name;
-        const link = document.getElementById('navbarUsername');
-        persistCurrentStaffUser(user);
-        if (link) {
-          link.textContent = username;
-          link.href = 'user_profile.html?user=' + encodeURIComponent(user.id);
-        }
-      }
-    })
-    .catch(() => {
-      setNavbarAccountDisplay(null);
-    });
+  setNavbarAccountDisplay(null);
 }
 
 window.addEventListener('DOMContentLoaded', setNavbarUsername);

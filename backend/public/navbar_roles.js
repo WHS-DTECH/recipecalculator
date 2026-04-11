@@ -57,7 +57,7 @@
           return;
         }
 
-        setUserRole('teacher');
+        setUserRole('public_access');
       })
       .catch(() => {
         const storedRole = getStoredUserRole();
@@ -65,7 +65,7 @@
           updateNavbarVisibility(storedRole);
           return;
         }
-        setUserRole('teacher');
+        setUserRole('public_access');
       });
   }
 
@@ -73,7 +73,7 @@
    * Set the user's role and update navbar visibility
    */
   function setUserRole(role) {
-    const normalized = normalizeRole(role) || 'teacher';
+    const normalized = normalizeRole(role) || 'public_access';
     sessionStorage.setItem(ROLE_STORAGE_KEY, normalized);
     updateNavbarVisibility(normalized);
   }
@@ -89,7 +89,7 @@
    * Update navbar sections based on user role
    */
   function updateNavbarVisibility(role) {
-    const normalized = normalizeRole(role) || 'teacher';
+    const normalized = normalizeRole(role) || 'public_access';
     document.documentElement.setAttribute('data-navbar-role', normalized);
 
     // Hide admin sections if user is not admin
