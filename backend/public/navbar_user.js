@@ -111,7 +111,7 @@ function attachLogoutHandler(logoutBtn) {
       sessionStorage.removeItem(CURRENT_STAFF_USER_KEY);
       sessionStorage.removeItem(ROLE_STORAGE_KEY);
     } catch (_) {}
-    window.location.href = 'google_login.html';
+    window.location.href = 'index.html';
   };
 }
 

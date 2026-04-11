@@ -167,7 +167,7 @@
             } catch (_) {
               // Ignore storage errors and still redirect.
             }
-            window.location.href = 'google_login.html';
+            window.location.href = 'index.html';
           });
       });
     });

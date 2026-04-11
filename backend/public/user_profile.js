@@ -155,7 +155,7 @@ function renderGoogleSection(authUser, profileData) {
           .catch(() => null)
           .finally(() => {
             sessionStorage.removeItem('navbar_user_role');
-            window.location.href = 'google_login.html';
+            window.location.href = 'index.html';
           });
       };
     } else {
