@@ -28,6 +28,12 @@ document.addEventListener('DOMContentLoaded', function() {
     panel.hidden = !visible;
   }
 
+  function setInlineSuggestVisible(visible) {
+    const panel = document.getElementById('inlineSuggestPanel');
+    if (!panel) return;
+    panel.hidden = !visible;
+  }
+
   function broadcastAuthSession(user) {
     document.dispatchEvent(new CustomEvent('auth-session-changed', {
       detail: { user: user || null }
@@ -178,6 +184,17 @@ document.addEventListener('DOMContentLoaded', function() {
       bootInlineLogin();
     } else {
       setInlineLoginVisible(false);
+    }
+  }
+
+  function toggleInlineSuggestPanel() {
+    const panel = document.getElementById('inlineSuggestPanel');
+    if (!panel) return;
+
+    const willShow = panel.hidden;
+    setInlineSuggestVisible(willShow);
+    if (willShow && typeof panel.scrollIntoView === 'function') {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }
 
@@ -534,8 +551,6 @@ document.addEventListener('DOMContentLoaded', function() {
       if (chips) {
         const counts = rows.reduce((acc, row) => {
           const key = getDishCategory(row.name || '');
-
-  document.addEventListener('click', toggleInlineLoginFromNavbar);
           acc[key] = (acc[key] || 0) + 1;
           return acc;
         }, {});
@@ -550,4 +565,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
       renderRecipeCards(cardList, orderedRows, recipeById, featuredRows.length);
     });
+
+  document.addEventListener('click', toggleInlineLoginFromNavbar);
+
+  const suggestButton = document.getElementById('heroSuggestRecipeButton');
+  if (suggestButton) {
+    suggestButton.addEventListener('click', toggleInlineSuggestPanel);
+  }
 });

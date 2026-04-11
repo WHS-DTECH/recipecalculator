@@ -1,6 +1,7 @@
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('userSuggestForm');
     const msg = document.getElementById('suggestMsg');
+    if (!form || !msg) return;
     const nameInput = form.elements.suggested_by;
     const emailInput = form.elements.email;
     let authUser = null;

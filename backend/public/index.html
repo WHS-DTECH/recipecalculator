@@ -18,12 +18,25 @@
       margin: 1.2rem auto 2rem;
     }
 
-    .top-login-strip {
+    .top-action-strip {
       width: 100%;
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 1rem;
       padding: 0.45rem 0.75rem 0;
       box-sizing: border-box;
+    }
+
+    .top-action-strip-start,
+    .top-action-strip-end {
+      display: flex;
+      align-items: flex-start;
+    }
+
+    .top-action-strip-end {
+      justify-content: flex-end;
+      margin-left: auto;
     }
 
     .showcase-hero {
@@ -114,6 +127,84 @@
       padding: 1rem;
       box-shadow: 0 10px 26px rgba(14, 40, 72, 0.16);
       color: #123a5e;
+    }
+
+    .suggest-inline-panel {
+      width: min(430px, calc(100vw - 1.5rem));
+      background: #f8fbff;
+      border: 2px solid #2196f3;
+      border-radius: 12px;
+      padding: 1.35rem 1.5rem;
+      box-shadow: 0 10px 26px rgba(14, 40, 72, 0.12);
+      color: #17324a;
+    }
+
+    .suggest-inline-panel h2 {
+      margin: 0 0 0.65rem;
+      color: #1976d2;
+      font-size: 1.1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+
+    .suggest-inline-panel .desc {
+      color: #344c64;
+      margin-bottom: 1rem;
+      line-height: 1.4;
+    }
+
+    .suggest-inline-panel label {
+      font-weight: 700;
+      display: block;
+      margin-top: 0.9rem;
+      color: #19344c;
+      font-size: 0.92rem;
+    }
+
+    .suggest-inline-panel input,
+    .suggest-inline-panel textarea {
+      width: 100%;
+      margin-top: 0.3rem;
+      margin-bottom: 0.6rem;
+      padding: 0.75rem;
+      border: 1px solid #b9c9d8;
+      border-radius: 6px;
+      font-size: 0.96rem;
+      box-sizing: border-box;
+      background: #ffffff;
+    }
+
+    .suggest-inline-panel textarea {
+      min-height: 78px;
+      resize: vertical;
+    }
+
+    .suggest-inline-panel .hint {
+      color: #5f6f82;
+      font-size: 0.88em;
+      margin-top: -0.2rem;
+      margin-bottom: 0.7rem;
+    }
+
+    .suggest-inline-panel button {
+      background: #1976d2;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 0.8rem 1.3rem;
+      font-size: 0.98rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 0.8rem;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      box-shadow: 0 10px 22px rgba(25, 118, 210, 0.18);
+    }
+
+    .suggest-inline-panel button:active {
+      background: #125ea2;
     }
 
     .hero-login-title {
@@ -401,8 +492,19 @@
         width: calc(100vw - 0.7rem);
       }
 
-      .top-login-strip {
+      .top-action-strip {
+        flex-direction: column;
         padding: 0.4rem 0.45rem 0;
+      }
+
+      .top-action-strip-start,
+      .top-action-strip-end {
+        width: 100%;
+      }
+
+      .top-action-strip-end {
+        margin-left: 0;
+        justify-content: flex-end;
       }
 
       .showcase-hero {
@@ -414,6 +516,10 @@
       .hero-login-panel {
         width: 100%;
         margin-top: 0.4rem;
+      }
+
+      .suggest-inline-panel {
+        width: 100%;
       }
 
       .recipe-card-list {
@@ -452,12 +558,40 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
-  <div class="top-login-strip">
-    <div id="inlineLoginPanel" class="hero-login-panel" hidden>
-      <h2 class="hero-login-title">Sign In With Google</h2>
-      <p class="hero-login-help">Use your school Google account to sign in.</p>
-      <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
-      <div id="heroLoginStatus" class="hero-login-status"></div>
+  <div class="top-action-strip">
+    <div class="top-action-strip-start">
+      <div id="inlineSuggestPanel" class="suggest-inline-panel" hidden>
+        <h2><span>💡</span> Suggest a Recipe</h2>
+        <div class="desc">Have a recipe you'd like added to our collection? Share your suggestion with the VP!</div>
+        <form id="userSuggestForm">
+          <label>Your Name:
+            <input type="text" name="suggested_by" placeholder="First and last name" required>
+          </label>
+          <label>Your Email:
+            <input type="email" name="email" placeholder="name@school.nz" required>
+          </label>
+          <div class="hint">Please use a valid school/work email (Google or Microsoft account).</div>
+          <label>Recipe Name:
+            <input type="text" name="recipe_name" placeholder="e.g., Chocolate Chip Cookies" required>
+          </label>
+          <label>Recipe URL (optional):
+            <input type="url" name="url" placeholder="https://...">
+          </label>
+          <label>Why should we add this recipe?
+            <textarea name="reason" placeholder="Tell us why this recipe would be great for our students..." required></textarea>
+          </label>
+          <button type="submit"><span>📧</span> Send Suggestion</button>
+        </form>
+        <div id="suggestMsg" style="margin-top:1em;"></div>
+      </div>
+    </div>
+    <div class="top-action-strip-end">
+      <div id="inlineLoginPanel" class="hero-login-panel" hidden>
+        <h2 class="hero-login-title">Sign In With Google</h2>
+        <p class="hero-login-help">Use your school Google account to sign in.</p>
+        <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
+        <div id="heroLoginStatus" class="hero-login-status"></div>
+      </div>
     </div>
   </div>
 
@@ -468,7 +602,7 @@
         <h1 class="main-title">Recipe Book</h1>
         <p class="hero-subtitle">Explore the dishes students are learning to cook, from confident weeknight meals to celebration baking projects.</p>
         <div class="hero-actions">
-          <button class="hero-cta" onclick="window.location.href='suggest_recipe.html'">Suggest a Recipe</button>
+          <button id="heroSuggestRecipeButton" class="hero-cta" type="button">Suggest a Recipe</button>
           <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
         </div>
       </div>
@@ -499,5 +633,6 @@
   </div>
 
   <script src="display_recipe_book.js"></script>
+  <script src="suggest_recipe.js"></script>
 </body>
 </html>
