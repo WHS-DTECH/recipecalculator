@@ -42,6 +42,8 @@ async function loadSuggestions() {
             if (normalizedUrl) {
                 urlCell = `<a href="${normalizedUrl}" target="_blank">View</a>`;
                 actionsCell = `<button class="import-url-btn" data-url="${encodeURIComponent(normalizedUrl)}" style="padding:2px 8px;font-size:0.95em;">Import to URL Upload</button>`;
+            } else {
+                actionsCell = `<button class="import-url-btn" data-url="" data-name="${encodeURIComponent(s.recipe_name || '')}" style="padding:2px 8px;font-size:0.95em;">Import to Quick Add</button>`;
             }
             table.innerHTML += `<tr>
                 <td>${s.date || ''}</td>
@@ -55,8 +57,12 @@ async function loadSuggestions() {
         // Add event listeners for import buttons
         document.querySelectorAll('.import-url-btn').forEach(btn => {
             btn.addEventListener('click', function() {
-                const url = decodeURIComponent(this.getAttribute('data-url'));
-                window.open(`upload_url.html?url=${encodeURIComponent(url)}`, '_blank');
+                const url = this.getAttribute('data-url');
+                if (url) {
+                    window.open(`upload_url.html?url=${url}`, '_blank');
+                } else {
+                    window.open('quick_add.html', '_blank');
+                }
             });
         });
     } else {

@@ -17,6 +17,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const syncUploadedToRecipesBtnProgressBar = document.getElementById('syncUploadedToRecipesBtnProgressBar');
   const syncUploadedToRecipesBtnProgressFill = document.getElementById('syncUploadedToRecipesBtnProgressFill');
 
+  // Pre-fill URL input if ?url= query param is present
+  const prefilledUrl = new URLSearchParams(window.location.search).get('url');
+  if (prefilledUrl && uploadUrlInput) {
+    uploadUrlInput.value = decodeURIComponent(prefilledUrl);
+  }
+
   function setActionButtonsDisabled(disabled) {
     if (uploadUrlBtn) uploadUrlBtn.disabled = disabled;
     if (smartUploadBtn) smartUploadBtn.disabled = disabled;
