@@ -1,28 +1,31 @@
 document.addEventListener('DOMContentLoaded', () => {
     loadSuggestions();
-    document.getElementById('suggestionForm').onsubmit = async function(e) {
-        e.preventDefault();
-        const form = e.target;
-        const data = {
-            date: form.date.value,
-            recipe_name: form.recipe_name.value,
-            suggested_by: form.suggested_by.value,
-            email: form.email.value,
-            url: form.url.value,
-            reason: form.reason.value
+    const suggestionForm = document.getElementById('suggestionForm');
+    if (suggestionForm) {
+        suggestionForm.onsubmit = async function(e) {
+            e.preventDefault();
+            const form = e.target;
+            const data = {
+                date: form.date.value,
+                recipe_name: form.recipe_name.value,
+                suggested_by: form.suggested_by.value,
+                email: form.email.value,
+                url: form.url.value,
+                reason: form.reason.value
+            };
+            const res = await fetch('/api/suggestions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            if (res.ok) {
+                form.reset();
+                loadSuggestions();
+            } else {
+                alert('Failed to add suggestion.');
+            }
         };
-        const res = await fetch('/api/suggestions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-        if (res.ok) {
-            form.reset();
-            loadSuggestions();
-        } else {
-            alert('Failed to add suggestion.');
-        }
-    };
+    }
 });
 
 async function loadSuggestions() {
@@ -34,9 +37,11 @@ async function loadSuggestions() {
         for (const s of suggestions) {
             let urlCell = '';
             let actionsCell = '';
-            if (s.url) {
-                urlCell = `<a href="${s.url}" target="_blank">View</a>`;
-                actionsCell = `<button class="import-url-btn" data-url="${encodeURIComponent(s.url)}" style="padding:2px 8px;font-size:0.95em;">Import to URL Upload</button>`;
+            const rawUrl = String(s.url || '').trim();
+            const normalizedUrl = rawUrl && /^https?:\/\//i.test(rawUrl) ? rawUrl : (rawUrl ? `https://${rawUrl}` : '');
+            if (normalizedUrl) {
+                urlCell = `<a href="${normalizedUrl}" target="_blank">View</a>`;
+                actionsCell = `<button class="import-url-btn" data-url="${encodeURIComponent(normalizedUrl)}" style="padding:2px 8px;font-size:0.95em;">Import to URL Upload</button>`;
             }
             table.innerHTML += `<tr>
                 <td>${s.date || ''}</td>

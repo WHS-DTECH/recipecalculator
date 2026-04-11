@@ -37,6 +37,38 @@ function getGoogleClientId() {
   return String(process.env.GOOGLE_CLIENT_ID || '').trim();
 }
 
+function isValidEmailFormat(email) {
+  const value = String(email || '').trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function getAllowedSuggestionEmailDomains() {
+  const configured = String(process.env.SUGGESTION_ALLOWED_EMAIL_DOMAINS || '')
+    .split(',')
+    .map((entry) => String(entry || '').trim().toLowerCase())
+    .filter(Boolean);
+
+  const schoolDomain = String(process.env.GOOGLE_ALLOWED_DOMAIN || 'westlandhigh.school.nz').trim().toLowerCase();
+  const defaults = [
+    schoolDomain,
+    'gmail.com',
+    'googlemail.com',
+    'outlook.com',
+    'hotmail.com',
+    'live.com',
+    'msn.com'
+  ].filter(Boolean);
+
+  return new Set([...defaults, ...configured]);
+}
+
+function isTrustedSuggestionEmail(email) {
+  const normalized = normalizeEmail(email);
+  if (!isValidEmailFormat(normalized)) return false;
+  const domain = normalized.split('@')[1] || '';
+  return getAllowedSuggestionEmailDomains().has(domain);
+}
+
 function getBootstrapAdminEmails() {
   const configured = String(process.env.ADMIN_BOOTSTRAP_EMAILS || '')
     .split(',')
@@ -422,19 +454,44 @@ app.get('/api/suggestions', async (req, res) => {
 app.post('/api/suggestions', async (req, res) => {
   const authEmail = normalizeEmail(req.authUserEmail || '');
   const authName = String(req.authUser && req.authUser.name ? req.authUser.name : '').trim();
-  const date = req.body.date;
-  const recipe_name = req.body.recipe_name;
-  const suggested_by = String(req.body.suggested_by || '').trim() || authName || (authEmail ? authEmail.split('@')[0] : '');
-  const email = normalizeEmail(req.body.email || '') || authEmail;
-  const url = req.body.url;
-  const reason = req.body.reason;
+  const date = String(req.body.date || '').trim();
+  const recipe_name = String(req.body.recipe_name || '').trim();
+  const suggested_by_input = String(req.body.suggested_by || '').trim();
+  const email_input = normalizeEmail(req.body.email || '');
+  const suggested_by = authName || suggested_by_input || (authEmail ? authEmail.split('@')[0] : '');
+  const email = authEmail || email_input;
+  const url = String(req.body.url || '').trim();
+  const reason = String(req.body.reason || '').trim();
+
+  if (!recipe_name || !reason) {
+    return res.status(400).json({ error: 'Recipe name and reason are required.' });
+  }
+
+  if (!suggested_by) {
+    return res.status(400).json({ error: 'Name is required.' });
+  }
+
+  if (!email) {
+    return res.status(400).json({ error: 'Email is required.' });
+  }
+
+  if (authEmail && email_input && email_input !== authEmail) {
+    return res.status(400).json({ error: 'When logged in, suggestion email must match your signed-in account.' });
+  }
+
+  if (!isTrustedSuggestionEmail(email)) {
+    return res.status(400).json({ error: 'Please use a valid school/work email (Google or Microsoft).' });
+  }
+
+  const normalizedUrl = url && !/^https?:\/\//i.test(url) ? `https://${url}` : url;
+
   const doInsert = () => pool.query(
     'INSERT INTO suggestions (date, recipe_name, suggested_by, email, url, reason) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
-    [date, recipe_name, suggested_by, email, url, reason]
+    [date, recipe_name, suggested_by, email, normalizedUrl, reason]
   );
   try {
     const result = await doInsert();
-    sendSuggestionNotificationEmail({ date, recipe_name, suggested_by, email, url, reason })
+    sendSuggestionNotificationEmail({ date, recipe_name, suggested_by, email, url: normalizedUrl, reason })
       .catch((mailErr) => console.error('[SUGGESTIONS] Email notification failed:', mailErr.message));
     res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
