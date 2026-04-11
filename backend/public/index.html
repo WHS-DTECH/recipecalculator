@@ -18,13 +18,6 @@
       margin: 1.2rem auto 2rem;
     }
 
-    .top-login-strip {
-      width: min(1160px, calc(100vw - 1.4rem));
-      margin: 0.7rem auto 0;
-      display: flex;
-      justify-content: flex-end;
-    }
-
     .showcase-hero {
       position: relative;
       overflow: hidden;
@@ -43,6 +36,13 @@
     }
 
     .hero-main {
+      min-width: 0;
+    }
+
+    .hero-side {
+      display: flex;
+      justify-content: flex-end;
+      align-items: flex-start;
       min-width: 0;
     }
 
@@ -400,14 +400,14 @@
         width: calc(100vw - 0.7rem);
       }
 
-      .top-login-strip {
-        width: calc(100vw - 0.7rem);
-      }
-
       .showcase-hero {
         grid-template-columns: 1fr;
         align-items: stretch;
         padding: 1.2rem;
+      }
+
+      .hero-side {
+        justify-content: stretch;
       }
 
       .hero-login-panel {
@@ -451,15 +451,6 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
-  <div class="top-login-strip">
-    <div id="inlineLoginPanel" class="hero-login-panel" hidden>
-      <h2 class="hero-login-title">Sign In With Google</h2>
-      <p class="hero-login-help">Use your school Google account to sign in.</p>
-      <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
-      <div id="heroLoginStatus" class="hero-login-status"></div>
-    </div>
-  </div>
-
   <div class="showcase-shell">
     <section class="showcase-hero">
       <div class="hero-main">
@@ -469,6 +460,14 @@
         <div class="hero-actions">
           <button class="hero-cta" onclick="window.location.href='suggest_recipe.html'">Suggest a Recipe</button>
           <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
+        </div>
+      </div>
+      <div class="hero-side">
+        <div id="inlineLoginPanel" class="hero-login-panel" hidden>
+          <h2 class="hero-login-title">Sign In With Google</h2>
+          <p class="hero-login-help">Use your school Google account to sign in.</p>
+          <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
+          <div id="heroLoginStatus" class="hero-login-status"></div>
         </div>
       </div>
     </section>
