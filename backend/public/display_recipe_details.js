@@ -113,64 +113,77 @@ document.addEventListener('DOMContentLoaded', function() {
   const id = params.get('id');
   if (!id) return;
 
-  fetch('/api/recipes/display-table')
+  fetch('/api/auth/me', { credentials: 'include' })
     .then(res => res.json())
-    .then(rows => {
-      const recipe = rows.find(r => String(r.id) === String(id));
-      if (!recipe) return;
-
-      const title = recipe.name || '(No Name)';
-      const recipeNumber = recipe.recipeid || recipe.recipe_id || recipe.id;
-      const category = getDishCategory(title);
-      const imageUrl = getDishImage(title, recipe.id, category);
-
-      const titleEl = document.getElementById('recipeTitle');
-      const recipeIdEl = document.getElementById('recipeIdPill');
-      const categoryEl = document.getElementById('recipeCategory');
-      const servingsEl = document.getElementById('recipeServings');
-      const sourceEl = document.getElementById('recipeSource');
-      const urlEl = document.getElementById('recipeUrlLink');
-      const imgEl = document.getElementById('recipeHeroImg');
-
-      if (titleEl) titleEl.textContent = title;
-      if (recipeIdEl) recipeIdEl.textContent = `RecipeID: ${recipeNumber}`;
-      if (categoryEl) categoryEl.textContent = category;
-      if (servingsEl) servingsEl.textContent = `Serving Size: ${recipe.serving_size || '-'}`;
-      if (sourceEl) sourceEl.textContent = `Source: ${sourceFromUrl(recipe.url)}`;
-      if (imgEl) {
-        imgEl.src = imageUrl;
-        imgEl.onerror = function() {
-          this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
-        };
+    .then(auth => {
+      const isAuthenticated = Boolean(auth && auth.authenticated && auth.user && auth.user.email);
+      if (!isAuthenticated) {
+        window.location.href = `google_login.html?next=${encodeURIComponent(`recipe_display.html?id=${id}`)}`;
+        return;
       }
 
-      if (urlEl && recipe.url) {
-        urlEl.href = String(recipe.url);
-        urlEl.style.display = 'inline-flex';
-      }
+      return fetch('/api/recipes/display-table')
+        .then(res => res.json())
+        .then(rows => {
+          const recipe = rows.find(r => String(r.id) === String(id));
+          if (!recipe) return;
 
-      document.title = `${title} | Recipe Details`;
+          const title = recipe.name || '(No Name)';
+          const recipeNumber = recipe.recipeid || recipe.recipe_id || recipe.id;
+          const category = getDishCategory(title);
+          const imageUrl = getDishImage(title, recipe.id, category);
 
-      const ingredientLines = splitLines(htmlToPlainText(recipe.ingredients));
-      renderList(document.getElementById('ingredientsList'), ingredientLines);
+          const titleEl = document.getElementById('recipeTitle');
+          const recipeIdEl = document.getElementById('recipeIdPill');
+          const categoryEl = document.getElementById('recipeCategory');
+          const servingsEl = document.getElementById('recipeServings');
+          const sourceEl = document.getElementById('recipeSource');
+          const urlEl = document.getElementById('recipeUrlLink');
+          const imgEl = document.getElementById('recipeHeroImg');
 
-      const instructionText = htmlToPlainText(recipe.instructions);
-      const instructionLines = splitLines(instructionText)
-        .map(line => line.replace(/^\d+[.)]\s*/, '').trim())
-        .filter(Boolean);
+          if (titleEl) titleEl.textContent = title;
+          if (recipeIdEl) recipeIdEl.textContent = `RecipeID: ${recipeNumber}`;
+          if (categoryEl) categoryEl.textContent = category;
+          if (servingsEl) servingsEl.textContent = `Serving Size: ${recipe.serving_size || '-'}`;
+          if (sourceEl) sourceEl.textContent = `Source: ${sourceFromUrl(recipe.url)}`;
+          if (imgEl) {
+            imgEl.src = imageUrl;
+            imgEl.onerror = function() {
+              this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+            };
+          }
 
-      const instructionsListEl = document.getElementById('instructionsList');
-      const instructionsFallbackEl = document.getElementById('instructionsFallback');
+          if (urlEl && recipe.url) {
+            urlEl.href = String(recipe.url);
+            urlEl.style.display = 'inline-flex';
+          }
 
-      if (instructionLines.length >= 2) {
-        renderList(instructionsListEl, instructionLines);
-        if (instructionsFallbackEl) instructionsFallbackEl.style.display = 'none';
-      } else {
-        if (instructionsListEl) instructionsListEl.innerHTML = '';
-        if (instructionsFallbackEl) {
-          instructionsFallbackEl.style.display = 'block';
-          instructionsFallbackEl.textContent = instructionText || 'No instructions available.';
-        }
-      }
+          document.title = `${title} | Recipe Details`;
+
+          const ingredientLines = splitLines(htmlToPlainText(recipe.ingredients));
+          renderList(document.getElementById('ingredientsList'), ingredientLines);
+
+          const instructionText = htmlToPlainText(recipe.instructions);
+          const instructionLines = splitLines(instructionText)
+            .map(line => line.replace(/^\d+[.)]\s*/, '').trim())
+            .filter(Boolean);
+
+          const instructionsListEl = document.getElementById('instructionsList');
+          const instructionsFallbackEl = document.getElementById('instructionsFallback');
+
+          if (instructionLines.length >= 2) {
+            renderList(instructionsListEl, instructionLines);
+            if (instructionsFallbackEl) instructionsFallbackEl.style.display = 'none';
+          } else {
+            if (instructionsListEl) instructionsListEl.innerHTML = '';
+            if (instructionsFallbackEl) {
+              instructionsFallbackEl.style.display = 'block';
+              instructionsFallbackEl.textContent = instructionText || 'No instructions available.';
+            }
+          }
+        });
+    })
+    .catch(() => {
+      window.location.href = `google_login.html?next=${encodeURIComponent(`recipe_display.html?id=${id}`)}`;
     });
 });

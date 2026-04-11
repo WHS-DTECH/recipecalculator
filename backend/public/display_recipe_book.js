@@ -2,6 +2,18 @@
 // Fetches and displays the Recipe Book from recipe_display table instead of recipes
 
 document.addEventListener('DOMContentLoaded', function() {
+  let canOpenRecipeDetails = false;
+
+  function refreshAuthState() {
+    return fetch('/api/auth/me', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((data) => {
+        canOpenRecipeDetails = Boolean(data && data.authenticated && data.user && data.user.email);
+      })
+      .catch(() => {
+        canOpenRecipeDetails = false;
+      });
+  }
   const SOURCE_BRAND_MAP = [
     { match: /chelsea/i, label: 'Chelsea', monogram: 'CH' },
     { match: /edmonds/i, label: 'Edmonds', monogram: 'ED' },
@@ -246,6 +258,10 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     card.onclick = () => {
+      if (!canOpenRecipeDetails) {
+        window.location.href = `google_login.html?next=${encodeURIComponent(`recipe_display.html?id=${row.id}`)}`;
+        return;
+      }
       window.location.href = `recipe_display.html?id=${row.id}`;
     };
 
@@ -262,11 +278,12 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   Promise.all([
+    refreshAuthState(),
     fetch('/api/recipes/display-table').then(res => res.json()).catch(() => []),
     fetch('/api/recipes').then(res => res.json()).catch(() => []),
     fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
   ])
-    .then(([displayRows, allRecipes, bookingsPayload]) => {
+    .then(([, displayRows, allRecipes, bookingsPayload]) => {
       const rows = Array.isArray(displayRows) ? displayRows : [];
       if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
