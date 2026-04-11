@@ -55,19 +55,7 @@ function setNavbarAccountDisplay(user) {
 
     if (logoutBtn) {
       logoutBtn.style.display = '';
-      logoutBtn.onclick = async function(e) {
-        e.preventDefault();
-        try {
-          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
-        } catch (_) {
-          // Ignore logout API errors and clear local view state anyway.
-        }
-        try {
-          sessionStorage.removeItem(CURRENT_STAFF_USER_KEY);
-          sessionStorage.removeItem(ROLE_STORAGE_KEY);
-        } catch (_) {}
-        window.location.href = 'google_login.html';
-      };
+      attachLogoutHandler(logoutBtn);
     }
     return;
   }
@@ -75,6 +63,23 @@ function setNavbarAccountDisplay(user) {
   link.textContent = 'Login';
   link.href = 'google_login.html';
   if (logoutBtn) logoutBtn.style.display = 'none';
+}
+
+function attachLogoutHandler(logoutBtn) {
+  if (!logoutBtn) return;
+  logoutBtn.onclick = async function(e) {
+    e.preventDefault();
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (_) {
+      // Ignore logout API errors and clear local view state anyway.
+    }
+    try {
+      sessionStorage.removeItem(CURRENT_STAFF_USER_KEY);
+      sessionStorage.removeItem(ROLE_STORAGE_KEY);
+    } catch (_) {}
+    window.location.href = 'google_login.html';
+  };
 }
 
 async function setNavbarFromAuthSession() {
@@ -98,6 +103,8 @@ function selectPreloginUser(staffRows) {
 }
 
 async function setNavbarUsername() {
+  attachLogoutHandler(document.querySelector('.navbar-logout-btn'));
+
   const hasAuth = await setNavbarFromAuthSession();
   if (hasAuth) return;
 
