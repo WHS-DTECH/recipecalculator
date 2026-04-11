@@ -91,6 +91,37 @@ document.addEventListener('DOMContentLoaded', function() {
       .filter(Boolean);
   }
 
+  function splitIngredientItems(value) {
+    let text = htmlToPlainText(value)
+      .replace(/\s*[•\u2022]\s*/g, '\n')
+      .replace(/\s*;\s*/g, '\n');
+
+    if (!/\n/.test(text)) {
+      text = text
+        .replace(/\)\s*(?=(?:\d+|[¼½¾]))/g, ')\n')
+        .replace(/\s+(?=(?:\d+\/?\d*|[¼½¾])\s*(?:cups?|cup|tbsp|tsp|g|kg|ml|l|oz|pinch|cloves?|eggs?|cans?|slices?))/gi, '\n');
+    }
+
+    const items = splitLines(text);
+    return items.length ? items : (text ? [text] : []);
+  }
+
+  function splitInstructionItems(value) {
+    let text = htmlToPlainText(value)
+      .replace(/\s*;\s*/g, '. ')
+      .replace(/\s+(?=\d+[.)]?\s*[A-Z])/g, '\n');
+
+    if (!/\n/.test(text)) {
+      text = text.replace(/\.\s+(?=[A-Z])/g, '.\n');
+    }
+
+    const items = splitLines(text)
+      .map(line => line.replace(/^\d+[.)]?\s*/, '').trim())
+      .filter(Boolean);
+
+    return items.length ? items : (text ? [text] : []);
+  }
+
   function renderList(container, items) {
     if (!container) return;
     container.innerHTML = '';
@@ -160,27 +191,16 @@ document.addEventListener('DOMContentLoaded', function() {
 
           document.title = `${title} | Recipe Details`;
 
-          const ingredientLines = splitLines(htmlToPlainText(recipe.ingredients));
+          const ingredientLines = splitIngredientItems(recipe.ingredients);
           renderList(document.getElementById('ingredientsList'), ingredientLines);
 
-          const instructionText = htmlToPlainText(recipe.instructions);
-          const instructionLines = splitLines(instructionText)
-            .map(line => line.replace(/^\d+[.)]\s*/, '').trim())
-            .filter(Boolean);
+          const instructionLines = splitInstructionItems(recipe.instructions);
 
           const instructionsListEl = document.getElementById('instructionsList');
           const instructionsFallbackEl = document.getElementById('instructionsFallback');
 
-          if (instructionLines.length >= 2) {
-            renderList(instructionsListEl, instructionLines);
-            if (instructionsFallbackEl) instructionsFallbackEl.style.display = 'none';
-          } else {
-            if (instructionsListEl) instructionsListEl.innerHTML = '';
-            if (instructionsFallbackEl) {
-              instructionsFallbackEl.style.display = 'block';
-              instructionsFallbackEl.textContent = instructionText || 'No instructions available.';
-            }
-          }
+          renderList(instructionsListEl, instructionLines);
+          if (instructionsFallbackEl) instructionsFallbackEl.style.display = 'none';
         });
     })
     .catch(() => {
