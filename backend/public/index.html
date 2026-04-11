@@ -13,37 +13,35 @@
         #f4f8fc;
     }
 
-    .showcase-shell {
-      width: min(1160px, calc(100vw - 1.4rem));
-      margin: 1.2rem auto 2rem;
-    }
-
-    .top-action-strip {
-      width: 100%;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
+    .page-layout {
+      width: min(1780px, calc(100vw - 1rem));
+      margin: 0.45rem auto 2rem;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: start;
       gap: 1rem;
-      padding: 0.45rem 0.75rem 0;
-      box-sizing: border-box;
     }
 
-    .top-action-strip-start,
-    .top-action-strip-end {
+    .layout-side {
       display: flex;
       align-items: flex-start;
     }
 
-    .top-action-strip-end {
+    .layout-side-right {
       justify-content: flex-end;
-      margin-left: auto;
+    }
+
+    .showcase-shell {
+      width: min(100%, 1160px);
+      margin: 0 auto;
+      min-width: 0;
     }
 
     .showcase-hero {
       position: relative;
       overflow: hidden;
       display: grid;
-      grid-template-columns: minmax(0, 1.2fr) minmax(280px, 420px);
+      grid-template-columns: minmax(0, 1fr);
       gap: 1rem;
       align-items: end;
       border-radius: 20px;
@@ -488,23 +486,10 @@
     }
 
     @media (max-width: 760px) {
-      .showcase-shell {
+      .page-layout {
         width: calc(100vw - 0.7rem);
-      }
-
-      .top-action-strip {
-        flex-direction: column;
-        padding: 0.4rem 0.45rem 0;
-      }
-
-      .top-action-strip-start,
-      .top-action-strip-end {
-        width: 100%;
-      }
-
-      .top-action-strip-end {
-        margin-left: 0;
-        justify-content: flex-end;
+        grid-template-columns: 1fr;
+        gap: 0.65rem;
       }
 
       .showcase-hero {
@@ -558,8 +543,8 @@
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
 
-  <div class="top-action-strip">
-    <div class="top-action-strip-start">
+  <div class="page-layout">
+    <div class="layout-side layout-side-left">
       <div id="inlineSuggestPanel" class="suggest-inline-panel" hidden>
         <h2><span>💡</span> Suggest a Recipe</h2>
         <div class="desc">Have a recipe you'd like added to our collection? Share your suggestion with the VP!</div>
@@ -585,50 +570,50 @@
         <div id="suggestMsg" style="margin-top:1em;"></div>
       </div>
     </div>
-    <div class="top-action-strip-end">
+
+    <div class="showcase-shell">
+      <section class="showcase-hero">
+        <div class="hero-main">
+          <p class="hero-kicker">Food Room Inventory</p>
+          <h1 class="main-title">Recipe Book</h1>
+          <p class="hero-subtitle">Explore the dishes students are learning to cook, from confident weeknight meals to celebration baking projects.</p>
+          <div class="hero-actions">
+            <button id="heroSuggestRecipeButton" class="hero-cta" type="button">Suggest a Recipe</button>
+            <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="weeklyRecipeBox" class="weekly-feature-box">
+        <div class="weekly-feature-head">
+          <h2 class="weekly-feature-title">Students Cooking This Week: <span id="weeklyRecipeDateLabel">Loading...</span></h2>
+        </div>
+        <div id="weeklyRecipeList" class="recipe-card-list"></div>
+        <p id="weeklyRecipeEmpty" class="weekly-empty" style="display:none;">No recipes are booked for this week yet.</p>
+      </section>
+
+      <section class="gallery-shell">
+        <div class="gallery-toolbar">
+          <h2 class="gallery-title">What Students Are Cooking</h2>
+          <div id="recipeCategoryChips" class="main-subaction"></div>
+        </div>
+        <div id="recipeCardList" class="recipe-card-list"></div>
+        <p class="card-disclaimer">Tap the source badge next to each RecipeID to open the original recipe website.</p>
+      </section>
+
+      <div id="toast" class="toast" role="status" aria-live="polite"></div>
+      <div id="globalLoading" class="loading-spinner" style="display:none;"></div>
+      <div id="errorState" class="text-muted" style="display:none;">An error occurred. Please try again later.</div>
+      <div id="emptyState" class="text-muted" style="display:none;">No data available.</div>
+    </div>
+
+    <div class="layout-side layout-side-right">
       <div id="inlineLoginPanel" class="hero-login-panel" hidden>
         <h2 class="hero-login-title">Sign In With Google</h2>
         <p class="hero-login-help">Use your school Google account to sign in.</p>
         <div id="heroGoogleSigninMount" class="hero-google-signin-mount"></div>
         <div id="heroLoginStatus" class="hero-login-status"></div>
       </div>
-    </div>
-  </div>
-
-  <div class="showcase-shell">
-    <section class="showcase-hero">
-      <div class="hero-main">
-        <p class="hero-kicker">Food Room Inventory</p>
-        <h1 class="main-title">Recipe Book</h1>
-        <p class="hero-subtitle">Explore the dishes students are learning to cook, from confident weeknight meals to celebration baking projects.</p>
-        <div class="hero-actions">
-          <button id="heroSuggestRecipeButton" class="hero-cta" type="button">Suggest a Recipe</button>
-          <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
-        </div>
-      </div>
-    </section>
-
-    <section id="weeklyRecipeBox" class="weekly-feature-box">
-      <div class="weekly-feature-head">
-        <h2 class="weekly-feature-title">Students Cooking This Week: <span id="weeklyRecipeDateLabel">Loading...</span></h2>
-      </div>
-      <div id="weeklyRecipeList" class="recipe-card-list"></div>
-      <p id="weeklyRecipeEmpty" class="weekly-empty" style="display:none;">No recipes are booked for this week yet.</p>
-    </section>
-
-    <section class="gallery-shell">
-      <div class="gallery-toolbar">
-        <h2 class="gallery-title">What Students Are Cooking</h2>
-        <div id="recipeCategoryChips" class="main-subaction"></div>
-      </div>
-      <div id="recipeCardList" class="recipe-card-list"></div>
-      <p class="card-disclaimer">Tap the source badge next to each RecipeID to open the original recipe website.</p>
-    </section>
-
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
-    <div id="globalLoading" class="loading-spinner" style="display:none;"></div>
-    <div id="errorState" class="text-muted" style="display:none;">An error occurred. Please try again later.</div>
-    <div id="emptyState" class="text-muted" style="display:none;">No data available.</div>
     </div>
   </div>
 
