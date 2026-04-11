@@ -180,6 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }, {});
 
         chips.innerHTML = Object.entries(counts)
+          .filter(([name]) => name !== 'Student Favourites')
           .sort((a, b) => b[1] - a[1])
           .slice(0, 4)
           .map(([name, count]) => `<span class="recipe-chip">${name}: ${count}</span>`)
@@ -194,6 +195,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const imageUrl = getDishImage(name, row.id, category, index);
         const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
         const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
+        const categoryChipHtml = category === 'Student Favourites'
+          ? ''
+          : `<span class="recipe-chip">${category}</span>`;
         const src = sourceInfo(recipeUrl, name);
         const sourceLink = src.href
           ? `<a class="recipe-source-link" href="${src.href}" target="_blank" rel="noopener noreferrer" title="Open original recipe on ${src.label}">
@@ -216,7 +220,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 <div class="recipe-card-id">#${recipeNumber}</div>
                 ${sourceLink}
               </div>
-              <span class="recipe-chip">${category}</span>
+              ${categoryChipHtml}
             </div>
             <div class="recipe-card-title">${name}</div>
             <div class="recipe-card-sub">${buildCardSubtitle(name)}</div>
