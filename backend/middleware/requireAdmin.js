@@ -6,6 +6,7 @@ function normalizeEmail(value) {
 
 function getRequestEmail(req) {
   return normalizeEmail(
+    req.authUserEmail ||
     req.headers['x-user-email'] ||
     req.headers['x-staff-email'] ||
     req.query.userEmail ||

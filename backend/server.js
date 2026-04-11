@@ -2,8 +2,10 @@
 
 const express = require('express');
 const app = express();
+const cookieParser = require('cookie-parser');
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(cookieParser());
 const fs = require('fs');
 const path = require('path');
 // --- DEBUG: Log all requests to /api/ingredients/inventory/* ---
@@ -14,6 +16,94 @@ app.use('/api/ingredients/inventory', (req, res, next) => {
 
 const pool = require('./db');
 const { requireAdmin } = require('./middleware/requireAdmin');
+const { OAuth2Client } = require('google-auth-library');
+const nodemailer = require('nodemailer');
+const {
+  canUseSessions,
+  issueSessionCookie,
+  clearSessionCookie,
+  attachAuthUser
+} = require('./middleware/authSession');
+
+app.use(attachAuthUser);
+
+const googleClient = new OAuth2Client();
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getGoogleClientId() {
+  return String(process.env.GOOGLE_CLIENT_ID || '').trim();
+}
+
+function getSuggestionNotifyRecipients() {
+  const configured = String(process.env.SUGGESTION_NOTIFY_TO || process.env.ADMIN_NOTIFICATION_EMAIL || '')
+    .split(',')
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+  return configured;
+}
+
+function createSuggestionMailer() {
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const user = String(process.env.SMTP_USER || '').trim();
+  const pass = String(process.env.SMTP_PASS || '').trim();
+  if (!host || !user || !pass) return null;
+
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: { user, pass }
+  });
+}
+
+async function sendSuggestionNotificationEmail(suggestion) {
+  const recipients = getSuggestionNotifyRecipients();
+  if (!recipients.length) return;
+
+  const transporter = createSuggestionMailer();
+  if (!transporter) {
+    console.warn('[SUGGESTIONS] Email skipped: SMTP_HOST/SMTP_USER/SMTP_PASS not configured.');
+    return;
+  }
+
+  const fromAddress = String(process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  if (!fromAddress) {
+    console.warn('[SUGGESTIONS] Email skipped: no sender address configured.');
+    return;
+  }
+
+  const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
+  const suggester = suggestion.suggested_by || 'Unknown';
+  const email = suggestion.email || 'Not provided';
+  const date = suggestion.date || '';
+  const reason = suggestion.reason || '';
+  const url = suggestion.url || '';
+
+  const text = [
+    'New recipe suggestion submitted.',
+    '',
+    `Date: ${date}`,
+    `Recipe: ${recipeName}`,
+    `Suggested By: ${suggester}`,
+    `Email: ${email}`,
+    `URL: ${url || 'N/A'}`,
+    '',
+    'Reason:',
+    reason || 'N/A'
+  ].join('\n');
+
+  await transporter.sendMail({
+    from: fromAddress,
+    to: recipients.join(','),
+    subject: `[Recipe Suggestion] ${recipeName}`,
+    text
+  });
+}
 
 // Compatibility wrapper for legacy SQLite-style db.* calls that still exist in this file.
 // This keeps legacy endpoints from throwing ReferenceError while the remaining handlers are migrated.
@@ -150,6 +240,81 @@ app.use('/api/permissions', permissionsRouter);
 const userRolesRouter = require('./routes/user_roles');
 app.use('/api/user_roles', userRolesRouter);
 
+// --- Google Auth API ---
+app.get('/api/auth/google/config', (req, res) => {
+  const clientId = getGoogleClientId();
+  if (!clientId) {
+    return res.status(503).json({ success: false, error: 'Google Sign-In is not configured.' });
+  }
+  return res.json({ success: true, clientId });
+});
+
+app.post('/api/auth/google/login', async (req, res) => {
+  const clientId = getGoogleClientId();
+  if (!clientId) {
+    return res.status(503).json({ success: false, error: 'Google Sign-In is not configured.' });
+  }
+
+  if (!canUseSessions()) {
+    return res.status(503).json({ success: false, error: 'Session secret is not configured.' });
+  }
+
+  const idToken = String(req.body && req.body.idToken ? req.body.idToken : '').trim();
+  if (!idToken) {
+    return res.status(400).json({ success: false, error: 'Missing Google token.' });
+  }
+
+  try {
+    const ticket = await googleClient.verifyIdToken({
+      idToken,
+      audience: clientId
+    });
+    const payload = ticket.getPayload() || {};
+    const email = normalizeEmail(payload.email);
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Google account email is required.' });
+    }
+
+    issueSessionCookie(res, {
+      email,
+      name: payload.name || email,
+      picture: payload.picture || ''
+    });
+
+    return res.json({
+      success: true,
+      user: {
+        email,
+        name: payload.name || email,
+        picture: payload.picture || ''
+      }
+    });
+  } catch (err) {
+    console.error('[AUTH] Google login failed:', err.message);
+    return res.status(401).json({ success: false, error: 'Invalid Google sign-in token.' });
+  }
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.authUserEmail) {
+    return res.json({ success: true, authenticated: false });
+  }
+  return res.json({
+    success: true,
+    authenticated: true,
+    user: {
+      email: req.authUserEmail,
+      name: (req.authUser && req.authUser.name) || req.authUserEmail,
+      picture: (req.authUser && req.authUser.picture) || ''
+    }
+  });
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearSessionCookie(res);
+  return res.json({ success: true });
+});
+
 // --- Suggestions API ---
 app.get('/api/suggestions', async (req, res) => {
   try {
@@ -160,13 +325,22 @@ app.get('/api/suggestions', async (req, res) => {
   }
 });
 app.post('/api/suggestions', async (req, res) => {
-  const { date, recipe_name, suggested_by, email, url, reason } = req.body;
+  const authEmail = normalizeEmail(req.authUserEmail || '');
+  const authName = String(req.authUser && req.authUser.name ? req.authUser.name : '').trim();
+  const date = req.body.date;
+  const recipe_name = req.body.recipe_name;
+  const suggested_by = String(req.body.suggested_by || '').trim() || authName || (authEmail ? authEmail.split('@')[0] : '');
+  const email = normalizeEmail(req.body.email || '') || authEmail;
+  const url = req.body.url;
+  const reason = req.body.reason;
   const doInsert = () => pool.query(
     'INSERT INTO suggestions (date, recipe_name, suggested_by, email, url, reason) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id',
     [date, recipe_name, suggested_by, email, url, reason]
   );
   try {
     const result = await doInsert();
+    sendSuggestionNotificationEmail({ date, recipe_name, suggested_by, email, url, reason })
+      .catch((mailErr) => console.error('[SUGGESTIONS] Email notification failed:', mailErr.message));
     res.json({ success: true, id: result.rows[0].id });
   } catch (err) {
     if (err.code === '23505' && err.constraint === 'suggestions_pkey') {

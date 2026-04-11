@@ -1,6 +1,19 @@
 document.addEventListener('DOMContentLoaded', () => {
     const form = document.getElementById('userSuggestForm');
     const msg = document.getElementById('suggestMsg');
+    let authUser = null;
+
+    fetch('/api/auth/me', { credentials: 'include' })
+        .then(res => res.json())
+        .then(data => {
+            if (data && data.authenticated && data.user) {
+                authUser = data.user;
+            }
+        })
+        .catch(() => {
+            authUser = null;
+        });
+
     form.onsubmit = async function(e) {
         e.preventDefault();
         const data = {
@@ -8,12 +21,13 @@ document.addEventListener('DOMContentLoaded', () => {
             recipe_name: form.recipe_name.value,
             url: form.url.value,
             reason: form.reason.value,
-            suggested_by: '',
-            email: ''
+            suggested_by: authUser && authUser.name ? authUser.name : '',
+            email: authUser && authUser.email ? authUser.email : ''
         };
         const res = await fetch('/api/suggestions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify(data)
         });
         if (res.ok) {

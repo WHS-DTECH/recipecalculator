@@ -3,6 +3,7 @@
 
 const CURRENT_STAFF_USER_KEY = 'currentStaffUser';
 const PREFERRED_ADMIN_EMAIL = 'vanessapringle@westlandhigh.school.nz';
+const ROLE_STORAGE_KEY = 'navbar_user_role';
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -24,12 +25,82 @@ function persistCurrentStaffUser(user) {
   }
 }
 
+function deriveNameFromEmail(email) {
+  const local = String(email || '').split('@')[0] || 'User';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function setNavbarAccountDisplay(user) {
+  const link = document.getElementById('navbarUsername');
+  const logoutBtn = document.querySelector('.navbar-logout-btn');
+  if (!link) return;
+
+  if (user && user.email) {
+    const displayName = String(user.name || '').trim() || deriveNameFromEmail(user.email);
+    link.textContent = displayName;
+    link.href = 'user_profile.html';
+
+    persistCurrentStaffUser({
+      id: '',
+      code: '',
+      first_name: displayName.split(' ')[0] || displayName,
+      last_name: displayName.split(' ').slice(1).join(' '),
+      title: '',
+      email_school: user.email
+    });
+
+    if (logoutBtn) {
+      logoutBtn.style.display = '';
+      logoutBtn.onclick = async function(e) {
+        e.preventDefault();
+        try {
+          await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+        } catch (_) {
+          // Ignore logout API errors and clear local view state anyway.
+        }
+        try {
+          sessionStorage.removeItem(CURRENT_STAFF_USER_KEY);
+          sessionStorage.removeItem(ROLE_STORAGE_KEY);
+        } catch (_) {}
+        window.location.href = 'google_login.html';
+      };
+    }
+    return;
+  }
+
+  link.textContent = 'Login';
+  link.href = 'google_login.html';
+  if (logoutBtn) logoutBtn.style.display = 'none';
+}
+
+async function setNavbarFromAuthSession() {
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'include' });
+    if (!res.ok) return false;
+    const data = await res.json();
+    if (data && data.authenticated && data.user) {
+      setNavbarAccountDisplay(data.user);
+      return true;
+    }
+    return false;
+  } catch (_) {
+    return false;
+  }
+}
+
 function selectPreloginUser(staffRows) {
   if (!Array.isArray(staffRows) || staffRows.length === 0) return null;
   return staffRows.find((user) => normalizeEmail(user.email_school) === PREFERRED_ADMIN_EMAIL) || staffRows[0];
 }
 
-function setNavbarUsername() {
+async function setNavbarUsername() {
+  const hasAuth = await setNavbarFromAuthSession();
+  if (hasAuth) return;
+
   fetch('/api/staff_upload/all')
     .then(res => res.json())
     .then(result => {
@@ -44,6 +115,9 @@ function setNavbarUsername() {
           link.href = 'user_profile.html?user=' + encodeURIComponent(user.id);
         }
       }
+    })
+    .catch(() => {
+      setNavbarAccountDisplay(null);
     });
 }
 
