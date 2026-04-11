@@ -537,6 +537,31 @@
         transform: translateY(0);
       }
     }
+
+    .site-footer {
+      text-align: center;
+      padding: 1.5rem 1rem;
+      border-top: 1px solid #e2e8f0;
+      margin-top: 2rem;
+    }
+    .footer-suggest-btn {
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 0.65rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.18s, transform 0.12s;
+    }
+    .footer-suggest-btn:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+    }
+    .footer-suggest-btn:active {
+      transform: translateY(1px);
+    }
   </style>
 </head>
 <body>
@@ -578,7 +603,6 @@
           <h1 class="main-title">Recipe Book</h1>
           <p class="hero-subtitle">Explore the dishes students are learning to cook, from confident weeknight meals to celebration baking projects.</p>
           <div class="hero-actions">
-            <button id="heroSuggestRecipeButton" class="hero-cta" type="button">Suggest a Recipe</button>
             <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
           </div>
         </div>
@@ -616,6 +640,10 @@
       </div>
     </div>
   </div>
+
+  <footer class="site-footer">
+    <button id="heroSuggestRecipeButton" class="footer-suggest-btn" type="button">💡 Suggest a Recipe</button>
+  </footer>
 
   <script src="display_recipe_book.js"></script>
   <script src="suggest_recipe.js"></script>
