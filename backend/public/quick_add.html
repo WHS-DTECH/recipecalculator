@@ -74,6 +74,38 @@
       max-width: 78ch;
     }
 
+    .suggestions-link-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      white-space: nowrap;
+      text-decoration: none;
+      margin-top: 0.2rem;
+      padding: 0.5rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid #174f84;
+      background: linear-gradient(135deg, #1f69ad 0%, #1a5a95 100%);
+      color: #ffffff;
+      font-weight: 800;
+      font-size: 0.86rem;
+      letter-spacing: 0.01em;
+      box-shadow: 0 7px 18px rgba(23, 79, 132, 0.22);
+      transition: transform 0.12s ease, box-shadow 0.16s ease, filter 0.16s ease;
+    }
+
+    .suggestions-link-btn:hover {
+      transform: translateY(-1px);
+      filter: brightness(1.03);
+      box-shadow: 0 10px 22px rgba(23, 79, 132, 0.28);
+      color: #ffffff;
+      text-decoration: none;
+    }
+
+    .suggestions-link-btn:focus-visible {
+      outline: 3px solid #9ec5ef;
+      outline-offset: 2px;
+    }
+
     .workflow-strip {
       display: flex;
       flex-wrap: wrap;
@@ -232,7 +264,7 @@
           <h2 class="quickadd-title">Add Recipes Workflow</h2>
           <p class="quickadd-intro">Single-page workflow for Teacher/Technician: choose source, save recipe, extract content, then publish + sync for class shopping.</p>
         </div>
-        <a href="admin_suggest_recipe.html" class="setup-btn" style="white-space:nowrap;text-decoration:none;margin-top:0.25rem;">📋 Suggestions List</a>
+        <a href="admin_suggest_recipe.html" class="suggestions-link-btn">📋 Suggestions List</a>
       </div>
       <div class="workflow-strip">
         <span class="workflow-chip">1. Load Source</span>
