@@ -161,6 +161,133 @@
       .recipe-content-grid {
         grid-template-columns: 1fr;
       }
+
+      .recipe-detail-wrapper {
+        grid-template-columns: 1fr;
+      }
+
+      .recipe-nav-sidebar {
+        max-height: 300px;
+        order: -1;
+      }
+    }
+
+    .recipe-detail-wrapper {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 1rem;
+    }
+
+    .recipe-nav-sidebar {
+      background: #fff;
+      border: 1px solid #d9e5f0;
+      border-radius: 14px;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.09);
+      padding: 1rem;
+      height: fit-content;
+      position: sticky;
+      top: 1rem;
+    }
+
+    .nav-sidebar-header {
+      margin: 0 0 0.8rem;
+      font-size: 1.07rem;
+      color: #15324c;
+      letter-spacing: 0.02em;
+      font-weight: 700;
+    }
+
+    .nav-button-group {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .nav-btn {
+      flex: 1;
+      border: 1px solid #d9e5f0;
+      background: #f8fafb;
+      color: #15324c;
+      border-radius: 8px;
+      padding: 0.5rem;
+      font-weight: 600;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .nav-btn:hover:not(:disabled) {
+      background: #e6f1ff;
+      border-color: #2f84ca;
+      color: #0f4f8b;
+    }
+
+    .nav-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .recipe-counter {
+      text-align: center;
+      font-size: 0.8rem;
+      color: #5d748c;
+      margin-bottom: 1rem;
+    }
+
+    #recipeSearchInput {
+      width: 100%;
+      border: 1px solid #d9e5f0;
+      border-radius: 8px;
+      padding: 0.5rem;
+      font-size: 0.9rem;
+      margin-bottom: 1rem;
+      box-sizing: border-box;
+    }
+
+    #recipeNavigationList {
+      max-height: 500px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .recipe-nav-item {
+      padding: 0.7rem;
+      background: #f8fafb;
+      border: 1px solid #e8ecf1;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .recipe-nav-item:hover {
+      background: #e6f1ff;
+      border-color: #2f84ca;
+    }
+
+    .recipe-nav-item.active {
+      background: #2f84ca;
+      border-color: #0f4f8b;
+      color: #fff;
+    }
+
+    .recipe-nav-name {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.25rem;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recipe-nav-id {
+      font-size: 0.75rem;
+      opacity: 0.7;
+    }
+
+    .recipe-nav-item.active .recipe-nav-id {
+      opacity: 0.95;
     }
   </style>
 </head>
@@ -187,20 +314,33 @@
       </div>
     </section>
 
-    <section class="recipe-content-grid">
-      <article class="recipe-panel">
-        <h2 class="panel-title">Ingredients</h2>
-        <p class="panel-subtitle">What students prepare for this dish.</p>
-        <ul id="ingredientsList" class="ingredient-list"></ul>
-      </article>
+    <div class="recipe-detail-wrapper">
+      <aside class="recipe-nav-sidebar">
+        <h3 class="nav-sidebar-header">Browse Recipes</h3>
+        <div class="nav-button-group">
+          <button id="prevRecipeBtn" class="nav-btn">← Prev</button>
+          <button id="nextRecipeBtn" class="nav-btn">Next →</button>
+        </div>
+        <div class="recipe-counter" id="recipeCounter">- / -</div>
+        <input id="recipeSearchInput" type="text" placeholder="Search recipes..." aria-label="Search recipes">
+        <div id="recipeNavigationList"></div>
+      </aside>
 
-      <article class="recipe-panel">
-        <h2 class="panel-title">Instructions</h2>
-        <p class="panel-subtitle">Step-by-step cooking method.</p>
-        <ol id="instructionsList" class="instruction-list"></ol>
-        <p id="instructionsFallback" class="instruction-text-fallback" style="display:none;"></p>
-      </article>
-    </section>
+      <section class="recipe-content-grid">
+        <article class="recipe-panel">
+          <h2 class="panel-title">Ingredients</h2>
+          <p class="panel-subtitle">What students prepare for this dish.</p>
+          <ul id="ingredientsList" class="ingredient-list"></ul>
+        </article>
+
+        <article class="recipe-panel">
+          <h2 class="panel-title">Instructions</h2>
+          <p class="panel-subtitle">Step-by-step cooking method.</p>
+          <ol id="instructionsList" class="instruction-list"></ol>
+          <p id="instructionsFallback" class="instruction-text-fallback" style="display:none;"></p>
+        </article>
+      </section>
+    </div>
   </main>
 
   <script src="display_recipe_details.js"></script>

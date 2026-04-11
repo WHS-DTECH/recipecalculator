@@ -157,6 +157,68 @@ document.addEventListener('DOMContentLoaded', function() {
   const id = params.get('id');
   if (!id) return;
 
+  let allRecipes = [];
+
+  function navigateToRecipe(recipeId) {
+    window.location.href = `recipe_display.html?id=${recipeId}`;
+  }
+
+  function updateRecipeList(recipes, currentId) {
+    const listContainer = document.getElementById('recipeNavigationList');
+    if (!listContainer) return;
+
+    listContainer.innerHTML = '';
+    recipes.forEach(recipe => {
+      const item = document.createElement('div');
+      item.className = `recipe-nav-item ${String(recipe.id) === String(currentId) ? 'active' : ''}`;
+      item.innerHTML = `
+        <div class="recipe-nav-name">${recipe.name || '(Unnamed)'}</div>
+        <div class="recipe-nav-id">ID: ${recipe.recipeid || recipe.recipe_id || recipe.id}</div>
+      `;
+      item.addEventListener('click', () => navigateToRecipe(recipe.id));
+      listContainer.appendChild(item);
+    });
+  }
+
+  function updateNavButtons(recipes, currentId) {
+    const currentIndex = recipes.findIndex(r => String(r.id) === String(currentId));
+    const prevBtn = document.getElementById('prevRecipeBtn');
+    const nextBtn = document.getElementById('nextRecipeBtn');
+    const recipeCounter = document.getElementById('recipeCounter');
+
+    if (recipeCounter) {
+      recipeCounter.textContent = `${currentIndex + 1} / ${recipes.length}`;
+    }
+
+    if (prevBtn) {
+      if (currentIndex > 0) {
+        prevBtn.disabled = false;
+        prevBtn.addEventListener('click', () => navigateToRecipe(recipes[currentIndex - 1].id));
+      } else {
+        prevBtn.disabled = true;
+      }
+    }
+
+    if (nextBtn) {
+      if (currentIndex < recipes.length - 1) {
+        nextBtn.disabled = false;
+        nextBtn.addEventListener('click', () => navigateToRecipe(recipes[currentIndex + 1].id));
+      } else {
+        nextBtn.disabled = true;
+      }
+    }
+  }
+
+  function filterRecipeList(searchTerm) {
+    const term = String(searchTerm || '').toLowerCase();
+    const items = document.querySelectorAll('.recipe-nav-item');
+    items.forEach(item => {
+      const name = item.querySelector('.recipe-nav-name').textContent.toLowerCase();
+      const id = item.querySelector('.recipe-nav-id').textContent.toLowerCase();
+      item.style.display = (name.includes(term) || id.includes(term)) ? '' : 'none';
+    });
+  }
+
   fetch('/api/auth/me', { credentials: 'include' })
     .then(res => res.json())
     .then(auth => {
@@ -169,8 +231,17 @@ document.addEventListener('DOMContentLoaded', function() {
       return fetch('/api/recipes/display-table')
         .then(res => res.json())
         .then(rows => {
+          allRecipes = rows;
           const recipe = rows.find(r => String(r.id) === String(id));
           if (!recipe) return;
+
+          updateRecipeList(rows, id);
+          updateNavButtons(rows, id);
+
+          const searchInput = document.getElementById('recipeSearchInput');
+          if (searchInput) {
+            searchInput.addEventListener('input', (e) => filterRecipeList(e.target.value));
+          }
 
           const title = recipe.name || '(No Name)';
           const recipeNumber = recipe.recipeid || recipe.recipe_id || recipe.id;
