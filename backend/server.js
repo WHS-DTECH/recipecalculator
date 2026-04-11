@@ -200,10 +200,16 @@ function createSuggestionMailer() {
 
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
+  const connectionTimeout = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 8000);
+  const greetingTimeout = Number(process.env.SMTP_GREETING_TIMEOUT_MS || 8000);
+  const socketTimeout = Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 12000);
   return nodemailer.createTransport({
     host,
     port,
     secure,
+    connectionTimeout,
+    greetingTimeout,
+    socketTimeout,
     auth: { user, pass }
   });
 }
@@ -268,17 +274,30 @@ async function sendSuggestionNotificationEmail(suggestion) {
     reason || 'N/A'
   ].join('\n');
 
-  const info = await transporter.sendMail({
+  const sendTimeoutMs = Number(process.env.SUGGESTION_EMAIL_TIMEOUT_MS || 12000);
+  const sendPromise = transporter.sendMail({
     from: fromAddress,
     to: recipients.join(','),
     subject: `[Recipe Suggestion] ${recipeName}`,
     text
   });
 
+  // Avoid leaving the suggestion API hanging if SMTP is slow/unreachable.
+  const info = await Promise.race([
+    sendPromise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('EMAIL_SEND_TIMEOUT')), sendTimeoutMs))
+  ]).catch((err) => {
+    if (String(err && err.message) === 'EMAIL_SEND_TIMEOUT') {
+      return { accepted: [], __timedOut: true };
+    }
+    throw err;
+  });
+
   const accepted = Array.isArray(info && info.accepted) ? info.accepted.length : 0;
+  const timedOut = Boolean(info && info.__timedOut);
   return {
     sent: accepted > 0,
-    reason: accepted > 0 ? 'sent' : 'not_accepted',
+    reason: accepted > 0 ? 'sent' : (timedOut ? 'send_timeout' : 'not_accepted'),
     recipients,
     recipientCount: recipients.length,
     acceptedCount: accepted

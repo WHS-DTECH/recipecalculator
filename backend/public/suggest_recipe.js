@@ -98,39 +98,45 @@ document.addEventListener('DOMContentLoaded', () => {
             suggested_by: suggestedBy,
             email: email
         };
-        const res = await fetch('/api/suggestions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify(data)
-        });
-        if (res.ok) {
-            const result = await res.json().catch(() => ({}));
-            if (authUser) {
-                form.recipe_name.value = '';
-                form.url.value = '';
-                form.reason.value = '';
-            } else {
-                form.reset();
-            }
+        try {
+            const res = await fetch('/api/suggestions', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(data)
+            });
 
-            const notification = result.notification || {};
-            if (notification.sent) {
-                setMsg('success', `Thank you for your suggestion. Email sent to Teachers/Admin (${notification.recipientCount || 0} recipients).`);
+            if (res.ok) {
+                const result = await res.json().catch(() => ({}));
+                if (authUser) {
+                    form.recipe_name.value = '';
+                    form.url.value = '';
+                    form.reason.value = '';
+                } else {
+                    form.reset();
+                }
+
+                const notification = result.notification || {};
+                if (notification.sent) {
+                    setMsg('success', `Thank you for your suggestion. Email sent to Teachers/Admin (${notification.recipientCount || 0} recipients).`);
+                } else {
+                    const reasonTextMap = {
+                        no_recipients: 'No Teacher/Admin recipients were found.',
+                        smtp_not_configured: 'Email is not configured yet (SMTP settings missing).',
+                        sender_not_configured: 'Email sender address is not configured.',
+                        not_accepted: 'Email server did not accept recipients.',
+                        send_failed: 'Email sending failed. Please check server logs.',
+                        send_timeout: 'Email delivery timed out while contacting SMTP. Suggestion was still saved.'
+                    };
+                    const reasonText = reasonTextMap[notification.reason] || 'Email status is unknown.';
+                    setMsg('warn', `Suggestion saved to list. Email notification not sent: ${reasonText}`);
+                }
             } else {
-                const reasonTextMap = {
-                    no_recipients: 'No Teacher/Admin recipients were found.',
-                    smtp_not_configured: 'Email is not configured yet (SMTP settings missing).',
-                    sender_not_configured: 'Email sender address is not configured.',
-                    not_accepted: 'Email server did not accept recipients.',
-                    send_failed: 'Email sending failed. Please check server logs.'
-                };
-                const reasonText = reasonTextMap[notification.reason] || 'Email status is unknown.';
-                setMsg('warn', `Suggestion saved to list. Email notification not sent: ${reasonText}`);
+                const result = await res.json().catch(() => ({}));
+                setMsg('error', result.error || 'Failed to send suggestion. Please try again later.');
             }
-        } else {
-            const result = await res.json().catch(() => ({}));
-            setMsg('error', result.error || 'Failed to send suggestion. Please try again later.');
+        } catch (err) {
+            setMsg('error', 'Could not reach the server. Suggestion may not have been submitted. Please try again.');
         }
     };
 });
