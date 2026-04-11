@@ -152,21 +152,181 @@ document.addEventListener('DOMContentLoaded', function() {
     };
   }
 
+  function parseLocalIsoDate(value) {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
+    if (!match) return null;
+    return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  }
+
+  function parseBookingDate(value) {
+    return parseLocalIsoDate(value) || new Date(value);
+  }
+
+  function getWeekStart(date) {
+    const base = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    base.setHours(0, 0, 0, 0);
+    base.setDate(base.getDate() - base.getDay());
+    return base;
+  }
+
+  function getWeekEnd(startDate) {
+    const end = new Date(startDate);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    return end;
+  }
+
+  function formatWeekRangeLabel(startDate, endDate) {
+    const startDay = startDate.getDate();
+    const endDay = endDate.getDate();
+    const startMonth = startDate.toLocaleString('en-NZ', { month: 'long' });
+    const endMonth = endDate.toLocaleString('en-NZ', { month: 'long' });
+
+    if (startMonth === endMonth) {
+      return `${startDay} - ${endDay} ${startMonth}`;
+    }
+
+    return `${startDay} ${startMonth} - ${endDay} ${endMonth}`;
+  }
+
+  function rowRecipeKey(row) {
+    return String(row.recipeid || row.recipe_id || row.id || '');
+  }
+
+  function createRecipeCard(row, index, recipeById) {
+    const name = row.name || '(No Name)';
+    const recipeNumber = row.recipeid || row.recipe_id || row.id;
+    const category = getDishCategory(name);
+    const imageUrl = getDishImage(name, row.id, category, index);
+    const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
+    const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
+    const categoryChipHtml = category === 'Student Favourites'
+      ? ''
+      : `<span class="recipe-chip">${category}</span>`;
+    const src = sourceInfo(recipeUrl, name);
+    const sourceLink = src.href
+      ? `<a class="recipe-source-link" href="${src.href}" target="_blank" rel="noopener noreferrer" title="Open original recipe on ${src.label}">
+           <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
+           <span class="recipe-source-name">${src.label}</span>
+         </a>`
+      : `<span class="recipe-source-link recipe-source-link-disabled" title="No source URL">
+           <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
+           <span class="recipe-source-name">${src.label}</span>
+         </span>`;
+
+    const card = document.createElement('div');
+    card.className = 'recipe-card';
+    card.style.cursor = 'pointer';
+    card.innerHTML = `
+      <img class="recipe-thumb" src="${imageUrl}" alt="${String(name).replace(/"/g, '&quot;')}" loading="lazy">
+      <div class="recipe-card-body">
+        <div class="recipe-card-top">
+          <div class="recipe-card-top-left">
+            <div class="recipe-card-id">#${recipeNumber}</div>
+            ${sourceLink}
+          </div>
+          ${categoryChipHtml}
+        </div>
+        <div class="recipe-card-title">${name}</div>
+        <div class="recipe-card-sub">${buildCardSubtitle(name)}</div>
+      </div>
+    `;
+
+    const img = card.querySelector('.recipe-thumb');
+    if (img) {
+      img.onerror = function() {
+        this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+      };
+    }
+
+    card.querySelectorAll('.recipe-source-link').forEach((linkEl) => {
+      linkEl.addEventListener('click', (event) => {
+        event.stopPropagation();
+      });
+    });
+
+    card.onclick = () => {
+      window.location.href = `recipe_display.html?id=${row.id}`;
+    };
+
+    return card;
+  }
+
+  function renderRecipeCards(container, rows, recipeById, startIndex) {
+    if (!container) return;
+    container.innerHTML = '';
+    rows.forEach((row, index) => {
+      const card = createRecipeCard(row, startIndex + index, recipeById);
+      container.appendChild(card);
+    });
+  }
+
   Promise.all([
     fetch('/api/recipes/display-table').then(res => res.json()).catch(() => []),
-    fetch('/api/recipes').then(res => res.json()).catch(() => [])
+    fetch('/api/recipes').then(res => res.json()).catch(() => []),
+    fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
   ])
-    .then(([displayRows, allRecipes]) => {
+    .then(([displayRows, allRecipes, bookingsPayload]) => {
       const rows = Array.isArray(displayRows) ? displayRows : [];
       if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
       const badge = document.getElementById('recipeCountBadge');
       const chips = document.getElementById('recipeCategoryChips');
+      const weeklyBox = document.getElementById('weeklyRecipeBox');
+      const weeklyDateLabel = document.getElementById('weeklyRecipeDateLabel');
+      const weeklyList = document.getElementById('weeklyRecipeList');
+      const weeklyEmpty = document.getElementById('weeklyRecipeEmpty');
       if (!cardList) return;
 
       const recipeById = new Map(
         (Array.isArray(allRecipes) ? allRecipes : []).map(recipe => [String(recipe.id), recipe])
       );
+      const displayByRecipeId = new Map(rows.map(row => [rowRecipeKey(row), row]));
+      const displayByName = new Map(rows.map(row => [String(row.name || '').trim().toLowerCase(), row]));
+      const bookings = Array.isArray(bookingsPayload && bookingsPayload.bookings) ? bookingsPayload.bookings : [];
+
+      const now = new Date();
+      const weekStart = getWeekStart(now);
+      const weekEnd = getWeekEnd(weekStart);
+
+      if (weeklyDateLabel) {
+        weeklyDateLabel.textContent = formatWeekRangeLabel(weekStart, weekEnd);
+      }
+
+      const featuredRows = [];
+      const featuredKeys = new Set();
+
+      bookings.forEach((booking) => {
+        const bookingDate = parseBookingDate(booking && booking.booking_date);
+        if (!(bookingDate instanceof Date) || Number.isNaN(bookingDate.getTime())) return;
+        if (bookingDate < weekStart || bookingDate > weekEnd) return;
+
+        const byId = displayByRecipeId.get(String(booking.recipe_id || '').trim());
+        const byName = displayByName.get(String(booking.recipe || '').trim().toLowerCase());
+        const row = byId || byName;
+        if (!row) return;
+
+        const key = rowRecipeKey(row);
+        if (!key || featuredKeys.has(key)) return;
+        featuredKeys.add(key);
+        featuredRows.push(row);
+      });
+
+      if (weeklyBox && weeklyList && weeklyEmpty) {
+        if (featuredRows.length > 0) {
+          weeklyBox.style.display = '';
+          weeklyEmpty.style.display = 'none';
+          renderRecipeCards(weeklyList, featuredRows, recipeById, 0);
+        } else {
+          weeklyBox.style.display = '';
+          weeklyList.innerHTML = '';
+          weeklyEmpty.style.display = '';
+        }
+      }
+
+      const orderedRows = featuredRows.length > 0
+        ? [...featuredRows, ...rows.filter(row => !featuredKeys.has(rowRecipeKey(row)))]
+        : rows;
 
       if (badge) {
         badge.textContent = `${rows.length} recipes in the student showcase`;
@@ -187,63 +347,6 @@ document.addEventListener('DOMContentLoaded', function() {
           .join('');
       }
 
-      cardList.innerHTML = '';
-      rows.forEach((row, index) => {
-        const name = row.name || '(No Name)';
-        const recipeNumber = row.recipeid || row.recipe_id || row.id;
-        const category = getDishCategory(name);
-        const imageUrl = getDishImage(name, row.id, category, index);
-        const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
-        const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
-        const categoryChipHtml = category === 'Student Favourites'
-          ? ''
-          : `<span class="recipe-chip">${category}</span>`;
-        const src = sourceInfo(recipeUrl, name);
-        const sourceLink = src.href
-          ? `<a class="recipe-source-link" href="${src.href}" target="_blank" rel="noopener noreferrer" title="Open original recipe on ${src.label}">
-               <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
-               <span class="recipe-source-name">${src.label}</span>
-             </a>`
-          : `<span class="recipe-source-link recipe-source-link-disabled" title="No source URL">
-               <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
-               <span class="recipe-source-name">${src.label}</span>
-             </span>`;
-
-        const card = document.createElement('div');
-        card.className = 'recipe-card';
-        card.style.cursor = 'pointer';
-        card.innerHTML = `
-          <img class="recipe-thumb" src="${imageUrl}" alt="${String(name).replace(/"/g, '&quot;')}" loading="lazy">
-          <div class="recipe-card-body">
-            <div class="recipe-card-top">
-              <div class="recipe-card-top-left">
-                <div class="recipe-card-id">#${recipeNumber}</div>
-                ${sourceLink}
-              </div>
-              ${categoryChipHtml}
-            </div>
-            <div class="recipe-card-title">${name}</div>
-            <div class="recipe-card-sub">${buildCardSubtitle(name)}</div>
-          </div>
-        `;
-
-        const img = card.querySelector('.recipe-thumb');
-        if (img) {
-          img.onerror = function() {
-            this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
-          };
-        }
-
-        card.querySelectorAll('.recipe-source-link').forEach((linkEl) => {
-          linkEl.addEventListener('click', (event) => {
-            event.stopPropagation();
-          });
-        });
-
-        card.onclick = () => {
-          window.location.href = `recipe_display.html?id=${row.id}`;
-        };
-        cardList.appendChild(card);
-      });
+      renderRecipeCards(cardList, orderedRows, recipeById, featuredRows.length);
     });
 });

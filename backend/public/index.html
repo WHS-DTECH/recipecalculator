@@ -118,6 +118,45 @@
       padding: 1rem;
     }
 
+    .weekly-feature-box {
+      margin-top: 1rem;
+      border: 2px solid #3e8fd0;
+      border-radius: 18px;
+      padding: 1rem;
+      background:
+        linear-gradient(180deg, rgba(233, 245, 255, 0.85), rgba(255, 255, 255, 0.98));
+      box-shadow: 0 14px 28px rgba(17, 72, 137, 0.12);
+    }
+
+    .weekly-feature-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
+
+    .weekly-feature-title {
+      margin: 0;
+      font-size: 1.08rem;
+      color: #123e62;
+      font-weight: 800;
+      letter-spacing: 0.01em;
+    }
+
+    .weekly-feature-title span {
+      color: #1a5d93;
+      font-weight: 700;
+    }
+
+    .weekly-empty {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #40617f;
+      padding: 0.45rem 0;
+    }
+
     .gallery-toolbar {
       display: flex;
       align-items: center;
@@ -351,6 +390,14 @@
         <button class="hero-cta" onclick="window.location.href='suggest_recipe.html'">Suggest a Recipe</button>
         <span id="recipeCountBadge" class="hero-count">Loading recipes...</span>
       </div>
+    </section>
+
+    <section id="weeklyRecipeBox" class="weekly-feature-box">
+      <div class="weekly-feature-head">
+        <h2 class="weekly-feature-title">Students Cooking This Week: <span id="weeklyRecipeDateLabel">Loading...</span></h2>
+      </div>
+      <div id="weeklyRecipeList" class="recipe-card-list"></div>
+      <p id="weeklyRecipeEmpty" class="weekly-empty" style="display:none;">No recipes are booked for this week yet.</p>
     </section>
 
     <section class="gallery-shell">
