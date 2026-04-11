@@ -6,6 +6,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const emailInput = form.elements.email;
     let authUser = null;
 
+    function setMsg(type, text) {
+        const palette = {
+            info: { color: '#1f4f7c', bg: '#eaf4ff', border: '#9cc7ef' },
+            success: { color: '#115b2b', bg: '#e8f7ee', border: '#98d7af' },
+            warn: { color: '#6f4a00', bg: '#fff6df', border: '#f0cb7f' },
+            error: { color: '#7b1d1d', bg: '#fdecec', border: '#e2a8a8' }
+        };
+        const choice = palette[type] || palette.info;
+        msg.style.display = 'block';
+        msg.style.padding = '0.7rem 0.8rem';
+        msg.style.borderRadius = '8px';
+        msg.style.border = `1px solid ${choice.border}`;
+        msg.style.background = choice.bg;
+        msg.style.color = choice.color;
+        msg.style.fontWeight = '700';
+        msg.textContent = text;
+    }
+
+    msg.setAttribute('role', 'status');
+    msg.setAttribute('aria-live', 'polite');
+    setMsg('info', 'Status: Ready to submit your suggestion.');
+
     function deriveNameFromEmail(email) {
         const local = String(email || '').split('@')[0] || '';
         return local
@@ -58,13 +80,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const suggestedBy = String(nameInput && nameInput.value || '').trim();
         const email = String(emailInput && emailInput.value || '').trim();
         if (!suggestedBy) {
-            msg.innerHTML = '<span style="color:red;">Please include your name.</span>';
+            setMsg('error', 'Please include your name.');
             return;
         }
         if (!email || !isLikelyTrustedEmail(email)) {
-            msg.innerHTML = '<span style="color:red;">Please use a valid school/work email (Google or Microsoft).</span>';
+            setMsg('error', 'Please use a valid school/work email (Google or Microsoft).');
             return;
         }
+
+        setMsg('info', 'Submitting suggestion and checking email delivery...');
 
         const data = {
             date: new Date().toISOString().slice(0,10),
@@ -92,7 +116,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const notification = result.notification || {};
             if (notification.sent) {
-                msg.innerHTML = `<span style="color:green;font-weight:bold;">Thank you for your suggestion! Email sent to Teachers/Admin (${notification.recipientCount || 0} recipients).</span>`;
+                setMsg('success', `Thank you for your suggestion. Email sent to Teachers/Admin (${notification.recipientCount || 0} recipients).`);
             } else {
                 const reasonTextMap = {
                     no_recipients: 'No Teacher/Admin recipients were found.',
@@ -102,11 +126,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     send_failed: 'Email sending failed. Please check server logs.'
                 };
                 const reasonText = reasonTextMap[notification.reason] || 'Email status is unknown.';
-                msg.innerHTML = `<span style="color:#0b5394;font-weight:bold;">Suggestion saved to list. Email notification not sent: ${reasonText}</span>`;
+                setMsg('warn', `Suggestion saved to list. Email notification not sent: ${reasonText}`);
             }
         } else {
             const result = await res.json().catch(() => ({}));
-            msg.innerHTML = `<span style="color:red;">${result.error || 'Failed to send suggestion. Please try again later.'}</span>`;
+            setMsg('error', result.error || 'Failed to send suggestion. Please try again later.');
         }
     };
 });
