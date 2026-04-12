@@ -4,8 +4,30 @@
 document.addEventListener('DOMContentLoaded', function() {
   let canOpenRecipeDetails = false;
   let inlineLoginBooted = false;
+  let inlineLoginReady = false;
+  let inlineLoginFallbackTimer = null;
   let pendingRecipeDetailUrl = '';
   const ROLE_STORAGE_KEY = 'navbar_user_role';
+
+  function clearInlineLoginFallbackTimer() {
+    if (!inlineLoginFallbackTimer) return;
+    clearTimeout(inlineLoginFallbackTimer);
+    inlineLoginFallbackTimer = null;
+  }
+
+  function isLikelyInAppBrowser() {
+    const ua = String((navigator && navigator.userAgent) || '').toLowerCase();
+    return /\bwv\b|fban|fbav|instagram|line\//i.test(ua);
+  }
+
+  function getDedicatedLoginUrl() {
+    const next = pendingRecipeDetailUrl || `${window.location.pathname}${window.location.search}`;
+    return `google_login.html?next=${encodeURIComponent(next)}`;
+  }
+
+  function redirectToDedicatedLogin() {
+    window.location.href = getDedicatedLoginUrl();
+  }
 
   function rememberRole(user) {
     try {
@@ -62,7 +84,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
   }
 
-  function loadGoogleScript(onLoad) {
+  function loadGoogleScript(onLoad, onError) {
     if (window.google && window.google.accounts && window.google.accounts.id) {
       onLoad();
       return;
@@ -80,6 +102,9 @@ document.addEventListener('DOMContentLoaded', function() {
     script.defer = true;
     script.setAttribute('data-google-identity', '1');
     script.addEventListener('load', onLoad, { once: true });
+    if (onError) {
+      script.addEventListener('error', onError, { once: true });
+    }
     document.head.appendChild(script);
   }
 
@@ -140,6 +165,8 @@ document.addEventListener('DOMContentLoaded', function() {
       text: 'signin_with',
       width: 280
     });
+    inlineLoginReady = true;
+    clearInlineLoginFallbackTimer();
   }
 
   function bootInlineLogin() {
@@ -153,6 +180,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     if (inlineLoginBooted) return;
     inlineLoginBooted = true;
+    inlineLoginReady = false;
 
     fetch('/api/auth/google/config', { credentials: 'include' })
       .then((res) => res.json().catch(() => ({})).then((data) => ({ ok: res.ok, data })))
@@ -163,10 +191,14 @@ document.addEventListener('DOMContentLoaded', function() {
 
         loadGoogleScript(() => {
           startInlineGoogleSignin(result.data.clientId);
+        }, () => {
+          setInlineLoginStatus('Google sign-in could not be loaded here. Redirecting to full login page...', 'error');
+          setTimeout(redirectToDedicatedLogin, 450);
         });
       })
       .catch((err) => {
         setInlineLoginStatus((err && err.message) || 'Unable to load Google sign-in.', 'error');
+        setTimeout(redirectToDedicatedLogin, 450);
       });
   }
 
@@ -203,9 +235,20 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function openInlineLoginPanel(message) {
+    if (isLikelyInAppBrowser()) {
+      redirectToDedicatedLogin();
+      return;
+    }
+
     setInlineSuggestVisible(false);
     setInlineLoginStatus(message || '', '');
     setInlineLoginVisible(true);
+    clearInlineLoginFallbackTimer();
+    inlineLoginFallbackTimer = setTimeout(() => {
+      if (canOpenRecipeDetails || inlineLoginReady) return;
+      setInlineLoginStatus('Inline login is unavailable. Redirecting to full login page...', 'error');
+      redirectToDedicatedLogin();
+    }, 4200);
     bootInlineLogin();
   }
 
