@@ -469,6 +469,16 @@ let allRecipesCache = [];
 			const data = await resp.json();
 			if (data.success) {
 				publishedRecipeIds.add(Number(recipeId));
+				// Sync ingredients inventory so Calculate Quantity page has data immediately
+				try {
+					await fetch('/api/ingredients/inventory/sync', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ recipeId: Number(recipeId), reseed: true })
+					});
+				} catch (syncErr) {
+					console.warn('[Publish] Inventory sync failed:', syncErr);
+				}
 				const selectedId = (document.getElementById('recipeIdFilter') || {}).value || '';
 				resetViewFilterToAll(selectedId);
 				notify(`RecipeID ${recipeId} published.`, 'success');
