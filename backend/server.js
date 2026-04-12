@@ -204,6 +204,92 @@ function getResendConfig() {
   return { apiKey, fromAddress };
 }
 
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function buildSuggestionEmailPayload(suggestion) {
+  const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
+  const suggester = suggestion.suggested_by || 'Unknown';
+  const email = suggestion.email || 'Not provided';
+  const date = suggestion.date || '';
+  const reason = suggestion.reason || '';
+  const url = suggestion.url || '';
+
+  const safeRecipeName = escapeHtml(recipeName);
+  const safeSuggester = escapeHtml(suggester);
+  const safeEmail = escapeHtml(email);
+  const safeDate = escapeHtml(date || 'N/A');
+  const safeReason = escapeHtml(reason || 'N/A').replace(/\n/g, '<br>');
+  const safeUrl = escapeHtml(url || 'N/A');
+
+  const text = [
+    'New recipe suggestion submitted.',
+    '',
+    `Date: ${date || 'N/A'}`,
+    `Recipe: ${recipeName}`,
+    `Suggested By: ${suggester}`,
+    `Email: ${email}`,
+    `URL: ${url || 'N/A'}`,
+    '',
+    'Reason:',
+    reason || 'N/A'
+  ].join('\n');
+
+  const html = `
+  <div style="font-family:Segoe UI, Arial, sans-serif; background:#f5f8fc; padding:20px; color:#1b2733;">
+    <div style="max-width:680px; margin:0 auto; background:#ffffff; border:1px solid #dbe5f0; border-radius:12px; overflow:hidden;">
+      <div style="padding:16px 20px; background:linear-gradient(120deg,#1f69ad,#4b91cc); color:#ffffff;">
+        <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; opacity:0.9;">Food Room Inventory</div>
+        <h2 style="margin:6px 0 0; font-size:22px; line-height:1.2;">New Recipe Suggestion</h2>
+      </div>
+
+      <div style="padding:20px;">
+        <p style="margin:0 0 14px; font-size:14px; color:#2a3f56;">A new suggestion has been submitted for review.</p>
+
+        <table style="width:100%; border-collapse:collapse; font-size:14px;">
+          <tr>
+            <td style="padding:8px 10px; width:170px; background:#f7fafc; border:1px solid #e5edf5; font-weight:600;">Date</td>
+            <td style="padding:8px 10px; border:1px solid #e5edf5;">${safeDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px; background:#f7fafc; border:1px solid #e5edf5; font-weight:600;">Recipe</td>
+            <td style="padding:8px 10px; border:1px solid #e5edf5;">${safeRecipeName}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px; background:#f7fafc; border:1px solid #e5edf5; font-weight:600;">Suggested By</td>
+            <td style="padding:8px 10px; border:1px solid #e5edf5;">${safeSuggester}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px; background:#f7fafc; border:1px solid #e5edf5; font-weight:600;">Email</td>
+            <td style="padding:8px 10px; border:1px solid #e5edf5;">${safeEmail}</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 10px; background:#f7fafc; border:1px solid #e5edf5; font-weight:600;">URL</td>
+            <td style="padding:8px 10px; border:1px solid #e5edf5;">${safeUrl}</td>
+          </tr>
+        </table>
+
+        <div style="margin-top:16px;">
+          <div style="font-size:13px; font-weight:700; color:#274867; margin-bottom:6px;">Reason</div>
+          <div style="padding:12px; border:1px solid #e3ebf4; border-radius:8px; background:#f9fcff; font-size:14px; line-height:1.45;">${safeReason}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+
+  return {
+    subject: `[Recipe Suggestion] ${recipeName}`,
+    text,
+    html
+  };
+}
+
 async function sendSuggestionNotificationViaResend(suggestion, recipients) {
   const cfg = getResendConfig();
   if (!cfg.apiKey) {
@@ -233,25 +319,7 @@ async function sendSuggestionNotificationViaResend(suggestion, recipients) {
     };
   }
 
-  const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
-  const suggester = suggestion.suggested_by || 'Unknown';
-  const email = suggestion.email || 'Not provided';
-  const date = suggestion.date || '';
-  const reason = suggestion.reason || '';
-  const url = suggestion.url || '';
-
-  const text = [
-    'New recipe suggestion submitted.',
-    '',
-    `Date: ${date}`,
-    `Recipe: ${recipeName}`,
-    `Suggested By: ${suggester}`,
-    `Email: ${email}`,
-    `URL: ${url || 'N/A'}`,
-    '',
-    'Reason:',
-    reason || 'N/A'
-  ].join('\n');
+  const payload = buildSuggestionEmailPayload(suggestion);
 
   try {
     const response = await fetch('https://api.resend.com/emails', {
@@ -263,8 +331,9 @@ async function sendSuggestionNotificationViaResend(suggestion, recipients) {
       body: JSON.stringify({
         from: cfg.fromAddress,
         to: recipients,
-        subject: `[Recipe Suggestion] ${recipeName}`,
-        text
+        subject: payload.subject,
+        text: payload.text,
+        html: payload.html
       })
     });
 
@@ -393,32 +462,15 @@ async function sendSuggestionNotificationEmail(suggestion) {
     };
   }
 
-  const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
-  const suggester = suggestion.suggested_by || 'Unknown';
-  const email = suggestion.email || 'Not provided';
-  const date = suggestion.date || '';
-  const reason = suggestion.reason || '';
-  const url = suggestion.url || '';
-
-  const text = [
-    'New recipe suggestion submitted.',
-    '',
-    `Date: ${date}`,
-    `Recipe: ${recipeName}`,
-    `Suggested By: ${suggester}`,
-    `Email: ${email}`,
-    `URL: ${url || 'N/A'}`,
-    '',
-    'Reason:',
-    reason || 'N/A'
-  ].join('\n');
+  const payload = buildSuggestionEmailPayload(suggestion);
 
   const sendTimeoutMs = Number(process.env.SUGGESTION_EMAIL_TIMEOUT_MS || 12000);
   const sendPromise = transporter.sendMail({
     from: fromAddress,
     to: recipients.join(','),
-    subject: `[Recipe Suggestion] ${recipeName}`,
-    text
+    subject: payload.subject,
+    text: payload.text,
+    html: payload.html
   });
 
   // Avoid leaving the suggestion API hanging if SMTP is slow/unreachable.
