@@ -48,6 +48,12 @@
 .add-booking-right-panel {
     min-width: 0;
 }
+.add-booking-right-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    align-self: start;
+}
 .add-booking-left-panel {
     display: flex;
     align-self: stretch;
@@ -106,7 +112,6 @@
 .add-booking-side-card {
     padding: 1rem;
     background: #f7fafc;
-    height: 100%;
     box-sizing: border-box;
 }
 .add-booking-side-title {
