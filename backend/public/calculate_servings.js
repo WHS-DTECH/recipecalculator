@@ -1,6 +1,7 @@
 // Fetch and render all records from desired_servings_ingredients
 let allDSIRecords = [];
 let recipeNameById = {};
+let pendingDSIFilterPreset = null;
 
 function extractRows(payload) {
   if (Array.isArray(payload)) return payload;
@@ -46,6 +47,9 @@ function populateDSIFilters() {
   const classSelect = document.getElementById('filter-dsi-class');
   const recipeSelect = document.getElementById('filter-dsi-recipe');
   if (!teacherSelect || !classSelect || !recipeSelect) return;
+  const prevTeacher = teacherSelect.value || '';
+  const prevClass = classSelect.value || '';
+  const prevRecipe = recipeSelect.value || '';
   // Get unique teachers, classes, and recipe IDs
   const teachers = Array.from(new Set(allDSIRecords.map(r => r.teacher).filter(Boolean)));
   const classes = Array.from(new Set(allDSIRecords.map(r => r.class_name).filter(Boolean)));
@@ -61,7 +65,40 @@ function populateDSIFilters() {
     const recipeName = recipeNameById[id] || 'Unknown Recipe';
     return `<option value="${id}">${id} | ${recipeName}</option>`;
   }).join('');
+
+  function applyIfExists(selectEl, value) {
+    if (!selectEl) return;
+    const wanted = String(value || '');
+    const hasOption = Array.from(selectEl.options || []).some(opt => String(opt.value) === wanted);
+    selectEl.value = hasOption ? wanted : '';
+  }
+
+  if (pendingDSIFilterPreset) {
+    applyIfExists(teacherSelect, pendingDSIFilterPreset.teacher);
+    applyIfExists(classSelect, pendingDSIFilterPreset.className);
+    applyIfExists(recipeSelect, pendingDSIFilterPreset.recipeId);
+    pendingDSIFilterPreset = null;
+  } else {
+    // Preserve existing user selection when filters are repopulated.
+    applyIfExists(teacherSelect, prevTeacher);
+    applyIfExists(classSelect, prevClass);
+    applyIfExists(recipeSelect, prevRecipe);
+  }
 }
+
+function presetDSIFilters(filters) {
+  const next = filters || {};
+  pendingDSIFilterPreset = {
+    teacher: String(next.teacher || ''),
+    className: String(next.className || ''),
+    recipeId: String(next.recipeId || '')
+  };
+  // Ensure options are current, then apply the preset.
+  populateDSIFilters();
+  renderDesiredServingIngredientsTable(allDSIRecords);
+}
+
+window.presetDSIFilters = presetDSIFilters;
 document.addEventListener('DOMContentLoaded', () => {
   loadDesiredServingIngredientsTable();
   const delBtn = document.getElementById('delete-all-desired-serving-ingredients-btn');
