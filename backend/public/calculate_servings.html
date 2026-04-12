@@ -431,6 +431,13 @@
                       : [];
                     const normalizeIngredient = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
                     const normalizeComparable = (text) => normalizeIngredientForOrder(text);
+                    // Word-boundary-safe includes: prevents "butter" matching "butterflied"
+                    const wbIncludes = (hay, needle) => {
+                      if (!needle || needle.length < 2) return false;
+                      try {
+                        return new RegExp('\\b' + needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b').test(hay);
+                      } catch(e) { return hay.includes(needle); }
+                    };
                     const getSortIndex = (row) => {
                       const candidates = [
                         normalizeIngredient(row.ingredient_name),
@@ -446,8 +453,8 @@
                         const orderLine = order[i];
                         const orderComparable = comparableOrder[i] || normalizeComparable(orderLine);
                         if (
-                          candidates.some(c => orderLine.includes(c) || c.includes(orderLine)) ||
-                          comparableCandidates.some(c => orderComparable.includes(c) || c.includes(orderComparable))
+                          candidates.some(c => wbIncludes(orderLine, c) || wbIncludes(c, orderLine)) ||
+                          comparableCandidates.some(c => wbIncludes(orderComparable, c) || wbIncludes(c, orderComparable))
                         ) {
                           return i;
                         }
