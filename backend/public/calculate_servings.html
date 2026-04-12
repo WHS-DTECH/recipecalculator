@@ -336,14 +336,26 @@
                   .replace(/([a-z)])((?:zest|juice)\s+of\s+\d+)/gi, '$1\n$2')
                   .replace(/([a-z)])(salt and pepper to taste)/gi, '$1\n$2')
                   .replace(/([a-z)])(freshly ground [a-z ]+)/gi, '$1\n$2')
-                  .replace(/\s+/g, ' ')
-                  .replace(/ ?\n ?/g, '\n')
+                  .replace(/[\t\f\v ]+/g, ' ')
+                  .replace(/ *\n */g, '\n')
                   .trim();
 
-                return cleaned
+                let lines = cleaned
                   .split(/\r?\n/)
                   .map(line => line.trim())
                   .filter(Boolean);
+
+                // Some stored ingredients arrive as a single long blob. Split on common ingredient starts.
+                if (lines.length <= 1 && cleaned.length > 40) {
+                  const blob = (lines[0] || cleaned)
+                    .replace(/\s+(?=\d+(?:\s*[-/]\s*\d+)?(?:\.\d+)?\s*(?:kg|g|mg|ml|l|cup|cups|tbsp|tsp|teaspoon|teaspoons|tablespoon|tablespoons)\b)/gi, '\n')
+                    .replace(/\s+(?=\d+\s*(?:small|medium|large)\b)/gi, '\n')
+                    .replace(/\s+(?=(?:zest|juice)\s+of\s+\d+)/gi, '\n')
+                    .replace(/\s+(?=salt and pepper to taste\b)/gi, '\n');
+                  lines = blob.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+                }
+
+                return lines;
               }
 
               function updateSelectedRecipeDisplay() {
