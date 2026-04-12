@@ -223,7 +223,7 @@ function printCombinedWeekLists(teacherHtml, categoryHtml, mondayDate) {
     win.document.write('</body></html>');
     win.document.close();
     win.focus();
-    setTimeout(() => { win.print(); win.close(); }, 300);
+    setTimeout(() => { win.print(); }, 300);
 }
 
 // Helper to get selected bookings as HTML
@@ -286,7 +286,7 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('</body></html>');
     win.document.close();
     win.focus();
-    setTimeout(()=>{ win.print(); win.close(); }, 300);
+    setTimeout(()=>{ win.print(); }, 300);
 }
 
 document.addEventListener('DOMContentLoaded',()=>{
