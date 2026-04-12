@@ -113,45 +113,54 @@ router.post('/save', (req, res) => {
     });
   }
 
-  // Main logic
-  db2.all('SELECT brand_name FROM food_brands', [], (brandErr, brandRows) => {
-    if (brandErr) {
-      db2.close();
-      return res.status(500).json({ success: false, error: brandErr.message });
-    }
-    brands = (brandRows || []).map(b => b.brand_name);
+  // Delete existing rows for this booking+recipe to prevent duplicates on re-save
+  const delParams = [];
+  let delSql = 'DELETE FROM desired_servings_ingredients WHERE 1=1';
+  if (booking_id != null) { delSql += ' AND booking_id = ?'; delParams.push(booking_id); }
+  if (recipe_id  != null) { delSql += ' AND recipe_id = ?';  delParams.push(recipe_id); }
+  db2.run(delSql, delParams, (delErr) => {
+    if (delErr) { db2.close(); return res.status(500).json({ success: false, error: delErr.message }); }
 
-    db2.all('SELECT id, ingredient_name FROM ingredients_inventory', [], (errInv, invRows) => {
-      if (errInv) {
+    // Main logic
+    db2.all('SELECT brand_name FROM food_brands', [], (brandErr, brandRows) => {
+      if (brandErr) {
         db2.close();
-        return res.status(500).json({ success: false, error: errInv.message });
+        return res.status(500).json({ success: false, error: brandErr.message });
       }
-      ingredients.forEach(ing => {
-        if (ing.ingredient_id) {
-          db2.get('SELECT id, stripFoodItem, aisle_category_id, ingredient_name, fooditem FROM ingredients_inventory WHERE id = ?', [ing.ingredient_id], (err, row) => {
-            doInsert(row, ing, ing.ingredient_id, 'id');
-          });
-        } else {
-          db2.get('SELECT id, stripFoodItem, aisle_category_id, ingredient_name, fooditem FROM ingredients_inventory WHERE lower(trim(ingredient_name)) = ? OR lower(trim(fooditem)) = ?', [normalize(ing.ingredient_name), normalize(ing.fooditem)], (err, row) => {
-            if (row) {
-              doInsert(row, ing, row.id, 'exact name/fooditem');
-            } else {
-              db2.all('SELECT id, stripFoodItem, aisle_category_id, ingredient_name, fooditem FROM ingredients_inventory', [], (errAll, allRows) => {
-                let found = null;
-                for (const r of allRows) {
-                  if (normalize(r.ingredient_name).includes(normalize(ing.ingredient_name)) || normalize(r.fooditem).includes(normalize(ing.fooditem))) {
-                    found = r;
-                    break;
-                  }
-                }
-                doInsert(found, ing, found ? found.id : null, 'partial name/fooditem');
-              });
-            }
-          });
+      brands = (brandRows || []).map(b => b.brand_name);
+
+      db2.all('SELECT id, ingredient_name FROM ingredients_inventory', [], (errInv, invRows) => {
+        if (errInv) {
+          db2.close();
+          return res.status(500).json({ success: false, error: errInv.message });
         }
+        ingredients.forEach(ing => {
+          if (ing.ingredient_id) {
+            db2.get('SELECT id, stripFoodItem, aisle_category_id, ingredient_name, fooditem FROM ingredients_inventory WHERE id = ?', [ing.ingredient_id], (err, row) => {
+              doInsert(row, ing, ing.ingredient_id, 'id');
+            });
+          } else {
+            db2.get('SELECT id, stripFoodItem, aisle_category_id, ingredient_name, fooditem FROM ingredients_inventory WHERE lower(trim(ingredient_name)) = ? OR lower(trim(fooditem)) = ?', [normalize(ing.ingredient_name), normalize(ing.fooditem)], (err, row) => {
+              if (row) {
+                doInsert(row, ing, row.id, 'exact name/fooditem');
+              } else {
+                db2.all('SELECT id, stripFoodItem, aisle_category_id, ingredient_name, fooditem FROM ingredients_inventory', [], (errAll, allRows) => {
+                  let found = null;
+                  for (const r of allRows) {
+                    if (normalize(r.ingredient_name).includes(normalize(ing.ingredient_name)) || normalize(r.fooditem).includes(normalize(ing.fooditem))) {
+                      found = r;
+                      break;
+                    }
+                  }
+                  doInsert(found, ing, found ? found.id : null, 'partial name/fooditem');
+                });
+              }
+            });
+          }
+        });
       });
     });
-  });
+  }); // end delete
 });
 
 // DELETE /desired_servings_ingredients/all
