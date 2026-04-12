@@ -358,6 +358,16 @@
                 return lines;
               }
 
+              function normalizeIngredientForOrder(text) {
+                return String(text || '')
+                  .toLowerCase()
+                  .replace(/[.,;:()[\]{}]/g, ' ')
+                  .replace(/\b\d+(?:\s*[-/]\s*\d+)?(?:\.\d+)?\b/g, ' ')
+                  .replace(/\b(?:kg|g|mg|ml|l|cup|cups|tbsp|tsp|teaspoon|teaspoons|tablespoon|tablespoons|clove|cloves|pinch|small|medium|large)\b/g, ' ')
+                  .replace(/\s+/g, ' ')
+                  .trim();
+              }
+
               function updateSelectedRecipeDisplay() {
                 const selectedRecipeDiv = document.getElementById('selected-recipe-display');
                 const servingSizeDiv = document.getElementById('serving-size-display');
@@ -388,6 +398,7 @@
                   const ingredients = parseOriginalIngredientsList(ingredientsRaw);
                   const normalizeIngredient = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
                   window.originalRecipeIngredientOrder = ingredients.map(normalizeIngredient);
+                  window.originalRecipeIngredientOrderComparable = ingredients.map(normalizeIngredientForOrder);
                   if (ingredients.length > 0) {
                     ingredientsListDiv.innerHTML = `<ul style="margin:0;padding-left:1.2em;display:grid;gap:0.38em;">${ingredients.map(i => `<li style="line-height:1.35;">${escapeHtml(i)}</li>`).join('')}</ul>`;
                   } else {
@@ -415,16 +426,29 @@
                     const ingredients = Array.isArray(data) ? data : (Array.isArray(data.data) ? data.data : (Array.isArray(data.ingredients) ? data.ingredients : []));
                     const filtered = ingredients.filter(row => String(row.recipe_id) === String(recipeId));
                     const order = Array.isArray(window.originalRecipeIngredientOrder) ? window.originalRecipeIngredientOrder : [];
+                    const comparableOrder = Array.isArray(window.originalRecipeIngredientOrderComparable)
+                      ? window.originalRecipeIngredientOrderComparable
+                      : [];
                     const normalizeIngredient = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
+                    const normalizeComparable = (text) => normalizeIngredientForOrder(text);
                     const getSortIndex = (row) => {
                       const candidates = [
                         normalizeIngredient(row.ingredient_name),
                         normalizeIngredient(row.strip_fooditem || row.stripFoodItem),
                         normalizeIngredient(row.fooditem)
                       ].filter(Boolean);
+                      const comparableCandidates = [
+                        normalizeComparable(row.ingredient_name),
+                        normalizeComparable(row.strip_fooditem || row.stripFoodItem),
+                        normalizeComparable(row.fooditem)
+                      ].filter(Boolean);
                       for (let i = 0; i < order.length; i++) {
                         const orderLine = order[i];
-                        if (candidates.some(c => orderLine.includes(c) || c.includes(orderLine))) {
+                        const orderComparable = comparableOrder[i] || normalizeComparable(orderLine);
+                        if (
+                          candidates.some(c => orderLine.includes(c) || c.includes(orderLine)) ||
+                          comparableCandidates.some(c => orderComparable.includes(c) || c.includes(orderComparable))
+                        ) {
                           return i;
                         }
                       }
