@@ -236,7 +236,15 @@ function buildPrintGrid(bookings, weekDates) {
   return grid;
 }
 
-async function printScheduleForWeek(printMonday, includeWeekends = showWeekends) {
+function getPrintBookingTitle(cell, displayMode) {
+  if (displayMode === 'recipe') {
+    const recipe = String(cell.recipe || '').trim();
+    return recipe ? `Recipe: ${recipe}` : `Class: ${cell.class_name || ''}`;
+  }
+  return `Class: ${cell.class_name || ''}`;
+}
+
+async function printScheduleForWeek(printMonday, includeWeekends = showWeekends, displayMode = 'class') {
   if (!printMonday) return;
 
   const weekDates = getWeekDatesFromMonday(printMonday);
@@ -264,7 +272,7 @@ async function printScheduleForWeek(printMonday, includeWeekends = showWeekends)
       const dayIdx = visibleDayIndices[d];
       const cell = grid[p][dayIdx];
       if (cell) {
-        tableHtml += `<td><div class="booking-box"><div class="booking-title">Class: ${cell.class_name || ''}</div><div class="booking-teacher">Teacher: ${cell.staff_name || ''}</div></div></td>`;
+        tableHtml += `<td><div class="booking-box"><div class="booking-title">${getPrintBookingTitle(cell, displayMode)}</div><div class="booking-teacher">Teacher: ${cell.staff_name || ''}</div></div></td>`;
       } else {
         tableHtml += '<td></td>';
       }
@@ -587,7 +595,16 @@ document.addEventListener('DOMContentLoaded', () => {
     printScheduleBtn.onclick = async () => {
       const chosenMonday = await askWeekToPrint(currentMonday);
       if (!chosenMonday) return;
-      await printScheduleForWeek(chosenMonday, showWeekends);
+      await printScheduleForWeek(chosenMonday, showWeekends, 'class');
+    };
+  }
+
+  const printScheduleByRecipeBtn = document.getElementById('printScheduleByRecipeBtn');
+  if (printScheduleByRecipeBtn) {
+    printScheduleByRecipeBtn.onclick = async () => {
+      const chosenMonday = await askWeekToPrint(currentMonday);
+      if (!chosenMonday) return;
+      await printScheduleForWeek(chosenMonday, showWeekends, 'recipe');
     };
   }
   ensureWeekendToggleButton();
