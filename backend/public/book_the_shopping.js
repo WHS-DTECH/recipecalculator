@@ -201,7 +201,7 @@ function printCombinedWeekLists(teacherHtml, categoryHtml, mondayDate) {
     win.document.write('.running-header img{height:40px;width:40px;object-fit:contain;}');
     win.document.write('.running-header-title{font-weight:700;font-size:11pt;flex:1;color:#1a237e;}');
     win.document.write('.running-header-meta{color:#555;font-size:8.5pt;text-align:right;white-space:nowrap;}');
-    win.document.write('.body-content{margin-top:3.8em;}');
+    win.document.write('.body-content{padding-top:3.8em;-webkit-box-decoration-break:clone;box-decoration-break:clone;}');
     win.document.write('h2,h3{margin:0.5em 0;}');
     win.document.write('table{width:100%;border-collapse:collapse;page-break-inside:auto;}');
     win.document.write('thead{display:table-header-group;}');
@@ -210,6 +210,8 @@ function printCombinedWeekLists(teacherHtml, categoryHtml, mondayDate) {
     win.document.write('th{background:#e3e3e3;}');
     win.document.write('tr:nth-child(even){background:#f6f8fa;}');
     win.document.write('.section{margin-bottom:1.8em;}');
+    win.document.write('.teacher-section{padding-top:3.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone;}');
+    win.document.write('.teacher-section > h2{break-after:avoid;page-break-after:avoid;}');
     win.document.write('.teacher-section > div{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('.category-section{break-before:page;page-break-before:always;padding-top:3.4em;}');
     win.document.write('.category-section h4,.category-section table{break-inside:avoid;page-break-inside:avoid;}');
@@ -265,7 +267,7 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('.running-header img{height:40px;width:40px;object-fit:contain;}');
     win.document.write('.running-header-title{font-weight:700;font-size:11pt;flex:1;color:#1a237e;}');
     win.document.write('.running-header-meta{color:#555;font-size:8.5pt;text-align:right;white-space:nowrap;}');
-    win.document.write('.body-content{margin-top:3.8em;}');
+    win.document.write('.body-content{padding-top:3.8em;-webkit-box-decoration-break:clone;box-decoration-break:clone;}');
     win.document.write('h2,h3{margin:0.5em 0;}');
     win.document.write('table{width:100%;border-collapse:collapse;page-break-inside:auto;}');
     win.document.write('thead{display:table-header-group;}');
@@ -275,10 +277,9 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('tr:nth-child(even){background:#f6f8fa;}');
     win.document.write('.section{margin-bottom:1.5em;}');
     win.document.write('.print-bookings{margin-bottom:1em;}');
-    win.document.write('.print-list{margin-top:0.3em;}');
+    win.document.write('.print-list{margin-top:0.3em;padding-top:3.2em;-webkit-box-decoration-break:clone;box-decoration-break:clone;}');
     win.document.write('.print-bookings-dedicated-page{break-after:page;page-break-after:always;min-height:calc(100vh - 4.4em);}');
     win.document.write('.start-on-new-page{break-before:page;page-break-before:always;}');
-    win.document.write('.start-on-new-page::before{content:"";display:block;height:3.4em;}');
     win.document.write('.print-list .shopping-panel-title{display:none;}');
     win.document.write('.print-list #by-teacher-ingredients > div > div{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('.print-list .shopping-category-table{break-inside:avoid;page-break-inside:avoid;}');
