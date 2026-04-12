@@ -115,8 +115,52 @@ function readCurrentStaffUser() {
   }
 }
 
-function resolveLoggedInStaffId(staffRows = []) {
-  const currentUser = readCurrentStaffUser();
+function deriveCandidateFromAuthUser(user) {
+  if (!user) return null;
+  const name = String(user.name || '').trim();
+  const parts = name ? name.split(/\s+/).filter(Boolean) : [];
+  const email = String(user.email || '').trim();
+  const emailLocal = email ? email.split('@')[0] : '';
+  const emailParts = emailLocal.split(/[._-]+/).filter(Boolean);
+
+  const firstFromName = parts.length ? parts[0] : '';
+  const lastFromName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+  const firstFromEmail = emailParts.length ? emailParts[0] : '';
+  const lastFromEmail = emailParts.length > 1 ? emailParts[emailParts.length - 1] : '';
+
+  return {
+    id: user.id || '',
+    code: user.code || '',
+    first_name: firstFromName || firstFromEmail,
+    last_name: lastFromName || lastFromEmail,
+    email_school: email || ''
+  };
+}
+
+async function readCurrentStaffUserWithAuthFallback() {
+  const fromStorage = readCurrentStaffUser();
+  if (fromStorage) return fromStorage;
+
+  try {
+    const resp = await fetch('/api/auth/me', { credentials: 'include' });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data || !data.authenticated || !data.user) return null;
+    const candidate = deriveCandidateFromAuthUser(data.user);
+    if (candidate) {
+      try {
+        sessionStorage.setItem('currentStaffUser', JSON.stringify(candidate));
+      } catch {
+        // Ignore storage write issues.
+      }
+    }
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
+function resolveLoggedInStaffId(staffRows = [], currentUser = null) {
   if (!currentUser || !Array.isArray(staffRows) || !staffRows.length) return '';
 
   const targetId = String(currentUser.id || '').trim();
@@ -1025,9 +1069,10 @@ function renderBookings(bookings = []) {
 window.addEventListener('DOMContentLoaded', () => {
   fetch('/api/staff_upload/dropdown')
     .then(res => res.json())
-    .then(data => {
+    .then(async (data) => {
       _staffArrCache = data.staff || [];
-      _preferredStaffId = resolveLoggedInStaffId(_staffArrCache);
+      const currentUser = await readCurrentStaffUserWithAuthFallback();
+      _preferredStaffId = resolveLoggedInStaffId(_staffArrCache, currentUser);
       return populateStaffDropdown(_staffArrCache).then(() => {
         const sharedState = readSharedEmbedState();
         const firstStaffId = sharedState && sharedState.staffId
