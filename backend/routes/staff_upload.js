@@ -25,7 +25,7 @@ router.get('/dropdown', async (req, res) => {
   console.log('[DEBUG] /api/staff_upload/dropdown called');
   try {
     await ensureStaffSchema();
-    const result = await pool.query("SELECT id, code, last_name, first_name FROM staff_upload WHERE COALESCE(status, 'Current') = 'Current' ORDER BY last_name, first_name");
+    const result = await pool.query("SELECT id, code, last_name, first_name, email_school FROM staff_upload WHERE COALESCE(status, 'Current') = 'Current' ORDER BY last_name, first_name");
     console.log('[DEBUG] Staff rows:', result.rows);
     res.json({ staff: result.rows });
   } catch (err) {

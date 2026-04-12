@@ -106,6 +106,10 @@ function normalizeToken(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function readCurrentStaffUser() {
   try {
     const raw = sessionStorage.getItem('currentStaffUser');
@@ -165,8 +169,14 @@ function resolveLoggedInStaffId(staffRows = [], currentUser = null) {
 
   const targetId = String(currentUser.id || '').trim();
   const targetCode = normalizeToken(currentUser.code);
+  const targetEmail = normalizeEmail(currentUser.email_school || currentUser.email || '');
   const targetFirst = normalizeToken(currentUser.first_name);
   const targetLast = normalizeToken(currentUser.last_name);
+    if (targetEmail) {
+      const byEmail = staffRows.find(s => normalizeEmail(s.email_school) === targetEmail);
+      if (byEmail) return String(byEmail.id || '');
+    }
+
   const combinedOne = normalizeToken(`${currentUser.first_name || ''}${currentUser.last_name || ''}`);
   const combinedTwo = normalizeToken(`${currentUser.last_name || ''}${currentUser.first_name || ''}`);
 
@@ -193,6 +203,23 @@ function resolveLoggedInStaffId(staffRows = [], currentUser = null) {
   });
 
   return byName ? String(byName.id || '') : '';
+}
+
+function ensureStaffSelected(preferredStaffId = '') {
+  const staffSelect = document.getElementById('staffSelect');
+  if (!staffSelect) return '';
+
+  if (preferredStaffId) {
+    staffSelect.value = String(preferredStaffId);
+  }
+
+  if (staffSelect.value) return String(staffSelect.value);
+
+  const firstRealOption = Array.from(staffSelect.options || []).find(opt => !opt.disabled && String(opt.value || '').trim() !== '');
+  if (firstRealOption) {
+    staffSelect.value = firstRealOption.value;
+  }
+  return String(staffSelect.value || '');
 }
 
 function readSharedEmbedState() {
@@ -1082,7 +1109,8 @@ window.addEventListener('DOMContentLoaded', () => {
         if (staffSelect && firstStaffId) {
           staffSelect.value = firstStaffId;
         }
-        const staffCode = getStaffCodeById(firstStaffId, _staffArrCache);
+        const effectiveStaffId = ensureStaffSelected(firstStaffId);
+        const staffCode = getStaffCodeById(effectiveStaffId, _staffArrCache);
         return populateClassDropdown(staffCode).then(() => applySharedEmbedState(sharedState || getCurrentEmbedState()));
       });
     });
