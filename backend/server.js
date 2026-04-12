@@ -214,6 +214,13 @@ function escapeHtml(value) {
 }
 
 function buildSuggestionEmailPayload(suggestion) {
+  const appBaseUrl = String(
+    process.env.APP_BASE_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    'https://recipe-calculator-backend.onrender.com'
+  ).trim().replace(/\/+$/, '');
+  const suggestionsListUrl = `${appBaseUrl}/admin_suggest_recipe.html`;
+
   const recipeName = suggestion.recipe_name || 'Untitled Recipe Suggestion';
   const suggester = suggestion.suggested_by || 'Unknown';
   const email = suggestion.email || 'Not provided';
@@ -227,6 +234,7 @@ function buildSuggestionEmailPayload(suggestion) {
   const safeDate = escapeHtml(date || 'N/A');
   const safeReason = escapeHtml(reason || 'N/A').replace(/\n/g, '<br>');
   const safeUrl = escapeHtml(url || 'N/A');
+  const safeSuggestionsListUrl = escapeHtml(suggestionsListUrl);
 
   const text = [
     'New recipe suggestion submitted.',
@@ -236,6 +244,7 @@ function buildSuggestionEmailPayload(suggestion) {
     `Suggested By: ${suggester}`,
     `Email: ${email}`,
     `URL: ${url || 'N/A'}`,
+    `Suggestion List: ${suggestionsListUrl}`,
     '',
     'Reason:',
     reason || 'N/A'
@@ -278,6 +287,11 @@ function buildSuggestionEmailPayload(suggestion) {
         <div style="margin-top:16px;">
           <div style="font-size:13px; font-weight:700; color:#274867; margin-bottom:6px;">Reason</div>
           <div style="padding:12px; border:1px solid #e3ebf4; border-radius:8px; background:#f9fcff; font-size:14px; line-height:1.45;">${safeReason}</div>
+        </div>
+
+        <div style="margin-top:18px; text-align:left;">
+          <a href="${safeSuggestionsListUrl}" style="display:inline-block; padding:10px 14px; background:#1f69ad; color:#ffffff; text-decoration:none; border-radius:8px; font-size:14px; font-weight:700;">Open Suggestions List</a>
+          <div style="margin-top:8px; font-size:12px; color:#4d657d;">Direct link: <a href="${safeSuggestionsListUrl}" style="color:#1f69ad;">${safeSuggestionsListUrl}</a></div>
         </div>
       </div>
     </div>
