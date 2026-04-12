@@ -203,12 +203,16 @@ function printCombinedWeekLists(teacherHtml, categoryHtml, mondayDate) {
     win.document.write('.running-header-meta{color:#555;font-size:8.5pt;text-align:right;white-space:nowrap;}');
     win.document.write('.body-content{margin-top:3.8em;}');
     win.document.write('h2,h3{margin:0.5em 0;}');
-    win.document.write('table{width:100%;border-collapse:collapse;}');
+    win.document.write('table{width:100%;border-collapse:collapse;page-break-inside:auto;}');
+    win.document.write('thead{display:table-header-group;}');
+    win.document.write('tr,th,td{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('th,td{border:1px solid #888;padding:0.3em 0.7em;}');
     win.document.write('th{background:#e3e3e3;}');
     win.document.write('tr:nth-child(even){background:#f6f8fa;}');
     win.document.write('.section{margin-bottom:1.8em;}');
-    win.document.write('.category-section{break-before:page;page-break-before:always;}');
+    win.document.write('.teacher-section > div{break-inside:avoid;page-break-inside:avoid;}');
+    win.document.write('.category-section{break-before:page;page-break-before:always;padding-top:3.4em;}');
+    win.document.write('.category-section h4,.category-section table{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('</style>');
     win.document.write('</head><body>');
     win.document.write('<div class="running-header">');
@@ -217,7 +221,7 @@ function printCombinedWeekLists(teacherHtml, categoryHtml, mondayDate) {
     win.document.write('<span class="running-header-meta">Week: ' + weekLabel + '&nbsp;&nbsp;|&nbsp;&nbsp;Printed: ' + printDate + '</span>');
     win.document.write('</div>');
     win.document.write('<div class="body-content">');
-    win.document.write('<div class="section"><h2>Shopping List by Teacher</h2>' + teacherHtml + '</div>');
+    win.document.write('<div class="section teacher-section"><h2>Shopping List by Teacher</h2>' + teacherHtml + '</div>');
     win.document.write('<div class="section category-section"><h2>Shopping List by Category</h2>' + categoryHtml + '</div>');
     win.document.write('</div>');
     win.document.write('</body></html>');
@@ -263,7 +267,9 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('.running-header-meta{color:#555;font-size:8.5pt;text-align:right;white-space:nowrap;}');
     win.document.write('.body-content{margin-top:3.8em;}');
     win.document.write('h2,h3{margin:0.5em 0;}');
-    win.document.write('table{width:100%;border-collapse:collapse;}');
+    win.document.write('table{width:100%;border-collapse:collapse;page-break-inside:auto;}');
+    win.document.write('thead{display:table-header-group;}');
+    win.document.write('tr,th,td{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('th,td{border:1px solid #888;padding:0.3em 0.7em;}');
     win.document.write('th{background:#e3e3e3;}');
     win.document.write('tr:nth-child(even){background:#f6f8fa;}');
@@ -276,6 +282,7 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('.print-list .shopping-panel-title{display:none;}');
     win.document.write('.print-list #by-teacher-ingredients > div > div{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('.print-list .shopping-category-table{break-inside:avoid;page-break-inside:avoid;}');
+    win.document.write('.print-list h4{break-after:avoid;page-break-after:avoid;}');
     win.document.write('</style>');
     win.document.write('</head><body>');
     win.document.write('<div class="running-header">');
