@@ -313,6 +313,39 @@
                 fetchStudentsForScheduledClass('');
               }
 
+              function escapeHtml(text) {
+                return String(text || '')
+                  .replace(/&/g, '&amp;')
+                  .replace(/</g, '&lt;')
+                  .replace(/>/g, '&gt;')
+                  .replace(/"/g, '&quot;')
+                  .replace(/'/g, '&#39;');
+              }
+
+              function parseOriginalIngredientsList(ingredientsRaw) {
+                const cleaned = String(ingredientsRaw || '')
+                  .replace(/<br\s*\/?>/gi, '\n')
+                  .replace(/<\/p>/gi, '\n')
+                  .replace(/<\/li>/gi, '\n')
+                  .replace(/<li[^>]*>/gi, '')
+                  .replace(/<[^>]+>/g, ' ')
+                  .replace(/&nbsp;/gi, ' ')
+                  .replace(/\u00a0/g, ' ')
+                  .replace(/\s*;\s*/g, '\n')
+                  .replace(/([a-z)])(\d+(?:\s*[-/]\s*\d+)?(?:\.\d+)?\s*(?:kg|g|mg|ml|l|cup|cups|tbsp|tsp|teaspoon|teaspoons|tablespoon|tablespoons|clove|cloves|small|medium|large))/gi, '$1\n$2')
+                  .replace(/([a-z)])((?:zest|juice)\s+of\s+\d+)/gi, '$1\n$2')
+                  .replace(/([a-z)])(salt and pepper to taste)/gi, '$1\n$2')
+                  .replace(/([a-z)])(freshly ground [a-z ]+)/gi, '$1\n$2')
+                  .replace(/\s+/g, ' ')
+                  .replace(/ ?\n ?/g, '\n')
+                  .trim();
+
+                return cleaned
+                  .split(/\r?\n/)
+                  .map(line => line.trim())
+                  .filter(Boolean);
+              }
+
               function updateSelectedRecipeDisplay() {
                 const selectedRecipeDiv = document.getElementById('selected-recipe-display');
                 const servingSizeDiv = document.getElementById('serving-size-display');
@@ -338,15 +371,11 @@
                   servingSizeDiv.textContent = `Serving Size: ${servingSize || ''}`;
                 }
                 if (ingredientsListDiv) {
-                  const ingredients = String(ingredientsRaw || '')
-                    .replace(/<br\s*\/?>/gi, '\n')
-                    .split(/\r?\n/)
-                    .map(line => line.replace(/<[^>]+>/g, '').trim())
-                    .filter(Boolean);
+                  const ingredients = parseOriginalIngredientsList(ingredientsRaw);
                   const normalizeIngredient = (text) => String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
                   window.originalRecipeIngredientOrder = ingredients.map(normalizeIngredient);
                   if (ingredients.length > 0) {
-                    ingredientsListDiv.innerHTML = `<ul style="margin:0;padding-left:1.1em;">${ingredients.map(i => `<li style="margin-bottom:0.2em;">${i}</li>`).join('')}</ul>`;
+                    ingredientsListDiv.innerHTML = `<ul style="margin:0;padding-left:1.2em;display:grid;gap:0.38em;">${ingredients.map(i => `<li style="line-height:1.35;">${escapeHtml(i)}</li>`).join('')}</ul>`;
                   } else {
                     ingredientsListDiv.innerHTML = '<div style="color:#888;text-align:center;">Ingredients: </div>';
                   }
