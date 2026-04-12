@@ -138,14 +138,51 @@ function ensureClassOption(select, className) {
 }
 
 function getCurrentEmbedState() {
+  const saveBtn = document.getElementById('saveBookingBtn');
   return {
     staffId: document.getElementById('staffSelect')?.value || '',
     className: document.getElementById('classSelect')?.value || '',
     bookingDate: document.getElementById('dateInput')?.value || '',
     period: document.getElementById('periodSelect')?.value || '',
     recipeId: document.getElementById('recipeSelect')?.value || '',
-    classSize: document.getElementById('classSizeInput')?.value || ''
+    classSize: document.getElementById('classSizeInput')?.value || '',
+    editBookingId: saveBtn && saveBtn.dataset ? (saveBtn.dataset.editId || '') : ''
   };
+}
+
+function clearFormEditMode() {
+  const saveBtn = document.getElementById('saveBookingBtn');
+  const masterSaveBtn = document.getElementById('masterSaveBtn');
+  const deleteBtn = document.getElementById('deleteBookingBtn');
+  if (saveBtn) {
+    saveBtn.textContent = 'Save booking';
+    delete saveBtn.dataset.editId;
+  }
+  if (masterSaveBtn) {
+    masterSaveBtn.textContent = 'SAVE';
+  }
+  if (deleteBtn) {
+    deleteBtn.style.display = 'none';
+    delete deleteBtn.dataset.bookingId;
+  }
+}
+
+function setFormEditMode(bookingId) {
+  const normalizedId = String(bookingId || '').trim();
+  const saveBtn = document.getElementById('saveBookingBtn');
+  const masterSaveBtn = document.getElementById('masterSaveBtn');
+  const deleteBtn = document.getElementById('deleteBookingBtn');
+  if (!saveBtn || !normalizedId) return;
+
+  saveBtn.dataset.editId = normalizedId;
+  saveBtn.textContent = 'Update booking';
+  if (masterSaveBtn) {
+    masterSaveBtn.textContent = 'UPDATE';
+  }
+  if (deleteBtn) {
+    deleteBtn.style.display = 'inline-block';
+    deleteBtn.dataset.bookingId = normalizedId;
+  }
 }
 
 function applySharedEmbedState(state = {}) {
@@ -169,6 +206,7 @@ function applySharedEmbedState(state = {}) {
   const targetPeriod = state.period || '';
   const targetRecipeId = state.recipeId || '';
   const targetClassSize = state.classSize || '';
+  const targetEditBookingId = state.editBookingId || '';
   lastSharedStateAppliedAt = state.updatedAt || Date.now();
 
   isApplyingSharedState = true;
@@ -196,6 +234,11 @@ function applySharedEmbedState(state = {}) {
       fetchStudentsForClass(classSelect.value || '');
     }
     fetchTeacherTimetableForSelectedDate();
+    if (targetEditBookingId) {
+      setFormEditMode(targetEditBookingId);
+    } else {
+      clearFormEditMode();
+    }
     isApplyingSharedState = false;
   };
 
@@ -761,24 +804,25 @@ function saveBooking(options = {}) {
             recipeId
           }).then(() => {
             if (window.QC) window.QC.toast('Desired serving ingredients saved', 'success');
-            document.getElementById('saveBookingBtn').textContent = 'Save booking';
-            delete document.getElementById('saveBookingBtn').dataset.editId;
+            clearFormEditMode();
             document.getElementById('resetBtn').click();
             fetchAndRenderBookings();
+            writeSharedEmbedState({ ...getCurrentEmbedState(), refreshCalendarAt: Date.now(), editBookingId: '' }, { force: true });
             return result;
           }).catch(err => {
             if (window.QC) window.QC.toast('Booking saved, but desired servings failed', 'warn');
             else alert('Booking saved, but desired servings failed.');
             console.error('Desired servings background save failed:', err);
             fetchAndRenderBookings();
+            writeSharedEmbedState({ ...getCurrentEmbedState(), refreshCalendarAt: Date.now(), editBookingId: '' }, { force: true });
             return { ...result, desiredServingsSaved: false, desiredServingsError: err.message || String(err) };
           });
         }
 
-        document.getElementById('saveBookingBtn').textContent = 'Save booking';
-        delete document.getElementById('saveBookingBtn').dataset.editId;
+        clearFormEditMode();
         document.getElementById('resetBtn').click();
         fetchAndRenderBookings();
+        writeSharedEmbedState({ ...getCurrentEmbedState(), refreshCalendarAt: Date.now(), editBookingId: '' }, { force: true });
         return result;
       } else {
         if (window.QC) window.QC.toast('Failed to save booking', 'error');
@@ -861,6 +905,59 @@ function renderBookings(bookings = []) {
       }
     };
   });
+  function loadBookingIntoForm(booking) {
+    if (!booking) return;
+    const staffSelect = document.getElementById('staffSelect');
+    const classSelect = document.getElementById('classSelect');
+    const dateInput = document.getElementById('dateInput');
+    const periodSelect = document.getElementById('periodSelect');
+    const recipeSelect = document.getElementById('recipeSelect');
+    const classSizeInput = document.getElementById('classSizeInput');
+
+    const bookingStaffId = String(booking.staff_id || getStaffIdByName(booking.staff_name) || '');
+    if (staffSelect && bookingStaffId) {
+      staffSelect.value = bookingStaffId;
+    }
+    const staffCode = getStaffCodeById(bookingStaffId, _staffArrCache);
+    populateClassDropdown(staffCode).then(() => {
+      if (classSelect) {
+        classSelect.value = booking.class_name || '';
+        fetchStudentsForClass(classSelect.value || '');
+      }
+    });
+
+    if (dateInput) {
+      dateInput.value = booking.booking_date || '';
+      updateBookingDateDayLabel();
+    }
+    if (periodSelect) {
+      periodSelect.value = String(booking.period || '');
+    }
+    if (recipeSelect) {
+      const recipeIdValue = booking.recipe_id ? String(booking.recipe_id) : '';
+      if (recipeIdValue) {
+        recipeSelect.value = recipeIdValue;
+      } else if (booking.recipe) {
+        const optionByName = Array.from(recipeSelect.options).find(opt => (opt.getAttribute('data-recipe-name') || '').trim() === String(booking.recipe).trim());
+        if (optionByName) recipeSelect.value = optionByName.value;
+      }
+    }
+    if (classSizeInput) {
+      classSizeInput.value = booking.class_size || '';
+    }
+    setFormEditMode(booking.id);
+    writeSharedEmbedState({
+      ...getCurrentEmbedState(),
+      staffId: bookingStaffId,
+      className: booking.class_name || '',
+      bookingDate: booking.booking_date || '',
+      period: String(booking.period || ''),
+      recipeId: booking.recipe_id ? String(booking.recipe_id) : '',
+      classSize: String(booking.class_size || ''),
+      editBookingId: String(booking.id || '')
+    }, { force: true });
+  }
+
   // Attach event listeners for edit
   tbody.querySelectorAll('.edit-btn').forEach(btn => {
     btn.onclick = function() {
@@ -869,32 +966,7 @@ function renderBookings(bookings = []) {
       // Find booking data
       const booking = bookings.find(b => String(b.id) === String(bookingId));
       if (!booking) return;
-      // Populate form fields
-      document.getElementById('staffSelect').value = getStaffIdByName(booking.staff_name);
-      const staffCode = getStaffCodeById(document.getElementById('staffSelect').value, _staffArrCache);
-      populateClassDropdown(staffCode);
-      setTimeout(() => {
-        document.getElementById('classSelect').value = booking.class_name;
-        fetchStudentsForClass(booking.class_name);
-      }, 200);
-      document.getElementById('dateInput').value = booking.booking_date;
-      document.getElementById('periodSelect').value = booking.period;
-      const recipeSelect = document.getElementById('recipeSelect');
-      if (recipeSelect) {
-        let recipeSelectValue = booking.recipe_id ? String(booking.recipe_id) : '';
-        if (!recipeSelectValue && booking.recipe) {
-          const idMatch = String(booking.recipe).match(/\[ID:\s*(\d+)\]/i);
-          if (idMatch) recipeSelectValue = idMatch[1];
-        }
-        recipeSelect.value = recipeSelectValue;
-        if (recipeSelect.selectedIndex < 0 && booking.recipe) {
-          const optionByName = Array.from(recipeSelect.options).find(opt => (opt.getAttribute('data-recipe-name') || '').trim() === String(booking.recipe).trim());
-          if (optionByName) recipeSelect.value = optionByName.value;
-        }
-      }
-      document.getElementById('classSizeInput').value = booking.class_size;
-      document.getElementById('saveBookingBtn').textContent = 'Update booking';
-      document.getElementById('saveBookingBtn').dataset.editId = bookingId;
+      loadBookingIntoForm(booking);
     };
   });
 }
@@ -934,7 +1006,37 @@ window.addEventListener('DOMContentLoaded', () => {
       saveBooking({ autoCalculate: true }).catch(() => {});
     });
   }
+  const deleteBookingBtn = document.getElementById('deleteBookingBtn');
+  if (deleteBookingBtn) {
+    deleteBookingBtn.addEventListener('click', () => {
+      const saveBtn = document.getElementById('saveBookingBtn');
+      const bookingId = saveBtn && saveBtn.dataset ? String(saveBtn.dataset.editId || '').trim() : '';
+      if (!bookingId) {
+        if (window.QC) window.QC.toast('Select an existing booking first', 'warn');
+        return;
+      }
+      if (!confirm('Delete this booking?')) return;
+      fetch(`/api/bookings/${encodeURIComponent(bookingId)}`, { method: 'DELETE' })
+        .then(res => res.json())
+        .then(result => {
+          if (!result || !result.success) {
+            throw new Error((result && (result.error || result.message)) || 'Delete failed');
+          }
+          clearFormEditMode();
+          document.getElementById('resetBtn').click();
+          fetchAndRenderBookings();
+          writeSharedEmbedState({ ...getCurrentEmbedState(), refreshCalendarAt: Date.now(), editBookingId: '' }, { force: true });
+          if (window.QC) window.QC.toast('Booking deleted', 'success');
+        })
+        .catch((err) => {
+          console.error('[Book a Class] Delete failed', err);
+          if (window.QC) window.QC.toast('Failed to delete booking', 'error');
+          else alert('Failed to delete booking.');
+        });
+    });
+  }
   document.getElementById('resetBtn').addEventListener('click', () => {
+    clearFormEditMode();
     document.getElementById('classSizeInput').value = 1;
     document.getElementById('recipeSelect').selectedIndex = 0;
     document.getElementById('periodSelect').selectedIndex = 0;

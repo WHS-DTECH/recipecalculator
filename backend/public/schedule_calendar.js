@@ -14,6 +14,32 @@ const longDateFormatter = new Intl.DateTimeFormat(userLocale, {
 const weekdayFormatter = new Intl.DateTimeFormat(userLocale, { weekday: 'long' });
 const WEEK_DAYS_COUNT = 7;
 const bookingPageLabel = (window && window.bookingPageLabel) ? String(window.bookingPageLabel) : 'Load Booking';
+const bookClassSharedStateKey = 'bookClassEmbedSharedState';
+const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
+const scheduleCalendarSourceId = `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const scheduleCalendarSharedChannel = ('BroadcastChannel' in window)
+  ? new BroadcastChannel(bookClassSharedChannelName)
+  : null;
+let lastCalendarRefreshSignalAt = 0;
+
+function publishBookingToBookClassForm(booking) {
+  if (!booking) return;
+  const sharedState = {
+    sourceId: scheduleCalendarSourceId,
+    updatedAt: Date.now(),
+    staffId: String(booking.staff_id || ''),
+    className: String(booking.class_name || ''),
+    bookingDate: String(booking.booking_date || ''),
+    period: String(booking.period || ''),
+    recipeId: booking.recipe_id != null ? String(booking.recipe_id) : '',
+    classSize: booking.class_size != null ? String(booking.class_size) : '',
+    editBookingId: String(booking.id || '')
+  };
+  localStorage.setItem(bookClassSharedStateKey, JSON.stringify(sharedState));
+  if (scheduleCalendarSharedChannel) {
+    scheduleCalendarSharedChannel.postMessage(sharedState);
+  }
+}
 
 function toLocalIsoDate(date) {
   const y = date.getFullYear();
@@ -479,6 +505,7 @@ async function renderScheduleCalendar() {
         const idx = window.selectedBookingIds.indexOf(bookingId);
         if (idx === -1) {
           window.selectedBookingIds.push(bookingId);
+          publishBookingToBookClassForm(cell);
         } else {
           window.selectedBookingIds.splice(idx, 1);
         }
@@ -539,4 +566,17 @@ document.addEventListener('DOMContentLoaded', () => {
     };
   }
   ensureWeekendToggleButton();
+
+  if (scheduleCalendarSharedChannel) {
+    scheduleCalendarSharedChannel.addEventListener('message', (event) => {
+      const state = event && event.data ? event.data : null;
+      if (!state || !state.refreshCalendarAt) return;
+      const refreshAt = Number(state.refreshCalendarAt);
+      if (!Number.isFinite(refreshAt) || refreshAt <= lastCalendarRefreshSignalAt) return;
+      lastCalendarRefreshSignalAt = refreshAt;
+      renderScheduleCalendar();
+    });
+  }
 });
+
+window.publishBookingToBookClassForm = publishBookingToBookClassForm;
