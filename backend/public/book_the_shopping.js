@@ -252,7 +252,6 @@ function printArea(areaId, title, extraTitle) {
     const weekLabelEl = document.getElementById('calendarWeekLabel');
     const weekText = weekLabelEl ? 'Week: ' + weekLabelEl.textContent.trim() : '';
     const selectedBookingsHtml = getSelectedBookingsHTML();
-    const shouldPageBreakBeforeList = areaId === 'printByTeacherArea';
     win.document.write('<!DOCTYPE html><html><head><title>' + fullTitle + '</title>');
     win.document.write('<style>');
     win.document.write('@page{margin:2.8cm 1.5cm 1.8cm 1.5cm;}');
@@ -271,9 +270,12 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('.section{margin-bottom:1.5em;}');
     win.document.write('.print-bookings{margin-bottom:1em;}');
     win.document.write('.print-list{margin-top:0.3em;}');
-    win.document.write('.break-before-list{break-before:page;page-break-before:always;padding-top:3.2em;}');
+    win.document.write('.print-bookings-dedicated-page{break-after:page;page-break-after:always;min-height:calc(100vh - 4.4em);}');
+    win.document.write('.start-on-new-page{break-before:page;page-break-before:always;}');
+    win.document.write('.start-on-new-page::before{content:"";display:block;height:3.4em;}');
     win.document.write('.print-list .shopping-panel-title{display:none;}');
     win.document.write('.print-list #by-teacher-ingredients > div > div{break-inside:avoid;page-break-inside:avoid;}');
+    win.document.write('.print-list .shopping-category-table{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('</style>');
     win.document.write('</head><body>');
     win.document.write('<div class="running-header">');
@@ -282,8 +284,8 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('<span class="running-header-meta">' + (weekText ? weekText + '&nbsp;&nbsp;|&nbsp;&nbsp;' : '') + 'Printed: ' + printDate + '</span>');
     win.document.write('</div>');
     win.document.write('<div class="body-content">');
-    win.document.write('<div class="print-bookings">' + selectedBookingsHtml + '</div>');
-    win.document.write('<div id="printArea" class="print-list ' + (shouldPageBreakBeforeList ? 'break-before-list' : '') + '">' + area.innerHTML + '</div>');
+    win.document.write('<div class="print-bookings print-bookings-dedicated-page">' + selectedBookingsHtml + '</div>');
+    win.document.write('<div id="printArea" class="print-list start-on-new-page">' + area.innerHTML + '</div>');
     win.document.write('</div>');
     win.document.write('</body></html>');
     win.document.close();
