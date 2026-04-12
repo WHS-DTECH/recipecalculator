@@ -16,11 +16,24 @@ const WEEK_DAYS_COUNT = 7;
 const bookingPageLabel = (window && window.bookingPageLabel) ? String(window.bookingPageLabel) : 'Load Booking';
 const bookClassSharedStateKey = 'bookClassEmbedSharedState';
 const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
+const scheduleViewModeStorageKey = 'scheduleViewMode';
 const scheduleCalendarSourceId = `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const scheduleCalendarSharedChannel = ('BroadcastChannel' in window)
   ? new BroadcastChannel(bookClassSharedChannelName)
   : null;
 let lastCalendarRefreshSignalAt = 0;
+let scheduleViewMode = (() => {
+  const saved = String(localStorage.getItem(scheduleViewModeStorageKey) || '').trim().toLowerCase();
+  return saved === 'recipe' ? 'recipe' : 'class';
+})();
+
+function getCellPrimaryText(booking) {
+  if (scheduleViewMode === 'recipe') {
+    const recipeLabel = String(booking.recipe || '').trim();
+    return recipeLabel ? `Recipe: ${recipeLabel}` : `Class: ${booking.class_name || ''}`;
+  }
+  return `Class: ${booking.class_name || ''}`;
+}
 
 function publishBookingToBookClassForm(booking) {
   if (!booking) return;
@@ -385,7 +398,7 @@ async function renderScheduleCalendar() {
           // Add a class for selected state
           html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>
             <div class=\"calendar-booking-cell\" id=\"${bookingId}\" data-booking-id=\"${cell.id}\" style='background:#e8f5e9;border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
-              <div style='font-weight:bold;font-size:0.98em;'>Class: ${cell.class_name}</div>
+              <div style='font-weight:bold;font-size:0.98em;'>${getCellPrimaryText(cell)}</div>
               <div style='font-weight:bold;color:#388e3c;font-size:0.95em;'>Teacher: ${cell.staff_name}</div>
               <!-- Recipe and Servings hidden in event box -->
             </div>
@@ -557,6 +570,18 @@ document.addEventListener('DOMContentLoaded', () => {
     currentMonday.setDate(currentMonday.getDate() + 7);
     renderScheduleCalendar();
   };
+
+  const scheduleViewModeSelect = document.getElementById('scheduleViewModeSelect');
+  if (scheduleViewModeSelect) {
+    scheduleViewModeSelect.value = scheduleViewMode;
+    scheduleViewModeSelect.onchange = () => {
+      const nextMode = String(scheduleViewModeSelect.value || '').trim().toLowerCase();
+      scheduleViewMode = nextMode === 'recipe' ? 'recipe' : 'class';
+      localStorage.setItem(scheduleViewModeStorageKey, scheduleViewMode);
+      renderScheduleCalendar();
+    };
+  }
+
   const printScheduleBtn = document.getElementById('printScheduleBtn');
   if (printScheduleBtn) {
     printScheduleBtn.onclick = async () => {
