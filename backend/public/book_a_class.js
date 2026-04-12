@@ -100,6 +100,56 @@ function getStaffCodeById(staffId, staffArr) {
 
 let _staffArrCache = [];
 let _currentTeacherTimetablePeriods = [];
+let _preferredStaffId = '';
+
+function normalizeToken(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function readCurrentStaffUser() {
+  try {
+    const raw = sessionStorage.getItem('currentStaffUser');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+function resolveLoggedInStaffId(staffRows = []) {
+  const currentUser = readCurrentStaffUser();
+  if (!currentUser || !Array.isArray(staffRows) || !staffRows.length) return '';
+
+  const targetId = String(currentUser.id || '').trim();
+  const targetCode = normalizeToken(currentUser.code);
+  const targetFirst = normalizeToken(currentUser.first_name);
+  const targetLast = normalizeToken(currentUser.last_name);
+  const combinedOne = normalizeToken(`${currentUser.first_name || ''}${currentUser.last_name || ''}`);
+  const combinedTwo = normalizeToken(`${currentUser.last_name || ''}${currentUser.first_name || ''}`);
+
+  if (targetId) {
+    const byId = staffRows.find(s => String(s.id || '') === targetId);
+    if (byId) return String(byId.id || '');
+  }
+
+  if (targetCode) {
+    const byCode = staffRows.find(s => normalizeToken(s.code) === targetCode);
+    if (byCode) return String(byCode.id || '');
+  }
+
+  const byName = staffRows.find((s) => {
+    const first = normalizeToken(s.first_name);
+    const last = normalizeToken(s.last_name);
+    const joinedOne = normalizeToken(`${s.first_name || ''}${s.last_name || ''}`);
+    const joinedTwo = normalizeToken(`${s.last_name || ''}${s.first_name || ''}`);
+    return (
+      (targetFirst && targetLast && first === targetFirst && last === targetLast) ||
+      (combinedOne && joinedOne === combinedOne) ||
+      (combinedTwo && joinedTwo === combinedTwo)
+    );
+  });
+
+  return byName ? String(byName.id || '') : '';
+}
 
 function readSharedEmbedState() {
   if (!isTeacherEmbedView) return null;
@@ -450,12 +500,11 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
     const classText = classTokens.length
       ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;">${cls}</button>`).join('')
       : '<span style="color:#999;">No class</span>';
-    return `<tr><td style="font-weight:bold;width:52px;text-align:center;">${p.period}</td><td>${classText}</td></tr>`;
+    return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
   }).join('');
   body.innerHTML = `
-    <table class="bookings-table" style="margin-top:0.5rem;table-layout:fixed;">
-      <colgroup><col style="width:52px;"><col></colgroup>
-      <thead><tr><th style="width:52px;text-align:center;">Period</th><th>Class(es)</th></tr></thead>
+    <table class="bookings-table" style="margin-top:0.5rem;">
+      <thead><tr><th>Period</th><th>Class(es)</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
@@ -978,9 +1027,12 @@ window.addEventListener('DOMContentLoaded', () => {
     .then(res => res.json())
     .then(data => {
       _staffArrCache = data.staff || [];
+      _preferredStaffId = resolveLoggedInStaffId(_staffArrCache);
       return populateStaffDropdown(_staffArrCache).then(() => {
         const sharedState = readSharedEmbedState();
-        const firstStaffId = sharedState && sharedState.staffId ? sharedState.staffId : (_staffArrCache.length ? _staffArrCache[0].id : '');
+        const firstStaffId = sharedState && sharedState.staffId
+          ? sharedState.staffId
+          : (_preferredStaffId || (_staffArrCache.length ? _staffArrCache[0].id : ''));
         const staffSelect = document.getElementById('staffSelect');
         if (staffSelect && firstStaffId) {
           staffSelect.value = firstStaffId;
@@ -1044,7 +1096,14 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('dateInput').value = toLocalIsoDate(new Date());
     updateBookingDateDayLabel();
     document.getElementById('classSelect').selectedIndex = 0;
-    document.getElementById('staffSelect').selectedIndex = 0;
+    const staffSelect = document.getElementById('staffSelect');
+    if (staffSelect) {
+      if (_preferredStaffId) {
+        staffSelect.value = _preferredStaffId;
+      } else {
+        staffSelect.selectedIndex = 0;
+      }
+    }
     // Reset class dropdown to first staff
     const staffId = document.getElementById('staffSelect').value;
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
