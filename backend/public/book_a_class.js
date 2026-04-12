@@ -450,11 +450,12 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
     const classText = classTokens.length
       ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;">${cls}</button>`).join('')
       : '<span style="color:#999;">No class</span>';
-    return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
+    return `<tr><td style="font-weight:bold;width:52px;text-align:center;">${p.period}</td><td>${classText}</td></tr>`;
   }).join('');
   body.innerHTML = `
-    <table class="bookings-table" style="margin-top:0.5rem;">
-      <thead><tr><th>Period</th><th>Class(es)</th></tr></thead>
+    <table class="bookings-table" style="margin-top:0.5rem;table-layout:fixed;">
+      <colgroup><col style="width:52px;"><col></colgroup>
+      <thead><tr><th style="width:52px;text-align:center;">Period</th><th>Class(es)</th></tr></thead>
       <tbody>${rows}</tbody>
     </table>
   `;
