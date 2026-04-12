@@ -271,7 +271,9 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('.section{margin-bottom:1.5em;}');
     win.document.write('.print-bookings{margin-bottom:1em;}');
     win.document.write('.print-list{margin-top:0.3em;}');
-    win.document.write('.break-before-list{break-before:page;page-break-before:always;}');
+    win.document.write('.break-before-list{break-before:page;page-break-before:always;padding-top:3.2em;}');
+    win.document.write('.print-list .shopping-panel-title{display:none;}');
+    win.document.write('.print-list #by-teacher-ingredients > div > div{break-inside:avoid;page-break-inside:avoid;}');
     win.document.write('</style>');
     win.document.write('</head><body>');
     win.document.write('<div class="running-header">');
