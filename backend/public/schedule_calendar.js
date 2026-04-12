@@ -51,7 +51,49 @@ function getStartOfWeek(referenceDate) {
 }
 
 // Days and periods for the calendar grid
-const periods = [1, 2, 3, 4, 5, 6];
+const periods = [1, 2, 3, 4, 5];
+let showWeekends = true;
+
+function getVisibleDayIndices(weekDates, includeWeekends = showWeekends) {
+  const indices = [];
+  for (let i = 0; i < weekDates.length; ++i) {
+    if (includeWeekends || !weekDates[i].isWeekend) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
+function ensureWeekendToggleButton() {
+  let toggleBtn = document.getElementById('toggleWeekendBtn');
+  if (!toggleBtn) {
+    const anchorBtn = document.getElementById('printScheduleBtn') || document.getElementById('nextWeekBtn');
+    const parent = anchorBtn && anchorBtn.parentElement;
+    if (!parent) return null;
+
+    toggleBtn = document.createElement('button');
+    toggleBtn.id = 'toggleWeekendBtn';
+    toggleBtn.style.margin = '0 0.3em';
+    toggleBtn.style.background = '#455a64';
+    toggleBtn.style.color = '#fff';
+    toggleBtn.style.border = 'none';
+    toggleBtn.style.borderRadius = '5px';
+    toggleBtn.style.padding = '0.45rem 1rem';
+    toggleBtn.onclick = () => {
+      showWeekends = !showWeekends;
+      renderScheduleCalendar();
+    };
+
+    if (anchorBtn && anchorBtn.nextSibling) {
+      parent.insertBefore(toggleBtn, anchorBtn.nextSibling);
+    } else {
+      parent.appendChild(toggleBtn);
+    }
+  }
+
+  toggleBtn.textContent = showWeekends ? 'Hide Weekend' : 'Show Weekend';
+  return toggleBtn;
+}
 
 function getWeekDatesFromMonday(monday) {
   const weekDates = [];
@@ -61,7 +103,8 @@ function getWeekDatesFromMonday(monday) {
     weekDates.push({
       display: formatDateShort(d),
       iso: getISODate(d),
-      weekday: weekdayFormatter.format(d)
+      weekday: weekdayFormatter.format(d),
+      isWeekend: d.getDay() === 0 || d.getDay() === 6
     });
   }
   return weekDates;
@@ -154,12 +197,14 @@ function buildPrintGrid(bookings, weekDates) {
   return grid;
 }
 
-async function printScheduleForWeek(printMonday) {
+async function printScheduleForWeek(printMonday, includeWeekends = showWeekends) {
   if (!printMonday) return;
 
   const weekDates = getWeekDatesFromMonday(printMonday);
   const bookings = await fetchBookingsForWeek(printMonday);
   const grid = buildPrintGrid(bookings, weekDates);
+  const visibleDayIndices = getVisibleDayIndices(weekDates, includeWeekends);
+  const visibleWeekDates = visibleDayIndices.map((idx) => weekDates[idx]);
   const weekStart = new Date(printMonday);
   const weekEnd = new Date(printMonday);
   weekEnd.setDate(weekStart.getDate() + 6);
@@ -168,16 +213,17 @@ async function printScheduleForWeek(printMonday) {
 
   let tableHtml = '<table class="print-calendar-table"><thead>';
   tableHtml += '<tr><th class="period-col"></th>';
-  tableHtml += weekDates.map(d => `<th>${d.weekday}</th>`).join('');
+  tableHtml += visibleWeekDates.map(d => `<th>${d.weekday}</th>`).join('');
   tableHtml += '</tr>';
   tableHtml += '<tr><th class="period-col"></th>';
-  tableHtml += weekDates.map(d => `<th class="date-head">${d.display}</th>`).join('');
+  tableHtml += visibleWeekDates.map(d => `<th class="date-head">${d.display}</th>`).join('');
   tableHtml += '</tr></thead><tbody>';
 
   for (let p = 0; p < periods.length; ++p) {
     tableHtml += `<tr><td class="period-col">P${periods[p]}</td>`;
-    for (let d = 0; d < weekDates.length; ++d) {
-      const cell = grid[p][d];
+    for (let d = 0; d < visibleDayIndices.length; ++d) {
+      const dayIdx = visibleDayIndices[d];
+      const cell = grid[p][dayIdx];
       if (cell) {
         tableHtml += `<td><div class="booking-box"><div class="booking-title">Class: ${cell.class_name || ''}</div><div class="booking-teacher">Teacher: ${cell.staff_name || ''}</div></div></td>`;
       } else {
@@ -287,6 +333,8 @@ let currentMonday = (() => {
 async function renderScheduleCalendar() {
   const table = document.getElementById('scheduleCalendarTable');
   const weekDates = getWeekDatesFromMonday(currentMonday);
+  const visibleDayIndices = getVisibleDayIndices(weekDates, showWeekends);
+  const visibleWeekDates = visibleDayIndices.map((idx) => weekDates[idx]);
 
   // Fetch bookings for this week
   const bookings = await fetchBookingsForWeek(currentMonday);
@@ -295,15 +343,16 @@ async function renderScheduleCalendar() {
 
   // Header rows
     let html = `<thead><tr style='background:#1976d2;color:#fff;'>
-      <th style='width:48px;background:#1976d2;'></th>` + weekDates.map((d) => `<th style='padding:0.35rem 0.1rem;font-size:0.98em;background:#1976d2;color:#fff;'>${d.weekday}</th>`).join('') + '</tr>';
+      <th style='width:48px;background:#1976d2;'></th>` + visibleWeekDates.map((d) => `<th style='padding:0.35rem 0.1rem;font-size:0.98em;background:#1976d2;color:#fff;'>${d.weekday}</th>`).join('') + '</tr>';
     html += `<tr style='background:#e3eafc;color:#222;'>
-      <th style='width:48px;'></th>` + weekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${date.display}</th>`).join('') + '</tr></thead>';
+      <th style='width:48px;'></th>` + visibleWeekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${date.display}</th>`).join('') + '</tr></thead>';
 
   // Periods and cells (make bookings clickable)
   for (let p = 0; p < periods.length; ++p) {
     html += `<tr><td style='background:#f5f5f5;font-weight:bold;text-align:center;'>P${periods[p]}</td>`;
-      for (let d = 0; d < weekDates.length; ++d) {
-      const cell = grid[p][d];
+      for (let d = 0; d < visibleDayIndices.length; ++d) {
+      const dayIdx = visibleDayIndices[d];
+      const cell = grid[p][dayIdx];
         if (cell) {
           // Add a unique id for each booking cell
           const bookingId = `booking-${cell.id}`;
@@ -448,6 +497,7 @@ async function renderScheduleCalendar() {
   const weekEnd = new Date(currentMonday);
   weekEnd.setDate(weekStart.getDate() + 6);
   document.getElementById('calendarWeekLabel').textContent = `Week of ${formatDateLong(weekStart)} to ${formatDateLong(weekEnd)}`;
+  ensureWeekendToggleButton();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -485,7 +535,8 @@ document.addEventListener('DOMContentLoaded', () => {
     printScheduleBtn.onclick = async () => {
       const chosenMonday = await askWeekToPrint(currentMonday);
       if (!chosenMonday) return;
-      await printScheduleForWeek(chosenMonday);
+      await printScheduleForWeek(chosenMonday, showWeekends);
     };
   }
+  ensureWeekendToggleButton();
 });
