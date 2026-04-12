@@ -251,6 +251,8 @@ function printArea(areaId, title, extraTitle) {
     const logoUrl = window.location.origin + '/images/whs%20logo%20circular%20reo%20.png';
     const weekLabelEl = document.getElementById('calendarWeekLabel');
     const weekText = weekLabelEl ? 'Week: ' + weekLabelEl.textContent.trim() : '';
+    const selectedBookingsHtml = getSelectedBookingsHTML();
+    const shouldPageBreakBeforeList = areaId === 'printByTeacherArea';
     win.document.write('<!DOCTYPE html><html><head><title>' + fullTitle + '</title>');
     win.document.write('<style>');
     win.document.write('@page{margin:2.8cm 1.5cm 1.8cm 1.5cm;}');
@@ -267,6 +269,9 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('th{background:#e3e3e3;}');
     win.document.write('tr:nth-child(even){background:#f6f8fa;}');
     win.document.write('.section{margin-bottom:1.5em;}');
+    win.document.write('.print-bookings{margin-bottom:1em;}');
+    win.document.write('.print-list{margin-top:0.3em;}');
+    win.document.write('.break-before-list{break-before:page;page-break-before:always;}');
     win.document.write('</style>');
     win.document.write('</head><body>');
     win.document.write('<div class="running-header">');
@@ -275,7 +280,8 @@ function printArea(areaId, title, extraTitle) {
     win.document.write('<span class="running-header-meta">' + (weekText ? weekText + '&nbsp;&nbsp;|&nbsp;&nbsp;' : '') + 'Printed: ' + printDate + '</span>');
     win.document.write('</div>');
     win.document.write('<div class="body-content">');
-    win.document.write('<div id="printArea">' + area.innerHTML + '</div>');
+    win.document.write('<div class="print-bookings">' + selectedBookingsHtml + '</div>');
+    win.document.write('<div id="printArea" class="print-list ' + (shouldPageBreakBeforeList ? 'break-before-list' : '') + '">' + area.innerHTML + '</div>');
     win.document.write('</div>');
     win.document.write('</body></html>');
     win.document.close();
