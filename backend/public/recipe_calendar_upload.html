@@ -581,6 +581,18 @@
       return { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' }; // Middle
     }
 
+    function isPlannerLikeBooking(booking) {
+      const period = String(booking && booking.period ? booking.period : '').trim().toLowerCase();
+      if (period === 'planner') return true;
+
+      const hasTeacher = Boolean(String(booking && booking.staff_id ? booking.staff_id : '').trim() ||
+        String(booking && booking.staff_name ? booking.staff_name : '').trim());
+      if (hasTeacher) return false;
+
+      const className = String(booking && booking.class_name ? booking.class_name : '').trim().toUpperCase();
+      return className === 'MFOOD' || className === 'JFOOD' || className === 'HOSP';
+    }
+
     async function renderMiniCal() {
       const grid = document.getElementById('miniCalGrid');
       const label = document.getElementById('miniCalMonthLabel');
@@ -611,7 +623,7 @@
       const byDate = {};
       for (const b of allBookings) {
         if (!b.booking_date || !String(b.recipe || '').trim()) continue;
-        const isPlanner = String(b.period || '').toLowerCase() === 'planner';
+        const isPlanner = isPlannerLikeBooking(b);
         if (!isPlanner) continue;
 
         const snapped = snapToMonday(b.booking_date);

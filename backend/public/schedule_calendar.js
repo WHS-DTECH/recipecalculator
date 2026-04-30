@@ -88,6 +88,18 @@ function plannerChipStyle(stream) {
   return { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' };
 }
 
+function isPlannerLikeBooking(booking) {
+  const period = String(booking && booking.period ? booking.period : '').trim().toLowerCase();
+  if (period === 'planner') return true;
+
+  const hasTeacher = Boolean(String(booking && booking.staff_id ? booking.staff_id : '').trim() ||
+    String(booking && booking.staff_name ? booking.staff_name : '').trim());
+  if (hasTeacher) return false;
+
+  const className = String(booking && booking.class_name ? booking.class_name : '').trim().toUpperCase();
+  return className === 'MFOOD' || className === 'JFOOD' || className === 'HOSP';
+}
+
   // Snap a Saturday (+2) or Sunday (+1) date string to the following Monday
   function snapToNearestMonday(isoDate) {
     const d = new Date(isoDate + 'T00:00:00');
@@ -263,6 +275,7 @@ function askWeekToPrint(defaultMonday) {
 function buildPrintGrid(bookings, weekDates) {
   const grid = Array.from({ length: periods.length }, () => Array(weekDates.length).fill(null));
   bookings.forEach(b => {
+    if (isPlannerLikeBooking(b)) return;
     const dayIdx = weekDates.findIndex(wd => wd.iso === b.booking_date);
     const periodIdx = periods.indexOf(Number(b.period));
     if (dayIdx !== -1 && periodIdx !== -1) {
@@ -436,9 +449,8 @@ async function renderScheduleCalendar() {
     const dayIdx = visibleDayIndices[d];
     const dayIso = weekDates[dayIdx].iso;
     const plannerEntries = bookings.filter(b =>
-      String(b.period || '').toLowerCase() === 'planner' &&
+      isPlannerLikeBooking(b) &&
         snapToNearestMonday(b.booking_date) === dayIso &&
-        (!b.staff_id || String(b.staff_id).trim() === '') &&
         String(b.recipe || '').trim()
     );
     const uniqueByRecipeAndStream = new Map();
