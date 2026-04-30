@@ -4,11 +4,11 @@ const pool = require('../db');
 
 // Update a booking by ID
 router.put('/:id', async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size } = req.body;
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size } = req.body;
   try {
     await pool.query(
-      'UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_id=$7, class_size=$8 WHERE id=$9',
-      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size, req.params.id]
+      'UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9 WHERE id=$10',
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -28,11 +28,11 @@ router.delete('/:id', async (req, res) => {
 
 // Create a new booking
 router.post('/', async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size } = req.body;
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size } = req.body;
   try {
     const result = await pool.query(
-      'INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id',
-      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_id, class_size]
+      'INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size]
     );
     res.json({ success: true, booking_id: result.rows[0].id });
   } catch (err) {

@@ -75,6 +75,18 @@ function normalizeRecipeFragment(value) {
     .trim();
 }
 
+function extractUrlFromRecipe(recipe) {
+  // Try to extract a URL from recipe text (URLs are often embedded)
+  const urlMatch = recipe.match(/https?:\/\/[^\s)]+/i);
+  if (urlMatch) {
+    const url = urlMatch[0];
+    // Remove the URL from the recipe text
+    const recipeText = recipe.replace(url, '').trim();
+    return { recipe: recipeText, url };
+  }
+  return { recipe, url: '' };
+}
+
 function mergeScore(left, right) {
   const a = normalizeRecipeFragment(left);
   const b = normalizeRecipeFragment(right);
@@ -335,16 +347,19 @@ function parseCalendarText(text) {
     condensedRecipes = condenseRecipeFragments(mergeObviousRecipeFragments(allRecipes), allWeeks.length);
   }
 
-  // Zip weeks and recipes
+  // Zip weeks and recipes, extracting URLs where present
   for (let i = 0; i < allWeeks.length; i++) {
     const w = allWeeks[i];
+    const recipeRaw = condensedRecipes[i] || '';
+    const { recipe, url } = extractUrlFromRecipe(recipeRaw);
     results.push({
       term: w.term,
       weekNum: w.weekNum,
       dateRange: w.dateRange || '',
       startDate: w.startDate || '',
-      recipe: condensedRecipes[i] || '',
-      confidence: condensedRecipes[i] ? 'auto' : 'missing'
+      recipe: recipe,
+      url: url,
+      confidence: recipeRaw ? 'auto' : 'missing'
     });
   }
 

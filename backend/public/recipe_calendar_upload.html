@@ -258,6 +258,7 @@
               <th>Week</th>
               <th>Week Start Date</th>
               <th>Recipe</th>
+              <th>URL</th>
               <th>Class Name</th>
               <th>Confidence</th>
               <th></th>
@@ -443,7 +444,7 @@
     }
 
     function addRow(w) {
-      w = w || { term: '', weekNum: '', startDate: '', recipe: '', class_name: '', confidence: 'manual' };
+      w = w || { term: '', weekNum: '', startDate: '', recipe: '', url: '', class_name: '', confidence: 'manual' };
       const tr = document.createElement('tr');
       tr.dataset.confidence = w.confidence || 'manual';
       tr.innerHTML = `
@@ -451,6 +452,7 @@
         <td><input type="text" class="rcal-week" value="${escHtml(String(w.weekNum || ''))}" placeholder="1" style="width:48px;"></td>
         <td><input type="date" class="rcal-date" value="${escHtml(w.startDate || '')}"></td>
         <td><input type="text" class="rcal-recipe" value="${escHtml(w.recipe || '')}" placeholder="Recipe name"></td>
+        <td><input type="url" class="rcal-url" value="${escHtml(w.url || '')}" placeholder="https://..." style="width:180px;"></td>
         <td><input type="text" class="rcal-classname" value="${escHtml(w.class_name || '')}" placeholder="e.g. 9FT1"></td>
         <td>
           ${w.confidence === 'auto' ? '<span class="rcal-badge-auto">auto</span>' :
@@ -491,6 +493,7 @@
 
       for (const row of rows) {
         const recipe = row.querySelector('.rcal-recipe').value.trim();
+        const url = row.querySelector('.rcal-url').value.trim();
         const startDate = row.querySelector('.rcal-date').value.trim();
         const className = row.querySelector('.rcal-classname').value.trim() || globalClassName || '';
         if (!recipe || !startDate) continue; // skip incomplete rows
@@ -500,6 +503,7 @@
             booking_date: startDate,
             period: period,
             recipe: recipe,
+            recipe_url: url,
             class_name: className,
             staff_id: null,
             staff_name: null,
