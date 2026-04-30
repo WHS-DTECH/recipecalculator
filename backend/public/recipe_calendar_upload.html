@@ -390,6 +390,7 @@
           return;
         }
 
+        injectMissingWeek1s(weeks);
         parseStatus.className = 'rcal-status ok';
         parseStatus.textContent = `Extracted ${weeks.length} week(s). Review below and correct any errors before saving.`;
         renderTable(weeks);
@@ -415,6 +416,25 @@
       return String(str == null ? '' : str)
         .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function injectMissingWeek1s(weeks) {
+      // Group by term to find which terms are missing Week 1
+      const terms = [...new Set(weeks.map(w => w.term))];
+      for (const term of terms) {
+        const termWeeks = weeks.filter(w => w.term === term);
+        const hasWeek1 = termWeeks.some(w => Number(w.weekNum) === 1);
+        if (!hasWeek1) {
+          const week2 = termWeeks.find(w => Number(w.weekNum) === 2);
+          if (week2 && week2.startDate) {
+            const d = new Date(week2.startDate);
+            d.setDate(d.getDate() - 7);
+            const iso = d.toISOString().slice(0, 10);
+            const insertIdx = weeks.indexOf(week2);
+            weeks.splice(insertIdx, 0, { term, weekNum: 1, startDate: iso, recipe: '', class_name: week2.class_name || '', confidence: 'missing' });
+          }
+        }
+      }
     }
 
     function renderTable(weeks) {
