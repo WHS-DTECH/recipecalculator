@@ -403,6 +403,27 @@ async function renderScheduleCalendar() {
     html += `<tr style='background:#e3eafc;color:#222;'>
       <th style='width:48px;'></th>` + visibleWeekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${date.display}</th>`).join('') + '</tr></thead>';
 
+  // Planner row — year planner entries (no staff assigned), one chip per unique recipe per day
+  html += `<tr><td style='background:#e8eaf6;font-weight:bold;text-align:center;font-size:0.85em;color:#283593;padding:0.3rem 0.1rem;'>Planner</td>`;
+  for (let d = 0; d < visibleDayIndices.length; ++d) {
+    const dayIdx = visibleDayIndices[d];
+    const dayIso = weekDates[dayIdx].iso;
+    const plannerEntries = bookings.filter(b =>
+      b.booking_date === dayIso &&
+      (!b.staff_id || String(b.staff_id).trim() === '') &&
+      String(b.recipe || '').trim()
+    );
+    const uniqueRecipes = [...new Set(plannerEntries.map(b => String(b.recipe || '').trim()))];
+    if (uniqueRecipes.length) {
+      html += `<td style='vertical-align:top;text-align:center;padding:0.2rem 0.1rem;'>` +
+        uniqueRecipes.map(r => `<div style='background:#e8eaf6;border-radius:5px;padding:0.15rem 0.22rem;font-size:0.82em;color:#283593;font-weight:600;margin-bottom:2px;'>${escHtml(r)}</div>`).join('') +
+        `</td>`;
+    } else {
+      html += '<td></td>';
+    }
+  }
+  html += '</tr>';
+
   // Periods and cells (make bookings clickable)
   for (let p = 0; p < periods.length; ++p) {
     html += `<tr><td style='background:#f5f5f5;font-weight:bold;text-align:center;'>P${periods[p]}</td>`;

@@ -140,26 +140,36 @@ router.get('/ical', async (req, res) => {
       'END:VTIMEZONE'
     ];
 
+    // Deduplicate by date + recipe so multiple period bookings for the same recipe
+    // on the same day appear as a single all-day event in Google Calendar.
+    const seen = new Set();
     for (const b of bookings) {
-      const period = Number(b.period);
-      const times = PERIOD_TIMES[period] || { start: '09:00', end: '10:00' };
-      const summary = [b.recipe, b.class_name].filter(Boolean).join(' \u2013 ');
+      const recipe = String(b.recipe || '').trim();
+      const key = `${b.booking_date}|${recipe}|${b.class_name || ''}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+
+      // Full-day event: DTEND is the following day (RFC 5545 §3.6.1)
+      const startDate = String(b.booking_date || '').replace(/-/g, '');
+      const nextDay = new Date(b.booking_date);
+      nextDay.setDate(nextDay.getDate() + 1);
+      const endDate = nextDay.toISOString().slice(0, 10).replace(/-/g, '');
+
+      const summary = [recipe, b.class_name].filter(Boolean).join(' \u2013 ');
       const description = [
-        b.recipe ? `Recipe: ${b.recipe}` : '',
+        recipe ? `Recipe: ${recipe}` : '',
         b.class_name ? `Class: ${b.class_name}` : '',
         b.staff_name ? `Teacher: ${b.staff_name}` : '',
-        `Period: ${period || '?'}`,
         b.class_size ? `Class size: ${b.class_size}` : ''
       ].filter(Boolean).join('\\n');
 
       lines.push('BEGIN:VEVENT');
-      lines.push(`UID:booking-${b.id}@recipecalculator`);
+      lines.push(foldLine(`UID:planner-${startDate}-${encodeURIComponent(recipe)}-${encodeURIComponent(b.class_name || '')}@recipecalculator`));
       lines.push(`DTSTAMP:${now}`);
-      lines.push(`DTSTART;TZID=${TIMEZONE}:${toIcalDt(b.booking_date, times.start)}`);
-      lines.push(`DTEND;TZID=${TIMEZONE}:${toIcalDt(b.booking_date, times.end)}`);
-      lines.push(foldLine(`SUMMARY:${escIcal(summary || 'Booking')}`));
+      lines.push(`DTSTART;VALUE=DATE:${startDate}`);
+      lines.push(`DTEND;VALUE=DATE:${endDate}`);
+      lines.push(foldLine(`SUMMARY:${escIcal(summary || 'Year Planner')}`));
       lines.push(foldLine(`DESCRIPTION:${escIcal(description)}`));
-      if (b.staff_name) lines.push(foldLine(`ORGANIZER;CN=${escIcal(b.staff_name)}:MAILTO:noreply@recipecalculator`));
       lines.push('END:VEVENT');
     }
 

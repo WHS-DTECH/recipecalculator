@@ -294,6 +294,16 @@
         2. Paste the link above → <strong>Add calendar</strong><br>
         3. Google will check for updates automatically (usually every 24 hours).
       </div>
+
+      <!-- Mini calendar preview -->
+      <div style="margin-top:1.25rem;border-top:1px solid #e5e7eb;padding-top:1rem;">
+        <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.75rem;">
+          <button id="miniCalPrevBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8249;</button>
+          <strong id="miniCalMonthLabel" style="flex:1;text-align:center;font-size:0.97rem;color:#1f2937;"></strong>
+          <button id="miniCalNextBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8250;</button>
+        </div>
+        <div id="miniCalGrid" style="font-size:0.87rem;">Loading…</div>
+      </div>
     </div>
   </div>
 
@@ -539,11 +549,74 @@
       if (failed === 0) {
         saveStatus.className = 'rcal-status ok';
         saveStatus.textContent = `✓ Saved ${saved} booking(s) successfully.`;
+        renderMiniCal(); // refresh calendar after saving
       } else {
         saveStatus.className = 'rcal-status error';
         saveStatus.textContent = `Saved ${saved} booking(s), but ${failed} failed. Check the console for details.`;
       }
     });
+
+    // --- Mini month calendar ---
+    let miniCalDate = new Date();
+    miniCalDate.setDate(1);
+
+    async function renderMiniCal() {
+      const grid = document.getElementById('miniCalGrid');
+      const label = document.getElementById('miniCalMonthLabel');
+      if (!grid || !label) return;
+      const year = miniCalDate.getFullYear();
+      const month = miniCalDate.getMonth();
+      label.textContent = miniCalDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+      let allBookings = [];
+      try {
+        const res = await fetch('/api/bookings/all');
+        const data = await res.json();
+        allBookings = data.bookings || [];
+      } catch { }
+
+      // Build date -> unique recipe set for this month
+      const byDate = {};
+      for (const b of allBookings) {
+        if (!b.booking_date || !String(b.recipe || '').trim()) continue;
+        const parts = b.booking_date.split('-').map(Number);
+        if (parts[0] !== year || parts[1] - 1 !== month) continue;
+        if (!byDate[b.booking_date]) byDate[b.booking_date] = new Set();
+        byDate[b.booking_date].add(String(b.recipe).trim());
+      }
+
+      const lastDay = new Date(year, month + 1, 0).getDate();
+      const startDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0=Mon
+      const todayIso = new Date().toISOString().slice(0, 10);
+
+      let html = '<table style="width:100%;border-collapse:collapse;">';
+      html += '<thead><tr>' + ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+        .map(d => `<th style="padding:4px 2px;color:#6b7280;font-weight:600;text-align:center;font-size:0.8rem;">${d}</th>`).join('') + '</tr></thead><tbody><tr>';
+
+      let col = startDow;
+      for (let i = 0; i < startDow; i++) html += '<td style="border:1px solid #f3f4f6;height:56px;"></td>';
+
+      for (let day = 1; day <= lastDay; day++) {
+        const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const recipes = byDate[iso] ? [...byDate[iso]] : [];
+        const isToday = iso === todayIso;
+        html += `<td style="border:1px solid #f3f4f6;vertical-align:top;padding:3px 2px;height:56px;${isToday ? 'background:#eff6ff;' : ''}">` +
+          `<div style="font-size:0.78rem;font-weight:${isToday ? '700' : '600'};color:${isToday ? '#1d4ed8' : '#374151'};margin-bottom:2px;">${day}</div>` +
+          recipes.map(r => `<div style="background:#dbeafe;border-radius:3px;padding:1px 3px;font-size:0.68rem;color:#1e40af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;" title="${escHtml(r)}">${escHtml(r)}</div>`).join('') +
+          '</td>';
+        col++;
+        if (col % 7 === 0 && day < lastDay) html += '</tr><tr>';
+      }
+
+      const trailing = (7 - (col % 7)) % 7;
+      for (let i = 0; i < trailing; i++) html += '<td style="border:1px solid #f3f4f6;height:56px;"></td>';
+      html += '</tr></tbody></table>';
+      grid.innerHTML = html;
+    }
+
+    document.getElementById('miniCalPrevBtn').onclick = () => { miniCalDate.setMonth(miniCalDate.getMonth() - 1); renderMiniCal(); };
+    document.getElementById('miniCalNextBtn').onclick = () => { miniCalDate.setMonth(miniCalDate.getMonth() + 1); renderMiniCal(); };
+    renderMiniCal();
   </script>
 </body>
 </html>
