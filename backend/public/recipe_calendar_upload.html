@@ -228,7 +228,7 @@
         Check each row. Edit the date, recipe or class name as needed. Rows marked
         <span class="rcal-badge-auto">auto</span> were detected automatically.
         Rows marked <span class="rcal-badge-missing">missing</span> need a recipe filled in.
-        Choose which periods and class this applies to, then click <strong>Save to Year Planner</strong>.
+        Choose the class and school stream, then click <strong>Save to Year Planner</strong>.
       </div>
 
       <div style="margin-bottom:1rem;">
@@ -247,16 +247,8 @@
         </select>
       </div>
 
-      <div style="margin-bottom:1rem;">
-        <span style="font-weight:600;font-size:0.95rem;">Period(s) to create booking for each week:</span>
-        <div class="rcal-period-options" id="periodOptions" style="margin-top:0.4rem;">
-          <label><input type="checkbox" name="period" value="1"> P1</label>
-          <label><input type="checkbox" name="period" value="2"> P2</label>
-          <label><input type="checkbox" name="period" value="3" checked> P3</label>
-          <label><input type="checkbox" name="period" value="4"> P4</label>
-          <label><input type="checkbox" name="period" value="5"> P5</label>
-        </div>
-        <div style="font-size:0.85rem;color:#6b7280;margin-top:0.3rem;">One booking per selected period per week will be created.</div>
+      <div style="margin-bottom:1rem;font-size:0.9rem;color:#4b5563;">
+        Entries saved from this page are added to the <strong>Planner</strong> row in Booking Calendar and exported as full-day Google Calendar events.
       </div>
 
       <div class="rcal-table-wrap">
@@ -505,14 +497,6 @@
 
     saveBtn.addEventListener('click', async () => {
       const rows = Array.from(reviewTableBody.querySelectorAll('tr'));
-      const periods = Array.from(document.querySelectorAll('#periodOptions input[name="period"]:checked'))
-        .map(el => el.value);
-
-      if (!periods.length) {
-        saveStatus.className = 'rcal-status error';
-        saveStatus.textContent = 'Please select at least one period.';
-        return;
-      }
 
       const globalClassName = document.getElementById('classnameInput').value.trim();
       const plannerStream = document.getElementById('plannerStreamSelect').value || 'Middle';
@@ -525,20 +509,18 @@
         const className = row.querySelector('.rcal-classname').value.trim() || globalClassName || '';
         if (!recipe || !startDate) continue; // skip incomplete rows
 
-        for (const period of periods) {
-          bookings.push({
-            booking_date: startDate,
-            period: period,
-            recipe: recipe,
-            recipe_url: url,
-            class_name: className,
-            planner_stream: plannerStream,
-            staff_id: null,
-            staff_name: null,
-            recipe_id: null,
-            class_size: null
-          });
-        }
+        bookings.push({
+          booking_date: startDate,
+          period: 'Planner',
+          recipe: recipe,
+          recipe_url: url,
+          class_name: className,
+          planner_stream: plannerStream,
+          staff_id: null,
+          staff_name: null,
+          recipe_id: null,
+          class_size: null
+        });
       }
 
       if (!bookings.length) {
