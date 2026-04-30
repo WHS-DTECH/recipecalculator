@@ -33,7 +33,7 @@ function mergeScore(left, right) {
   // Strong continuation signals.
   if (/^\(/.test(b)) score -= 8;
   if (/^[a-z]/.test(b)) score -= 7;
-  if (/^[)\]}/.test(b)) score -= 7;
+  if (/^[)\]}]/.test(b)) score -= 7;
   if (/\($/.test(a)) score -= 7;
   if (/[:;,]$/.test(a)) score -= 6;
   if (/[:;,]$/.test(b)) score -= 3;
