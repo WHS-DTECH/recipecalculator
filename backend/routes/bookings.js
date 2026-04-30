@@ -2,16 +2,25 @@
 const router = express.Router();
 const pool = require('../db');
 
+let schemaReady = false;
+async function ensureSchema() {
+  if (schemaReady) return;
+  await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS recipe_url TEXT DEFAULT ''");
+  schemaReady = true;
+}
+
 // Update a booking by ID
 router.put('/:id', async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size } = req.body;
   try {
+    await ensureSchema();
     await pool.query(
       'UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9 WHERE id=$10',
       [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {
+    console.error('Failed to update booking:', err.message);
     res.status(500).json({ error: 'Failed to update booking.' });
   }
 });
@@ -30,12 +39,14 @@ router.delete('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size } = req.body;
   try {
+    await ensureSchema();
     const result = await pool.query(
       'INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
       [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size]
     );
     res.json({ success: true, booking_id: result.rows[0].id });
   } catch (err) {
+    console.error('Failed to create booking:', err.message);
     res.status(500).json({ error: 'Failed to create booking.' });
   }
 });
@@ -43,9 +54,11 @@ router.post('/', async (req, res) => {
 // Get all bookings
 router.get('/all', async (req, res) => {
   try {
+    await ensureSchema();
     const result = await pool.query('SELECT * FROM bookings ORDER BY booking_date DESC, period');
     res.json({ bookings: result.rows });
   } catch (err) {
+    console.error('Failed to fetch bookings:', err.message);
     res.status(500).json({ error: 'Failed to fetch bookings.' });
   }
 });
