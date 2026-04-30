@@ -175,13 +175,42 @@ async function parseDocxCalendar(buffer) {
     }
   }
 
+  // Also parse by full text and merge in any term/week entries not found in table extraction.
+  // This handles mixed DOCX layouts where some terms aren't represented as a strict table.
+  const parsedFromText = parseCalendarText(fullText, []);
+  const textWeeks = Array.isArray(parsedFromText)
+    ? parsedFromText
+    : ((parsedFromText && parsedFromText.weeks) || []);
+
   if (!results.length) {
-    // Fallback for planners that don't use a strict week-row + practical-row table layout.
-    const parsed = parseCalendarText(fullText, []);
     return {
-      weeks: parsed.weeks || [],
+      weeks: textWeeks,
       rawText: fullText.slice(0, 3000)
     };
+  }
+
+  if (textWeeks.length) {
+    const byTermWeek = new Map();
+    for (const row of results) {
+      byTermWeek.set(`${row.term}|${row.weekNum}`, row);
+    }
+
+    for (const row of textWeeks) {
+      const key = `${row.term}|${row.weekNum}`;
+      const existing = byTermWeek.get(key);
+      if (!existing) {
+        results.push(row);
+        byTermWeek.set(key, row);
+        continue;
+      }
+
+      // Keep table row as primary, but fill obvious blanks from text parse.
+      if (!existing.startDate && row.startDate) existing.startDate = row.startDate;
+      if (!existing.recipe && row.recipe) existing.recipe = row.recipe;
+      if (!existing.url && row.url) existing.url = row.url;
+      if (!existing.dateRange && row.dateRange) existing.dateRange = row.dateRange;
+    }
+    results.sort((a, b) => (a.term - b.term) || (a.weekNum - b.weekNum));
   }
 
   return {
