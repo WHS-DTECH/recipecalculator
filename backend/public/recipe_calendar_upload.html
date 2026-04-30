@@ -576,13 +576,23 @@
       } catch { }
 
       // Build date -> unique recipe set for this month
+      // Snap Saturday (+2) / Sunday (+1) to the following Monday
+      function snapToMonday(isoDate) {
+        const d = new Date(isoDate + 'T00:00:00');
+        const dow = d.getDay();
+        if (dow === 0) d.setDate(d.getDate() + 1);
+        else if (dow === 6) d.setDate(d.getDate() + 2);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+
       const byDate = {};
       for (const b of allBookings) {
         if (!b.booking_date || !String(b.recipe || '').trim()) continue;
-        const parts = b.booking_date.split('-').map(Number);
+        const snapped = snapToMonday(b.booking_date);
+        const parts = snapped.split('-').map(Number);
         if (parts[0] !== year || parts[1] - 1 !== month) continue;
-        if (!byDate[b.booking_date]) byDate[b.booking_date] = new Set();
-        byDate[b.booking_date].add(String(b.recipe).trim());
+        if (!byDate[snapped]) byDate[snapped] = new Set();
+        byDate[snapped].add(String(b.recipe).trim());
       }
 
       const lastDay = new Date(year, month + 1, 0).getDate();

@@ -70,6 +70,15 @@ function toLocalIsoDate(date) {
   return `${y}-${m}-${d}`;
 }
 
+  // Snap a Saturday (+2) or Sunday (+1) date string to the following Monday
+  function snapToNearestMonday(isoDate) {
+    const d = new Date(isoDate + 'T00:00:00');
+    const dow = d.getDay();
+    if (dow === 0) d.setDate(d.getDate() + 1);
+    else if (dow === 6) d.setDate(d.getDate() + 2);
+    return toLocalIsoDate(d);
+  }
+
 function parseLocalIsoDate(value) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value || ''));
   if (!match) return null;
@@ -409,9 +418,9 @@ async function renderScheduleCalendar() {
     const dayIdx = visibleDayIndices[d];
     const dayIso = weekDates[dayIdx].iso;
     const plannerEntries = bookings.filter(b =>
-      b.booking_date === dayIso &&
-      (!b.staff_id || String(b.staff_id).trim() === '') &&
-      String(b.recipe || '').trim()
+        snapToNearestMonday(b.booking_date) === dayIso &&
+        (!b.staff_id || String(b.staff_id).trim() === '') &&
+        String(b.recipe || '').trim()
     );
     const uniqueRecipes = [...new Set(plannerEntries.map(b => String(b.recipe || '').trim()))];
     if (uniqueRecipes.length) {
