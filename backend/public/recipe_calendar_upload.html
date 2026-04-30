@@ -301,6 +301,7 @@
         <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.75rem;">
           <button id="miniCalPrevBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8249;</button>
           <strong id="miniCalMonthLabel" style="flex:1;text-align:center;font-size:0.97rem;color:#1f2937;"></strong>
+          <button id="miniCalWeekendBtn" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:5px;padding:0.28rem 0.6rem;font-size:0.8rem;cursor:pointer;line-height:1.2;">Hide Weekend</button>
           <button id="miniCalNextBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8250;</button>
         </div>
         <div id="miniCalGrid" style="font-size:0.87rem;">Loading…</div>
@@ -560,14 +561,35 @@
     // --- Mini month calendar ---
     let miniCalDate = new Date();
     miniCalDate.setDate(1);
+    let miniCalShowWeekends = true;
+
+    function normalizePlannerStream(booking) {
+      const explicit = String(booking && booking.planner_stream ? booking.planner_stream : '').trim().toLowerCase();
+      if (explicit === 'junior') return 'Junior';
+      if (explicit === 'senior') return 'Senior';
+      if (explicit === 'middle') return 'Middle';
+
+      const className = String(booking && booking.class_name ? booking.class_name : '').toLowerCase();
+      if (/(^|\b)jfood(\b|$)|junior/.test(className)) return 'Junior';
+      if (/(^|\b)hosp(\b|$)|senior|hp100/.test(className)) return 'Senior';
+      return 'Middle';
+    }
+
+    function streamChipStyle(stream) {
+      if (stream === 'Junior') return { bg: '#dcfce7', border: '#86efac', text: '#166534' };
+      if (stream === 'Senior') return { bg: '#ffedd5', border: '#fdba74', text: '#9a3412' };
+      return { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' }; // Middle
+    }
 
     async function renderMiniCal() {
       const grid = document.getElementById('miniCalGrid');
       const label = document.getElementById('miniCalMonthLabel');
+      const weekendBtn = document.getElementById('miniCalWeekendBtn');
       if (!grid || !label) return;
       const year = miniCalDate.getFullYear();
       const month = miniCalDate.getMonth();
       label.textContent = miniCalDate.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      if (weekendBtn) weekendBtn.textContent = miniCalShowWeekends ? 'Hide Weekend' : 'Show Weekend';
 
       let allBookings = [];
       try {
@@ -589,11 +611,16 @@
       const byDate = {};
       for (const b of allBookings) {
         if (!b.booking_date || !String(b.recipe || '').trim()) continue;
+        const isPlanner = String(b.period || '').toLowerCase() === 'planner';
+        if (!isPlanner) continue;
+
         const snapped = snapToMonday(b.booking_date);
         const parts = snapped.split('-').map(Number);
         if (parts[0] !== year || parts[1] - 1 !== month) continue;
-        if (!byDate[snapped]) byDate[snapped] = new Set();
-        byDate[snapped].add(String(b.recipe).trim());
+        if (!byDate[snapped]) byDate[snapped] = new Map();
+        const recipe = String(b.recipe).trim();
+        const stream = normalizePlannerStream(b);
+        byDate[snapped].set(`${recipe}|${stream}`, { recipe, stream });
       }
 
       const lastDay = new Date(year, month + 1, 0).getDate();
@@ -602,31 +629,41 @@
 
       let html = '<table style="width:100%;border-collapse:collapse;">';
       html += '<thead><tr>' + ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
-        .map(d => `<th style="padding:4px 2px;color:#6b7280;font-weight:600;text-align:center;font-size:0.8rem;">${d}</th>`).join('') + '</tr></thead><tbody><tr>';
+        .map((d, idx) => `<th style="padding:4px 2px;color:#6b7280;font-weight:600;text-align:center;font-size:0.8rem;${(!miniCalShowWeekends && idx >= 5) ? 'display:none;' : ''}">${d}</th>`).join('') + '</tr></thead><tbody><tr>';
 
       let col = startDow;
-      for (let i = 0; i < startDow; i++) html += '<td style="border:1px solid #f3f4f6;height:56px;"></td>';
+      for (let i = 0; i < startDow; i++) {
+        html += `<td style="border:1px solid #f3f4f6;height:56px;${(!miniCalShowWeekends && i >= 5) ? 'display:none;' : ''}"></td>`;
+      }
 
       for (let day = 1; day <= lastDay; day++) {
         const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const recipes = byDate[iso] ? [...byDate[iso]] : [];
+        const entries = byDate[iso] ? [...byDate[iso].values()] : [];
         const isToday = iso === todayIso;
-        html += `<td style="border:1px solid #f3f4f6;vertical-align:top;padding:3px 2px;height:56px;${isToday ? 'background:#eff6ff;' : ''}">` +
+        const dowMon0 = (new Date(year, month, day).getDay() + 6) % 7;
+        html += `<td style="border:1px solid #f3f4f6;vertical-align:top;padding:3px 2px;height:56px;${isToday ? 'background:#eff6ff;' : ''}${(!miniCalShowWeekends && dowMon0 >= 5) ? 'display:none;' : ''}">` +
           `<div style="font-size:0.78rem;font-weight:${isToday ? '700' : '600'};color:${isToday ? '#1d4ed8' : '#374151'};margin-bottom:2px;">${day}</div>` +
-          recipes.map(r => `<div style="background:#dbeafe;border-radius:3px;padding:1px 3px;font-size:0.68rem;color:#1e40af;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;" title="${escHtml(r)}">${escHtml(r)}</div>`).join('') +
+          entries.map(e => {
+            const chip = streamChipStyle(e.stream);
+            return `<div style="background:${chip.bg};border:1px solid ${chip.border};border-radius:3px;padding:1px 3px;font-size:0.68rem;color:${chip.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;" title="${escHtml(e.recipe)} (${e.stream})">${escHtml(e.recipe)}</div>`;
+          }).join('') +
           '</td>';
         col++;
         if (col % 7 === 0 && day < lastDay) html += '</tr><tr>';
       }
 
       const trailing = (7 - (col % 7)) % 7;
-      for (let i = 0; i < trailing; i++) html += '<td style="border:1px solid #f3f4f6;height:56px;"></td>';
+      for (let i = 0; i < trailing; i++) {
+        const colIdx = (col + i) % 7;
+        html += `<td style="border:1px solid #f3f4f6;height:56px;${(!miniCalShowWeekends && colIdx >= 5) ? 'display:none;' : ''}"></td>`;
+      }
       html += '</tr></tbody></table>';
       grid.innerHTML = html;
     }
 
     document.getElementById('miniCalPrevBtn').onclick = () => { miniCalDate.setMonth(miniCalDate.getMonth() - 1); renderMiniCal(); };
     document.getElementById('miniCalNextBtn').onclick = () => { miniCalDate.setMonth(miniCalDate.getMonth() + 1); renderMiniCal(); };
+    document.getElementById('miniCalWeekendBtn').onclick = () => { miniCalShowWeekends = !miniCalShowWeekends; renderMiniCal(); };
     renderMiniCal();
   </script>
 </body>

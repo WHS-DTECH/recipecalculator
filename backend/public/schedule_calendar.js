@@ -70,6 +70,24 @@ function toLocalIsoDate(date) {
   return `${y}-${m}-${d}`;
 }
 
+function normalizePlannerStream(booking) {
+  const explicit = String(booking && booking.planner_stream ? booking.planner_stream : '').trim().toLowerCase();
+  if (explicit === 'junior') return 'Junior';
+  if (explicit === 'senior') return 'Senior';
+  if (explicit === 'middle') return 'Middle';
+
+  const className = String(booking && booking.class_name ? booking.class_name : '').toLowerCase();
+  if (/(^|\b)jfood(\b|$)|junior/.test(className)) return 'Junior';
+  if (/(^|\b)hosp(\b|$)|senior|hp100/.test(className)) return 'Senior';
+  return 'Middle';
+}
+
+function plannerChipStyle(stream) {
+  if (stream === 'Junior') return { bg: '#dcfce7', border: '#86efac', text: '#166534' };
+  if (stream === 'Senior') return { bg: '#ffedd5', border: '#fdba74', text: '#9a3412' };
+  return { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' };
+}
+
   // Snap a Saturday (+2) or Sunday (+1) date string to the following Monday
   function snapToNearestMonday(isoDate) {
     const d = new Date(isoDate + 'T00:00:00');
@@ -418,14 +436,24 @@ async function renderScheduleCalendar() {
     const dayIdx = visibleDayIndices[d];
     const dayIso = weekDates[dayIdx].iso;
     const plannerEntries = bookings.filter(b =>
+      String(b.period || '').toLowerCase() === 'planner' &&
         snapToNearestMonday(b.booking_date) === dayIso &&
         (!b.staff_id || String(b.staff_id).trim() === '') &&
         String(b.recipe || '').trim()
     );
-    const uniqueRecipes = [...new Set(plannerEntries.map(b => String(b.recipe || '').trim()))];
-    if (uniqueRecipes.length) {
+    const uniqueByRecipeAndStream = new Map();
+    for (const entry of plannerEntries) {
+      const recipe = String(entry.recipe || '').trim();
+      const stream = normalizePlannerStream(entry);
+      uniqueByRecipeAndStream.set(`${recipe}|${stream}`, { recipe, stream });
+    }
+    const chips = [...uniqueByRecipeAndStream.values()];
+    if (chips.length) {
       html += `<td style='vertical-align:top;text-align:center;padding:0.2rem 0.1rem;'>` +
-        uniqueRecipes.map(r => `<div style='background:#e8eaf6;border-radius:5px;padding:0.15rem 0.22rem;font-size:0.82em;color:#283593;font-weight:600;margin-bottom:2px;'>${escHtml(r)}</div>`).join('') +
+        chips.map(c => {
+          const style = plannerChipStyle(c.stream);
+          return `<div style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.15rem 0.22rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;'>${escHtml(c.recipe)}</div>`;
+        }).join('') +
         `</td>`;
     } else {
       html += '<td></td>';
