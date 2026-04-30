@@ -19,6 +19,63 @@ function parseMonthDay(monthStr, dayStr, year) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function normalizeRecipeFragment(value) {
+  return String(value || '').replace(/\s+/g, ' ').trim();
+}
+
+function mergeScore(left, right) {
+  const a = normalizeRecipeFragment(left);
+  const b = normalizeRecipeFragment(right);
+  if (!a || !b) return 999;
+
+  let score = 0;
+
+  // Strong continuation signals.
+  if (/^\(/.test(b)) score -= 8;
+  if (/^[a-z]/.test(b)) score -= 7;
+  if (/\($/.test(a)) score -= 7;
+  if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b$/i.test(a)) score -= 5;
+  if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b/i.test(b)) score -= 4;
+  if (a.split(' ').length === 1) score -= 3;
+  if (b.split(' ').length === 1) score -= 2;
+
+  // Likely boundary signals.
+  if (/[.!?)]$/.test(a)) score += 4;
+  if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$/.test(b)) score += 4;
+  if (/^(Week|TERM|Content|Assessment|ATL)$/i.test(b)) score += 12;
+
+  return score;
+}
+
+function condenseRecipeFragments(fragments, targetCount) {
+  let entries = (Array.isArray(fragments) ? fragments : [])
+    .map(normalizeRecipeFragment)
+    .filter(Boolean);
+
+  if (!Number.isInteger(targetCount) || targetCount <= 0) return entries;
+  if (entries.length <= targetCount) return entries;
+
+  let guard = 0;
+  while (entries.length > targetCount && guard < 2000) {
+    let bestIndex = 0;
+    let bestScore = Infinity;
+
+    for (let i = 0; i < entries.length - 1; i++) {
+      const score = mergeScore(entries[i], entries[i + 1]);
+      if (score < bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+
+    const merged = normalizeRecipeFragment(`${entries[bestIndex]} ${entries[bestIndex + 1]}`);
+    entries.splice(bestIndex, 2, merged);
+    guard += 1;
+  }
+
+  return entries;
+}
+
 /**
  * Parse the raw PDF text extracted from the year planner PDF.
  * Strategy: scan for TERM markers, then Week N + date range patterns,
@@ -137,6 +194,11 @@ function parseCalendarText(text) {
     for (const w of weeks) allWeeks.push({ ...w, term });
   }
 
+  // PDFs often split one recipe cell across several lines (for example,
+  // "Food Truck foods:" becoming "Food", "Truck", "foods:").
+  // Condense fragments back to the number of week columns we parsed.
+  const condensedRecipes = condenseRecipeFragments(allRecipes, allWeeks.length);
+
   // Zip weeks and recipes
   for (let i = 0; i < allWeeks.length; i++) {
     const w = allWeeks[i];
@@ -145,8 +207,8 @@ function parseCalendarText(text) {
       weekNum: w.weekNum,
       dateRange: w.dateRange || '',
       startDate: w.startDate || '',
-      recipe: allRecipes[i] || '',
-      confidence: allRecipes[i] ? 'auto' : 'missing'
+      recipe: condensedRecipes[i] || '',
+      confidence: condensedRecipes[i] ? 'auto' : 'missing'
     });
   }
 

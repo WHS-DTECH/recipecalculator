@@ -104,9 +104,9 @@ function renderStaffUploadTable(rows) {
   const container = document.getElementById('departmentTableContainer');
   if (!container) return;
   let html = '<h2>Staff Upload Table</h2>';
-  html += '<table class="staff-table"><thead><tr><th>ID</th><th>Code</th><th>Last Name</th><th>First Name</th><th>Title</th><th>Email (School)</th><th>Status</th></tr></thead><tbody>';
+  html += '<table class="staff-table"><thead><tr><th>ID</th><th>Code</th><th>Last Name</th><th>First Name</th><th>Title</th><th>Email (School)</th><th>Status</th><th>UploadYear</th><th>UploadTerm</th><th>UploadDate</th></tr></thead><tbody>';
   rows.forEach(row => {
-    html += `<tr><td>${escHtml(row.id)}</td><td>${escHtml(row.code)}</td><td>${escHtml(row.last_name)}</td><td>${escHtml(row.first_name)}</td><td>${escHtml(row.title)}</td><td>${escHtml(row.email_school)}</td><td>${escHtml(row.status || 'Current')}</td></tr>`;
+    html += `<tr><td>${escHtml(row.id)}</td><td>${escHtml(row.code)}</td><td>${escHtml(row.last_name)}</td><td>${escHtml(row.first_name)}</td><td>${escHtml(row.title)}</td><td>${escHtml(row.email_school)}</td><td>${escHtml(row.status || 'Current')}</td><td>${escHtml(row.upload_year)}</td><td>${escHtml(row.upload_term)}</td><td>${escHtml(row.upload_date)}</td></tr>`;
   });
   html += '</tbody></table>';
   container.innerHTML = html;
@@ -124,6 +124,26 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
   if (submitBtn) submitBtn.disabled = true;
   const uploadResult = document.getElementById('uploadResult');
   if (uploadResult) uploadResult.textContent = '';
+  const uploadYear = Number(document.getElementById('uploadYear') && document.getElementById('uploadYear').value);
+  const uploadTerm = String((document.getElementById('uploadTerm') && document.getElementById('uploadTerm').value) || '').trim();
+  const uploadDate = String((document.getElementById('uploadDate') && document.getElementById('uploadDate').value) || '').trim();
+
+  if (!Number.isInteger(uploadYear) || uploadYear < 2000 || uploadYear > 2100) {
+    document.getElementById('uploadResult').textContent = 'Please enter a valid Upload Year.';
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+  if (!uploadTerm) {
+    document.getElementById('uploadResult').textContent = 'Please select Upload Term.';
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+  if (!uploadDate) {
+    document.getElementById('uploadResult').textContent = 'Please select Upload Date.';
+    if (submitBtn) submitBtn.disabled = false;
+    return;
+  }
+
   setUploadProgress('Reading file...', 0);
 
   const reader = new FileReader();
@@ -147,7 +167,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     setUploadProgress(`Uploading ${data.length} rows...`, 45);
 
     uploadStaffWithProgress(
-      { headers, staff: data },
+      { headers, staff: data, uploadYear, uploadTerm, uploadDate },
       (pct) => setUploadProgress(`Uploading ${data.length} rows...`, 45 + (pct * 0.5))
     )
     .then(result => {
@@ -160,7 +180,8 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
           ', Updated: ' + (result.updated || 0) +
           ', Marked Not Current: ' + (result.marked_not_current || 0) +
           ', Skipped (no email): ' + (result.skipped_no_email || 0) +
-          ', Duplicate emails in upload: ' + (result.duplicate_emails_in_upload || 0);
+          ', Duplicate emails in upload: ' + (result.duplicate_emails_in_upload || 0) +
+          `, UploadYear: ${escHtml(result.upload_year)}, UploadTerm: ${escHtml(result.upload_term)}, UploadDate: ${escHtml(result.upload_date)}`;
       } else if (data.length === 0) {
         document.getElementById('uploadResult').textContent = 'No valid staff data found in CSV.';
       } else {

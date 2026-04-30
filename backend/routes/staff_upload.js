@@ -7,7 +7,20 @@ let staffSchemaEnsured = false;
 async function ensureStaffSchema() {
   if (staffSchemaEnsured) return;
   await pool.query("ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'staff'");
+  await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_year INTEGER');
+  await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_term TEXT');
+  await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_date DATE');
   await pool.query("UPDATE staff_upload SET primary_role = 'staff' WHERE primary_role IS NULL OR trim(primary_role) = ''");
+  await pool.query(`
+    UPDATE staff_upload
+    SET upload_year = 2026,
+        upload_term = 'Term 1',
+        upload_date = DATE '2026-04-01'
+    WHERE COALESCE(status, 'Current') = 'Current'
+      AND upload_year IS NULL
+      AND COALESCE(trim(upload_term), '') = ''
+      AND upload_date IS NULL
+  `);
   staffSchemaEnsured = true;
 }
 // Run once at startup (best-effort, non-blocking)
@@ -24,6 +37,15 @@ function getIndexByAliases(headers, aliases) {
     if (idx >= 0) return idx;
   }
   return -1;
+}
+
+function parseUploadDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const dmy = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  return null;
 }
 
 // Dropdown: Get all staff for dropdown
@@ -54,6 +76,10 @@ router.post('/', requireAdmin, async (req, res) => {
   await ensureStaffSchema();
   const staff = req.body.staff;
   const headers = Array.isArray(req.body.headers) ? req.body.headers : [];
+  const uploadYearRaw = Number(req.body.uploadYear);
+  const uploadYear = Number.isInteger(uploadYearRaw) ? uploadYearRaw : new Date().getFullYear();
+  const uploadTerm = String(req.body.uploadTerm || '').trim() || 'Term 1';
+  const uploadDate = parseUploadDate(req.body.uploadDate) || new Date().toISOString().slice(0, 10);
   if (!Array.isArray(staff) || staff.length === 0) {
     return res.json({ success: false, error: 'No staff data provided.' });
   }
@@ -110,17 +136,18 @@ router.post('/', requireAdmin, async (req, res) => {
     for (const row of dedupedRows) {
       const updateResult = await client.query(
         `UPDATE staff_upload
-         SET code = $1, last_name = $2, first_name = $3, title = $4, email_school = $5, status = 'Current', primary_role = 'staff'
+         SET code = $1, last_name = $2, first_name = $3, title = $4, email_school = $5, status = 'Current', primary_role = 'staff',
+             upload_year = $6, upload_term = $7, upload_date = $8
          WHERE lower(trim(email_school)) = lower(trim($5))`,
-        [row.code, row.lastName, row.firstName, row.title, row.email]
+        [row.code, row.lastName, row.firstName, row.title, row.email, uploadYear, uploadTerm, uploadDate]
       );
 
       if (updateResult.rowCount > 0) {
         updated += updateResult.rowCount;
       } else {
         await client.query(
-          'INSERT INTO staff_upload (code, last_name, first_name, title, email_school, status, primary_role) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [row.code, row.lastName, row.firstName, row.title, row.email, 'Current', 'staff']
+          'INSERT INTO staff_upload (code, last_name, first_name, title, email_school, status, primary_role, upload_year, upload_term, upload_date) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)',
+          [row.code, row.lastName, row.firstName, row.title, row.email, 'Current', 'staff', uploadYear, uploadTerm, uploadDate]
         );
         inserted++;
       }
@@ -137,7 +164,10 @@ router.post('/', requireAdmin, async (req, res) => {
       marked_not_current: markedNotCurrent,
       skipped_no_email: skippedNoEmail,
       duplicate_emails_in_upload: duplicateEmailsInUpload,
-      processed: dedupedRows.length
+      processed: dedupedRows.length,
+      upload_year: uploadYear,
+      upload_term: uploadTerm,
+      upload_date: uploadDate
     });
   } catch (err) {
     await client.query('ROLLBACK');
