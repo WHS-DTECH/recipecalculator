@@ -65,7 +65,7 @@ async function ensureStaffSchema() {
           AND h.upload_date = s.upload_date
           AND COALESCE(h.status_snapshot, 'Current') = COALESCE(s.status, 'Current')
       )
-        ON CONFLICT ON CONSTRAINT staff_upload_history_unique_snapshot DO NOTHING
+        ON CONFLICT DO NOTHING
   `);
 
   // If current records were already moved to Term 2 before history existed,
@@ -90,7 +90,7 @@ async function ensureStaffSchema() {
           AND h.upload_year = 2026
           AND lower(trim(COALESCE(h.upload_term, ''))) = 'term 1'
       )
-      ON CONFLICT ON CONSTRAINT staff_upload_history_unique_snapshot DO NOTHING
+      ON CONFLICT DO NOTHING
   `);
   staffSchemaEnsured = true;
 }
@@ -251,7 +251,7 @@ router.post('/', requireAdmin, async (req, res) => {
              AND h.upload_date = $8::date
              AND COALESCE(h.status_snapshot, 'Current') = 'Current'
          )
-         ON CONFLICT ON CONSTRAINT staff_upload_history_unique_snapshot DO NOTHING`,
+         ON CONFLICT DO NOTHING`,
         [row.email, row.code, row.firstName, row.lastName, row.title, uploadYear, uploadTerm, uploadDate]
       );
     }

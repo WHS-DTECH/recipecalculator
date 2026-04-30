@@ -166,7 +166,7 @@ const schemaReady = (async () => {
             AND h.upload_date = s.upload_date
             AND COALESCE(h.status_snapshot, 'Current') = COALESCE(s.status, 'Current')
         )
-      ON CONFLICT ON CONSTRAINT staff_upload_history_unique_snapshot DO NOTHING
+      ON CONFLICT DO NOTHING
     `);
     await pool.query(`
       INSERT INTO staff_upload_history (
@@ -188,7 +188,7 @@ const schemaReady = (async () => {
             AND h.upload_year = 2026
             AND lower(trim(COALESCE(h.upload_term, ''))) = 'term 1'
         )
-          ON CONFLICT ON CONSTRAINT staff_upload_history_unique_snapshot DO NOTHING
+          ON CONFLICT DO NOTHING
     `);
 
     await pool.query("ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'student'");
