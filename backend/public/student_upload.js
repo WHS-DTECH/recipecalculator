@@ -4,6 +4,9 @@ const DISPLAY_COLUMNS = [
   { key: 'id_number', label: 'ID Number' },
   { key: 'form_class', label: 'Form Class' },
   { key: 'year_level', label: 'Year Level' },
+  { key: 'upload_year', label: 'UploadYear' },
+  { key: 'upload_term', label: 'UploadTerm' },
+  { key: 'upload_date', label: 'UploadDate' },
   { key: 'mon_p1_1', label: 'Mon P1' },
   { key: 'mon_p1_2', label: 'Mon P1' },
   { key: 'mon_p2', label: 'Mon P2' },
@@ -93,6 +96,17 @@ function hideUploadProgress() {
   if (wrap) wrap.style.display = 'none';
 }
 
+function formatDisplayDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) return raw;
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(date.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function uploadStudentsWithProgress(payload, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
@@ -157,7 +171,8 @@ function renderStudentTable(rows) {
   rows.forEach(row => {
     html += '<tr>';
     DISPLAY_COLUMNS.forEach(col => {
-      html += `<td>${row[col.key] || ''}</td>`;
+      const cellValue = col.key === 'upload_date' ? formatDisplayDate(row[col.key]) : (row[col.key] || '');
+      html += `<td>${cellValue}</td>`;
     });
     html += '</tr>';
   });
@@ -172,7 +187,22 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
   e.preventDefault();
   const fileInput = document.getElementById('csvFile');
   const file = fileInput.files[0];
+  const uploadYear = Number(document.getElementById('uploadYear') && document.getElementById('uploadYear').value);
+  const uploadTerm = String((document.getElementById('uploadTerm') && document.getElementById('uploadTerm').value) || '').trim();
+  const uploadDate = String((document.getElementById('uploadDate') && document.getElementById('uploadDate').value) || '').trim();
   if (!file) return;
+  if (!Number.isInteger(uploadYear) || uploadYear < 2000 || uploadYear > 2100) {
+    document.getElementById('uploadResult').textContent = 'Please enter a valid Upload Year.';
+    return;
+  }
+  if (!uploadTerm) {
+    document.getElementById('uploadResult').textContent = 'Please select an Upload Term.';
+    return;
+  }
+  if (!uploadDate) {
+    document.getElementById('uploadResult').textContent = 'Please select an Upload Date.';
+    return;
+  }
 
   const uploadResult = document.getElementById('uploadResult');
   if (uploadResult) uploadResult.textContent = '';
@@ -199,7 +229,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     setUploadProgress(`Uploading ${data.length} rows...`, 45);
 
     uploadStudentsWithProgress(
-      { headers, students: data },
+      { headers, students: data, uploadYear, uploadTerm, uploadDate },
       (pct) => setUploadProgress(`Uploading ${data.length} rows...`, 45 + (pct * 0.5))
     )
       .then(result => {
@@ -211,6 +241,9 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
             ', Inserted: ' + (result.inserted || 0) +
             ', Updated: ' + (result.updated || 0) +
             ', Marked Not Current: ' + (result.marked_not_current || 0) +
+            ', UploadYear: ' + (result.upload_year || '') +
+            ', UploadTerm: ' + (result.upload_term || '') +
+            ', UploadDate: ' + formatDisplayDate(result.upload_date || '') +
             ', Skipped (no ID Number): ' + (result.skipped_no_id_number || 0) +
             ', Duplicate ID Numbers in upload: ' + (result.duplicate_id_numbers_in_upload || 0);
         } else if (data.length === 0) {

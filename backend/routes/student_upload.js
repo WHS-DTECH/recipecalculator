@@ -21,6 +21,9 @@ async function ensureSchema() {
       id_number TEXT,
       form_class TEXT,
       year_level TEXT,
+      upload_year INTEGER,
+      upload_term TEXT,
+      upload_date DATE,
       mon_p1_1 TEXT,
       mon_p1_2 TEXT,
       mon_p2 TEXT,
@@ -72,7 +75,29 @@ async function ensureSchema() {
   `);
 
   await pool.query("ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'student'");
+  await pool.query('ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS upload_year INTEGER');
+  await pool.query('ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS upload_term TEXT');
+  await pool.query('ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS upload_date DATE');
   await pool.query("UPDATE student_timetable SET primary_role = 'student' WHERE primary_role IS NULL OR trim(primary_role) = ''");
+  await pool.query(`
+    UPDATE student_timetable
+    SET upload_year = 2026,
+        upload_term = 'Term 1',
+        upload_date = DATE '2026-01-01'
+    WHERE COALESCE(status, 'Current') = 'Current'
+      AND upload_year IS NULL
+      AND COALESCE(trim(upload_term), '') = ''
+      AND upload_date IS NULL
+  `);
+}
+
+function parseUploadDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const dmy = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  return null;
 }
 
 function normalizeCsvHeader(value) {
@@ -148,6 +173,10 @@ router.get('/by-class/:ttcode', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const { students, headers = [] } = req.body;
+  const uploadYearRaw = Number(req.body.uploadYear);
+  const uploadYear = Number.isInteger(uploadYearRaw) ? uploadYearRaw : 2026;
+  const uploadTerm = String(req.body.uploadTerm || '').trim() || 'Term 1';
+  const uploadDate = parseUploadDate(req.body.uploadDate) || '2026-01-01';
   if (!Array.isArray(students) || students.length === 0) {
     return res.status(400).json({ success: false, error: 'No student data provided.' });
   }
@@ -229,9 +258,12 @@ router.post('/', async (req, res) => {
           fri_p4 = $41,
           fri_l = $42,
           fri_p5 = $43,
+          upload_year = $44,
+          upload_term = $45,
+          upload_date = $46,
           status = 'Current',
           primary_role = 'student'
-      WHERE lower(trim(id_number)) = lower(trim($44))
+      WHERE lower(trim(id_number)) = lower(trim($47))
     `;
 
     const insertSql = `
@@ -242,6 +274,7 @@ router.post('/', async (req, res) => {
         wed_p1_1, wed_p1_2, wed_p2, wed_i, wed_p3, wed_p4, wed_l, wed_p5,
         thu_p1_1, thu_p1_2, thu_p2, thu_i, thu_p3, thu_p4, thu_l, thu_p5,
         fri_p1_1, fri_p1_2, fri_p2, fri_i, fri_p3, fri_p4, fri_l, fri_p5,
+        upload_year, upload_term, upload_date,
         status, primary_role
       ) VALUES (
         $1, $2, $3, $4,
@@ -250,6 +283,7 @@ router.post('/', async (req, res) => {
         $21, $22, $23, $24, $25, $26, $27, $28,
         $29, $30, $31, $32, $33, $34, $35, $36,
         $37, $38, $39, $40, $41, $42, $43, $44,
+        $45, $46, $47,
         'Current', 'student'
       )
     `;
@@ -299,6 +333,9 @@ router.post('/', async (req, res) => {
         row.fri_p4,
         row.fri_l,
         row.fri_p5,
+        uploadYear,
+        uploadTerm,
+        uploadDate,
         row.id_number
       ];
 
@@ -350,7 +387,10 @@ router.post('/', async (req, res) => {
           row.fri_p3,
           row.fri_p4,
           row.fri_l,
-          row.fri_p5
+          row.fri_p5,
+          uploadYear,
+          uploadTerm,
+          uploadDate
         ]);
         inserted++;
       }
@@ -365,6 +405,9 @@ router.post('/', async (req, res) => {
       inserted,
       updated,
       marked_not_current: markedNotCurrent,
+      upload_year: uploadYear,
+      upload_term: uploadTerm,
+      upload_date: uploadDate,
       skipped_no_id_number: skippedNoId,
       duplicate_id_numbers_in_upload: duplicateIdsInUpload,
       processed: dedupedRows.length
