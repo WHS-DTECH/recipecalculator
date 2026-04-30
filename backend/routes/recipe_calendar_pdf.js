@@ -354,20 +354,33 @@ function parseCalendarText(text) {
 
   // PDFs often split one recipe cell across several lines (for example,
   // "Food Truck foods:" becoming "Food", "Truck", "foods:").
-  // Prefer condensing per term so merges stay aligned with each term's week count.
+  // Only condense if fragments significantly exceed weeks; otherwise keep all fragments.
   let condensedRecipes = [];
   if (sortedTerms.length > 0) {
     for (const term of sortedTerms) {
       const termWeeks = (termWeekMap.get(term) || []).length;
       const sectionRecipes = sectionRecipeListsByTerm.get(term) || [];
       const strongMerged = mergeObviousRecipeFragments(sectionRecipes);
-      const termCondensed = condenseRecipeFragments(strongMerged, termWeeks);
+      // Only condense if we have significantly more fragments than weeks (more than 1.3x)
+      // Otherwise, use the fragments as-is to avoid merging separate recipes
+      let termCondensed;
+      if (strongMerged.length > termWeeks * 1.3) {
+        termCondensed = condenseRecipeFragments(strongMerged, termWeeks);
+      } else {
+        termCondensed = strongMerged;
+      }
       if (termCondensed.length) condensedRecipes.push(...termCondensed);
     }
   }
 
   if (!condensedRecipes.length) {
     condensedRecipes = condenseRecipeFragments(mergeObviousRecipeFragments(allRecipes), allWeeks.length);
+  }
+
+  // If we have more recipes than weeks, keep only the first allWeeks.length recipes.
+  // This is safer than forced merging that corrupts recipe names.
+  if (condensedRecipes.length > allWeeks.length) {
+    condensedRecipes = condensedRecipes.slice(0, allWeeks.length);
   }
 
   // Zip weeks and recipes, extracting URLs where present
