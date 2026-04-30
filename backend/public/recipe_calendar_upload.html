@@ -335,6 +335,23 @@
     const saveBtn = document.getElementById('saveBtn');
     const saveStatus = document.getElementById('saveStatus');
 
+    function getDefaultClassNameForStream(stream) {
+      if (stream === 'Senior') return '13HOSP';
+      if (stream === 'Junior') return 'JFOOD';
+      return 'MFOOD';
+    }
+
+    function applyGlobalClassNameToRows(previousValue = '') {
+      const classnameInput = document.getElementById('classnameInput');
+      const nextValue = classnameInput.value.trim();
+      document.querySelectorAll('.rcal-classname').forEach((input) => {
+        const current = input.value.trim();
+        if (!current || (previousValue && current === previousValue)) {
+          input.value = nextValue;
+        }
+      });
+    }
+
     pdfFileInput.addEventListener('change', () => {
       parseBtn.disabled = !pdfFileInput.files.length;
       parseStatus.textContent = '';
@@ -345,21 +362,35 @@
       const classnameAutoHint = document.getElementById('classnameAutoHint');
       const fname = pdfFileInput.files.length ? pdfFileInput.files[0].name : '';
       let detected = '';
+      const previousValue = classnameInput.value.trim();
       if (/middle\s*school|mfood/i.test(fname)) {
-        detected = 'MFOOD';
+        detected = getDefaultClassNameForStream('Middle');
         plannerStreamSelect.value = 'Middle';
       } else if (/junior\s*school|jfood/i.test(fname)) {
-        detected = 'JFOOD';
+        detected = getDefaultClassNameForStream('Junior');
         plannerStreamSelect.value = 'Junior';
       } else if (/senior\s*school|hosp|hp100/i.test(fname)) {
-        detected = 'HOSP';
+        detected = getDefaultClassNameForStream('Senior');
         plannerStreamSelect.value = 'Senior';
       }
       if (detected) {
         classnameInput.value = detected;
+        applyGlobalClassNameToRows(previousValue);
         classnameAutoHint.style.display = '';
       } else {
         classnameAutoHint.style.display = 'none';
+      }
+    });
+
+    document.getElementById('plannerStreamSelect').addEventListener('change', function() {
+      const classnameInput = document.getElementById('classnameInput');
+      const classnameAutoHint = document.getElementById('classnameAutoHint');
+      const previousValue = classnameInput.value.trim();
+      const nextDefault = getDefaultClassNameForStream(this.value || 'Middle');
+      if (!previousValue || previousValue === 'MFOOD' || previousValue === 'JFOOD' || previousValue === 'HOSP' || previousValue === '13HOSP') {
+        classnameInput.value = nextDefault;
+        applyGlobalClassNameToRows(previousValue);
+        classnameAutoHint.style.display = '';
       }
     });
 
@@ -464,6 +495,7 @@
 
     function addRow(w) {
       w = w || { term: '', weekNum: '', startDate: '', recipe: '', url: '', class_name: '', confidence: 'manual' };
+      const globalClassName = document.getElementById('classnameInput').value.trim();
       const tr = document.createElement('tr');
       tr.dataset.confidence = w.confidence || 'manual';
       tr.innerHTML = `
@@ -472,7 +504,7 @@
         <td><input type="date" class="rcal-date" value="${escHtml(w.startDate || '')}"></td>
         <td><input type="text" class="rcal-recipe" value="${escHtml(w.recipe || '')}" placeholder="Recipe name"></td>
         <td><input type="url" class="rcal-url" value="${escHtml(w.url || '')}" placeholder="https://..." style="width:180px;"></td>
-        <td><input type="text" class="rcal-classname" value="${escHtml(w.class_name || '')}" placeholder="e.g. 9FT1"></td>
+        <td><input type="text" class="rcal-classname" value="${escHtml(w.class_name || globalClassName || '')}" placeholder="e.g. 9FT1"></td>
         <td>
           ${w.confidence === 'auto' ? '<span class="rcal-badge-auto">auto</span>' :
             w.confidence === 'missing' ? '<span class="rcal-badge-missing">missing</span>' :
