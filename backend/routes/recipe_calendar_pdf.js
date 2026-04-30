@@ -81,7 +81,30 @@ function extractUrlFromRecipe(recipe) {
   if (urlMatch) {
     const url = urlMatch[0];
     // Remove the URL from the recipe text
-    const recipeText = recipe.replace(url, '').trim();
+    let recipeText = recipe.replace(url, '').trim();
+    
+    // Try to extract recipe name from URL (more reliable than OCR text)
+    let recipeFromUrl = '';
+    
+    // Pattern 1: /recipes/recipe-name or /recipe/recipe-name or /r/recipe-name
+    const pathMatch = url.match(/\/(?:recipe|recipes|r)\/([^/?#]+)/i);
+    if (pathMatch) {
+      recipeFromUrl = decodeURIComponent(pathMatch[1]).replace(/[-_]/g, ' ').trim();
+    }
+    
+    // Pattern 2: ?recipe=Recipe%20Name or &recipe=Recipe%20Name
+    if (!recipeFromUrl) {
+      const queryMatch = url.match(/[\?&]recipe=([^&]+)/i);
+      if (queryMatch) {
+        recipeFromUrl = decodeURIComponent(queryMatch[1]).trim();
+      }
+    }
+    
+    // Use URL-derived name if available and more substantial than OCR text, otherwise keep OCR text
+    if (recipeFromUrl && recipeFromUrl.length > 2) {
+      recipeText = recipeFromUrl;
+    }
+    
     return { recipe: recipeText, url };
   }
   return { recipe, url: '' };
@@ -103,8 +126,8 @@ function mergeScore(left, right) {
   if (/:$/.test(a)) score += 10;
   if (/[;,]$/.test(a)) score -= 2;
   if (/[:;,]$/.test(b)) score -= 3;
-  // If both fragments are single capitalized words, they're likely separate recipes; strongly penalize merging
-  if (a.split(' ').length === 1 && b.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z]/.test(b)) score += 15;
+  // Strong penalty: if both are single capitalized words (likely separate recipes), don't merge
+  if (a.split(' ').length === 1 && b.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z]/.test(b)) score += 25;
   if (a.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z][a-z]/.test(b)) score -= 6;
   if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b$/i.test(a)) score -= 5;
   if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b/i.test(b)) score -= 4;
