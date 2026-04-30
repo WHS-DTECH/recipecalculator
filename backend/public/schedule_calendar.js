@@ -1,4 +1,13 @@
 
+function escHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Locale-aware date formatting using the browser's regional settings
 const userLocale = (navigator.languages && navigator.languages[0]) || navigator.language || undefined;
 const shortDateFormatter = new Intl.DateTimeFormat(userLocale, {
@@ -403,12 +412,12 @@ async function renderScheduleCalendar() {
         if (cell) {
           // Add a unique id for each booking cell
           const bookingId = `booking-${cell.id}`;
+          const cellLabel = `${escHtml(getCellPrimaryText(cell))}, Teacher: ${escHtml(cell.staff_name)}`;
           // Add a class for selected state
           html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>
-            <div class=\"calendar-booking-cell\" id=\"${bookingId}\" data-booking-id=\"${cell.id}\" style='background:#e8f5e9;border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
-              <div style='font-weight:bold;font-size:0.98em;'>${getCellPrimaryText(cell)}</div>
-              <div style='font-weight:bold;color:#388e3c;font-size:0.95em;'>Teacher: ${cell.staff_name}</div>
-              <!-- Recipe and Servings hidden in event box -->
+            <div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${cell.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:#e8f5e9;border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
+              <div style='font-weight:bold;font-size:0.98em;'>${escHtml(getCellPrimaryText(cell))}</div>
+              <div style='font-weight:bold;color:#388e3c;font-size:0.95em;'>Teacher: ${escHtml(cell.staff_name)}</div>
             </div>
           </td>`;
       } else {
@@ -418,6 +427,7 @@ async function renderScheduleCalendar() {
     html += '</tr>';
   }
 
+  table.setAttribute('aria-label', `Schedule calendar, week of ${formatDateLong(new Date(currentMonday))}`);
   table.innerHTML = html;
 
   // Add or update the Selected Bookings list below the calendar
@@ -439,7 +449,7 @@ async function renderScheduleCalendar() {
     selectedIds.forEach(id => {
       const b = bookings.find(bk => bk.id === id);
       if (b) {
-        html += `<li><a href="#" onclick="scrollToDesiredServingsRow(${id});return false;">${b.booking_date} | ${b.staff_name} | ${b.class_name} | ${b.recipe}</a></li>`;
+        html += `<li><a href="#" onclick="scrollToDesiredServingsRow(${escHtml(String(id))});return false;">${escHtml(b.booking_date)} | ${escHtml(b.staff_name)} | ${escHtml(b.class_name)} | ${escHtml(b.recipe)}</a></li>`;
       }
     });
     html += '</ul>';
@@ -521,7 +531,7 @@ async function renderScheduleCalendar() {
   bookings.forEach(cell => {
     const bookingDiv = document.getElementById(`booking-${cell.id}`);
     if (bookingDiv) {
-      bookingDiv.onclick = function() {
+      const toggleBooking = function() {
         const bookingId = parseInt(cell.id, 10);
         const idx = window.selectedBookingIds.indexOf(bookingId);
         if (idx === -1) {
@@ -533,6 +543,13 @@ async function renderScheduleCalendar() {
         window.selectedBookingIds = [...new Set(window.selectedBookingIds)];
         applySelectionStyles();
         renderSelectedBookings();
+      };
+      bookingDiv.onclick = toggleBooking;
+      bookingDiv.onkeydown = function(e) {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          toggleBooking();
+        }
       };
     }
   });
