@@ -838,6 +838,23 @@
     color: #fff;
     font-weight: 600;
 }
+.class-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-top: 1rem;
+}
+.class-table th, .class-table td {
+    border: 1px solid #1976d2;
+    padding: 0.7rem 0.5rem;
+    text-align: left;
+    font-size: 1.05rem;
+}
+.class-table th {
+    background: #1976d2;
+    color: #fff;
+    font-weight: 600;
+}
 
 /* --- Admin User Roles Page Styles --- */
 .admin-user-roles-app {
