@@ -3,7 +3,6 @@
   var ASSET_VERSION = '20260430b';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
-    'https://www.w3schools.com/w3css/4/w3.css',
     '/navbar.css'
   ];
   var SCRIPT_SRCS = [
