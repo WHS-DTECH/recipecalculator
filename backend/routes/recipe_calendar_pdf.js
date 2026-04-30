@@ -33,7 +33,12 @@ function mergeScore(left, right) {
   // Strong continuation signals.
   if (/^\(/.test(b)) score -= 8;
   if (/^[a-z]/.test(b)) score -= 7;
+  if (/^[)\]}/.test(b)) score -= 7;
   if (/\($/.test(a)) score -= 7;
+  if (/[:;,]$/.test(a)) score -= 6;
+  if (/[:;,]$/.test(b)) score -= 3;
+  if (a.split(' ').length === 1 && b.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z]/.test(b)) score -= 8;
+  if (a.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z][a-z]/.test(b)) score -= 6;
   if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b$/i.test(a)) score -= 5;
   if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b/i.test(b)) score -= 4;
   if (a.split(' ').length === 1) score -= 3;
@@ -41,7 +46,7 @@ function mergeScore(left, right) {
 
   // Likely boundary signals.
   if (/[.!?)]$/.test(a)) score += 4;
-  if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$/.test(b)) score += 4;
+  if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+$/.test(b)) score += 1;
   if (/^(Week|TERM|Content|Assessment|ATL)$/i.test(b)) score += 12;
 
   return score;
@@ -161,17 +166,23 @@ function parseCalendarText(text) {
   // They're separated by newlines. Ignore noise words.
   const noiseWords = new Set(['N/A', 'n/a', 'Assessment', 'ATL', 'Content', 'Week', 'TERM', 'Practical', 'Lessons', '']);
   const allRecipes = [];
+  const sectionRecipeLists = [];
   for (const section of practicalSections) {
     const parts = section.split(/\n+/)
       .map(s => s.trim())
       .filter(s => s && !noiseWords.has(s) && !/^(TERM|Week\s+\d|Assessment|Content|ATL)/i.test(s));
+    const sectionRecipes = [];
     for (const p of parts) {
       // Split by common separators that pdf-parse might insert between cells
       const subParts = p.split(/\s{3,}/).map(s => s.trim()).filter(Boolean);
       for (const sp of subParts) {
-        if (!noiseWords.has(sp) && sp.length > 1) allRecipes.push(sp);
+        if (!noiseWords.has(sp) && sp.length > 1) {
+          allRecipes.push(sp);
+          sectionRecipes.push(sp);
+        }
       }
     }
+    if (sectionRecipes.length) sectionRecipeLists.push(sectionRecipes);
   }
 
   // Match weekly entries to recipes. We have weekEntries sorted by weekNum per term.
@@ -196,8 +207,21 @@ function parseCalendarText(text) {
 
   // PDFs often split one recipe cell across several lines (for example,
   // "Food Truck foods:" becoming "Food", "Truck", "foods:").
-  // Condense fragments back to the number of week columns we parsed.
-  const condensedRecipes = condenseRecipeFragments(allRecipes, allWeeks.length);
+  // Prefer condensing per term so merges stay aligned with each term's week count.
+  let condensedRecipes = [];
+  if (sectionRecipeLists.length >= sortedTerms.length && sortedTerms.length > 0) {
+    for (let i = 0; i < sortedTerms.length; i++) {
+      const term = sortedTerms[i];
+      const termWeeks = (termWeekMap.get(term) || []).length;
+      const sectionRecipes = sectionRecipeLists[i] || [];
+      const termCondensed = condenseRecipeFragments(sectionRecipes, termWeeks);
+      condensedRecipes.push(...termCondensed);
+    }
+  }
+
+  if (!condensedRecipes.length) {
+    condensedRecipes = condenseRecipeFragments(allRecipes, allWeeks.length);
+  }
 
   // Zip weeks and recipes
   for (let i = 0; i < allWeeks.length; i++) {
