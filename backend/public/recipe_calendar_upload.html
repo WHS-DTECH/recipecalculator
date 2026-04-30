@@ -208,10 +208,10 @@
 
     <!-- Step 1: Upload -->
     <div class="rcal-card" id="uploadCard">
-      <h2>Step 1 — Upload PDF</h2>
-      <div class="rcal-card-sub">Select your Middle school Calendar PDF (the year planner). Only the Practical Lessons row is imported.</div>
+      <h2>Step 1 — Upload File</h2>
+      <div class="rcal-card-sub">Select your Middle school planner file (.pdf or .docx). Only the Practical Lessons row is imported.</div>
       <div class="rcal-upload-row">
-        <input type="file" id="pdfFileInput" accept="application/pdf" aria-label="Select PDF year planner">
+        <input type="file" id="pdfFileInput" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-label="Select planner file">
         <button class="rcal-btn" id="parseBtn" disabled>Extract Schedule</button>
       </div>
       <div class="rcal-status" id="parseStatus" role="status" aria-live="polite"></div>
@@ -355,22 +355,22 @@
       if (!file) return;
       parseBtn.disabled = true;
       parseStatus.className = 'rcal-status';
-      parseStatus.textContent = 'Reading PDF…';
+      parseStatus.textContent = 'Reading file…';
 
       try {
         const dataUrl = await readFileAsDataUrl(file);
-        parseStatus.textContent = 'Sending to server for extraction…';
+        parseStatus.textContent = 'Sending file to server for extraction…';
 
         const res = await fetch('/api/recipe_calendar_pdf/parse', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pdfDataUrl: dataUrl })
+          body: JSON.stringify({ fileDataUrl: dataUrl })
         });
         const data = await res.json();
 
         if (!res.ok) {
           parseStatus.className = 'rcal-status error';
-          parseStatus.textContent = 'Error: ' + (data.error || 'Failed to parse PDF.');
+          parseStatus.textContent = 'Error: ' + (data.error || 'Failed to parse file.');
           parseBtn.disabled = false;
           return;
         }
@@ -383,7 +383,7 @@
 
         if (!weeks.length) {
           parseStatus.className = 'rcal-status error';
-          parseStatus.textContent = 'No week entries could be extracted from the PDF. Try reviewing the raw text, or add rows manually.';
+          parseStatus.textContent = 'No week entries could be extracted from the file. Try reviewing the raw text, or add rows manually.';
           rawToggleBtn.hidden = false;
           reviewCard.hidden = false;
           renderTable([]);

@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pdfParse = require('pdf-parse');
+const JSZip = require('jszip');
 
 // Months for date parsing (NZ date formats)
 const MONTH_MAP = {
@@ -17,6 +18,161 @@ function parseMonthDay(monthStr, dayStr, year) {
   if (isNaN(d)) return null;
   const date = new Date(year, m, d);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+function decodeXmlEntities(text) {
+  return String(text || '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function parseStartDateFromWeekCell(cellText, year) {
+  const text = String(cellText || '').replace(/\s+/g, ' ').trim();
+
+  let m = text.match(/([A-Za-z]+)\s+(\d{1,2})\s*[-–]\s*(?:([A-Za-z]+)\s+)?(\d{1,2})/i);
+  if (m) return parseMonthDay(m[1], m[2], year);
+
+  m = text.match(/(\d{1,2})\s+([A-Za-z]+)\s*[-–]\s*(\d{1,2})\s+([A-Za-z]+)/i);
+  if (m) return parseMonthDay(m[2], m[1], year);
+
+  return '';
+}
+
+async function parseDocxCalendar(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const docEntry = zip.file('word/document.xml');
+  if (!docEntry) {
+    throw new Error('DOCX is missing word/document.xml');
+  }
+
+  const relsEntry = zip.file('word/_rels/document.xml.rels');
+  const docXml = await docEntry.async('string');
+  const relsXml = relsEntry ? await relsEntry.async('string') : '';
+
+  const relMap = new Map();
+  const relRegex = /<Relationship[^>]*Id="([^"]+)"[^>]*Target="([^"]+)"[^>]*>/g;
+  let relMatch;
+  while ((relMatch = relRegex.exec(relsXml)) !== null) {
+    const id = relMatch[1];
+    const target = decodeXmlEntities(relMatch[2]);
+    if (/^https?:\/\//i.test(target)) relMap.set(id, target);
+  }
+
+  const rowRegex = /<w:tr\b[\s\S]*?<\/w:tr>/g;
+  const cellRegex = /<w:tc\b[\s\S]*?<\/w:tc>/g;
+  const textRegex = /<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g;
+  const linkRegex = /<w:hyperlink\b[^>]*r:id="([^"]+)"[^>]*>/g;
+
+  const rows = [];
+  let rowMatch;
+  while ((rowMatch = rowRegex.exec(docXml)) !== null) {
+    const rowXml = rowMatch[0];
+    const cells = [];
+    let cellMatch;
+    while ((cellMatch = cellRegex.exec(rowXml)) !== null) {
+      const cellXml = cellMatch[0];
+      const parts = [];
+      let textMatch;
+      while ((textMatch = textRegex.exec(cellXml)) !== null) {
+        parts.push(decodeXmlEntities(textMatch[1]));
+      }
+
+      let url = '';
+      let linkMatch;
+      while ((linkMatch = linkRegex.exec(cellXml)) !== null) {
+        const resolved = relMap.get(linkMatch[1]);
+        if (resolved) {
+          url = resolved;
+          break;
+        }
+      }
+
+      cells.push({
+        text: parts.join(' ').replace(/\s+/g, ' ').trim(),
+        url
+      });
+    }
+    if (cells.length) rows.push(cells);
+  }
+
+  const fullText = rows.map((r) => r.map((c) => c.text).join(' ')).join('\n');
+  const yearMatch = fullText.match(/\b(202\d)\b/);
+  const year = yearMatch ? Number(yearMatch[1]) : new Date().getFullYear();
+
+  const weekRowIndexes = [];
+  for (let i = 0; i < rows.length; i++) {
+    const weekCount = rows[i].filter((c) => /Week\s+\d+/i.test(c.text)).length;
+    if (weekCount >= 3) weekRowIndexes.push(i);
+  }
+
+  const results = [];
+  for (const wrIdx of weekRowIndexes) {
+    const weekRow = rows[wrIdx];
+
+    let practicalRow = null;
+    for (let j = wrIdx + 1; j < Math.min(rows.length, wrIdx + 12); j++) {
+      const rowText = rows[j].map((c) => c.text).join(' ');
+      if (/Practical\s*Lessons?/i.test(rowText)) {
+        practicalRow = rows[j];
+        break;
+      }
+    }
+    if (!practicalRow) continue;
+
+    let term = 1;
+    const nearbyText = [
+      weekRow.map((c) => c.text).join(' '),
+      ...rows.slice(Math.max(0, wrIdx - 5), wrIdx).map((r) => r.map((c) => c.text).join(' '))
+    ].join(' ');
+    const termMatch = nearbyText.match(/TERM\s*(\d+)/i);
+    if (termMatch) term = Number(termMatch[1]);
+
+    for (let col = 0; col < weekRow.length; col++) {
+      const weekCell = weekRow[col];
+      const m = weekCell.text.match(/Week\s+(\d+)/i);
+      if (!m) continue;
+
+      const weekNum = Number(m[1]);
+      const startDate = parseStartDateFromWeekCell(weekCell.text, year);
+      const recipeCell = practicalRow[col] || { text: '', url: '' };
+      const recipe = normalizeRecipeFragment(recipeCell.text || '');
+      const url = recipeCell.url || '';
+
+      if (!recipe && !startDate) continue;
+      results.push({
+        term,
+        weekNum,
+        dateRange: '',
+        startDate,
+        recipe,
+        url,
+        confidence: recipe ? 'auto' : 'missing'
+      });
+    }
+  }
+
+  results.sort((a, b) => (a.term - b.term) || (a.weekNum - b.weekNum));
+
+  // Fill missing Week 1 date from Week 2 for each term.
+  const terms = [...new Set(results.map((r) => r.term))];
+  for (const t of terms) {
+    const termRows = results.filter((r) => r.term === t);
+    const week1 = termRows.find((r) => r.weekNum === 1);
+    const week2 = termRows.find((r) => r.weekNum === 2 && r.startDate);
+    if (week1 && !week1.startDate && week2) {
+      const d = new Date(week2.startDate);
+      d.setDate(d.getDate() - 7);
+      week1.startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+  }
+
+  return {
+    weeks: results,
+    rawText: fullText.slice(0, 3000)
+  };
 }
 
 function extractWeeksWithPositions(text, year) {
@@ -414,53 +570,69 @@ function parseCalendarText(text, pdfUrls = []) {
 
 /**
  * POST /api/recipe_calendar_pdf/parse
- * Body: { pdfDataUrl: 'data:application/pdf;base64,...' }
+ * Body: { fileDataUrl: 'data:application/pdf;base64,...' }
  * Returns: { weeks: [...] }
  */
 router.post('/parse', async (req, res) => {
-  const rawDataUrl = String(req.body && req.body.pdfDataUrl ? req.body.pdfDataUrl : '');
+  const rawDataUrl = String(req.body && (req.body.fileDataUrl || req.body.pdfDataUrl)
+    ? (req.body.fileDataUrl || req.body.pdfDataUrl)
+    : '');
   if (!rawDataUrl) {
-    return res.status(400).json({ error: 'pdfDataUrl is required.' });
+    return res.status(400).json({ error: 'fileDataUrl is required.' });
   }
 
-  // Accept data:application/pdf;base64,<data> or bare base64
-  let pdfBuffer;
-  const dataUrlMatch = /^data:application\/pdf(?:;[^,]*)?;base64,(.+)$/i.exec(rawDataUrl);
-  if (dataUrlMatch) {
-    pdfBuffer = Buffer.from(dataUrlMatch[1], 'base64');
+  // Accept PDF or DOCX data URLs (plus legacy bare base64 PDF).
+  let fileBuffer;
+  let fileType = 'pdf';
+  const pdfDataUrlMatch = /^data:application\/pdf(?:;[^,]*)?;base64,(.+)$/i.exec(rawDataUrl);
+  const docxDataUrlMatch = /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document(?:;[^,]*)?;base64,(.+)$/i.exec(rawDataUrl);
+  if (pdfDataUrlMatch) {
+    fileBuffer = Buffer.from(pdfDataUrlMatch[1], 'base64');
+    fileType = 'pdf';
+  } else if (docxDataUrlMatch) {
+    fileBuffer = Buffer.from(docxDataUrlMatch[1], 'base64');
+    fileType = 'docx';
   } else if (/^[A-Za-z0-9+/]+=*$/.test(rawDataUrl.replace(/\s/g, ''))) {
-    pdfBuffer = Buffer.from(rawDataUrl.replace(/\s/g, ''), 'base64');
+    fileBuffer = Buffer.from(rawDataUrl.replace(/\s/g, ''), 'base64');
+    fileType = 'pdf';
   } else {
-    return res.status(400).json({ error: 'pdfDataUrl must be a base64-encoded PDF or data URL.' });
+    return res.status(400).json({ error: 'fileDataUrl must be a base64-encoded PDF/DOCX data URL.' });
   }
 
-  if (pdfBuffer.length > 20 * 1024 * 1024) {
-    return res.status(413).json({ error: 'PDF file too large (max 20 MB).' });
+  if (fileBuffer.length > 20 * 1024 * 1024) {
+    return res.status(413).json({ error: 'File too large (max 20 MB).' });
   }
 
   try {
+    if (fileType === 'docx') {
+      const docxParsed = await parseDocxCalendar(fileBuffer);
+      if (!docxParsed.weeks.length) {
+        return res.status(400).json({ error: 'No week entries found in DOCX. Ensure it has week headers and a Practical Lessons row.' });
+      }
+      return res.json(docxParsed);
+    }
+
     const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
-    const pdfDoc = await pdfjsLib.getDocument(new Uint8Array(pdfBuffer)).promise;
-    
-    // Extract links from PDF annotations
-    const linksByText = new Map();
+    const pdfDoc = await pdfjsLib.getDocument(new Uint8Array(fileBuffer)).promise;
+
+    // Extract links from PDF annotations in reading order.
+    const pdfUrls = [];
     for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
       const page = await pdfDoc.getPage(pageNum);
       const annotations = await page.getAnnotations();
       for (const annot of annotations || []) {
         if (annot.subtype === 'Link' && annot.url) {
-          // Store URL by approximate text position as fallback matching
-          linksByText.set(`page${pageNum}_${Math.floor(annot.y)}`, annot.url);
+          pdfUrls.push(annot.url);
         }
       }
     }
-    
-    const parsed = await pdfParse(pdfBuffer);
+
+    const parsed = await pdfParse(fileBuffer);
     const rawText = parsed.text || '';
-    const weeks = parseCalendarText(rawText, linksByText);
+    const weeks = parseCalendarText(rawText, pdfUrls);
     res.json({ weeks, rawText: rawText.slice(0, 3000) }); // rawText preview for debugging
   } catch (err) {
-    res.status(500).json({ error: 'Failed to parse PDF: ' + (err.message || String(err)) });
+    res.status(500).json({ error: 'Failed to parse file: ' + (err.message || String(err)) });
   }
 });
 
