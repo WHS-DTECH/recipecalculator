@@ -19,6 +19,55 @@ function parseMonthDay(monthStr, dayStr, year) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function extractWeeksWithPositions(text, year) {
+  const matches = [];
+
+  // Pattern A: Week 2 Feb 1 - Feb 5
+  const patternMonthDay = /Week\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*[-–]\s*(?:([A-Za-z]+)\s+)?(\d+)/gi;
+  let m;
+  while ((m = patternMonthDay.exec(text)) !== null) {
+    const weekNum = parseInt(m[1], 10);
+    const startMonth = m[2];
+    const startDay = m[3];
+    const endMonth = m[4] || startMonth;
+    const endDay = m[5];
+    const startDate = parseMonthDay(startMonth, startDay, year);
+    const endDate = parseMonthDay(endMonth, endDay, year);
+    const dateRange = startDate && endDate
+      ? `${startMonth} ${startDay} - ${endMonth ? endMonth + ' ' : ''}${endDay}`
+      : '';
+    matches.push({ weekNum, startDate, dateRange, index: m.index });
+  }
+
+  // Pattern B: Week 2 1 Feb - 5 Feb
+  const patternDayMonth = /Week\s+(\d+)\s+(\d{1,2})\s+([A-Za-z]+)\s*[-–]\s*(\d{1,2})\s+([A-Za-z]+)/gi;
+  while ((m = patternDayMonth.exec(text)) !== null) {
+    const weekNum = parseInt(m[1], 10);
+    const startDay = m[2];
+    const startMonth = m[3];
+    const endDay = m[4];
+    const endMonth = m[5];
+    const startDate = parseMonthDay(startMonth, startDay, year);
+    const endDate = parseMonthDay(endMonth, endDay, year);
+    const dateRange = startDate && endDate
+      ? `${startDay} ${startMonth} - ${endDay} ${endMonth}`
+      : '';
+    matches.push({ weekNum, startDate, dateRange, index: m.index });
+  }
+
+  // Deduplicate same week/date starts captured by both patterns, preserving first seen order.
+  matches.sort((a, b) => a.index - b.index);
+  const deduped = [];
+  const seen = new Set();
+  for (const item of matches) {
+    const key = `${item.index}:${item.weekNum}:${item.startDate || ''}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(item);
+  }
+  return deduped;
+}
+
 function normalizeRecipeFragment(value) {
   return String(value || '').replace(/\s+/g, ' ').trim();
 }
@@ -81,6 +130,40 @@ function condenseRecipeFragments(fragments, targetCount) {
   return entries;
 }
 
+function isNonRecipeToken(token) {
+  const value = String(token || '').trim();
+  if (!value) return true;
+  if (/^(TERM\s+\d+|Week\s+\d+)$/i.test(value)) return true;
+  if (/^(Content|Assessment|ATL|Theory|Resources?|Notes?)$/i.test(value)) return true;
+  if (/^[A-Za-z]+\s+\d{1,2}\s*[-–]\s*(?:[A-Za-z]+\s*)?\d{1,2}$/i.test(value)) return true;
+  if (/^\d{1,2}\s+[A-Za-z]+\s*[-–]\s*\d{1,2}\s+[A-Za-z]+$/i.test(value)) return true;
+  if (/^(Monday|Tuesday|Wednesday|Thursday|Friday)$/i.test(value)) return true;
+  return false;
+}
+
+function mergeObviousRecipeFragments(fragments) {
+  let entries = (Array.isArray(fragments) ? fragments : []).map(normalizeRecipeFragment).filter(Boolean);
+  if (entries.length < 2) return entries;
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard < 2000) {
+    changed = false;
+    for (let i = 0; i < entries.length - 1; i++) {
+      const score = mergeScore(entries[i], entries[i + 1]);
+      // Very strong continuation pair; merge even if counts already line up.
+      if (score <= -8) {
+        const merged = normalizeRecipeFragment(`${entries[i]} ${entries[i + 1]}`);
+        entries.splice(i, 2, merged);
+        changed = true;
+        break;
+      }
+    }
+    guard += 1;
+  }
+  return entries;
+}
+
 /**
  * Parse the raw PDF text extracted from the year planner PDF.
  * Strategy: scan for TERM markers, then Week N + date range patterns,
@@ -88,7 +171,6 @@ function condenseRecipeFragments(fragments, targetCount) {
  * Returns an array of { term, weekNum, dateRange, startDate, recipe, notes }
  */
 function parseCalendarText(text) {
-  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const results = [];
 
   // Detect the year from "Calendar - YYYY" or similar
@@ -96,39 +178,16 @@ function parseCalendarText(text) {
   const yearMatch = text.match(/\b(202\d)\b/);
   if (yearMatch) year = Number(yearMatch[1]);
 
-  // Parse week-level info. We'll scan the full text for patterns like:
-  // "Week 2 Feb 1 - Feb 5" or "Week 3 Feb 9 - Feb 13"
-  // Date pattern: Month day - [Month] day
-  const weekDatePattern = /Week\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*[-–]\s*(?:([A-Za-z]+)\s+)?(\d+)/gi;
-  const weekEntries = [];
-  let m;
-  while ((m = weekDatePattern.exec(text)) !== null) {
-    const weekNum = parseInt(m[1], 10);
-    const startMonth = m[2];
-    const startDay = m[3];
-    const endMonth = m[4] || startMonth;
-    const endDay = m[5];
-    const startDate = parseMonthDay(startMonth, startDay, year);
-    const endDate = parseMonthDay(endMonth, endDay, year);
-    const dateRange = startDate && endDate
-      ? `${startMonth} ${startDay} - ${endMonth ? endMonth + ' ' : ''}${endDay}`
-      : null;
-    weekEntries.push({ weekNum, startDate, dateRange });
-  }
+  // Parse week-level info from common planner date formats.
+  const weekEntries = extractWeeksWithPositions(text, year);
 
   // Determine term boundaries by finding "TERM N" markers in the text.
   // We'll track which TERM each week belongs to by position in text.
   const termPositions = [];
   const termPattern = /TERM\s+(\d)/gi;
+  let m;
   while ((m = termPattern.exec(text)) !== null) {
     termPositions.push({ term: parseInt(m[1], 10), index: m.index });
-  }
-
-  // Also capture the WEEK positions in the raw text to assign terms
-  const weekDatePatternForPos = /Week\s+(\d+)\s+([A-Za-z]+)\s+(\d+)\s*[-–]\s*(?:([A-Za-z]+)\s+)?(\d+)/gi;
-  const weekPositions = [];
-  while ((m = weekDatePatternForPos.exec(text)) !== null) {
-    weekPositions.push({ weekNum: parseInt(m[1], 10), index: m.index });
   }
 
   function getTermForIndex(idx) {
@@ -139,59 +198,61 @@ function parseCalendarText(text) {
     return term;
   }
 
-  // Assign terms to week entries using their positions in the original text
-  const weekPosMap = new Map();
-  for (const wp of weekPositions) {
-    weekPosMap.set(wp.weekNum + '_' + wp.index, { term: getTermForIndex(wp.index), ...wp });
+  // Extract recipes from "Practical Lessons" rows in each term block.
+  // This keeps recipes aligned with week groups in that same term.
+  const sortedTermPositions = termPositions.slice().sort((a, b) => a.index - b.index);
+  const termBlocks = [];
+  if (sortedTermPositions.length) {
+    for (let i = 0; i < sortedTermPositions.length; i++) {
+      const start = sortedTermPositions[i].index;
+      const end = i + 1 < sortedTermPositions.length ? sortedTermPositions[i + 1].index : text.length;
+      termBlocks.push({ term: sortedTermPositions[i].term, text: text.slice(start, end) });
+    }
+  } else {
+    termBlocks.push({ term: 1, text });
   }
 
-  // Now extract recipes from the "Practical Lessons" row.
-  // The pattern: after "Practical" | "Practical Lessons", there's a sequence of recipe names
-  // separated by newlines or large whitespace until the next section/table heading.
   const practicalSections = [];
-  const practicalPattern = /Practica[l]?\s+[Ll]esso[n]?s?\s*([\s\S]*?)(?=(?:Content|Assessment|TERM\s+\d|$))/gi;
-  while ((m = practicalPattern.exec(text)) !== null) {
-    const block = String(m[1] || '').trim();
-    if (block) practicalSections.push(block);
-  }
-
-  // Also try "Practical\nLessons" multiline form
-  const practicalPattern2 = /Practica\s*l\s+[Ll]esso\s*n\s*s\s*([\s\S]*?)(?=Content|Assessment|TERM\s+\d|$)/gi;
-  while ((m = practicalPattern2.exec(text)) !== null) {
-    const block = String(m[1] || '').trim();
-    if (block && !practicalSections.includes(block)) practicalSections.push(block);
+  for (const block of termBlocks) {
+    const practicalPattern = /Practical\s*Lessons?\s*([\s\S]*?)(?=(?:\n\s*(?:Content|Assessment|ATL|Theory|Resources?)\b|TERM\s+\d|$))/gi;
+    while ((m = practicalPattern.exec(block.text)) !== null) {
+      const section = String(m[1] || '').trim();
+      if (section) practicalSections.push({ term: block.term, section });
+    }
   }
 
   // For each practical section, split into individual recipe names.
-  // They're separated by newlines. Ignore noise words.
-  const noiseWords = new Set(['N/A', 'n/a', 'Assessment', 'ATL', 'Content', 'Week', 'TERM', 'Practical', 'Lessons', '']);
+  // They're usually separated by newlines or large spaces. Ignore non-recipe tokens.
+  const noiseWords = new Set(['N/A', 'n/a', 'Assessment', 'ATL', 'Content', 'Week', 'TERM', 'Practical', 'Lessons', '', '-']);
   const allRecipes = [];
-  const sectionRecipeLists = [];
-  for (const section of practicalSections) {
-    const parts = section.split(/\n+/)
+  const sectionRecipeListsByTerm = new Map();
+  for (const entry of practicalSections) {
+    const parts = entry.section.split(/\n+/)
       .map(s => s.trim())
-      .filter(s => s && !noiseWords.has(s) && !/^(TERM|Week\s+\d|Assessment|Content|ATL)/i.test(s));
+      .filter(s => s && !noiseWords.has(s) && !isNonRecipeToken(s));
     const sectionRecipes = [];
     for (const p of parts) {
       // Split by common separators that pdf-parse might insert between cells
       const subParts = p.split(/\s{3,}/).map(s => s.trim()).filter(Boolean);
       for (const sp of subParts) {
-        if (!noiseWords.has(sp) && sp.length > 1) {
+        if (!noiseWords.has(sp) && sp.length > 1 && !isNonRecipeToken(sp)) {
           allRecipes.push(sp);
           sectionRecipes.push(sp);
         }
       }
     }
-    if (sectionRecipes.length) sectionRecipeLists.push(sectionRecipes);
+    if (sectionRecipes.length) {
+      const mergedStrong = mergeObviousRecipeFragments(sectionRecipes);
+      if (!sectionRecipeListsByTerm.has(entry.term)) sectionRecipeListsByTerm.set(entry.term, []);
+      sectionRecipeListsByTerm.get(entry.term).push(...mergedStrong);
+    }
   }
 
   // Match weekly entries to recipes. We have weekEntries sorted by weekNum per term.
   // Group again but with term info.
   const termWeekMap = new Map(); // termNum -> sorted list of weekEntry
-  for (let i = 0; i < weekEntries.length; i++) {
-    const we = weekEntries[i];
-    const posEntry = weekPositions[i];
-    const term = posEntry ? getTermForIndex(posEntry.index) : 1;
+  for (const we of weekEntries) {
+    const term = getTermForIndex(we.index);
     const key = term;
     if (!termWeekMap.has(key)) termWeekMap.set(key, []);
     termWeekMap.get(key).push({ ...we, term });
@@ -209,18 +270,18 @@ function parseCalendarText(text) {
   // "Food Truck foods:" becoming "Food", "Truck", "foods:").
   // Prefer condensing per term so merges stay aligned with each term's week count.
   let condensedRecipes = [];
-  if (sectionRecipeLists.length >= sortedTerms.length && sortedTerms.length > 0) {
-    for (let i = 0; i < sortedTerms.length; i++) {
-      const term = sortedTerms[i];
+  if (sortedTerms.length > 0) {
+    for (const term of sortedTerms) {
       const termWeeks = (termWeekMap.get(term) || []).length;
-      const sectionRecipes = sectionRecipeLists[i] || [];
-      const termCondensed = condenseRecipeFragments(sectionRecipes, termWeeks);
-      condensedRecipes.push(...termCondensed);
+      const sectionRecipes = sectionRecipeListsByTerm.get(term) || [];
+      const strongMerged = mergeObviousRecipeFragments(sectionRecipes);
+      const termCondensed = condenseRecipeFragments(strongMerged, termWeeks);
+      if (termCondensed.length) condensedRecipes.push(...termCondensed);
     }
   }
 
   if (!condensedRecipes.length) {
-    condensedRecipes = condenseRecipeFragments(allRecipes, allWeeks.length);
+    condensedRecipes = condenseRecipeFragments(mergeObviousRecipeFragments(allRecipes), allWeeks.length);
   }
 
   // Zip weeks and recipes
