@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upload Recipe Calendar</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .rcal-page {
+      max-width: 1100px;
+      margin: 24px auto 48px;
+      padding: 0 1rem;
+    }
+    .rcal-card {
+      background: #fff;
+      border: 1px solid #d8dee6;
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.07);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .rcal-card h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1.25rem;
+      color: #1f2937;
+    }
+    .rcal-card .rcal-card-sub {
+      font-size: 0.93rem;
+      color: #4a5568;
+      margin-bottom: 1rem;
+    }
+    .rcal-upload-row {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .rcal-upload-row input[type="file"] {
+      flex: 1 1 260px;
+      border: 1px solid #d0d7de;
+      border-radius: 7px;
+      padding: 0.45rem 0.7rem;
+      font-size: 0.97rem;
+    }
+    .rcal-btn {
+      background: #1976d2;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 0.5rem 1.3rem;
+      font-size: 0.97rem;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .rcal-btn:hover { background: #1565c0; }
+    .rcal-btn:disabled { background: #90a4ae; cursor: default; }
+    .rcal-btn-green { background: #2e7d32; }
+    .rcal-btn-green:hover { background: #1b5e20; }
+    .rcal-btn-teal { background: #00695c; }
+    .rcal-btn-teal:hover { background: #004d40; }
+    .rcal-status {
+      margin-top: 0.7rem;
+      font-size: 0.95rem;
+      color: #374151;
+      min-height: 1.4em;
+    }
+    .rcal-status.error { color: #c62828; }
+    .rcal-status.ok { color: #2e7d32; }
+    .rcal-table-wrap {
+      overflow-x: auto;
+      margin-top: 1rem;
+    }
+    .rcal-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+    .rcal-table th {
+      background: #1976d2;
+      color: #fff;
+      padding: 0.45rem 0.6rem;
+      text-align: left;
+      white-space: nowrap;
+    }
+    .rcal-table td {
+      border: 1px solid #e2e8f0;
+      padding: 0.35rem 0.5rem;
+      vertical-align: middle;
+    }
+    .rcal-table tr:nth-child(even) td { background: #f7fafc; }
+    .rcal-table input[type="text"],
+    .rcal-table input[type="date"],
+    .rcal-table select {
+      width: 100%;
+      border: 1px solid #c8d3de;
+      border-radius: 5px;
+      padding: 0.3rem 0.45rem;
+      font-size: 0.93rem;
+      box-sizing: border-box;
+      background: #fff;
+    }
+    .rcal-table input[type="text"]:focus,
+    .rcal-table input[type="date"]:focus,
+    .rcal-table select:focus {
+      outline: 2px solid #1976d2;
+    }
+    .rcal-badge-auto {
+      display: inline-block;
+      font-size: 0.72rem;
+      background: #e3f2fd;
+      color: #1565c0;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .rcal-badge-missing {
+      display: inline-block;
+      font-size: 0.72rem;
+      background: #fff3e0;
+      color: #e65100;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .rcal-remove-btn {
+      background: none;
+      border: none;
+      color: #c62828;
+      font-size: 1.15rem;
+      cursor: pointer;
+      padding: 0 0.3rem;
+    }
+    .rcal-add-row-btn {
+      margin-top: 0.6rem;
+      background: #455a64;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: 0.38rem 1rem;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .rcal-ical-section {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: 0.5rem;
+    }
+    .rcal-ical-url {
+      flex: 1 1 320px;
+      border: 1px solid #c8d3de;
+      border-radius: 7px;
+      padding: 0.42rem 0.7rem;
+      font-size: 0.92rem;
+      background: #f7fafc;
+      color: #1f2937;
+      font-family: monospace;
+    }
+    .rcal-period-options {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .rcal-period-options label {
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+      cursor: pointer;
+    }
+    .rcal-raw-toggle {
+      font-size: 0.82rem;
+      color: #1976d2;
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+      margin-top: 0.25rem;
+    }
+    .rcal-raw-box {
+      margin-top: 0.5rem;
+      background: #f3f4f6;
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      padding: 0.7rem;
+      font-size: 0.78rem;
+      font-family: monospace;
+      white-space: pre-wrap;
+      max-height: 220px;
+      overflow-y: auto;
+    }
+    @media (max-width: 700px) {
+      .rcal-card { padding: 1rem; }
+      .rcal-upload-row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+
+  <div class="rcal-page">
+    <h1 style="margin:0 0 0.25rem;color:#1f2937;">Recipe Calendar Upload</h1>
+    <p style="color:#4a5568;margin:0 0 1.5rem;font-size:0.97rem;">
+      Upload your year-planner PDF to automatically extract the recipe schedule week by week.
+      Review and correct the data before saving it as bookings.
+    </p>
+
+    <!-- Step 1: Upload -->
+    <div class="rcal-card" id="uploadCard">
+      <h2>Step 1 — Upload PDF</h2>
+      <div class="rcal-card-sub">Select your Middle school Calendar PDF (the year planner). Only the Practical Lessons row is imported.</div>
+      <div class="rcal-upload-row">
+        <input type="file" id="pdfFileInput" accept="application/pdf" aria-label="Select PDF year planner">
+        <button class="rcal-btn" id="parseBtn" disabled>Extract Schedule</button>
+      </div>
+      <div class="rcal-status" id="parseStatus" role="status" aria-live="polite"></div>
+      <div>
+        <button class="rcal-raw-toggle" id="rawToggleBtn" hidden>Show raw extracted text</button>
+        <pre class="rcal-raw-box" id="rawTextBox" hidden></pre>
+      </div>
+    </div>
+
+    <!-- Step 2: Review -->
+    <div class="rcal-card" id="reviewCard" hidden>
+      <h2>Step 2 — Review &amp; Edit</h2>
+      <div class="rcal-card-sub">
+        Check each row. Edit the date, recipe or class name as needed. Rows marked
+        <span class="rcal-badge-auto">auto</span> were detected automatically.
+        Rows marked <span class="rcal-badge-missing">missing</span> need a recipe filled in.
+        Choose which periods and class this applies to, then click <strong>Save as Bookings</strong>.
+      </div>
+
+      <div style="margin-bottom:1rem;">
+        <label for="classnameInput" style="font-weight:600;font-size:0.95rem;">Class name for all rows:</label>
+        <input type="text" id="classnameInput" placeholder="e.g. 9FT1" style="border:1px solid #c8d3de;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;width:200px;margin-left:0.5rem;">
+        <span style="font-size:0.87rem;color:#6b7280;margin-left:0.5rem;">(You can override per-row)</span>
+      </div>
+
+      <div style="margin-bottom:1rem;">
+        <span style="font-weight:600;font-size:0.95rem;">Period(s) to create booking for each week:</span>
+        <div class="rcal-period-options" id="periodOptions" style="margin-top:0.4rem;">
+          <label><input type="checkbox" name="period" value="1"> P1</label>
+          <label><input type="checkbox" name="period" value="2"> P2</label>
+          <label><input type="checkbox" name="period" value="3" checked> P3</label>
+          <label><input type="checkbox" name="period" value="4"> P4</label>
+          <label><input type="checkbox" name="period" value="5"> P5</label>
+        </div>
+        <div style="font-size:0.85rem;color:#6b7280;margin-top:0.3rem;">One booking per selected period per week will be created.</div>
+      </div>
+
+      <div class="rcal-table-wrap">
+        <table class="rcal-table" id="reviewTable">
+          <thead>
+            <tr>
+              <th>Term</th>
+              <th>Week</th>
+              <th>Week Start Date</th>
+              <th>Recipe</th>
+              <th>Class Name</th>
+              <th>Confidence</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="reviewTableBody"></tbody>
+        </table>
+      </div>
+      <button class="rcal-add-row-btn" id="addRowBtn" type="button">+ Add row</button>
+
+      <div style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
+        <button class="rcal-btn rcal-btn-green" id="saveBtn">Save as Bookings</button>
+        <div class="rcal-status" id="saveStatus" role="status" aria-live="polite"></div>
+      </div>
+    </div>
+
+    <!-- Google Calendar iCal Section -->
+    <div class="rcal-card">
+      <h2>Subscribe to Booking Schedule in Google Calendar</h2>
+      <div class="rcal-card-sub">
+        This live calendar feed includes all bookings that have a teacher allocated.
+        When teachers are assigned, the calendar updates automatically.
+        Copy the link below and add it to Google Calendar as a URL calendar.
+      </div>
+      <div class="rcal-ical-section">
+        <input class="rcal-ical-url" id="icalUrlInput" type="text" readonly aria-label="iCal feed URL">
+        <button class="rcal-btn rcal-btn-teal" id="copyIcalBtn" type="button">Copy Link</button>
+        <a class="rcal-btn" id="downloadIcalBtn" href="#" download="booking_schedule.ics" style="text-decoration:none;display:inline-block;">Download .ics</a>
+      </div>
+      <div style="margin-top:0.9rem;font-size:0.9rem;color:#374151;">
+        <strong>How to subscribe in Google Calendar:</strong><br>
+        1. Open <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer">Google Calendar</a>
+        → click <strong>+ Other calendars</strong> → <strong>From URL</strong><br>
+        2. Paste the link above → <strong>Add calendar</strong><br>
+        3. Google will check for updates automatically (usually every 24 hours).
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- iCal URL setup ---
+    const icalUrl = `${window.location.origin}/api/bookings/ical`;
+    document.getElementById('icalUrlInput').value = icalUrl;
+    document.getElementById('downloadIcalBtn').href = icalUrl;
+    document.getElementById('copyIcalBtn').onclick = function() {
+      navigator.clipboard.writeText(icalUrl).then(() => {
+        this.textContent = 'Copied!';
+        setTimeout(() => { this.textContent = 'Copy Link'; }, 2000);
+      }).catch(() => {
+        document.getElementById('icalUrlInput').select();
+        document.execCommand('copy');
+      });
+    };
+
+    // --- PDF upload ---
+    const pdfFileInput = document.getElementById('pdfFileInput');
+    const parseBtn = document.getElementById('parseBtn');
+    const parseStatus = document.getElementById('parseStatus');
+    const reviewCard = document.getElementById('reviewCard');
+    const reviewTableBody = document.getElementById('reviewTableBody');
+    const rawToggleBtn = document.getElementById('rawToggleBtn');
+    const rawTextBox = document.getElementById('rawTextBox');
+    const saveBtn = document.getElementById('saveBtn');
+    const saveStatus = document.getElementById('saveStatus');
+
+    pdfFileInput.addEventListener('change', () => {
+      parseBtn.disabled = !pdfFileInput.files.length;
+      parseStatus.textContent = '';
+      parseStatus.className = 'rcal-status';
+    });
+
+    rawToggleBtn.addEventListener('click', () => {
+      const hidden = rawTextBox.hidden;
+      rawTextBox.hidden = !hidden;
+      rawToggleBtn.textContent = hidden ? 'Hide raw extracted text' : 'Show raw extracted text';
+    });
+
+    parseBtn.addEventListener('click', async () => {
+      const file = pdfFileInput.files[0];
+      if (!file) return;
+      parseBtn.disabled = true;
+      parseStatus.className = 'rcal-status';
+      parseStatus.textContent = 'Reading PDF…';
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        parseStatus.textContent = 'Sending to server for extraction…';
+
+        const res = await fetch('/api/recipe_calendar_pdf/parse', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pdfDataUrl: dataUrl })
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+          parseStatus.className = 'rcal-status error';
+          parseStatus.textContent = 'Error: ' + (data.error || 'Failed to parse PDF.');
+          parseBtn.disabled = false;
+          return;
+        }
+
+        const weeks = data.weeks || [];
+        if (data.rawText) {
+          rawTextBox.textContent = data.rawText;
+          rawToggleBtn.hidden = false;
+        }
+
+        if (!weeks.length) {
+          parseStatus.className = 'rcal-status error';
+          parseStatus.textContent = 'No week entries could be extracted from the PDF. Try reviewing the raw text, or add rows manually.';
+          rawToggleBtn.hidden = false;
+          reviewCard.hidden = false;
+          renderTable([]);
+          parseBtn.disabled = false;
+          return;
+        }
+
+        parseStatus.className = 'rcal-status ok';
+        parseStatus.textContent = `Extracted ${weeks.length} week(s). Review below and correct any errors before saving.`;
+        renderTable(weeks);
+        reviewCard.hidden = false;
+        reviewCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (err) {
+        parseStatus.className = 'rcal-status error';
+        parseStatus.textContent = 'Unexpected error: ' + (err.message || String(err));
+      }
+      parseBtn.disabled = false;
+    });
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error('Failed to read file.'));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function escHtml(str) {
+      return String(str == null ? '' : str)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    function renderTable(weeks) {
+      reviewTableBody.innerHTML = '';
+      for (const w of weeks) addRow(w);
+    }
+
+    function addRow(w) {
+      w = w || { term: '', weekNum: '', startDate: '', recipe: '', class_name: '', confidence: 'manual' };
+      const tr = document.createElement('tr');
+      tr.dataset.confidence = w.confidence || 'manual';
+      tr.innerHTML = `
+        <td><input type="text" class="rcal-term" value="${escHtml(String(w.term || ''))}" placeholder="1" style="width:48px;"></td>
+        <td><input type="text" class="rcal-week" value="${escHtml(String(w.weekNum || ''))}" placeholder="1" style="width:48px;"></td>
+        <td><input type="date" class="rcal-date" value="${escHtml(w.startDate || '')}"></td>
+        <td><input type="text" class="rcal-recipe" value="${escHtml(w.recipe || '')}" placeholder="Recipe name"></td>
+        <td><input type="text" class="rcal-classname" value="${escHtml(w.class_name || '')}" placeholder="e.g. 9FT1"></td>
+        <td>
+          ${w.confidence === 'auto' ? '<span class="rcal-badge-auto">auto</span>' :
+            w.confidence === 'missing' ? '<span class="rcal-badge-missing">missing</span>' :
+            '<span style="font-size:0.8rem;color:#6b7280;">manual</span>'}
+        </td>
+        <td><button class="rcal-remove-btn" title="Remove row" aria-label="Remove row">&#x2715;</button></td>
+      `;
+      tr.querySelector('.rcal-remove-btn').onclick = () => tr.remove();
+      reviewTableBody.appendChild(tr);
+    }
+
+    document.getElementById('addRowBtn').addEventListener('click', () => {
+      addRow(null);
+    });
+
+    // Fill class name from global input when rows are added
+    document.getElementById('classnameInput').addEventListener('input', function() {
+      // Only fill rows that are still empty
+      document.querySelectorAll('.rcal-classname').forEach(input => {
+        if (!input.value.trim()) input.value = this.value;
+      });
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      const rows = Array.from(reviewTableBody.querySelectorAll('tr'));
+      const periods = Array.from(document.querySelectorAll('#periodOptions input[name="period"]:checked'))
+        .map(el => el.value);
+
+      if (!periods.length) {
+        saveStatus.className = 'rcal-status error';
+        saveStatus.textContent = 'Please select at least one period.';
+        return;
+      }
+
+      const globalClassName = document.getElementById('classnameInput').value.trim();
+      const bookings = [];
+
+      for (const row of rows) {
+        const recipe = row.querySelector('.rcal-recipe').value.trim();
+        const startDate = row.querySelector('.rcal-date').value.trim();
+        const className = row.querySelector('.rcal-classname').value.trim() || globalClassName || '';
+        if (!recipe || !startDate) continue; // skip incomplete rows
+
+        for (const period of periods) {
+          bookings.push({
+            booking_date: startDate,
+            period: period,
+            recipe: recipe,
+            class_name: className,
+            staff_id: null,
+            staff_name: null,
+            recipe_id: null,
+            class_size: null
+          });
+        }
+      }
+
+      if (!bookings.length) {
+        saveStatus.className = 'rcal-status error';
+        saveStatus.textContent = 'No complete rows to save. Make sure each row has a date and recipe name.';
+        return;
+      }
+
+      saveBtn.disabled = true;
+      saveStatus.className = 'rcal-status';
+      saveStatus.textContent = `Saving ${bookings.length} booking(s)…`;
+
+      let saved = 0;
+      let failed = 0;
+      for (const b of bookings) {
+        try {
+          const res = await fetch('/api/bookings', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(b)
+          });
+          if (res.ok) { saved++; } else { failed++; }
+        } catch { failed++; }
+      }
+
+      saveBtn.disabled = false;
+      if (failed === 0) {
+        saveStatus.className = 'rcal-status ok';
+        saveStatus.textContent = `✓ Saved ${saved} booking(s) successfully.`;
+      } else {
+        saveStatus.className = 'rcal-status error';
+        saveStatus.textContent = `Saved ${saved} booking(s), but ${failed} failed. Check the console for details.`;
+      }
+    });
+  </script>
+</body>
+</html>

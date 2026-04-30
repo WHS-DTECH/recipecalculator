@@ -657,6 +657,9 @@ app.use('/api/classes', classesRouter);
 const uploadTimetableRouter = require('./routes/upload_timetable');
 app.use('/api/upload_timetable', uploadTimetableRouter);
 
+const recipeCalendarPdfRouter = require('./routes/recipe_calendar_pdf');
+app.use('/api/recipe_calendar_pdf', recipeCalendarPdfRouter);
+
 const studentUploadRouter = require('./routes/student_upload');
 app.use('/api/student_upload', studentUploadRouter);
 
