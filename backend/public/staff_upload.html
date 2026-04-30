@@ -11,13 +11,17 @@
     <script src="shared/navbar_loader.js"></script>
     <div class="container" style="max-width:600px;margin:2rem auto;background:#fff;padding:2rem;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
         <h1>Staff Upload</h1>
+        <p style="font-size:0.93rem;color:#4a5568;margin:0 0 1rem;">
+            Upload a CSV exported from Kamar. Expected columns (in any order):
+            <strong>Code</strong>, <strong>Last Name</strong>, <strong>First Name</strong>,
+            <strong>Title</strong>, <strong>Email (School)</strong>.
+        </p>
         <form id="uploadForm">
             <label for="csvFile">Upload Staff CSV File:</label>
             <input type="file" id="csvFile" accept=".csv" required />
-            <button type="submit">Upload</button>
+            <button type="submit" id="uploadSubmitBtn">Upload</button>
         </form>
-        <div id="uploadResult" style="margin-top:1.5rem;"></div>
-        <div id="staffTableContainer" style="margin-top:2rem;"></div>
+        <div id="uploadResult" style="margin-top:1.5rem;" role="status" aria-live="polite"></div>
         <div id="departmentTableContainer" style="margin-top:2rem;"></div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>

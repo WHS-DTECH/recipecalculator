@@ -1,11 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
+let staffSchemaEnsured = false;
 async function ensureStaffSchema() {
+  if (staffSchemaEnsured) return;
   await pool.query("ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'staff'");
   await pool.query("UPDATE staff_upload SET primary_role = 'staff' WHERE primary_role IS NULL OR trim(primary_role) = ''");
+  staffSchemaEnsured = true;
 }
+// Run once at startup (best-effort, non-blocking)
+ensureStaffSchema().catch(err => console.error('[staff_upload] ensureStaffSchema failed on startup:', err.message));
 
 function normalizeHeader(value) {
   return (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -24,7 +30,6 @@ function getIndexByAliases(headers, aliases) {
 router.get('/dropdown', async (req, res) => {
   console.log('[DEBUG] /api/staff_upload/dropdown called');
   try {
-    await ensureStaffSchema();
     const result = await pool.query("SELECT id, code, last_name, first_name, email_school FROM staff_upload WHERE COALESCE(status, 'Current') = 'Current' ORDER BY last_name, first_name");
     console.log('[DEBUG] Staff rows:', result.rows);
     res.json({ staff: result.rows });
@@ -34,19 +39,18 @@ router.get('/dropdown', async (req, res) => {
   }
 });
 
-// Get all staff_upload rows
-router.get('/all', async (req, res) => {
+// Get all staff_upload rows (admin only)
+router.get('/all', requireAdmin, async (req, res) => {
   try {
-    await ensureStaffSchema();
-    const result = await pool.query('SELECT * FROM staff_upload');
+    const result = await pool.query('SELECT * FROM staff_upload ORDER BY last_name, first_name');
     res.json({ staff: result.rows });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch staff_upload data.' });
   }
 });
 
-// Handle staff CSV upload
-router.post('/', async (req, res) => {
+// Handle staff CSV upload (admin only)
+router.post('/', requireAdmin, async (req, res) => {
   await ensureStaffSchema();
   const staff = req.body.staff;
   const headers = Array.isArray(req.body.headers) ? req.body.headers : [];

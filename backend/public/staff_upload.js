@@ -94,13 +94,19 @@ function uploadStaffWithProgress(payload, onProgress) {
   });
 }
 
+function escHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 function renderStaffUploadTable(rows) {
   const container = document.getElementById('departmentTableContainer');
   if (!container) return;
   let html = '<h2>Staff Upload Table</h2>';
   html += '<table class="staff-table"><thead><tr><th>ID</th><th>Code</th><th>Last Name</th><th>First Name</th><th>Title</th><th>Email (School)</th><th>Status</th></tr></thead><tbody>';
   rows.forEach(row => {
-    html += `<tr><td>${row.id}</td><td>${row.code || ''}</td><td>${row.last_name || ''}</td><td>${row.first_name || ''}</td><td>${row.title || ''}</td><td>${row.email_school || ''}</td><td>${row.status || 'Current'}</td></tr>`;
+    html += `<tr><td>${escHtml(row.id)}</td><td>${escHtml(row.code)}</td><td>${escHtml(row.last_name)}</td><td>${escHtml(row.first_name)}</td><td>${escHtml(row.title)}</td><td>${escHtml(row.email_school)}</td><td>${escHtml(row.status || 'Current')}</td></tr>`;
   });
   html += '</tbody></table>';
   container.innerHTML = html;
@@ -114,6 +120,8 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
   const fileInput = document.getElementById('csvFile');
   const file = fileInput.files[0];
   if (!file) return;
+  const submitBtn = document.getElementById('uploadSubmitBtn');
+  if (submitBtn) submitBtn.disabled = true;
   const uploadResult = document.getElementById('uploadResult');
   if (uploadResult) uploadResult.textContent = '';
   setUploadProgress('Reading file...', 0);
@@ -163,42 +171,19 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     .catch(err => {
       document.getElementById('uploadResult').textContent = 'Import failed: ' + err;
       hideUploadProgress();
+    })
+    .finally(() => {
+      if (submitBtn) submitBtn.disabled = false;
     });
   };
 
   reader.onerror = function() {
     document.getElementById('uploadResult').textContent = 'Import failed: could not read file.';
     hideUploadProgress();
+    if (submitBtn) submitBtn.disabled = false;
   };
 
   reader.readAsText(file);
 });
 
-function renderStaffTable(headers, data) {
-  const table = document.createElement('table');
-  table.className = 'staff-table';
-  const thead = document.createElement('thead');
-  const trHead = document.createElement('tr');
-  headers.forEach(h => {
-    const th = document.createElement('th');
-    th.textContent = h;
-    trHead.appendChild(th);
-  });
-  thead.appendChild(trHead);
-  table.appendChild(thead);
-  const tbody = document.createElement('tbody');
-  data.forEach(row => {
-    if (row.length < 2) return;
-    const tr = document.createElement('tr');
-    row.forEach(cell => {
-      const td = document.createElement('td');
-      td.textContent = cell;
-      tr.appendChild(td);
-    });
-    tbody.appendChild(tr);
-  });
-  table.appendChild(tbody);
-  const container = document.getElementById('staffTableContainer');
-  container.innerHTML = '';
-  container.appendChild(table);
-}
+
