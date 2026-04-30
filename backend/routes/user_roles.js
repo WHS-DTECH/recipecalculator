@@ -29,6 +29,14 @@ const STUDENT_WEEK_MAP = [
   { day: 'Friday', key: 'fri' }
 ];
 
+const STUDENT_PERIOD_COLUMNS = [
+  'mon_p1_1', 'mon_p1_2', 'mon_p2', 'mon_i', 'mon_p3', 'mon_p4', 'mon_l', 'mon_p5',
+  'tue_p1_1', 'tue_p1_2', 'tue_p2', 'tue_i', 'tue_p3', 'tue_p4', 'tue_l', 'tue_p5',
+  'wed_p1_1', 'wed_p1_2', 'wed_p2', 'wed_i', 'wed_p3', 'wed_p4', 'wed_l', 'wed_p5',
+  'thu_p1_1', 'thu_p1_2', 'thu_p2', 'thu_i', 'thu_p3', 'thu_p4', 'thu_l', 'thu_p5',
+  'fri_p1_1', 'fri_p1_2', 'fri_p2', 'fri_i', 'fri_p3', 'fri_p4', 'fri_l', 'fri_p5'
+];
+
 function buildWeeklyTimetable(row) {
   if (!row) return [];
   return WEEKDAY_MAP.map(({ day, key }) => {
@@ -111,7 +119,75 @@ const schemaReady = (async () => {
     await pool.query("UPDATE user_additional_roles SET user_type = 'staff' WHERE user_type IS NULL OR trim(user_type) = ''");
 
     await pool.query("ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'staff'");
+    await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_year INTEGER');
+    await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_term TEXT');
+    await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_date DATE');
     await pool.query("UPDATE staff_upload SET primary_role = 'staff' WHERE primary_role IS NULL OR trim(primary_role) = ''");
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS staff_upload_history (
+        id SERIAL PRIMARY KEY,
+        email_school TEXT NOT NULL,
+        code TEXT,
+        first_name TEXT,
+        last_name TEXT,
+        title TEXT,
+        status_snapshot TEXT DEFAULT 'Current',
+        upload_year INTEGER,
+        upload_term TEXT,
+        upload_date DATE,
+        source TEXT DEFAULT 'profile',
+        recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query(`
+      CREATE UNIQUE INDEX IF NOT EXISTS staff_upload_history_unique_snapshot
+      ON staff_upload_history (lower(trim(email_school)), upload_year, lower(trim(upload_term)), upload_date, status_snapshot)
+    `);
+    await pool.query(`
+      INSERT INTO staff_upload_history (
+        email_school, code, first_name, last_name, title,
+        status_snapshot, upload_year, upload_term, upload_date, source
+      )
+      SELECT
+        email_school, code, first_name, last_name, title,
+        COALESCE(status, 'Current'), upload_year, upload_term, upload_date, 'profile_backfill'
+      FROM staff_upload s
+      WHERE trim(COALESCE(email_school, '')) <> ''
+        AND upload_year IS NOT NULL
+        AND trim(COALESCE(upload_term, '')) <> ''
+        AND upload_date IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1
+          FROM staff_upload_history h
+          WHERE lower(trim(h.email_school)) = lower(trim(s.email_school))
+            AND h.upload_year = s.upload_year
+            AND lower(trim(COALESCE(h.upload_term, ''))) = lower(trim(COALESCE(s.upload_term, '')))
+            AND h.upload_date = s.upload_date
+            AND COALESCE(h.status_snapshot, 'Current') = COALESCE(s.status, 'Current')
+        )
+    `);
+    await pool.query(`
+      INSERT INTO staff_upload_history (
+        email_school, code, first_name, last_name, title,
+        status_snapshot, upload_year, upload_term, upload_date, source
+      )
+      SELECT
+        email_school, code, first_name, last_name, title,
+        'Current', 2026, 'Term 1', DATE '2026-04-01', 'profile_inferred_baseline'
+      FROM staff_upload s
+      WHERE COALESCE(status, 'Current') = 'Current'
+        AND upload_year = 2026
+        AND lower(trim(COALESCE(upload_term, ''))) = 'term 2'
+        AND trim(COALESCE(email_school, '')) <> ''
+        AND NOT EXISTS (
+          SELECT 1
+          FROM staff_upload_history h
+          WHERE lower(trim(h.email_school)) = lower(trim(s.email_school))
+            AND h.upload_year = 2026
+            AND lower(trim(COALESCE(h.upload_term, ''))) = 'term 1'
+        )
+    `);
 
     await pool.query("ALTER TABLE student_timetable ADD COLUMN IF NOT EXISTS primary_role TEXT DEFAULT 'student'");
     await pool.query("UPDATE student_timetable SET primary_role = 'student' WHERE primary_role IS NULL OR trim(primary_role) = ''");
@@ -376,6 +452,76 @@ router.get('/profile', async (req, res) => {
 
     const timetableRow = timetableResult.rows[0] || null;
 
+    let uploadHistory = [];
+    try {
+      const historyResult = await pool.query(
+        `SELECT upload_year, upload_term, upload_date, status_snapshot, source
+         FROM staff_upload_history
+         WHERE lower(trim(email_school)) = lower(trim($1))
+         ORDER BY upload_year DESC, upload_date DESC, lower(trim(COALESCE(upload_term, ''))) DESC`,
+        [email]
+      );
+      uploadHistory = historyResult.rows;
+    } catch (_) {
+      // History table may not exist in older deployments yet.
+      uploadHistory = [];
+    }
+
+    if (!uploadHistory.length && staff.upload_year && staff.upload_term) {
+      uploadHistory.push({
+        upload_year: staff.upload_year,
+        upload_term: staff.upload_term,
+        upload_date: staff.upload_date,
+        status_snapshot: staff.status || 'Current',
+        source: 'staff_upload'
+      });
+    }
+
+    let classes = [];
+    if (teacherCode) {
+      const classesResult = await pool.query(
+        `SELECT code, class_name, year_level, department
+         FROM class_upload
+         WHERE COALESCE(status, 'Current') = 'Current'
+           AND upper(trim(COALESCE(teacher_code, ''))) = upper(trim($1))
+         ORDER BY class_name, code`,
+        [teacherCode]
+      );
+
+      for (const cls of classesResult.rows) {
+        const classCode = String(cls.code || '').trim();
+        if (!classCode) continue;
+
+        const whereClause = STUDENT_PERIOD_COLUMNS
+          .map((col, i) => `upper(COALESCE(${col}, '')) LIKE '%' || upper($${i + 1}) || '%'`)
+          .join(' OR ');
+        const values = STUDENT_PERIOD_COLUMNS.map(() => classCode);
+
+        const studentsResult = await pool.query(
+          `SELECT student_name, id_number, form_class, year_level
+           FROM student_timetable
+           WHERE COALESCE(status, 'Current') = 'Current'
+             AND (${whereClause})
+           ORDER BY student_name, id_number`,
+          values
+        );
+
+        classes.push({
+          code: classCode,
+          class_name: cls.class_name || classCode,
+          year_level: cls.year_level || '',
+          department: cls.department || '',
+          student_count: studentsResult.rows.length,
+          students: studentsResult.rows.map((row) => ({
+            student_name: row.student_name || '',
+            id_number: row.id_number || '',
+            form_class: row.form_class || '',
+            year_level: row.year_level || ''
+          }))
+        });
+      }
+    }
+
     res.json({
       success: true,
       email,
@@ -403,6 +549,8 @@ router.get('/profile', async (req, res) => {
             staff_name: department.staff_name || ''
           }
         : null,
+      upload_history: uploadHistory,
+      classes,
       timetable: timetableRow
         ? {
             teacher_code: timetableRow.Teacher || teacherCode,

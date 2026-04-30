@@ -10,6 +10,26 @@ async function ensureStaffSchema() {
   await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_year INTEGER');
   await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_term TEXT');
   await pool.query('ALTER TABLE staff_upload ADD COLUMN IF NOT EXISTS upload_date DATE');
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS staff_upload_history (
+      id SERIAL PRIMARY KEY,
+      email_school TEXT NOT NULL,
+      code TEXT,
+      first_name TEXT,
+      last_name TEXT,
+      title TEXT,
+      status_snapshot TEXT DEFAULT 'Current',
+      upload_year INTEGER,
+      upload_term TEXT,
+      upload_date DATE,
+      source TEXT DEFAULT 'upload',
+      recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS staff_upload_history_unique_snapshot
+    ON staff_upload_history (lower(trim(email_school)), upload_year, lower(trim(upload_term)), upload_date, status_snapshot)
+  `);
   await pool.query("UPDATE staff_upload SET primary_role = 'staff' WHERE primary_role IS NULL OR trim(primary_role) = ''");
   await pool.query(`
     UPDATE staff_upload
@@ -20,6 +40,55 @@ async function ensureStaffSchema() {
       AND upload_year IS NULL
       AND COALESCE(trim(upload_term), '') = ''
       AND upload_date IS NULL
+  `);
+
+  // Backfill history from current table so profile pages can show prior upload snapshots.
+  await pool.query(`
+    INSERT INTO staff_upload_history (
+      email_school, code, first_name, last_name, title,
+      status_snapshot, upload_year, upload_term, upload_date, source
+    )
+    SELECT
+      email_school, code, first_name, last_name, title,
+      COALESCE(status, 'Current'), upload_year, upload_term, upload_date, 'backfill'
+    FROM staff_upload s
+    WHERE trim(COALESCE(email_school, '')) <> ''
+      AND upload_year IS NOT NULL
+      AND trim(COALESCE(upload_term, '')) <> ''
+      AND upload_date IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM staff_upload_history h
+        WHERE lower(trim(h.email_school)) = lower(trim(s.email_school))
+          AND h.upload_year = s.upload_year
+          AND lower(trim(COALESCE(h.upload_term, ''))) = lower(trim(COALESCE(s.upload_term, '')))
+          AND h.upload_date = s.upload_date
+          AND COALESCE(h.status_snapshot, 'Current') = COALESCE(s.status, 'Current')
+      )
+  `);
+
+  // If current records were already moved to Term 2 before history existed,
+  // infer a Term 1 baseline so profile pages can show Term 1 + Term 2 continuity for 2026.
+  await pool.query(`
+    INSERT INTO staff_upload_history (
+      email_school, code, first_name, last_name, title,
+      status_snapshot, upload_year, upload_term, upload_date, source
+    )
+    SELECT
+      email_school, code, first_name, last_name, title,
+      'Current', 2026, 'Term 1', DATE '2026-04-01', 'inferred_baseline'
+    FROM staff_upload s
+    WHERE COALESCE(status, 'Current') = 'Current'
+      AND upload_year = 2026
+      AND lower(trim(COALESCE(upload_term, ''))) = 'term 2'
+      AND trim(COALESCE(email_school, '')) <> ''
+      AND NOT EXISTS (
+        SELECT 1
+        FROM staff_upload_history h
+        WHERE lower(trim(h.email_school)) = lower(trim(s.email_school))
+          AND h.upload_year = 2026
+          AND lower(trim(COALESCE(h.upload_term, ''))) = 'term 1'
+      )
   `);
   staffSchemaEnsured = true;
 }
@@ -164,6 +233,24 @@ router.post('/', requireAdmin, async (req, res) => {
         );
         inserted++;
       }
+
+      await client.query(
+        `INSERT INTO staff_upload_history (
+           email_school, code, first_name, last_name, title,
+           status_snapshot, upload_year, upload_term, upload_date, source
+         )
+         SELECT $1, $2, $3, $4, $5, 'Current', $6, $7, $8::date, 'upload'
+         WHERE NOT EXISTS (
+           SELECT 1
+           FROM staff_upload_history h
+           WHERE lower(trim(h.email_school)) = lower(trim($1))
+             AND h.upload_year = $6
+             AND lower(trim(COALESCE(h.upload_term, ''))) = lower(trim($7))
+             AND h.upload_date = $8::date
+             AND COALESCE(h.status_snapshot, 'Current') = 'Current'
+         )`,
+        [row.email, row.code, row.firstName, row.lastName, row.title, uploadYear, uploadTerm, uploadDate]
+      );
     }
 
     const inactiveResult = await client.query("SELECT COUNT(*)::int AS count FROM staff_upload WHERE status = 'Not Current'");

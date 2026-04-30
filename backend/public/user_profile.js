@@ -29,6 +29,17 @@ function setText(id, value) {
   el.textContent = value;
 }
 
+function formatDisplayDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) return raw;
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(date.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function setHero(staff, authUser, department) {
   const nameEl = document.getElementById('profileName');
   const subtitleEl = document.getElementById('profileSubtitle');
@@ -206,6 +217,89 @@ function renderDataLinks(profileData) {
   `;
 }
 
+function renderUploadHistory(profileData) {
+  const container = document.getElementById('profileUploadHistory');
+  if (!container) return;
+
+  const history = profileData && Array.isArray(profileData.upload_history)
+    ? profileData.upload_history
+    : [];
+
+  if (!history.length) {
+    container.innerHTML = '<div class="profile-empty">No upload history has been recorded yet.</div>';
+    return;
+  }
+
+  const rows = history.map((item) => `
+    <tr>
+      <td>${escapeHtml(item.upload_year || '')}</td>
+      <td>${escapeHtml(item.upload_term || '')}</td>
+      <td>${escapeHtml(formatDisplayDate(item.upload_date || ''))}</td>
+      <td>${escapeHtml(item.status_snapshot || '')}</td>
+    </tr>
+  `).join('');
+
+  const uniqueTerms = Array.from(new Set(
+    history
+      .map((item) => `${item.upload_year || ''} ${item.upload_term || ''}`.trim())
+      .filter(Boolean)
+  ));
+
+  container.innerHTML = `
+    <div style="margin-bottom:0.55rem; font-size:0.92rem; color:#24466a;">
+      <strong>Seen in:</strong> ${escapeHtml(uniqueTerms.join(', ') || 'N/A')}
+    </div>
+    <div style="overflow:auto;">
+      <table class="styled-table" style="width:100%; min-width:460px;">
+        <thead>
+          <tr>
+            <th>Year</th>
+            <th>Term</th>
+            <th>Upload Date</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+function renderClassesAndStudents(profileData) {
+  const container = document.getElementById('profileClassesStudents');
+  if (!container) return;
+
+  const classes = profileData && Array.isArray(profileData.classes)
+    ? profileData.classes
+    : [];
+
+  if (!classes.length) {
+    container.innerHTML = '<div class="profile-empty">No classes are currently linked to this staff code.</div>';
+    return;
+  }
+
+  const html = classes.map((cls) => {
+    const students = Array.isArray(cls.students) ? cls.students : [];
+    const studentsHtml = students.length
+      ? `<div style="overflow:auto;"><table class="styled-table" style="width:100%; min-width:520px; margin-top:0.5rem;"><thead><tr><th>Student</th><th>ID</th><th>Form Class</th><th>Year</th></tr></thead><tbody>${students.map((s) => `<tr><td>${escapeHtml(s.student_name || '')}</td><td>${escapeHtml(s.id_number || '')}</td><td>${escapeHtml(s.form_class || '')}</td><td>${escapeHtml(s.year_level || '')}</td></tr>`).join('')}</tbody></table></div>`
+      : '<div class="profile-empty" style="margin-top:0.45rem;">No students found for this class code in current student timetable.</div>';
+
+    return `
+      <details style="border:1px solid #d8e2ef; border-radius:9px; padding:0.45rem 0.65rem; margin-bottom:0.55rem; background:#f8fbff;" open>
+        <summary style="cursor:pointer; font-weight:700; color:#1e4162;">
+          ${escapeHtml(cls.class_name || cls.code || 'Class')} (${escapeHtml(cls.code || '')}) - ${escapeHtml(String(cls.student_count || 0))} student(s)
+        </summary>
+        <div style="margin-top:0.35rem; font-size:0.89rem; color:#3b5877;">
+          ${escapeHtml(cls.year_level || '')}${cls.department ? ` • ${escapeHtml(cls.department)}` : ''}
+        </div>
+        ${studentsHtml}
+      </details>
+    `;
+  }).join('');
+
+  container.innerHTML = html;
+}
+
 function renderTimetable(profileData) {
   const container = document.getElementById('profileTimetable');
   if (!container) return;
@@ -299,6 +393,8 @@ async function fetchAndRenderUserProfile() {
     renderProfileFacts(staff, authUser, profileData);
     renderTimetable(profileData);
     renderDataLinks(profileData);
+    renderUploadHistory(profileData);
+    renderClassesAndStudents(profileData);
   } catch (err) {
     const container = document.getElementById('profileContainer');
     if (container) {
