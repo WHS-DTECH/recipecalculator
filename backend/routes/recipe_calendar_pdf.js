@@ -69,7 +69,10 @@ function extractWeeksWithPositions(text, year) {
 }
 
 function normalizeRecipeFragment(value) {
-  return String(value || '').replace(/\s+/g, ' ').trim();
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\b([A-Za-z]{2,})\s+([A-Za-z])\b/g, '$1$2')
+    .trim();
 }
 
 function mergeScore(left, right) {
@@ -84,7 +87,9 @@ function mergeScore(left, right) {
   if (/^[a-z]/.test(b)) score -= 7;
   if (/^[)\]}]/.test(b)) score -= 7;
   if (/\($/.test(a)) score -= 7;
-  if (/[:;,]$/.test(a)) score -= 6;
+  // A trailing colon often marks a complete cell label in planner exports.
+  if (/:$/.test(a)) score += 10;
+  if (/[;,]$/.test(a)) score -= 2;
   if (/[:;,]$/.test(b)) score -= 3;
   if (a.split(' ').length === 1 && b.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z]/.test(b)) score -= 8;
   if (a.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z][a-z]/.test(b)) score -= 6;
