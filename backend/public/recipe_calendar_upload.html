@@ -341,6 +341,35 @@
       return 'MFOOD';
     }
 
+    function detectPlannerDefaults(sourceText) {
+      const text = String(sourceText || '').trim();
+      if (!text) return null;
+
+      if (/senior\s*school|hosp|hp100|hp300|year\s*13|13hosp/i.test(text)) {
+        return { stream: 'Senior', className: getDefaultClassNameForStream('Senior') };
+      }
+      if (/junior\s*school|jfood/i.test(text)) {
+        return { stream: 'Junior', className: getDefaultClassNameForStream('Junior') };
+      }
+      if (/middle\s*school|mfood/i.test(text)) {
+        return { stream: 'Middle', className: getDefaultClassNameForStream('Middle') };
+      }
+      return null;
+    }
+
+    function applyDetectedPlannerDefaults(detectedDefaults) {
+      if (!detectedDefaults) return;
+      const classnameInput = document.getElementById('classnameInput');
+      const plannerStreamSelect = document.getElementById('plannerStreamSelect');
+      const classnameAutoHint = document.getElementById('classnameAutoHint');
+      const previousValue = classnameInput.value.trim();
+
+      plannerStreamSelect.value = detectedDefaults.stream;
+      classnameInput.value = detectedDefaults.className;
+      applyGlobalClassNameToRows(previousValue);
+      classnameAutoHint.style.display = '';
+    }
+
     function applyGlobalClassNameToRows(previousValue = '') {
       const classnameInput = document.getElementById('classnameInput');
       const nextValue = classnameInput.value.trim();
@@ -356,27 +385,11 @@
       parseBtn.disabled = !pdfFileInput.files.length;
       parseStatus.textContent = '';
       parseStatus.className = 'rcal-status';
-      // Auto-detect class name from filename
-      const classnameInput = document.getElementById('classnameInput');
-      const plannerStreamSelect = document.getElementById('plannerStreamSelect');
       const classnameAutoHint = document.getElementById('classnameAutoHint');
       const fname = pdfFileInput.files.length ? pdfFileInput.files[0].name : '';
-      let detected = '';
-      const previousValue = classnameInput.value.trim();
-      if (/middle\s*school|mfood/i.test(fname)) {
-        detected = getDefaultClassNameForStream('Middle');
-        plannerStreamSelect.value = 'Middle';
-      } else if (/junior\s*school|jfood/i.test(fname)) {
-        detected = getDefaultClassNameForStream('Junior');
-        plannerStreamSelect.value = 'Junior';
-      } else if (/senior\s*school|hosp|hp100/i.test(fname)) {
-        detected = getDefaultClassNameForStream('Senior');
-        plannerStreamSelect.value = 'Senior';
-      }
-      if (detected) {
-        classnameInput.value = detected;
-        applyGlobalClassNameToRows(previousValue);
-        classnameAutoHint.style.display = '';
+      const detectedDefaults = detectPlannerDefaults(fname);
+      if (detectedDefaults) {
+        applyDetectedPlannerDefaults(detectedDefaults);
       } else {
         classnameAutoHint.style.display = 'none';
       }
@@ -429,6 +442,8 @@
         if (data.rawText) {
           rawTextBox.textContent = data.rawText;
           rawToggleBtn.hidden = false;
+          // Refine auto-detection using the document title/content when available.
+          applyDetectedPlannerDefaults(detectPlannerDefaults(data.rawText));
         }
 
         if (!weeks.length) {
