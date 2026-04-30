@@ -613,6 +613,103 @@ function parseCalendarText(text, pdfUrls = []) {
 }
 
 /**
+ * Parse a Junior-school spreadsheet (.xlsx) planner.
+ * Columns: A = "Week N" label, B = recipe link (hyperlinked), C = recipe name.
+ * Returns: { weeks: [{weekNum, term, startDate, recipe, url, confidence}], xlsxMode: true }
+ */
+async function parseXlsxCalendar(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+
+  // Shared strings
+  const ssEntry = zip.file('xl/sharedStrings.xml');
+  const strings = [];
+  if (ssEntry) {
+    const ssXml = await ssEntry.async('string');
+    const siRe = /<si>([\s\S]*?)<\/si>/g;
+    let m;
+    while ((m = siRe.exec(ssXml)) !== null) {
+      strings.push(decodeXmlEntities(m[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()));
+    }
+  }
+
+  // Hyperlink rels: rId → URL
+  const relsEntry = zip.file('xl/worksheets/_rels/sheet1.xml.rels');
+  const urlMap = new Map();
+  if (relsEntry) {
+    const relsXml = await relsEntry.async('string');
+    const relRe = /<Relationship\b[^>]*/g;
+    let rm;
+    while ((rm = relRe.exec(relsXml)) !== null) {
+      const tag = rm[0];
+      if (!/\/hyperlink/.test(tag)) continue;
+      const idM = tag.match(/\bId="([^"]+)"/);
+      const tgtM = tag.match(/\bTarget="([^"]+)"/);
+      if (idM && tgtM) urlMap.set(idM[1], decodeXmlEntities(tgtM[1]));
+    }
+  }
+
+  // Sheet data
+  const sheetEntry = zip.file('xl/worksheets/sheet1.xml');
+  if (!sheetEntry) return { weeks: [], xlsxMode: true };
+  const sheetXml = await sheetEntry.async('string');
+
+  // Map cell ref → rId from <hyperlink> elements
+  const cellHlMap = new Map();
+  const hlRe = /<hyperlink\b([^>]*)\/?>/g;
+  let hlm;
+  while ((hlm = hlRe.exec(sheetXml)) !== null) {
+    const attrs = hlm[1];
+    const refM = attrs.match(/\bref="([^"]+)"/);
+    const ridM = attrs.match(/\br:id="([^"]+)"/);
+    if (refM && ridM) cellHlMap.set(refM[1], ridM[1]);
+  }
+
+  // Parse rows
+  const weeks = [];
+  const rowRe = /<row\b[^>]*\br="(\d+)"[^>]*>([\s\S]*?)<\/row>/g;
+  let rowM;
+  while ((rowM = rowRe.exec(sheetXml)) !== null) {
+    const rowXml = rowM[2];
+    const cellData = {};
+    const cellRe = /<c\b[^>]*\br="([A-Z]+)(\d+)"([^>]*)>([\s\S]*?)<\/c>/g;
+    let cm;
+    while ((cm = cellRe.exec(rowXml)) !== null) {
+      const col = cm[1], rowNum = cm[2], attrs = cm[3], inner = cm[4];
+      const ref = col + rowNum;
+      let value = '';
+      if (/t="s"/.test(attrs)) {
+        const vM = inner.match(/<v>(\d+)<\/v>/);
+        if (vM) value = strings[parseInt(vM[1])] || '';
+      } else {
+        const isM = inner.match(/<is>([\s\S]*?)<\/is>/);
+        if (isM) value = decodeXmlEntities(isM[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim());
+        else { const vM = inner.match(/<v>([^<]*)<\/v>/); if (vM) value = vM[1]; }
+      }
+      const rId = cellHlMap.get(ref);
+      const url = rId ? (urlMap.get(rId) || '') : '';
+      cellData[col] = { value, url };
+    }
+
+    const colA = cellData['A'];
+    if (!colA) continue;
+    const weekMatch = colA.value.match(/week\s*(\d+)/i);
+    if (!weekMatch) continue;
+
+    const weekNum = parseInt(weekMatch[1]);
+    const recipe = (cellData['C'] && cellData['C'].value) || (cellData['B'] && cellData['B'].value) || '';
+    const url = (cellData['B'] && cellData['B'].url)
+      || (cellData['C'] && cellData['C'].url)
+      || (cellData['D'] && cellData['D'].url)
+      || '';
+    if (!recipe) continue;
+
+    weeks.push({ weekNum, term: 0, startDate: '', recipe, url, confidence: 'auto' });
+  }
+
+  return { weeks, xlsxMode: true };
+}
+
+/**
  * POST /api/recipe_calendar_pdf/parse
  * Body: { fileDataUrl: 'data:application/pdf;base64,...' }
  * Returns: { weeks: [...] }
@@ -625,22 +722,26 @@ router.post('/parse', async (req, res) => {
     return res.status(400).json({ error: 'fileDataUrl is required.' });
   }
 
-  // Accept PDF or DOCX data URLs (plus legacy bare base64 PDF).
+  // Accept PDF, DOCX, or XLSX data URLs (plus legacy bare base64 PDF).
   let fileBuffer;
   let fileType = 'pdf';
   const pdfDataUrlMatch = /^data:application\/pdf(?:;[^,]*)?;base64,(.+)$/i.exec(rawDataUrl);
   const docxDataUrlMatch = /^data:application\/vnd\.openxmlformats-officedocument\.wordprocessingml\.document(?:;[^,]*)?;base64,(.+)$/i.exec(rawDataUrl);
+  const xlsxDataUrlMatch = /^data:application\/vnd\.openxmlformats-officedocument\.spreadsheetml\.sheet(?:;[^,]*)?;base64,(.+)$/i.exec(rawDataUrl);
   if (pdfDataUrlMatch) {
     fileBuffer = Buffer.from(pdfDataUrlMatch[1], 'base64');
     fileType = 'pdf';
   } else if (docxDataUrlMatch) {
     fileBuffer = Buffer.from(docxDataUrlMatch[1], 'base64');
     fileType = 'docx';
+  } else if (xlsxDataUrlMatch) {
+    fileBuffer = Buffer.from(xlsxDataUrlMatch[1], 'base64');
+    fileType = 'xlsx';
   } else if (/^[A-Za-z0-9+/]+=*$/.test(rawDataUrl.replace(/\s/g, ''))) {
     fileBuffer = Buffer.from(rawDataUrl.replace(/\s/g, ''), 'base64');
     fileType = 'pdf';
   } else {
-    return res.status(400).json({ error: 'fileDataUrl must be a base64-encoded PDF/DOCX data URL.' });
+    return res.status(400).json({ error: 'fileDataUrl must be a base64-encoded PDF/DOCX/XLSX data URL.' });
   }
 
   if (fileBuffer.length > 20 * 1024 * 1024) {
@@ -648,6 +749,14 @@ router.post('/parse', async (req, res) => {
   }
 
   try {
+    if (fileType === 'xlsx') {
+      const xlsxParsed = await parseXlsxCalendar(fileBuffer);
+      if (!xlsxParsed.weeks.length) {
+        return res.status(400).json({ error: 'No week entries found in spreadsheet. Ensure column A has "Week N" labels and column C has recipe names.' });
+      }
+      return res.json(xlsxParsed);
+    }
+
     if (fileType === 'docx') {
       const docxParsed = await parseDocxCalendar(fileBuffer);
       if (!docxParsed.weeks.length) {

@@ -209,9 +209,9 @@
     <!-- Step 1: Upload -->
     <div class="rcal-card" id="uploadCard">
       <h2>Step 1 — Upload File</h2>
-      <div class="rcal-card-sub">Select your planner file (.pdf or .docx). Only the Practical Lessons row is imported.</div>
+      <div class="rcal-card-sub">Select your planner file (.pdf, .docx, or .xlsx). For DOCX/PDF only the Practical Lessons row is imported.</div>
       <div class="rcal-upload-row">
-        <input type="file" id="pdfFileInput" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-label="Select planner file">
+        <input type="file" id="pdfFileInput" accept="application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Select planner file">
         <button class="rcal-btn" id="parseBtn" disabled>Extract Schedule</button>
       </div>
       <div class="rcal-status" id="parseStatus" role="status" aria-live="polite"></div>
@@ -245,6 +245,13 @@
           <option value="Junior">Junior</option>
           <option value="Senior">Senior (HOSP)</option>
         </select>
+      </div>
+
+      <!-- Term start date (shown for spreadsheet uploads that have no dates) -->
+      <div id="xlsxDateHelper" hidden style="margin-bottom:1rem;padding:0.75rem 1rem;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;">
+        <label for="xlsxTermStartDate" style="font-weight:600;font-size:0.95rem;color:#166534;">&#128197; Week 1 start date (Monday):</label>
+        <input type="date" id="xlsxTermStartDate" style="border:1px solid #86efac;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;margin-left:0.5rem;">
+        <span style="font-size:0.85rem;color:#4b5563;margin-left:0.6rem;">Enter the Monday of Week 1 to auto-fill all dates.</span>
       </div>
 
       <div style="margin-bottom:1rem;font-size:0.9rem;color:#4b5563;">
@@ -348,7 +355,7 @@
       if (/senior\s*school|hosp|hp100|hp300|year\s*13|13hosp/i.test(text)) {
         return { stream: 'Senior', className: getDefaultClassNameForStream('Senior') };
       }
-      if (/junior\s*school|jfood/i.test(text)) {
+      if (/junior(?:\s*school|\s*recipes?|\s*food)?|jfood/i.test(text)) {
         return { stream: 'Junior', className: getDefaultClassNameForStream('Junior') };
       }
       if (/middle\s*school|mfood/i.test(text)) {
@@ -413,6 +420,32 @@
       rawToggleBtn.textContent = hidden ? 'Hide raw extracted text' : 'Show raw extracted text';
     });
 
+    // Track whether current data came from a spreadsheet (no dates embedded)
+    let xlsxModeActive = false;
+    let xlsxWeekNums = []; // parallel array of weekNums for xlsx rows
+
+    document.getElementById('xlsxTermStartDate').addEventListener('change', function() {
+      const val = this.value;
+      if (!val || !xlsxModeActive) return;
+      const base = new Date(val + 'T00:00:00');
+      // Ensure it's a Monday; snap forward if not
+      const dow = base.getDay(); // 0=Sun,1=Mon...
+      if (dow !== 1) {
+        const diff = dow === 0 ? 1 : (8 - dow);
+        base.setDate(base.getDate() + diff);
+        // Update input to reflect corrected Monday
+        this.value = base.toISOString().slice(0, 10);
+      }
+      const rows = Array.from(reviewTableBody.querySelectorAll('tr'));
+      rows.forEach((tr, i) => {
+        const weekNum = xlsxWeekNums[i];
+        if (!weekNum) return;
+        const d = new Date(base);
+        d.setDate(d.getDate() + (weekNum - 1) * 7);
+        tr.querySelector('.rcal-date').value = d.toISOString().slice(0, 10);
+      });
+    });
+
     parseBtn.addEventListener('click', async () => {
       const file = pdfFileInput.files[0];
       if (!file) return;
@@ -439,11 +472,23 @@
         }
 
         const weeks = data.weeks || [];
+        xlsxModeActive = !!data.xlsxMode;
+        xlsxWeekNums = [];
+        document.getElementById('xlsxDateHelper').hidden = !xlsxModeActive;
+        document.getElementById('xlsxTermStartDate').value = '';
+
         if (data.rawText) {
           rawTextBox.textContent = data.rawText;
           rawToggleBtn.hidden = false;
           // Refine auto-detection using the document title/content when available.
           applyDetectedPlannerDefaults(detectPlannerDefaults(data.rawText));
+        }
+
+        // For xlsx, try to detect term number from filename (e.g. T2)
+        if (xlsxModeActive) {
+          const termMatch = file.name.match(/[_\s-]T(\d)/i);
+          const termNum = termMatch ? parseInt(termMatch[1]) : 0;
+          weeks.forEach(w => { w.term = termNum; });
         }
 
         if (!weeks.length) {
@@ -456,9 +501,13 @@
           return;
         }
 
-        injectMissingWeek1s(weeks);
+        if (!xlsxModeActive) injectMissingWeek1s(weeks);
         parseStatus.className = 'rcal-status ok';
         parseStatus.textContent = `Extracted ${weeks.length} week(s). Review below and correct any errors before saving.`;
+        if (xlsxModeActive) {
+          xlsxWeekNums = weeks.map(w => w.weekNum);
+          parseStatus.textContent += ' Enter Week 1 start date above to auto-fill dates.';
+        }
         renderTable(weeks);
         reviewCard.hidden = false;
         reviewCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
