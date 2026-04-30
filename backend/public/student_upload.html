@@ -11,6 +11,26 @@
     <script src="shared/navbar_loader.js"></script>
     <div class="container" style="max-width:900px;margin:2rem auto;background:#fff;padding:2rem;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.08);">
         <h1>Upload Student Timetable</h1>
+        <details style="margin:0 0 1rem; border:1px solid #d8dee6; border-radius:10px; padding:0.75rem 0.9rem; background:#f8fbff;">
+            <summary style="cursor:pointer; font-weight:700; color:#1f2937;">How to export Student Timetable CSV from Kamar</summary>
+            <ol style="margin:0.8rem 0 0; padding-left:1.2rem; color:#1f2937;">
+                <li style="margin-bottom:0.6rem;">
+                    In Kamar, open <strong>Reporting</strong> from the top menu.
+                </li>
+                <li style="margin-bottom:0.6rem;">
+                    Select <strong>Timetable</strong>, then choose <strong>Student Timetable Summary</strong>.
+                </li>
+                <li style="margin-bottom:0.6rem;">
+                    In the student filter panel, select the students you want (or use <strong>Select All</strong> if needed), then click <strong>OK</strong>.
+                </li>
+                <li style="margin-bottom:0.6rem;">
+                    Open the <strong>Actions</strong> tab and choose <strong>Spreadsheet</strong>.
+                </li>
+                <li>
+                    In the <strong>Download Files</strong> dialog, click the generated CSV file to download it, then upload that CSV here.
+                </li>
+            </ol>
+        </details>
         <form id="uploadForm">
             <label for="csvFile">Upload Student Timetable CSV File:</label>
             <input type="file" id="csvFile" accept=".csv" required />
