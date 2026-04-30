@@ -107,7 +107,6 @@ router.get('/ical', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM bookings
-       WHERE staff_id IS NOT NULL AND staff_id <> ''
        ORDER BY booking_date, period`
     );
 
@@ -166,7 +165,7 @@ router.get('/ical', async (req, res) => {
 
     lines.push('END:VCALENDAR');
 
-    const body = lines.map(foldLine).join('\r\n');
+    const body = lines.join('\r\n');
     res.setHeader('Content-Type', 'text/calendar; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="booking_schedule.ics"');
     res.send(body);

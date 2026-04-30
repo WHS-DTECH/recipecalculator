@@ -203,7 +203,7 @@
     <h1 style="margin:0 0 0.25rem;color:#1f2937;">Upload Year Planner</h1>
     <p style="color:#4a5568;margin:0 0 1.5rem;font-size:0.97rem;">
       Upload your year-planner PDF to automatically extract the recipe schedule week by week.
-      Review and correct the data before saving it as bookings.
+      Review and correct the data before saving it to the Year Planner.
     </p>
 
     <!-- Step 1: Upload -->
@@ -228,7 +228,7 @@
         Check each row. Edit the date, recipe or class name as needed. Rows marked
         <span class="rcal-badge-auto">auto</span> were detected automatically.
         Rows marked <span class="rcal-badge-missing">missing</span> need a recipe filled in.
-        Choose which periods and class this applies to, then click <strong>Save as Bookings</strong>.
+        Choose which periods and class this applies to, then click <strong>Save to Year Planner</strong>.
       </div>
 
       <div style="margin-bottom:1rem;">
@@ -270,17 +270,16 @@
       <button class="rcal-add-row-btn" id="addRowBtn" type="button">+ Add row</button>
 
       <div style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
-        <button class="rcal-btn rcal-btn-green" id="saveBtn">Save as Bookings</button>
+        <button class="rcal-btn rcal-btn-green" id="saveBtn">Save to Year Planner</button>
         <div class="rcal-status" id="saveStatus" role="status" aria-live="polite"></div>
       </div>
     </div>
 
     <!-- Google Calendar iCal Section -->
     <div class="rcal-card">
-      <h2>Subscribe to Booking Schedule in Google Calendar</h2>
+      <h2>Subscribe to Year Planner in Google Calendar</h2>
       <div class="rcal-card-sub">
-        This live calendar feed includes all bookings that have a teacher allocated.
-        When teachers are assigned, the calendar updates automatically.
+        This live calendar feed shows all saved Year Planner entries.
         Copy the link below and add it to Google Calendar as a URL calendar.
       </div>
       <div class="rcal-ical-section">
