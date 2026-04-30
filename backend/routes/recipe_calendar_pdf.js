@@ -33,6 +33,8 @@ function decodeXmlEntities(text) {
     .replace(/&#39;/g, "'");
 }
 
+  const PRACTICAL_HEADER_PATTERN = /Practical(?:\s*(?:Lessons?|&\s*Assessment|and\s*Assessment))?/i;
+
 function parseStartDateFromWeekCell(cellText, year) {
   const text = String(cellText || '').replace(/\s+/g, ' ').trim();
 
@@ -119,7 +121,7 @@ async function parseDocxCalendar(buffer) {
     let practicalRow = null;
     for (let j = wrIdx + 1; j < Math.min(rows.length, wrIdx + 12); j++) {
       const rowText = rows[j].map((c) => c.text).join(' ');
-      if (/Practical\s*Lessons?/i.test(rowText)) {
+      if (PRACTICAL_HEADER_PATTERN.test(rowText)) {
         practicalRow = rows[j];
         break;
       }
@@ -171,6 +173,15 @@ async function parseDocxCalendar(buffer) {
       d.setDate(d.getDate() - 7);
       week1.startDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
+  }
+
+  if (!results.length) {
+    // Fallback for planners that don't use a strict week-row + practical-row table layout.
+    const parsed = parseCalendarText(fullText, []);
+    return {
+      weeks: parsed.weeks || [],
+      rawText: fullText.slice(0, 3000)
+    };
   }
 
   return {
@@ -371,7 +382,7 @@ function extractPracticalSections(termBlocks, fullText, getTermForIndex) {
 
   // Primary matcher: explicit "Practical Lessons" text within each term block.
   for (const block of termBlocks) {
-    const practicalPattern = /Practical\s*Lessons?\s*([\s\S]*?)(?=(?:\n\s*(?:Content|Assessment|ATL|Theory|Resources?)\b|TERM\s+\d|$))/gi;
+    const practicalPattern = /Practical(?:\s*(?:Lessons?|&\s*Assessment|and\s*Assessment))?\s*([\s\S]*?)(?=(?:\n\s*(?:Content|Assessment|ATL|Theory|Resources?)\b|TERM\s+\d|$))/gi;
     while ((m = practicalPattern.exec(block.text)) !== null) {
       const section = String(m[1] || '').trim();
       if (section) sections.push({ term: block.term, section });

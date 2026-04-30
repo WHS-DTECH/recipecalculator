@@ -6,17 +6,19 @@ let schemaReady = false;
 async function ensureSchema() {
   if (schemaReady) return;
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS recipe_url TEXT DEFAULT ''");
+  await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS planner_stream TEXT DEFAULT 'Middle'");
+  await pool.query("UPDATE bookings SET planner_stream='Middle' WHERE planner_stream IS NULL OR planner_stream=''");
   schemaReady = true;
 }
 
 // Update a booking by ID
 router.put('/:id', async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size } = req.body;
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = req.body;
   try {
     await ensureSchema();
     await pool.query(
-      'UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9 WHERE id=$10',
-      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, req.params.id]
+      "UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9, planner_stream=COALESCE($10, planner_stream, 'Middle') WHERE id=$11",
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || null, req.params.id]
     );
     res.json({ success: true });
   } catch (err) {
@@ -37,12 +39,12 @@ router.delete('/:id', async (req, res) => {
 
 // Create a new booking
 router.post('/', async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size } = req.body;
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = req.body;
   try {
     await ensureSchema();
     const result = await pool.query(
-      'INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id',
-      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size]
+      "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
     );
     res.json({ success: true, booking_id: result.rows[0].id });
   } catch (err) {
@@ -145,7 +147,8 @@ router.get('/ical', async (req, res) => {
     const seen = new Set();
     for (const b of bookings) {
       const recipe = String(b.recipe || '').trim();
-      const key = `${b.booking_date}|${recipe}|${b.class_name || ''}`;
+      const stream = String(b.planner_stream || 'Middle').trim();
+      const key = `${b.booking_date}|${recipe}|${b.class_name || ''}|${stream}`;
       if (seen.has(key)) continue;
       seen.add(key);
 
@@ -158,6 +161,7 @@ router.get('/ical', async (req, res) => {
       const summary = [recipe, b.class_name].filter(Boolean).join(' \u2013 ');
       const description = [
         recipe ? `Recipe: ${recipe}` : '',
+        stream ? `Planner stream: ${stream}` : '',
         b.class_name ? `Class: ${b.class_name}` : '',
         b.staff_name ? `Teacher: ${b.staff_name}` : '',
         b.class_size ? `Class size: ${b.class_size}` : ''

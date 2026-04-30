@@ -239,6 +239,15 @@
       </div>
 
       <div style="margin-bottom:1rem;">
+        <label for="plannerStreamSelect" style="font-weight:600;font-size:0.95rem;">School:</label>
+        <select id="plannerStreamSelect" style="border:1px solid #c8d3de;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;width:220px;margin-left:0.5rem;">
+          <option value="Middle" selected>Middle</option>
+          <option value="Junior">Junior</option>
+          <option value="Senior">Senior (HOSP)</option>
+        </select>
+      </div>
+
+      <div style="margin-bottom:1rem;">
         <span style="font-weight:600;font-size:0.95rem;">Period(s) to create booking for each week:</span>
         <div class="rcal-period-options" id="periodOptions" style="margin-top:0.4rem;">
           <label><input type="checkbox" name="period" value="1"> P1</label>
@@ -339,12 +348,20 @@
       parseStatus.className = 'rcal-status';
       // Auto-detect class name from filename
       const classnameInput = document.getElementById('classnameInput');
+      const plannerStreamSelect = document.getElementById('plannerStreamSelect');
       const classnameAutoHint = document.getElementById('classnameAutoHint');
       const fname = pdfFileInput.files.length ? pdfFileInput.files[0].name : '';
       let detected = '';
-      if (/middle\s*school/i.test(fname)) detected = 'MFOOD';
-      else if (/junior\s*school/i.test(fname)) detected = 'JFOOD';
-      else if (/senior\s*school/i.test(fname)) detected = 'HOSP';
+      if (/middle\s*school|mfood/i.test(fname)) {
+        detected = 'MFOOD';
+        plannerStreamSelect.value = 'Middle';
+      } else if (/junior\s*school|jfood/i.test(fname)) {
+        detected = 'JFOOD';
+        plannerStreamSelect.value = 'Junior';
+      } else if (/senior\s*school|hosp|hp100/i.test(fname)) {
+        detected = 'HOSP';
+        plannerStreamSelect.value = 'Senior';
+      }
       if (detected) {
         classnameInput.value = detected;
         classnameAutoHint.style.display = '';
@@ -498,6 +515,7 @@
       }
 
       const globalClassName = document.getElementById('classnameInput').value.trim();
+      const plannerStream = document.getElementById('plannerStreamSelect').value || 'Middle';
       const bookings = [];
 
       for (const row of rows) {
@@ -514,6 +532,7 @@
             recipe: recipe,
             recipe_url: url,
             class_name: className,
+            planner_stream: plannerStream,
             staff_id: null,
             staff_name: null,
             recipe_id: null,
