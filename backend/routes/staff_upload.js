@@ -90,8 +90,21 @@ router.post('/', requireAdmin, async (req, res) => {
   const titleIdx = getIndexByAliases(headers, ['title']);
   const emailIdx = getIndexByAliases(headers, ['email_school', 'email school', 'email', 'school_email', 'email_address', 'email address']);
 
+  const missingHeaders = [];
+  if (codeIdx < 0) missingHeaders.push('Code');
+  if (lastNameIdx < 0) missingHeaders.push('Last Name');
+  if (firstNameIdx < 0) missingHeaders.push('First Name');
+  if (titleIdx < 0) missingHeaders.push('Title');
+  if (emailIdx < 0) missingHeaders.push('Email (School)');
+  if (missingHeaders.length > 0) {
+    return res.json({
+      success: false,
+      error: `CSV is missing required headers: ${missingHeaders.join(', ')}`
+    });
+  }
+
   // If headers are missing or unrecognized, keep legacy positional mapping.
-  const useHeaderMapping = headers.length > 0 && emailIdx >= 0;
+  const useHeaderMapping = headers.length > 0;
 
   // Keep only rows with email_school and deduplicate by normalized email.
   const byEmail = new Map();

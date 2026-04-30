@@ -100,6 +100,34 @@ function escHtml(str) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+function normalizeHeader(value) {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function csvHasAnyAlias(headers, aliases) {
+  const normalizedHeaders = (headers || []).map(normalizeHeader);
+  return aliases.some(alias => normalizedHeaders.includes(normalizeHeader(alias)));
+}
+
+function validateRequiredCsvHeaders(headers) {
+  const required = [
+    { label: 'Code', aliases: ['code', 'staff_code', 'staff code'] },
+    { label: 'Last Name', aliases: ['last_name', 'last name', 'surname', 'family_name'] },
+    { label: 'First Name', aliases: ['first_name', 'first name', 'given_name', 'forename'] },
+    { label: 'Title', aliases: ['title'] },
+    { label: 'Email (School)', aliases: ['email_school', 'email school', 'email', 'school_email', 'email_address', 'email address'] }
+  ];
+
+  const missing = required
+    .filter(field => !csvHasAnyAlias(headers, field.aliases))
+    .map(field => field.label);
+
+  return {
+    ok: missing.length === 0,
+    missing
+  };
+}
+
 function renderStaffUploadTable(rows) {
   const container = document.getElementById('departmentTableContainer');
   if (!container) return;
@@ -163,6 +191,15 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
       return;
     }
     const headers = rows[0];
+    const headerValidation = validateRequiredCsvHeaders(headers);
+    if (!headerValidation.ok) {
+      document.getElementById('uploadResult').textContent =
+        'CSV is missing required fields: ' + headerValidation.missing.join(', ') +
+        '. Please export again from Kamar with Default Fields and Column Headings enabled.';
+      hideUploadProgress();
+      if (submitBtn) submitBtn.disabled = false;
+      return;
+    }
     const data = rows.slice(1).filter(rowArr => rowArr.length === headers.length && rowArr.join() !== headers.join());
     setUploadProgress(`Uploading ${data.length} rows...`, 45);
 
