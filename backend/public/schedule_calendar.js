@@ -457,7 +457,8 @@ async function renderScheduleCalendar() {
       html += `<td style='vertical-align:top;text-align:center;padding:0.2rem 0.1rem;'>` +
         plannerEntries.map(entry => {
           const style = plannerChipStyle(normalizePlannerStream(entry));
-          return `<div class='planner-chip' data-booking-id='${entry.id}' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;'><span>${escHtml(entry.recipe)}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:0.9em;opacity:0.6;padding:0 1px;line-height:1;flex-shrink:0;' aria-label='Delete ${escHtml(entry.recipe)}'>&#x2715;</button></div>`;
+          const safeRecipe = escHtml(entry.recipe);
+          return `<div class='planner-chip' data-booking-id='${entry.id}' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div>`;
         }).join('') +
         `</td>`;
     } else {
@@ -507,23 +508,6 @@ async function renderScheduleCalendar() {
     <span style="background:#ffedd5;border:1px solid #fdba74;color:#9a3412;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Senior (HOSP)</span>
     <span style="font-size:0.75rem;color:#6b7280;margin-left:0.25rem;">Click &#x2715; on a chip to delete it.</span>
   </div>`;
-
-  // Delete handler for planner chips
-  table.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.planner-delete-btn');
-    if (!btn) return;
-    const id = btn.dataset.bookingId;
-    if (!id) return;
-    const chip = btn.closest('.planner-chip');
-    const recipeName = chip ? chip.querySelector('span') ? chip.querySelector('span').textContent : '' : '';
-    if (!confirm(`Delete planner entry "${recipeName}"?`)) return;
-    try {
-      const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
-      if (!res.ok) { alert('Failed to delete entry.'); return; }
-      await renderScheduleCalendar();
-    } catch { alert('Error deleting entry.'); }
-  }, { capture: false });
-
   // Add or update the Selected Bookings list below the calendar
   let selectedListDiv = document.getElementById('selected-bookings-list');
   if (!selectedListDiv) {
@@ -662,6 +646,25 @@ async function renderScheduleCalendar() {
 document.addEventListener('DOMContentLoaded', () => {
   if (document.documentElement) {
     document.documentElement.lang = String(userLocale || 'en');
+    // One-time delete handler for planner chips (event delegation on document)
+    document.addEventListener('click', async (e) => {
+      const btn = e.target.closest('.planner-delete-btn');
+      if (!btn) return;
+      // Only handle clicks inside the schedule calendar table
+      if (!btn.closest('#scheduleCalendarTable')) return;
+      const id = btn.dataset.bookingId;
+      if (!id) return;
+      // aria-label is "Delete <recipe>" and the browser decodes HTML entities for us
+      const ariaLabel = btn.getAttribute('aria-label') || '';
+      const recipeName = ariaLabel.startsWith('Delete ') ? ariaLabel.slice(7) : (btn.dataset.recipe || '');
+      if (!confirm(`Delete planner entry "${recipeName}"?`)) return;
+      btn.disabled = true;
+      try {
+        const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+        if (!res.ok) { alert('Failed to delete entry.'); btn.disabled = false; return; }
+        await renderScheduleCalendar();
+      } catch { alert('Error deleting entry.'); btn.disabled = false; }
+    });
   }
   renderScheduleCalendar();
   // Add click handler for compare button

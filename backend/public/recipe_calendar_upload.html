@@ -780,18 +780,21 @@
     document.getElementById('miniCalWeekendBtn').onclick = () => { miniCalShowWeekends = !miniCalShowWeekends; renderMiniCal(); };
 
     // Delete handler for mini-cal chips (event delegation on the grid container)
-    document.getElementById('miniCalGrid').addEventListener('click', async (e) => {
+    document.addEventListener('click', async (e) => {
       const btn = e.target.closest('.mini-cal-delete-btn');
       if (!btn) return;
+      if (!btn.closest('#miniCalGrid')) return;
       const id = btn.dataset.bookingId;
-      const recipe = btn.dataset.recipe || '';
+      const ariaLabel = btn.getAttribute('aria-label') || '';
+      const recipe = ariaLabel.startsWith('Delete ') ? ariaLabel.slice(7) : (btn.dataset.recipe || '');
       if (!id) return;
       if (!confirm(`Delete planner entry "${recipe}"?`)) return;
+      btn.disabled = true;
       try {
         const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
-        if (!res.ok) { alert('Failed to delete entry.'); return; }
+        if (!res.ok) { alert('Failed to delete entry.'); btn.disabled = false; return; }
         await renderMiniCal();
-      } catch { alert('Error deleting entry.'); }
+      } catch { alert('Error deleting entry.'); btn.disabled = false; }
     });
 
     renderMiniCal();
