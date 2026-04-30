@@ -240,9 +240,9 @@ function extractPracticalSections(termBlocks, fullText, getTermForIndex) {
  * Parse the raw PDF text extracted from the year planner PDF.
  * Strategy: scan for TERM markers, then Week N + date range patterns,
  * then extract recipes from the "Practical Lessons" section.
- * Returns an array of { term, weekNum, dateRange, startDate, recipe, notes }
+ * Returns an array of { term, weekNum, dateRange, startDate, recipe, url, notes }
  */
-function parseCalendarText(text) {
+function parseCalendarText(text, pdfUrls = []) {
   const results = [];
 
   // Detect the year from "Calendar - YYYY" or similar
@@ -383,18 +383,28 @@ function parseCalendarText(text) {
     condensedRecipes = condensedRecipes.slice(0, allWeeks.length);
   }
 
-  // Zip weeks and recipes, extracting URLs where present
+  // Zip weeks and recipes, using URLs from PDF or extracted from text
+  // pdfUrls contains hyperlinks in order as they appear in the PDF
+  let pdfUrlIndex = 0;
   for (let i = 0; i < allWeeks.length; i++) {
     const w = allWeeks[i];
     const recipeRaw = condensedRecipes[i] || '';
-    const { recipe, url } = extractUrlFromRecipe(recipeRaw);
+    const { recipe, url: textUrl } = extractUrlFromRecipe(recipeRaw);
+    
+    // Prefer URL from text extraction, fall back to sequential PDF URLs
+    let finalUrl = textUrl;
+    if (!finalUrl && pdfUrlIndex < pdfUrls.length) {
+      finalUrl = pdfUrls[pdfUrlIndex];
+      pdfUrlIndex++;
+    }
+    
     results.push({
       term: w.term,
       weekNum: w.weekNum,
       dateRange: w.dateRange || '',
       startDate: w.startDate || '',
       recipe: recipe,
-      url: url,
+      url: finalUrl,
       confidence: recipeRaw ? 'auto' : 'missing'
     });
   }
@@ -429,9 +439,25 @@ router.post('/parse', async (req, res) => {
   }
 
   try {
+    const pdfjsLib = require('pdfjs-dist/legacy/build/pdf');
+    const pdfDoc = await pdfjsLib.getDocument(new Uint8Array(pdfBuffer)).promise;
+    
+    // Extract links from PDF annotations
+    const linksByText = new Map();
+    for (let pageNum = 1; pageNum <= pdfDoc.numPages; pageNum++) {
+      const page = await pdfDoc.getPage(pageNum);
+      const annotations = await page.getAnnotations();
+      for (const annot of annotations || []) {
+        if (annot.subtype === 'Link' && annot.url) {
+          // Store URL by approximate text position as fallback matching
+          linksByText.set(`page${pageNum}_${Math.floor(annot.y)}`, annot.url);
+        }
+      }
+    }
+    
     const parsed = await pdfParse(pdfBuffer);
     const rawText = parsed.text || '';
-    const weeks = parseCalendarText(rawText);
+    const weeks = parseCalendarText(rawText, linksByText);
     res.json({ weeks, rawText: rawText.slice(0, 3000) }); // rawText preview for debugging
   } catch (err) {
     res.status(500).json({ error: 'Failed to parse PDF: ' + (err.message || String(err)) });
