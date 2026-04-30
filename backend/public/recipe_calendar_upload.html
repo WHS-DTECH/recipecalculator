@@ -305,6 +305,14 @@
 
       <!-- Mini calendar preview -->
       <div style="margin-top:1.25rem;border-top:1px solid #e5e7eb;padding-top:1rem;">
+        <!-- Legend -->
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;font-size:0.79rem;margin-bottom:0.65rem;">
+          <span style="font-weight:600;color:#374151;">Legend:</span>
+          <span style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Middle School</span>
+          <span style="background:#dcfce7;border:1px solid #86efac;color:#166534;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Junior School</span>
+          <span style="background:#ffedd5;border:1px solid #fdba74;color:#9a3412;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Senior (HOSP)</span>
+          <span style="font-size:0.74rem;color:#6b7280;">Click &#x2715; on an entry to delete it.</span>
+        </div>
         <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.75rem;">
           <button id="miniCalPrevBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8249;</button>
           <strong id="miniCalMonthLabel" style="flex:1;text-align:center;font-size:0.97rem;color:#1f2937;"></strong>
@@ -725,10 +733,8 @@
         const snapped = snapToMonday(b.booking_date);
         const parts = snapped.split('-').map(Number);
         if (parts[0] !== year || parts[1] - 1 !== month) continue;
-        if (!byDate[snapped]) byDate[snapped] = new Map();
-        const recipe = String(b.recipe).trim();
-        const stream = normalizePlannerStream(b);
-        byDate[snapped].set(`${recipe}|${stream}`, { recipe, stream });
+        if (!byDate[snapped]) byDate[snapped] = [];
+        byDate[snapped].push({ id: b.id, recipe: String(b.recipe).trim(), stream: normalizePlannerStream(b) });
       }
 
       const lastDay = new Date(year, month + 1, 0).getDate();
@@ -746,14 +752,14 @@
 
       for (let day = 1; day <= lastDay; day++) {
         const iso = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        const entries = byDate[iso] ? [...byDate[iso].values()] : [];
+        const entries = byDate[iso] ? byDate[iso] : [];
         const isToday = iso === todayIso;
         const dowMon0 = (new Date(year, month, day).getDay() + 6) % 7;
         html += `<td style="border:1px solid #f3f4f6;vertical-align:top;padding:3px 2px;height:56px;${isToday ? 'background:#eff6ff;' : ''}${(!miniCalShowWeekends && dowMon0 >= 5) ? 'display:none;' : ''}">` +
           `<div style="font-size:0.78rem;font-weight:${isToday ? '700' : '600'};color:${isToday ? '#1d4ed8' : '#374151'};margin-bottom:2px;">${day}</div>` +
           entries.map(e => {
             const chip = streamChipStyle(e.stream);
-            return `<div style="background:${chip.bg};border:1px solid ${chip.border};border-radius:3px;padding:1px 3px;font-size:0.68rem;color:${chip.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;" title="${escHtml(e.recipe)} (${e.stream})">${escHtml(e.recipe)}</div>`;
+            return `<div style="background:${chip.bg};border:1px solid ${chip.border};border-radius:3px;padding:1px 3px;font-size:0.68rem;color:${chip.text};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:1px;display:flex;align-items:center;gap:2px;" title="${escHtml(e.recipe)} (${e.stream})"><span style="flex:1;overflow:hidden;text-overflow:ellipsis;">${escHtml(e.recipe)}</span><button class="mini-cal-delete-btn" data-booking-id="${e.id}" data-recipe="${escHtml(e.recipe)}" style="background:none;border:none;cursor:pointer;color:${chip.text};font-size:0.75em;opacity:0.65;padding:0;line-height:1;flex-shrink:0;" title="Delete" aria-label="Delete ${escHtml(e.recipe)}">&#x2715;</button></div>`;
           }).join('') +
           '</td>';
         col++;
@@ -772,6 +778,22 @@
     document.getElementById('miniCalPrevBtn').onclick = () => { miniCalDate.setMonth(miniCalDate.getMonth() - 1); renderMiniCal(); };
     document.getElementById('miniCalNextBtn').onclick = () => { miniCalDate.setMonth(miniCalDate.getMonth() + 1); renderMiniCal(); };
     document.getElementById('miniCalWeekendBtn').onclick = () => { miniCalShowWeekends = !miniCalShowWeekends; renderMiniCal(); };
+
+    // Delete handler for mini-cal chips (event delegation on the grid container)
+    document.getElementById('miniCalGrid').addEventListener('click', async (e) => {
+      const btn = e.target.closest('.mini-cal-delete-btn');
+      if (!btn) return;
+      const id = btn.dataset.bookingId;
+      const recipe = btn.dataset.recipe || '';
+      if (!id) return;
+      if (!confirm(`Delete planner entry "${recipe}"?`)) return;
+      try {
+        const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+        if (!res.ok) { alert('Failed to delete entry.'); return; }
+        await renderMiniCal();
+      } catch { alert('Error deleting entry.'); }
+    });
+
     renderMiniCal();
   </script>
 </body>

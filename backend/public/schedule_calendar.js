@@ -443,7 +443,7 @@ async function renderScheduleCalendar() {
     html += `<tr style='background:#e3eafc;color:#222;'>
       <th style='width:48px;'></th>` + visibleWeekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${date.display}</th>`).join('') + '</tr></thead>';
 
-  // Planner row — year planner entries (no staff assigned), one chip per unique recipe per day
+  // Planner row — year planner entries, each shown individually with a delete button
   html += `<tr><td style='background:#e8eaf6;font-weight:bold;text-align:center;font-size:0.85em;color:#283593;padding:0.3rem 0.1rem;'>Planner</td>`;
   for (let d = 0; d < visibleDayIndices.length; ++d) {
     const dayIdx = visibleDayIndices[d];
@@ -453,18 +453,11 @@ async function renderScheduleCalendar() {
         snapToNearestMonday(b.booking_date) === dayIso &&
         String(b.recipe || '').trim()
     );
-    const uniqueByRecipeAndStream = new Map();
-    for (const entry of plannerEntries) {
-      const recipe = String(entry.recipe || '').trim();
-      const stream = normalizePlannerStream(entry);
-      uniqueByRecipeAndStream.set(`${recipe}|${stream}`, { recipe, stream });
-    }
-    const chips = [...uniqueByRecipeAndStream.values()];
-    if (chips.length) {
+    if (plannerEntries.length) {
       html += `<td style='vertical-align:top;text-align:center;padding:0.2rem 0.1rem;'>` +
-        chips.map(c => {
-          const style = plannerChipStyle(c.stream);
-          return `<div style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.15rem 0.22rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;'>${escHtml(c.recipe)}</div>`;
+        plannerEntries.map(entry => {
+          const style = plannerChipStyle(normalizePlannerStream(entry));
+          return `<div class='planner-chip' data-booking-id='${entry.id}' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;'><span>${escHtml(entry.recipe)}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:0.9em;opacity:0.6;padding:0 1px;line-height:1;flex-shrink:0;' aria-label='Delete ${escHtml(entry.recipe)}'>&#x2715;</button></div>`;
         }).join('') +
         `</td>`;
     } else {
@@ -499,6 +492,37 @@ async function renderScheduleCalendar() {
 
   table.setAttribute('aria-label', `Schedule calendar, week of ${formatDateLong(new Date(currentMonday))}`);
   table.innerHTML = html;
+
+  // Legend: inject above the table
+  let legendEl = document.getElementById('planner-stream-legend');
+  if (!legendEl) {
+    legendEl = document.createElement('div');
+    legendEl.id = 'planner-stream-legend';
+    table.parentNode.insertBefore(legendEl, table);
+  }
+  legendEl.innerHTML = `<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;font-size:0.8rem;margin-bottom:0.45rem;">
+    <span style="font-weight:600;color:#374151;">Planner:</span>
+    <span style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Middle School</span>
+    <span style="background:#dcfce7;border:1px solid #86efac;color:#166534;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Junior School</span>
+    <span style="background:#ffedd5;border:1px solid #fdba74;color:#9a3412;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Senior (HOSP)</span>
+    <span style="font-size:0.75rem;color:#6b7280;margin-left:0.25rem;">Click &#x2715; on a chip to delete it.</span>
+  </div>`;
+
+  // Delete handler for planner chips
+  table.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.planner-delete-btn');
+    if (!btn) return;
+    const id = btn.dataset.bookingId;
+    if (!id) return;
+    const chip = btn.closest('.planner-chip');
+    const recipeName = chip ? chip.querySelector('span') ? chip.querySelector('span').textContent : '' : '';
+    if (!confirm(`Delete planner entry "${recipeName}"?`)) return;
+    try {
+      const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+      if (!res.ok) { alert('Failed to delete entry.'); return; }
+      await renderScheduleCalendar();
+    } catch { alert('Error deleting entry.'); }
+  }, { capture: false });
 
   // Add or update the Selected Bookings list below the calendar
   let selectedListDiv = document.getElementById('selected-bookings-list');
