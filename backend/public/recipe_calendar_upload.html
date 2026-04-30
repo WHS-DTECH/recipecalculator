@@ -262,6 +262,7 @@
         <table class="rcal-table" id="reviewTable">
           <thead>
             <tr>
+              <th style="width:44px;text-align:center;"><input type="checkbox" id="selectAllRowsToggle" title="Select all rows" aria-label="Select all rows"></th>
               <th>Term</th>
               <th>Week</th>
               <th>Week Start Date</th>
@@ -275,7 +276,12 @@
           <tbody id="reviewTableBody"></tbody>
         </table>
       </div>
-      <button class="rcal-add-row-btn" id="addRowBtn" type="button">+ Add row</button>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-top:0.5rem;">
+        <button class="rcal-add-row-btn" id="addRowBtn" type="button">+ Add row</button>
+        <button class="rcal-add-row-btn" id="selectAllRowsBtn" type="button">Select All</button>
+        <button class="rcal-add-row-btn" id="clearSelectionBtn" type="button">Clear Selection</button>
+        <button class="rcal-add-row-btn" id="deleteSelectedRowsBtn" type="button" style="background:#fee2e2;border-color:#fecaca;color:#991b1b;">Delete Selected</button>
+      </div>
 
       <div style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
         <button class="rcal-btn rcal-btn-green" id="saveBtn">Save to Year Planner</button>
@@ -345,6 +351,10 @@
     const parseStatus = document.getElementById('parseStatus');
     const reviewCard = document.getElementById('reviewCard');
     const reviewTableBody = document.getElementById('reviewTableBody');
+    const selectAllRowsToggle = document.getElementById('selectAllRowsToggle');
+    const selectAllRowsBtn = document.getElementById('selectAllRowsBtn');
+    const clearSelectionBtn = document.getElementById('clearSelectionBtn');
+    const deleteSelectedRowsBtn = document.getElementById('deleteSelectedRowsBtn');
     const rawToggleBtn = document.getElementById('rawToggleBtn');
     const rawTextBox = document.getElementById('rawTextBox');
     const saveBtn = document.getElementById('saveBtn');
@@ -563,6 +573,35 @@
     function renderTable(weeks) {
       reviewTableBody.innerHTML = '';
       for (const w of weeks) addRow(w);
+      syncSelectAllState();
+    }
+
+    function getReviewRows() {
+      return Array.from(reviewTableBody.querySelectorAll('tr'));
+    }
+
+    function getRowSelectors() {
+      return Array.from(reviewTableBody.querySelectorAll('.rcal-row-select'));
+    }
+
+    function syncSelectAllState() {
+      const selectors = getRowSelectors();
+      if (!selectors.length) {
+        selectAllRowsToggle.checked = false;
+        selectAllRowsToggle.indeterminate = false;
+        return;
+      }
+      const checkedCount = selectors.filter(c => c.checked).length;
+      if (checkedCount === 0) {
+        selectAllRowsToggle.checked = false;
+        selectAllRowsToggle.indeterminate = false;
+      } else if (checkedCount === selectors.length) {
+        selectAllRowsToggle.checked = true;
+        selectAllRowsToggle.indeterminate = false;
+      } else {
+        selectAllRowsToggle.checked = false;
+        selectAllRowsToggle.indeterminate = true;
+      }
     }
 
     function addRow(w) {
@@ -571,6 +610,7 @@
       const tr = document.createElement('tr');
       tr.dataset.confidence = w.confidence || 'manual';
       tr.innerHTML = `
+        <td style="text-align:center;"><input type="checkbox" class="rcal-row-select" checked aria-label="Select row"></td>
         <td><input type="text" class="rcal-term" value="${escHtml(String(w.term || ''))}" placeholder="1" style="width:48px;"></td>
         <td><input type="text" class="rcal-week" value="${escHtml(String(w.weekNum || ''))}" placeholder="1" style="width:48px;"></td>
         <td><input type="date" class="rcal-date" value="${escHtml(w.startDate || '')}"></td>
@@ -584,12 +624,47 @@
         </td>
         <td><button class="rcal-remove-btn" title="Remove row" aria-label="Remove row">&#x2715;</button></td>
       `;
-      tr.querySelector('.rcal-remove-btn').onclick = () => tr.remove();
+      tr.querySelector('.rcal-remove-btn').onclick = () => {
+        tr.remove();
+        syncSelectAllState();
+      };
+      tr.querySelector('.rcal-row-select').addEventListener('change', syncSelectAllState);
       reviewTableBody.appendChild(tr);
+      syncSelectAllState();
     }
 
     document.getElementById('addRowBtn').addEventListener('click', () => {
       addRow(null);
+    });
+
+    selectAllRowsToggle.addEventListener('change', () => {
+      getRowSelectors().forEach(cb => { cb.checked = selectAllRowsToggle.checked; });
+      syncSelectAllState();
+    });
+
+    selectAllRowsBtn.addEventListener('click', () => {
+      getRowSelectors().forEach(cb => { cb.checked = true; });
+      syncSelectAllState();
+    });
+
+    clearSelectionBtn.addEventListener('click', () => {
+      getRowSelectors().forEach(cb => { cb.checked = false; });
+      syncSelectAllState();
+    });
+
+    deleteSelectedRowsBtn.addEventListener('click', () => {
+      const rows = getReviewRows();
+      const selectedRows = rows.filter(r => r.querySelector('.rcal-row-select')?.checked);
+      if (!selectedRows.length) {
+        saveStatus.className = 'rcal-status error';
+        saveStatus.textContent = 'No rows selected to delete.';
+        return;
+      }
+      if (!confirm(`Delete ${selectedRows.length} selected row(s)?`)) return;
+      selectedRows.forEach(r => r.remove());
+      syncSelectAllState();
+      saveStatus.className = 'rcal-status ok';
+      saveStatus.textContent = `Deleted ${selectedRows.length} row(s).`;
     });
 
     // Fill class name from global input when rows are added
