@@ -1104,6 +1104,35 @@ app.get('/api/search/staff', async (req, res) => {
 
 // --- Class Upload Endpoints ---
 
+let classUploadSchemaEnsured = false;
+
+async function ensureClassUploadSchema() {
+  if (classUploadSchemaEnsured) return;
+  await pool.query('ALTER TABLE class_upload ADD COLUMN IF NOT EXISTS upload_year INTEGER');
+  await pool.query('ALTER TABLE class_upload ADD COLUMN IF NOT EXISTS upload_term TEXT');
+  await pool.query('ALTER TABLE class_upload ADD COLUMN IF NOT EXISTS upload_date DATE');
+  await pool.query(`
+    UPDATE class_upload
+    SET upload_year = 2026,
+        upload_term = 'Term 1',
+        upload_date = DATE '2026-04-01'
+    WHERE COALESCE(status, 'Current') = 'Current'
+      AND upload_year IS NULL
+      AND COALESCE(trim(upload_term), '') = ''
+      AND upload_date IS NULL
+  `);
+  classUploadSchemaEnsured = true;
+}
+
+function parseClassUploadDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const dmy = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(raw);
+  if (dmy) return `${dmy[3]}-${dmy[2]}-${dmy[1]}`;
+  return null;
+}
+
 function normalizeCsvHeader(value) {
   return (value || '').toString().trim().toLowerCase().replace(/[^a-z0-9]/g, '');
 }
@@ -1120,6 +1149,11 @@ function getHeaderIndex(headers, aliases) {
 // POST /api/class-upload: Upload class CSV data
 app.post('/api/class-upload', async (req, res) => {
   const { classes, headers = [] } = req.body;
+  await ensureClassUploadSchema();
+  const uploadYearRaw = Number(req.body.uploadYear);
+  const uploadYear = Number.isInteger(uploadYearRaw) ? uploadYearRaw : new Date().getFullYear();
+  const uploadTerm = String(req.body.uploadTerm || '').trim() || 'Term 1';
+  const uploadDate = parseClassUploadDate(req.body.uploadDate) || new Date().toISOString().slice(0, 10);
   if (!Array.isArray(classes) || classes.length === 0) {
     return res.status(400).json({ success: false, error: 'No class data provided.' });
   }
@@ -1192,6 +1226,9 @@ app.post('/api/class-upload', async (req, res) => {
              teacher_code = $7,
              notes = $8,
              extra2 = $9,
+             upload_year = $10,
+             upload_term = $11,
+             upload_date = $12::date,
              status = 'Current'
          WHERE upper(trim(code)) = upper(trim($1))`,
         [
@@ -1203,7 +1240,10 @@ app.post('/api/class-upload', async (req, res) => {
           row.subDepartment,
           row.teacherInCharge,
           row.description,
-          row.star
+          row.star,
+          uploadYear,
+          uploadTerm,
+          uploadDate
         ]
       );
 
@@ -1212,9 +1252,9 @@ app.post('/api/class-upload', async (req, res) => {
       } else {
         await client.query(
           `INSERT INTO class_upload
-            (code, year_level, class_name, year, department, extra1, teacher_code, notes, extra2, status)
+            (code, year_level, class_name, year, department, extra1, teacher_code, notes, extra2, upload_year, upload_term, upload_date, status)
            VALUES
-            ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'Current')`,
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::date, 'Current')`,
           [
             row.ttcode,
             row.level,
@@ -1224,7 +1264,10 @@ app.post('/api/class-upload', async (req, res) => {
             row.subDepartment,
             row.teacherInCharge,
             row.description,
-            row.star
+            row.star,
+            uploadYear,
+            uploadTerm,
+            uploadDate
           ]
         );
         inserted++;
@@ -1242,7 +1285,10 @@ app.post('/api/class-upload', async (req, res) => {
       marked_not_current: markedNotCurrent,
       skipped_no_ttcode: skippedNoTtcode,
       duplicate_ttcodes_in_upload: duplicateTtcodesInUpload,
-      processed: deduped.length
+      processed: deduped.length,
+      upload_year: uploadYear,
+      upload_term: uploadTerm,
+      upload_date: uploadDate
     });
   } catch (err) {
     await client.query('ROLLBACK');
@@ -1255,6 +1301,7 @@ app.post('/api/class-upload', async (req, res) => {
 // GET /api/class_upload/all: Fetch all class records
 app.get('/api/class_upload/all', async (req, res) => {
   try {
+    await ensureClassUploadSchema();
     const result = await pool.query(`
       SELECT
         id,
@@ -1267,6 +1314,9 @@ app.get('/api/class_upload/all', async (req, res) => {
         teacher_code AS teacher_in_charge,
         notes AS description,
         extra2 AS star,
+        upload_year,
+        upload_term,
+        upload_date,
         COALESCE(status, 'Current') AS status
       FROM class_upload
       ORDER BY class_name

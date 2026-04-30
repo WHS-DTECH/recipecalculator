@@ -1,4 +1,4 @@
-// Class CSV Upload Script (modeled after staff_upload.js)
+// Subjects CSV Upload Script (modeled after staff_upload.js)
 // Assumes backend endpoint /api/class-upload for POST
 
 function fetchAndRenderClassUploadTable() {
@@ -96,10 +96,21 @@ function uploadClassesWithProgress(payload, onProgress) {
   });
 }
 
+function formatDisplayDate(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) return raw;
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yyyy = String(date.getFullYear());
+  return `${dd}/${mm}/${yyyy}`;
+}
+
 function renderClassUploadTable(rows) {
   const container = document.getElementById('classTableContainer');
   if (!container) return;
-  let html = '<h2>Class Upload Table</h2>';
+  let html = '<h2>Subjects Upload Table</h2>';
   html += '<button id="deleteAllClassesBtn" style="margin-bottom:1rem;background:#d9534f;color:white;border:none;padding:0.5rem 1rem;border-radius:4px;cursor:pointer;">DELETE ALL</button>';
   html += '<table class="class-table"><thead><tr>' +
     '<th>ID</th>' +
@@ -112,6 +123,9 @@ function renderClassUploadTable(rows) {
     '<th>Teacher in Charge</th>' +
     '<th>Description</th>' +
     '<th>STAR</th>' +
+    '<th>UploadYear</th>' +
+    '<th>UploadTerm</th>' +
+    '<th>UploadDate</th>' +
     '<th>Status</th>' +
     '</tr></thead><tbody>';
   rows.forEach(row => {
@@ -126,6 +140,9 @@ function renderClassUploadTable(rows) {
       `<td>${row.teacher_in_charge || ''}</td>` +
       `<td>${row.description || ''}</td>` +
       `<td>${row.star || ''}</td>` +
+      `<td>${row.upload_year || ''}</td>` +
+      `<td>${row.upload_term || ''}</td>` +
+      `<td>${formatDisplayDate(row.upload_date || '')}</td>` +
         `<td>${row.status || 'Current'}</td>` +
       `</tr>`;
   });
@@ -159,6 +176,21 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
   const fileInput = document.getElementById('csvFile');
   const file = fileInput.files[0];
   if (!file) return;
+  const uploadYear = Number(document.getElementById('uploadYear') && document.getElementById('uploadYear').value);
+  const uploadTerm = String((document.getElementById('uploadTerm') && document.getElementById('uploadTerm').value) || '').trim();
+  const uploadDate = String((document.getElementById('uploadDate') && document.getElementById('uploadDate').value) || '').trim();
+  if (!Number.isInteger(uploadYear) || uploadYear < 2000 || uploadYear > 2100) {
+    document.getElementById('uploadResult').textContent = 'Please enter a valid Upload Year.';
+    return;
+  }
+  if (!uploadTerm) {
+    document.getElementById('uploadResult').textContent = 'Please select Upload Term.';
+    return;
+  }
+  if (!uploadDate) {
+    document.getElementById('uploadResult').textContent = 'Please select Upload Date.';
+    return;
+  }
   const uploadResult = document.getElementById('uploadResult');
   if (uploadResult) uploadResult.textContent = '';
   setUploadProgress('Reading file...', 0);
@@ -184,7 +216,7 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
     setUploadProgress(`Uploading ${data.length} rows...`, 45);
 
     uploadClassesWithProgress(
-      { headers, classes: data },
+      { headers, classes: data, uploadYear, uploadTerm, uploadDate },
       (pct) => setUploadProgress(`Uploading ${data.length} rows...`, 45 + (pct * 0.5))
     )
     .then(result => {
@@ -197,7 +229,8 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
           ', Updated: ' + (result.updated || 0) +
           ', Marked Not Current: ' + (result.marked_not_current || 0) +
           ', Skipped (no TTCode): ' + (result.skipped_no_ttcode || 0) +
-          ', Duplicate TTCodes in upload: ' + (result.duplicate_ttcodes_in_upload || 0);
+          ', Duplicate TTCodes in upload: ' + (result.duplicate_ttcodes_in_upload || 0) +
+          `, UploadYear: ${result.upload_year || ''}, UploadTerm: ${result.upload_term || ''}, UploadDate: ${formatDisplayDate(result.upload_date || '')}`;
       } else if (data.length === 0) {
         document.getElementById('uploadResult').textContent = 'No valid class data found in CSV.';
       } else {
