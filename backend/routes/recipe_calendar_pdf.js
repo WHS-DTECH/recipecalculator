@@ -288,16 +288,14 @@ function parseCalendarText(text) {
   }
 
   // If a term's earliest week number is > 1, the PDF has no date header for the
-  // leading week(s) (e.g. orientation/powhiri week). Inject synthetic week entries
-  // so that recipe count and week count stay aligned during condensing.
+  // leading week(s) (e.g. orientation/powhiri week). Inject ALL missing weeks 1 through minWeek-1
+  // so the week count is complete and condensing doesn't over-merge recipes.
   for (const [term, entries] of termWeekMap) {
     const sorted = entries.sort((a, b) => a.weekNum - b.weekNum);
     const minWeek = sorted[0].weekNum;
     if (minWeek > 1) {
-      const sectionRecipes = sectionRecipeListsByTerm.get(term) || [];
-      const premerged = mergeObviousRecipeFragments(sectionRecipes);
-      const missing = Math.min(minWeek - 1, Math.max(0, premerged.length - sorted.length));
-      for (let w = minWeek - missing; w < minWeek; w++) {
+      // Inject all missing weeks from 1 to minWeek-1
+      for (let w = 1; w < minWeek; w++) {
         // Calculate date as 7*(minWeek - w) days before the first known week's date
         let syntheticDate = '';
         if (sorted[0].startDate) {
