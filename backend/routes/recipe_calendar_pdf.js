@@ -17,6 +17,10 @@ function parseMonthDay(monthStr, dayStr, year) {
   const d = parseInt(dayStr, 10);
   if (isNaN(d)) return null;
   const date = new Date(year, m, d);
+  // Snap to Monday: Sunday (+1), Saturday (+2)
+  const dow = date.getDay();
+  if (dow === 0) date.setDate(date.getDate() + 1);
+  else if (dow === 6) date.setDate(date.getDate() + 2);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
