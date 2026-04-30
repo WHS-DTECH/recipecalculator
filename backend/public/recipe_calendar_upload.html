@@ -234,6 +234,7 @@
       <div style="margin-bottom:1rem;">
         <label for="classnameInput" style="font-weight:600;font-size:0.95rem;">Class name for all rows:</label>
         <input type="text" id="classnameInput" placeholder="e.g. 9FT1" style="border:1px solid #c8d3de;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;width:200px;margin-left:0.5rem;">
+        <span id="classnameAutoHint" style="font-size:0.83rem;color:#2563eb;margin-left:0.6rem;display:none;">&#10003; Auto-detected from filename</span>
         <span style="font-size:0.87rem;color:#6b7280;margin-left:0.5rem;">(You can override per-row)</span>
       </div>
 
@@ -326,6 +327,20 @@
       parseBtn.disabled = !pdfFileInput.files.length;
       parseStatus.textContent = '';
       parseStatus.className = 'rcal-status';
+      // Auto-detect class name from filename
+      const classnameInput = document.getElementById('classnameInput');
+      const classnameAutoHint = document.getElementById('classnameAutoHint');
+      const fname = pdfFileInput.files.length ? pdfFileInput.files[0].name : '';
+      let detected = '';
+      if (/middle\s*school/i.test(fname)) detected = 'MFOOD';
+      else if (/junior\s*school/i.test(fname)) detected = 'JFOOD';
+      else if (/senior\s*school/i.test(fname)) detected = 'HOSP';
+      if (detected) {
+        classnameInput.value = detected;
+        classnameAutoHint.style.display = '';
+      } else {
+        classnameAutoHint.style.display = 'none';
+      }
     });
 
     rawToggleBtn.addEventListener('click', () => {
