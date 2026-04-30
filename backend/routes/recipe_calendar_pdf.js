@@ -164,6 +164,37 @@ function mergeObviousRecipeFragments(fragments) {
   return entries;
 }
 
+function extractPracticalSections(termBlocks, fullText, getTermForIndex) {
+  const sections = [];
+  let m;
+
+  // Primary matcher: explicit "Practical Lessons" text within each term block.
+  for (const block of termBlocks) {
+    const practicalPattern = /Practical\s*Lessons?\s*([\s\S]*?)(?=(?:\n\s*(?:Content|Assessment|ATL|Theory|Resources?)\b|TERM\s+\d|$))/gi;
+    while ((m = practicalPattern.exec(block.text)) !== null) {
+      const section = String(m[1] || '').trim();
+      if (section) sections.push({ term: block.term, section });
+    }
+  }
+
+  if (sections.length) return sections;
+
+  // Fallback matcher: tolerate OCR/text-fragmented variants like
+  // "Practica l Lesso n s" by matching loosened character spacing.
+  const looseHeaderPattern = /P\s*r\s*a\s*c\s*t\s*i\s*c\s*a\s*l\s*L\s*e\s*s\s*s\s*o\s*n\s*s?/gi;
+  while ((m = looseHeaderPattern.exec(fullText)) !== null) {
+    const headerEnd = m.index + m[0].length;
+    const tail = fullText.slice(headerEnd);
+    const boundaryMatch = /(?:\n\s*(?:Content|Assessment|ATL|Theory|Resources?)\b|TERM\s+\d)/i.exec(tail);
+    const sectionEnd = boundaryMatch ? headerEnd + boundaryMatch.index : fullText.length;
+    const section = String(fullText.slice(headerEnd, sectionEnd) || '').trim();
+    if (!section) continue;
+    sections.push({ term: getTermForIndex(m.index), section });
+  }
+
+  return sections;
+}
+
 /**
  * Parse the raw PDF text extracted from the year planner PDF.
  * Strategy: scan for TERM markers, then Week N + date range patterns,
@@ -212,14 +243,7 @@ function parseCalendarText(text) {
     termBlocks.push({ term: 1, text });
   }
 
-  const practicalSections = [];
-  for (const block of termBlocks) {
-    const practicalPattern = /Practical\s*Lessons?\s*([\s\S]*?)(?=(?:\n\s*(?:Content|Assessment|ATL|Theory|Resources?)\b|TERM\s+\d|$))/gi;
-    while ((m = practicalPattern.exec(block.text)) !== null) {
-      const section = String(m[1] || '').trim();
-      if (section) practicalSections.push({ term: block.term, section });
-    }
-  }
+  const practicalSections = extractPracticalSections(termBlocks, text, getTermForIndex);
 
   // For each practical section, split into individual recipe names.
   // They're usually separated by newlines or large spaces. Ignore non-recipe tokens.
