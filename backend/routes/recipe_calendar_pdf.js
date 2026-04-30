@@ -91,7 +91,8 @@ function mergeScore(left, right) {
   if (/:$/.test(a)) score += 10;
   if (/[;,]$/.test(a)) score -= 2;
   if (/[:;,]$/.test(b)) score -= 3;
-  if (a.split(' ').length === 1 && b.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z]/.test(b)) score -= 8;
+  // If both fragments are single capitalized words, they're likely separate recipes; strongly penalize merging
+  if (a.split(' ').length === 1 && b.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z]/.test(b)) score += 15;
   if (a.split(' ').length === 1 && /^[A-Z]/.test(a) && /^[A-Z][a-z]/.test(b)) score -= 6;
   if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b$/i.test(a)) score -= 5;
   if (/\b(and|with|of|the|a|an|to|for|in|on|at)\b/i.test(b)) score -= 4;
