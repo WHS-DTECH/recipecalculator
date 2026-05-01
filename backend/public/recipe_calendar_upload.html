@@ -755,7 +755,7 @@
                 const { autoMatched, needsReview } = matchData.summary;
                 saveStatus.textContent = `✓ Saved ${saved} booking(s). Auto-matched ${autoMatched} recipe(s).`;
                 if (needsReview > 0) {
-                  saveStatus.textContent += ` ${needsReview} recipe(s) need manual review (see Admin > Match Planner Recipes).`;
+                  saveStatus.innerHTML += ` ${needsReview} recipe(s) need <a href="admin_match_recipes.html" style="color:#1565c0;text-decoration:underline;font-weight:600;">Manual Review</a>.`;
                 }
               }
             } catch (matchErr) {
