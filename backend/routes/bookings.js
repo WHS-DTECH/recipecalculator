@@ -77,6 +77,20 @@ router.post('/batch', async (req, res) => {
   }
 });
 
+// DELETE /api/bookings/clear-planners - Clear all planner bookings (admin function)
+router.delete('/clear-planners', async (req, res) => {
+  try {
+    await ensureSchema();
+    const result = await pool.query("DELETE FROM bookings WHERE period = 'Planner'");
+    const deletedCount = result.rowCount || 0;
+    console.log(`[ADMIN] Cleared ${deletedCount} planner bookings`);
+    res.json({ success: true, message: `Deleted ${deletedCount} planner booking(s).`, deleted: deletedCount });
+  } catch (err) {
+    console.error('Failed to clear planner bookings:', err.message);
+    res.status(500).json({ error: 'Failed to clear planner bookings.' });
+  }
+});
+
 // Get all bookings
 router.get('/all', async (req, res) => {
   try {
