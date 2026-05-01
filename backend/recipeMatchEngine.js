@@ -1,0 +1,216 @@
+/**
+ * Recipe Match Engine
+ * Handles automatic and manual matching of planner recipes to stored recipes
+ */
+
+/**
+ * Simple Levenshtein distance for fuzzy matching
+ * Returns distance between two strings (lower = more similar)
+ */
+function levenshteinDistance(str1, str2) {
+  const s1 = String(str1 || '').toLowerCase().trim();
+  const s2 = String(str2 || '').toLowerCase().trim();
+  
+  const len1 = s1.length;
+  const len2 = s2.length;
+  const d = Array(len1 + 1).fill(0).map(() => Array(len2 + 1).fill(0));
+
+  for (let i = 0; i <= len1; i++) d[i][0] = i;
+  for (let j = 0; j <= len2; j++) d[0][j] = j;
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+      d[i][j] = Math.min(
+        d[i - 1][j] + 1,
+        d[i][j - 1] + 1,
+        d[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return d[len1][len2];
+}
+
+/**
+ * Normalize recipe name for comparison
+ * Removes common articles, prepositions, and normalizes whitespace
+ */
+function normalizeRecipeName(name) {
+  return String(name || '')
+    .toLowerCase()
+    .trim()
+    // Remove common articles/prepositions
+    .replace(/\b(the|a|an|and|with|in|on|at)\b/gi, '')
+    // Normalize whitespace and special chars
+    .replace(/\s+/g, ' ')
+    .replace(/['-]/g, '')
+    .trim();
+}
+
+/**
+ * Extract domain from URL
+ */
+function extractDomain(url) {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname.replace('www.', '').split('.')[0];
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Find best matches for a planner recipe
+ * Returns: { exactMatch, fuzzyMatches, urlMatch }
+ */
+async function findRecipeMatches(plannerRecipe, storedRecipes) {
+  const plannerName = plannerRecipe.recipe || '';
+  const plannerUrl = plannerRecipe.recipe_url || '';
+  
+  const normalized = normalizeRecipeName(plannerName);
+
+  let exactMatch = null;
+  let urlMatch = null;
+  const fuzzyMatches = [];
+
+  for (const stored of storedRecipes) {
+    const storedName = stored.name || '';
+    const storedUrl = stored.url || '';
+
+    // Exact name match
+    if (storedName.toLowerCase().trim() === plannerName.toLowerCase().trim()) {
+      exactMatch = stored;
+      continue;
+    }
+
+    // URL match (if both have URLs)
+    if (plannerUrl && storedUrl) {
+      const plannerDomain = extractDomain(plannerUrl);
+      const storedDomain = extractDomain(storedUrl);
+      if (plannerDomain && storedDomain && plannerDomain === storedDomain) {
+        // Same domain - good indicator
+        const similarity = 1 - levenshteinDistance(normalized, normalizeRecipeName(storedName)) / Math.max(normalized.length, storedName.length);
+        if (similarity > 0.6) {
+          urlMatch = { ...stored, matchScore: similarity, matchType: 'url+name' };
+        }
+      }
+    }
+
+    // Fuzzy name match
+    const distance = levenshteinDistance(normalized, normalizeRecipeName(storedName));
+    const maxLen = Math.max(normalized.length, storedName.length);
+    const similarity = maxLen > 0 ? 1 - (distance / maxLen) : 0;
+
+    // Only include if similarity is above 65%
+    if (similarity > 0.65) {
+      fuzzyMatches.push({
+        ...stored,
+        matchScore: similarity,
+        matchType: 'name'
+      });
+    }
+  }
+
+  // Sort fuzzy matches by score descending
+  fuzzyMatches.sort((a, b) => b.matchScore - a.matchScore);
+
+  return {
+    exactMatch,
+    urlMatch,
+    fuzzyMatches: fuzzyMatches.slice(0, 5) // Top 5 matches
+  };
+}
+
+/**
+ * Auto-match a planner recipe to stored recipes
+ * Returns recipe_id if confident match found, null otherwise
+ * Confidence thresholds:
+ * - Exact match: always match
+ * - URL match with 85%+ name similarity: match
+ * - Fuzzy match 90%+ similarity: match
+ */
+async function autoMatchRecipe(plannerRecipe, storedRecipes) {
+  const matches = await findRecipeMatches(plannerRecipe, storedRecipes);
+
+  // Highest priority: exact match
+  if (matches.exactMatch) {
+    return {
+      recipeId: matches.exactMatch.id,
+      confidence: 'exact',
+      matchedRecipe: matches.exactMatch
+    };
+  }
+
+  // Second priority: URL match with strong name similarity
+  if (matches.urlMatch && matches.urlMatch.matchScore >= 0.85) {
+    return {
+      recipeId: matches.urlMatch.id,
+      confidence: 'url-strong',
+      matchedRecipe: matches.urlMatch
+    };
+  }
+
+  // Third priority: very high fuzzy match (90%+)
+  if (matches.fuzzyMatches.length > 0 && matches.fuzzyMatches[0].matchScore >= 0.90) {
+    return {
+      recipeId: matches.fuzzyMatches[0].id,
+      confidence: 'fuzzy-high',
+      matchedRecipe: matches.fuzzyMatches[0]
+    };
+  }
+
+  // No confident match found
+  return null;
+}
+
+/**
+ * Process batch of planner bookings and match recipes
+ * Returns: { matched: [], unmatched: [] }
+ */
+async function matchPlannerBookings(bookings, storedRecipes) {
+  const matched = [];
+  const unmatched = [];
+
+  for (const booking of bookings) {
+    // Skip if already has recipe_id
+    if (booking.recipe_id) {
+      matched.push({ ...booking, status: 'already_linked' });
+      continue;
+    }
+
+    const result = await autoMatchRecipe(booking, storedRecipes);
+    
+    if (result) {
+      matched.push({
+        ...booking,
+        recipe_id: result.recipeId,
+        match_confidence: result.confidence,
+        status: 'auto_matched'
+      });
+    } else {
+      // Provide suggestions for manual review
+      const matches = await findRecipeMatches(booking, storedRecipes);
+      unmatched.push({
+        ...booking,
+        suggestions: [
+          matches.exactMatch,
+          matches.urlMatch,
+          ...matches.fuzzyMatches
+        ].filter(Boolean),
+        status: 'needs_review'
+      });
+    }
+  }
+
+  return { matched, unmatched };
+}
+
+module.exports = {
+  levenshteinDistance,
+  normalizeRecipeName,
+  extractDomain,
+  findRecipeMatches,
+  autoMatchRecipe,
+  matchPlannerBookings
+};

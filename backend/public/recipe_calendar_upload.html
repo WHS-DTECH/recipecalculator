@@ -740,6 +740,29 @@
         const data = await res.json();
         if (res.ok) {
           saved = data.saved || bookings.length;
+          
+          // Auto-match recipes after successful save
+          if (saved > 0) {
+            saveStatus.textContent = `Saved ${saved} booking(s). Auto-matching recipes…`;
+            try {
+              const matchRes = await fetch('/api/recipe-matching/auto-match', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bookings })
+              });
+              const matchData = await matchRes.json();
+              if (matchRes.ok) {
+                const { autoMatched, needsReview } = matchData.summary;
+                saveStatus.textContent = `✓ Saved ${saved} booking(s). Auto-matched ${autoMatched} recipe(s).`;
+                if (needsReview > 0) {
+                  saveStatus.textContent += ` ${needsReview} recipe(s) need manual review (see Admin > Match Planner Recipes).`;
+                }
+              }
+            } catch (matchErr) {
+              console.warn('Auto-match failed (non-critical):', matchErr);
+              saveStatus.textContent = `✓ Saved ${saved} booking(s). Recipe matching will be available in Admin > Match Planner Recipes.`;
+            }
+          }
         } else {
           failed = bookings.length;
           console.error('Batch save failed:', data.error);
@@ -752,7 +775,9 @@
       saveBtn.disabled = false;
       if (failed === 0) {
         saveStatus.className = 'rcal-status ok';
-        saveStatus.textContent = `✓ Saved ${saved} booking(s) successfully.`;
+        if (!saveStatus.textContent.includes('Auto-matched')) {
+          saveStatus.textContent = `✓ Saved ${saved} booking(s) successfully.`;
+        }
         renderMiniCal(); // refresh calendar after saving
       } else {
         saveStatus.className = 'rcal-status error';

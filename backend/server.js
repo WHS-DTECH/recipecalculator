@@ -651,6 +651,9 @@ app.use('/api/staff_upload', staffUploadRouter);
 const bookingsRouter = require('./routes/bookings');
 app.use('/api/bookings', bookingsRouter);
 
+const recipeMatchingRouter = require('./routes/recipe-matching');
+app.use('/api/recipe-matching', recipeMatchingRouter);
+
 const classesRouter = require('./routes/classes');
 app.use('/api/classes', classesRouter);
 
