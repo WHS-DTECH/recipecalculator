@@ -667,15 +667,38 @@
       }
 
       async function findRecipeIdByUploadId(uploadId) {
-        if (!uploadId) return '';
+        if (!uploadId) return { recipeId: '', reusedExisting: false };
         try {
-          const res = await fetch('/api/recipes');
-          const recipes = await res.json();
-          if (!Array.isArray(recipes)) return '';
+          const [recipesRes, uploadRes] = await Promise.all([
+            fetch('/api/recipes'),
+            fetch(`/api/uploads/${uploadId}`)
+          ]);
+          const recipes = await recipesRes.json();
+          const upload = uploadRes.ok ? await uploadRes.json() : null;
+          if (!Array.isArray(recipes)) return { recipeId: '', reusedExisting: false };
+
           const matched = recipes.find(r => String(r && r.uploaded_recipe_id) === String(uploadId));
-          return matched && matched.id !== undefined ? String(matched.id) : '';
+          if (matched && matched.id !== undefined) {
+            return { recipeId: String(matched.id), reusedExisting: false };
+          }
+
+          if (upload) {
+            const normalizedUploadName = String(upload.recipe_title || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+            const uploadUrl = String(upload.source_url || '').trim().toLowerCase();
+            const duplicate = recipes.find((recipe) => {
+              const recipeUrl = String(recipe && recipe.url ? recipe.url : '').trim().toLowerCase();
+              const normalizedRecipeName = String(recipe && recipe.name ? recipe.name : '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+              return (uploadUrl && recipeUrl === uploadUrl)
+                || (normalizedUploadName && normalizedRecipeName === normalizedUploadName);
+            });
+            if (duplicate && duplicate.id !== undefined) {
+              return { recipeId: String(duplicate.id), reusedExisting: true };
+            }
+          }
+
+          return { recipeId: '', reusedExisting: false };
         } catch (_) {
-          return '';
+          return { recipeId: '', reusedExisting: false };
         }
       }
 
@@ -1446,7 +1469,8 @@
             }
 
             setSaveRecipeBusy(true, 'Save Recipe: Selecting Recipe...');
-            let recipeId = await findRecipeIdByUploadId(uploadId);
+            const recipeMatch = await findRecipeIdByUploadId(uploadId);
+            let recipeId = recipeMatch && recipeMatch.recipeId ? recipeMatch.recipeId : '';
             await repopulateRecipeSelect(recipeId || getSelectedRecipeIdValue());
 
             if (!recipeId) {
@@ -1475,7 +1499,10 @@
             await saveRawDataByRecipeId(recipeId, visibleText);
             await refreshRecipeMatrix();
 
-            setSaveRecipeStatus(`Save complete for RecipeID ${recipeId}. Upload + Sync + Extract Visible Text + Save Raw Data finished.`, 'success');
+            const successMessage = recipeMatch && recipeMatch.reusedExisting
+              ? `Recipe already exists. Reusing RecipeID ${recipeId}. Upload + Sync + Extract Visible Text + Save Raw Data finished.`
+              : `Save complete for RecipeID ${recipeId}. Upload + Sync + Extract Visible Text + Save Raw Data finished.`;
+            setSaveRecipeStatus(successMessage, 'success');
           } catch (err) {
             const message = err && err.message ? err.message : String(err);
             setSaveRecipeStatus(`Save Recipe failed: ${message}`, 'error');

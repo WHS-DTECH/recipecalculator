@@ -1375,20 +1375,49 @@ app.get('/api/timetable/all', async (req, res) => {
 
 
         // --- Sync Uploaded Recipes to Recipes Table ---
+    function normalizeRecipeDuplicateKey(value) {
+      return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    }
+
     app.post('/api/recipes/sync-from-uploads', async (req, res) => {
       try {
         const uploadsResult = await pool.query('SELECT * FROM uploads');
         const uploads = uploadsResult.rows;
         let inserted = 0;
+        let duplicates = 0;
+        const matchedExisting = [];
         if (!uploads.length) return res.json({ success: true, inserted: 0 });
         for (const upload of uploads) {
           const recipeResult = await pool.query('SELECT * FROM recipes WHERE uploaded_recipe_id = $1', [upload.id]);
           if (recipeResult.rows.length === 0) {
+            const normalizedUploadName = normalizeRecipeDuplicateKey(upload.recipe_title);
+            const duplicateRecipeResult = await pool.query(
+              `SELECT id, name, url
+               FROM recipes
+               WHERE ($1 <> '' AND lower(regexp_replace(coalesce(name, ''), '[^a-z0-9]+', '', 'g')) = $1)
+                  OR ($2 <> '' AND lower(coalesce(url, '')) = lower($2))
+               ORDER BY id ASC
+               LIMIT 1`,
+              [normalizedUploadName, String(upload.source_url || '').trim()]
+            );
+
+            if (duplicateRecipeResult.rows.length > 0) {
+              duplicates++;
+              matchedExisting.push({
+                upload_id: upload.id,
+                recipe_id: duplicateRecipeResult.rows[0].id,
+                reason: duplicateRecipeResult.rows[0].url && String(upload.source_url || '').trim() && String(duplicateRecipeResult.rows[0].url).toLowerCase() === String(upload.source_url || '').trim().toLowerCase()
+                  ? 'url'
+                  : 'name'
+              });
+              continue;
+            }
+
             await pool.query('INSERT INTO recipes (uploaded_recipe_id, name, url) VALUES ($1, $2, $3)', [upload.id, upload.recipe_title, upload.source_url]);
             inserted++;
           }
         }
-        res.json({ success: true, inserted });
+        res.json({ success: true, inserted, duplicates, matchedExisting });
       } catch (err) {
         console.error('[DEBUG /api/recipes/sync-from-uploads] Error:', err);
         res.status(500).json({ success: false, error: err.message });

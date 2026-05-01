@@ -528,6 +528,10 @@
         return String(value);
       }
 
+      function normalizeRecipeDuplicateKey(value) {
+        return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+      }
+
       function parseDisplayListValue(value) {
         const raw = String(value || '').trim();
         if (!raw) return null;
@@ -728,14 +732,39 @@
       }
 
       async function findRecipeIdByUploadId(uploadId) {
-        if (!uploadId) return '';
-        const res = await fetch('/api/recipes');
-        const recipes = await res.json();
-        if (!Array.isArray(recipes)) return '';
+        if (!uploadId) return { recipeId: '', reusedExisting: false };
+        const [recipesRes, uploadRes] = await Promise.all([
+          fetch('/api/recipes'),
+          fetch(`/api/uploads/${uploadId}`)
+        ]);
+        const recipes = await recipesRes.json();
+        const upload = uploadRes.ok ? await uploadRes.json() : null;
+        if (!Array.isArray(recipes)) return { recipeId: '', reusedExisting: false };
+
         const matched = recipes.find(r => String(r && r.uploaded_recipe_id) === String(uploadId));
-        if (matched && matched.id !== undefined) return String(matched.id);
+        if (matched && matched.id !== undefined) {
+          return { recipeId: String(matched.id), reusedExisting: false };
+        }
+
+        if (upload) {
+          const normalizedUploadName = normalizeRecipeDuplicateKey(upload.recipe_title);
+          const uploadUrl = String(upload.source_url || '').trim().toLowerCase();
+          const duplicate = recipes.find((recipe) => {
+            const recipeUrl = String(recipe && recipe.url ? recipe.url : '').trim().toLowerCase();
+            const normalizedRecipeName = normalizeRecipeDuplicateKey(recipe && recipe.name ? recipe.name : '');
+            return (uploadUrl && recipeUrl === uploadUrl)
+              || (normalizedUploadName && normalizedRecipeName === normalizedUploadName);
+          });
+          if (duplicate && duplicate.id !== undefined) {
+            return { recipeId: String(duplicate.id), reusedExisting: true };
+          }
+        }
+
         const newest = recipes.slice().sort((a, b) => Number(b.id || 0) - Number(a.id || 0))[0];
-        return newest && newest.id !== undefined ? String(newest.id) : '';
+        return {
+          recipeId: newest && newest.id !== undefined ? String(newest.id) : '',
+          reusedExisting: false
+        };
       }
 
       async function getRecipeById(recipeId) {
@@ -846,7 +875,8 @@
         }
 
         setSaveProgress(55);
-        const recipeId = await findRecipeIdByUploadId(uploadId);
+        const recipeMatch = await findRecipeIdByUploadId(uploadId);
+        const recipeId = recipeMatch && recipeMatch.recipeId ? recipeMatch.recipeId : '';
         if (!recipeId) throw new Error('Upload succeeded, but no recipe could be matched.');
 
         setSaveRecipeStatus(`RecipeID ${recipeId} synced. Extracting visible text...`, 'info');
@@ -862,8 +892,11 @@
         await refreshRecipeMatrix(recipeId);
         setSaveProgress(100);
 
-        setSaveRecipeStatus(`Saved successfully. RecipeID ${recipeId} is now shown in the table.`, 'success');
-        notify(`Saved successfully. RecipeID ${recipeId} is now shown in the table.`, 'success');
+        const successMessage = recipeMatch && recipeMatch.reusedExisting
+          ? `Recipe already exists. Reusing RecipeID ${recipeId} and showing it in the table.`
+          : `Saved successfully. RecipeID ${recipeId} is now shown in the table.`;
+        setSaveRecipeStatus(successMessage, 'success');
+        notify(successMessage, 'success');
         return recipeId;
       }
 

@@ -753,13 +753,35 @@ router.get('/', async (req, res) => {
 
 // Create a new recipe
 router.post('/recipes', async (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, url } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Recipe name is required.' });
   }
   try {
-    const result = await pool.query('INSERT INTO recipes (name, description) VALUES ($1, $2) RETURNING id', [name, description]);
-    res.json({ id: result.rows[0].id, name, description });
+    const normalizedName = String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const duplicateResult = await pool.query(
+      `SELECT id, name, url
+       FROM recipes
+       WHERE lower(regexp_replace(coalesce(name, ''), '[^a-z0-9]+', '', 'g')) = $1
+          OR ($2 <> '' AND lower(coalesce(url, '')) = lower($2))
+       ORDER BY id ASC
+       LIMIT 1`,
+      [normalizedName, String(url || '').trim()]
+    );
+
+    if (duplicateResult.rows.length > 0) {
+      const existing = duplicateResult.rows[0];
+      return res.status(409).json({
+        error: 'Recipe already exists.',
+        existingRecipe: existing
+      });
+    }
+
+    const result = await pool.query(
+      'INSERT INTO recipes (name, description, url) VALUES ($1, $2, $3) RETURNING id',
+      [name, description, url || '']
+    );
+    res.json({ id: result.rows[0].id, name, description, url: url || '' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
