@@ -252,6 +252,7 @@
         <label for="xlsxTermStartDate" style="font-weight:600;font-size:0.95rem;color:#166534;">&#128197; Week 1 start date (Monday):</label>
         <input type="date" id="xlsxTermStartDate" style="border:1px solid #86efac;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;margin-left:0.5rem;">
         <span style="font-size:0.85rem;color:#4b5563;margin-left:0.6rem;">Enter the Monday of Week 1 to auto-fill all dates.</span>
+        <span id="xlsxSnapWarning" style="font-size:0.83rem;color:#b45309;margin-left:0.6rem;display:none;">&#9888; Date snapped to the following Monday.</span>
       </div>
 
       <div style="margin-bottom:1rem;font-size:0.9rem;color:#4b5563;">
@@ -282,6 +283,7 @@
         <button class="rcal-add-row-btn" id="clearSelectionBtn" type="button">Clear Selection</button>
         <button class="rcal-add-row-btn" id="deleteSelectedRowsBtn" type="button" style="background:#fee2e2;border-color:#fecaca;color:#991b1b;">Delete Selected</button>
       </div>
+      <div class="rcal-status" id="deleteStatus" role="status" aria-live="polite" style="margin-top:0.35rem;"></div>
 
       <div style="margin-top:1.25rem;display:flex;gap:0.75rem;flex-wrap:wrap;align-items:center;">
         <button class="rcal-btn rcal-btn-green" id="saveBtn">Save to Year Planner</button>
@@ -331,6 +333,11 @@
   </div>
 
   <script>
+    // Local date formatter — avoids toISOString() UTC offset shifting dates in NZ timezone
+    function toLocalIso(d) {
+      return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    }
+
     // --- iCal URL setup ---
     const icalUrl = `${window.location.origin}/api/bookings/ical`;
     document.getElementById('icalUrlInput').value = icalUrl;
@@ -340,8 +347,12 @@
         this.textContent = 'Copied!';
         setTimeout(() => { this.textContent = 'Copy Link'; }, 2000);
       }).catch(() => {
-        document.getElementById('icalUrlInput').select();
-        document.execCommand('copy');
+        const input = document.getElementById('icalUrlInput');
+        input.select();
+        input.focus();
+        const btn = this;
+        btn.textContent = 'Select & copy manually';
+        setTimeout(() => { btn.textContent = 'Copy Link'; }, 3000);
       });
     };
 
@@ -355,6 +366,7 @@
     const selectAllRowsBtn = document.getElementById('selectAllRowsBtn');
     const clearSelectionBtn = document.getElementById('clearSelectionBtn');
     const deleteSelectedRowsBtn = document.getElementById('deleteSelectedRowsBtn');
+    const deleteStatus = document.getElementById('deleteStatus');
     const rawToggleBtn = document.getElementById('rawToggleBtn');
     const rawTextBox = document.getElementById('rawTextBox');
     const saveBtn = document.getElementById('saveBtn');
@@ -448,11 +460,15 @@
       const base = new Date(val + 'T00:00:00');
       // Ensure it's a Monday; snap forward if not
       const dow = base.getDay(); // 0=Sun,1=Mon...
+      const snapWarning = document.getElementById('xlsxSnapWarning');
       if (dow !== 1) {
         const diff = dow === 0 ? 1 : (8 - dow);
         base.setDate(base.getDate() + diff);
-        // Update input to reflect corrected Monday
-        this.value = base.toISOString().slice(0, 10);
+        // Update input using local date to avoid UTC offset shifting the date in NZ timezone
+        this.value = toLocalIso(base);
+        if (snapWarning) snapWarning.style.display = '';
+      } else {
+        if (snapWarning) snapWarning.style.display = 'none';
       }
       const rows = Array.from(reviewTableBody.querySelectorAll('tr'));
       rows.forEach((tr, i) => {
@@ -460,7 +476,7 @@
         if (!weekNum) return;
         const d = new Date(base);
         d.setDate(d.getDate() + (weekNum - 1) * 7);
-        tr.querySelector('.rcal-date').value = d.toISOString().slice(0, 10);
+        tr.querySelector('.rcal-date').value = toLocalIso(d);
       });
     });
 
@@ -560,9 +576,9 @@
         if (!hasWeek1) {
           const week2 = termWeeks.find(w => Number(w.weekNum) === 2);
           if (week2 && week2.startDate) {
-            const d = new Date(week2.startDate);
+            const d = new Date(week2.startDate + 'T00:00:00');
             d.setDate(d.getDate() - 7);
-            const iso = d.toISOString().slice(0, 10);
+            const iso = toLocalIso(d);
             const insertIdx = weeks.indexOf(week2);
             weeks.splice(insertIdx, 0, { term, weekNum: 1, startDate: iso, recipe: '', class_name: week2.class_name || '', confidence: 'missing' });
           }
@@ -656,23 +672,23 @@
       const rows = getReviewRows();
       const selectedRows = rows.filter(r => r.querySelector('.rcal-row-select')?.checked);
       if (!selectedRows.length) {
-        saveStatus.className = 'rcal-status error';
-        saveStatus.textContent = 'No rows selected to delete.';
+        deleteStatus.className = 'rcal-status error';
+        deleteStatus.textContent = 'No rows selected to delete.';
         return;
       }
       if (!confirm(`Delete ${selectedRows.length} selected row(s)?`)) return;
       selectedRows.forEach(r => r.remove());
       syncSelectAllState();
-      saveStatus.className = 'rcal-status ok';
-      saveStatus.textContent = `Deleted ${selectedRows.length} row(s).`;
+      deleteStatus.className = 'rcal-status ok';
+      deleteStatus.textContent = `Deleted ${selectedRows.length} row(s).`;
     });
 
     // Fill class name from global input when rows are added
+    // Track previous value so applyGlobalClassNameToRows can also update rows that still hold the old default
+    let _prevGlobalClassName = document.getElementById('classnameInput').value.trim();
     document.getElementById('classnameInput').addEventListener('input', function() {
-      // Only fill rows that are still empty
-      document.querySelectorAll('.rcal-classname').forEach(input => {
-        if (!input.value.trim()) input.value = this.value;
-      });
+      applyGlobalClassNameToRows(_prevGlobalClassName);
+      _prevGlobalClassName = this.value.trim();
     });
 
     saveBtn.addEventListener('click', async () => {
@@ -715,15 +731,22 @@
 
       let saved = 0;
       let failed = 0;
-      for (const b of bookings) {
-        try {
-          const res = await fetch('/api/bookings', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(b)
-          });
-          if (res.ok) { saved++; } else { failed++; }
-        } catch { failed++; }
+      try {
+        const res = await fetch('/api/bookings/batch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookings })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          saved = data.saved || bookings.length;
+        } else {
+          failed = bookings.length;
+          console.error('Batch save failed:', data.error);
+        }
+      } catch (err) {
+        failed = bookings.length;
+        console.error('Batch save error:', err);
       }
 
       saveBtn.disabled = false;
@@ -814,7 +837,7 @@
 
       const lastDay = new Date(year, month + 1, 0).getDate();
       const startDow = (new Date(year, month, 1).getDay() + 6) % 7; // 0=Mon
-      const todayIso = new Date().toISOString().slice(0, 10);
+      const todayIso = toLocalIso(new Date());
 
       let html = '<table style="width:100%;border-collapse:collapse;">';
       html += '<thead><tr>' + ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']

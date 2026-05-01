@@ -53,6 +53,30 @@ router.post('/', async (req, res) => {
   }
 });
 
+// Batch create bookings (used by recipe_calendar_upload page)
+router.post('/batch', async (req, res) => {
+  const items = req.body && Array.isArray(req.body.bookings) ? req.body.bookings : null;
+  if (!items || !items.length) {
+    return res.status(400).json({ error: 'bookings array is required.' });
+  }
+  try {
+    await ensureSchema();
+    const ids = [];
+    for (const b of items) {
+      const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
+      const result = await pool.query(
+        "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+        [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
+      );
+      ids.push(result.rows[0].id);
+    }
+    res.json({ success: true, saved: ids.length, ids });
+  } catch (err) {
+    console.error('Failed to batch create bookings:', err.message);
+    res.status(500).json({ error: 'Failed to save bookings.' });
+  }
+});
+
 // Get all bookings
 router.get('/all', async (req, res) => {
   try {
