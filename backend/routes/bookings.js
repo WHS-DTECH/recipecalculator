@@ -119,6 +119,43 @@ router.post('/batch', async (req, res) => {
         [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
       );
       ids.push(result.rows[0].id);
+
+    // GET /api/bookings/planner-class-options - current Upload Subjects TT codes ranked by usage
+    router.get('/planner-class-options', async (req, res) => {
+      try {
+        await ensureSchema();
+        const result = await pool.query(
+          `SELECT
+             upper(trim(cu.code)) AS class_code,
+             trim(coalesce(cu.class_name, '')) AS class_name,
+             trim(coalesce(cu.year_level, '')) AS year_level,
+             trim(coalesce(cu.year, '')) AS qualification,
+             trim(coalesce(cu.department, '')) AS department,
+             count(b.id)::int AS usage_count
+           FROM class_upload cu
+           LEFT JOIN bookings b
+             ON upper(trim(coalesce(b.class_name, ''))) = upper(trim(coalesce(cu.code, '')))
+           WHERE coalesce(cu.status, 'Current') = 'Current'
+             AND trim(coalesce(cu.code, '')) <> ''
+           GROUP BY cu.code, cu.class_name, cu.year_level, cu.year, cu.department
+           ORDER BY count(b.id) DESC, upper(trim(cu.code)) ASC`
+        );
+
+        const classes = result.rows.map((row) => ({
+          code: row.class_code,
+          name: row.class_name,
+          yearLevel: row.year_level,
+          qualification: row.qualification,
+          department: row.department,
+          usageCount: row.usage_count || 0
+        }));
+
+        res.json({ success: true, classes });
+      } catch (err) {
+        console.error('Failed to fetch planner class options:', err.message);
+        res.status(500).json({ success: false, error: 'Failed to fetch planner class options.' });
+      }
+    });
     }
     res.json({ success: true, saved: ids.length, ids });
   } catch (err) {

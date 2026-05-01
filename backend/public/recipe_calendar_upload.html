@@ -233,7 +233,9 @@
 
       <div style="margin-bottom:1rem;">
         <label for="classnameInput" style="font-weight:600;font-size:0.95rem;">Class name for all rows:</label>
-        <input type="text" id="classnameInput" placeholder="e.g. 9FT1" style="border:1px solid #c8d3de;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;width:200px;margin-left:0.5rem;">
+        <select id="classnameInput" style="border:1px solid #c8d3de;border-radius:6px;padding:0.35rem 0.6rem;font-size:0.95rem;min-width:220px;margin-left:0.5rem;background:#fff;">
+          <option value="">Loading class names...</option>
+        </select>
         <span id="classnameAutoHint" style="font-size:0.83rem;color:#2563eb;margin-left:0.6rem;display:none;">&#10003; Auto-detected from filename</span>
         <span style="font-size:0.87rem;color:#6b7280;margin-left:0.5rem;">(You can override per-row)</span>
       </div>
@@ -389,6 +391,71 @@
     const deletePlannerStreamSelect = document.getElementById('deletePlannerStreamSelect');
     const deletePlannerEntriesBtn = document.getElementById('deletePlannerEntriesBtn');
     const deletePlannerEntriesStatus = document.getElementById('deletePlannerEntriesStatus');
+    const classnameInput = document.getElementById('classnameInput');
+
+    async function loadPlannerClassOptions() {
+      const fallbackClasses = [
+        { code: 'MFOOD', name: 'Food and Nutrition', usageCount: 1 },
+        { code: 'JFOOD', name: 'Junior Food', usageCount: 1 },
+        { code: '11HOSP', name: 'Level 1 Hospitality', usageCount: 1 },
+        { code: '12HOSP', name: 'Level 2 Hospitality', usageCount: 1 },
+        { code: '13HOSP', name: 'Level 3 Hospitality', usageCount: 1 }
+      ];
+
+      let classes = fallbackClasses;
+      try {
+        const res = await fetch('/api/bookings/planner-class-options');
+        const data = await res.json();
+        if (res.ok && Array.isArray(data.classes) && data.classes.length) {
+          classes = data.classes;
+        }
+      } catch (err) {
+        console.warn('Failed to load planner class options, using fallback defaults.', err);
+      }
+
+      const topUsed = classes.filter((item) => Number(item.usageCount) > 0);
+      const remaining = classes.filter((item) => Number(item.usageCount) <= 0);
+      const currentValue = String(classnameInput.value || '').trim();
+
+      const options = [];
+      options.push('<option value="">Select class...</option>');
+
+      const renderOption = (item) => {
+        const labelParts = [item.code];
+        if (item.name) labelParts.push(item.name);
+        return `<option value="${escHtml(item.code || '')}">${escHtml(labelParts.join(' - '))}</option>`;
+      };
+
+      topUsed.forEach((item) => options.push(renderOption(item)));
+      if (topUsed.length && remaining.length) {
+        options.push('<option value="" disabled>──────────</option>');
+      }
+      remaining.forEach((item) => options.push(renderOption(item)));
+
+      classnameInput.innerHTML = options.join('');
+
+      const nextValue = currentValue || getDefaultClassNameForStream(document.getElementById('plannerStreamSelect').value || 'Middle');
+      setGlobalClassValue(nextValue);
+    }
+
+    function setGlobalClassValue(value) {
+      const normalized = String(value || '').trim();
+      if (!normalized) {
+        classnameInput.value = '';
+        return;
+      }
+
+      const existingOption = Array.from(classnameInput.options).find((option) => option.value === normalized);
+      if (!existingOption) {
+        const option = document.createElement('option');
+        option.value = normalized;
+        option.textContent = normalized;
+        classnameInput.appendChild(option);
+      }
+      classnameInput.value = normalized;
+    }
+
+    loadPlannerClassOptions();
 
     function getDefaultClassNameForStream(stream) {
       if (stream === 'Senior') return '13HOSP';
@@ -414,19 +481,17 @@
 
     function applyDetectedPlannerDefaults(detectedDefaults) {
       if (!detectedDefaults) return;
-      const classnameInput = document.getElementById('classnameInput');
       const plannerStreamSelect = document.getElementById('plannerStreamSelect');
       const classnameAutoHint = document.getElementById('classnameAutoHint');
       const previousValue = classnameInput.value.trim();
 
       plannerStreamSelect.value = detectedDefaults.stream;
-      classnameInput.value = detectedDefaults.className;
+      setGlobalClassValue(detectedDefaults.className);
       applyGlobalClassNameToRows(previousValue);
       classnameAutoHint.style.display = '';
     }
 
     function applyGlobalClassNameToRows(previousValue = '') {
-      const classnameInput = document.getElementById('classnameInput');
       const nextValue = classnameInput.value.trim();
       document.querySelectorAll('.rcal-classname').forEach((input) => {
         const current = input.value.trim();
@@ -451,12 +516,11 @@
     });
 
     document.getElementById('plannerStreamSelect').addEventListener('change', function() {
-      const classnameInput = document.getElementById('classnameInput');
       const classnameAutoHint = document.getElementById('classnameAutoHint');
       const previousValue = classnameInput.value.trim();
       const nextDefault = getDefaultClassNameForStream(this.value || 'Middle');
-      if (!previousValue || previousValue === 'MFOOD' || previousValue === 'JFOOD' || previousValue === 'HOSP' || previousValue === '13HOSP') {
-        classnameInput.value = nextDefault;
+      if (!previousValue || ['MFOOD', 'JFOOD', 'HOSP', '11HOSP', '12HOSP', '13HOSP'].includes(previousValue)) {
+        setGlobalClassValue(nextDefault);
         applyGlobalClassNameToRows(previousValue);
         classnameAutoHint.style.display = '';
       }
@@ -703,8 +767,8 @@
 
     // Fill class name from global input when rows are added
     // Track previous value so applyGlobalClassNameToRows can also update rows that still hold the old default
-    let _prevGlobalClassName = document.getElementById('classnameInput').value.trim();
-    document.getElementById('classnameInput').addEventListener('input', function() {
+    let _prevGlobalClassName = classnameInput.value.trim();
+    classnameInput.addEventListener('change', function() {
       applyGlobalClassNameToRows(_prevGlobalClassName);
       _prevGlobalClassName = this.value.trim();
     });
@@ -712,7 +776,7 @@
     saveBtn.addEventListener('click', async () => {
       const rows = Array.from(reviewTableBody.querySelectorAll('tr'));
 
-      const globalClassName = document.getElementById('classnameInput').value.trim();
+      const globalClassName = classnameInput.value.trim();
       const plannerStream = document.getElementById('plannerStreamSelect').value || 'Middle';
       const bookings = [];
 
