@@ -323,6 +323,10 @@
             <option value="Junior">Junior</option>
             <option value="Senior">Senior (HOSP)</option>
           </select>
+          <label for="deletePlannerClassSelect" style="font-size:0.88rem;color:#7c2d12;">Class:</label>
+          <select id="deletePlannerClassSelect" style="border:1px solid #fdba74;border-radius:6px;padding:0.32rem 0.55rem;font-size:0.9rem;background:#fff;min-width:240px;">
+            <option value="">All classes in selected school</option>
+          </select>
           <button class="rcal-btn" id="deletePlannerEntriesBtn" type="button" style="background:#b91c1c;">Delete Planner Entries</button>
           <span id="deletePlannerEntriesStatus" style="font-size:0.86rem;color:#7c2d12;"></span>
         </div>
@@ -389,9 +393,11 @@
     const saveBtn = document.getElementById('saveBtn');
     const saveStatus = document.getElementById('saveStatus');
     const deletePlannerStreamSelect = document.getElementById('deletePlannerStreamSelect');
+    const deletePlannerClassSelect = document.getElementById('deletePlannerClassSelect');
     const deletePlannerEntriesBtn = document.getElementById('deletePlannerEntriesBtn');
     const deletePlannerEntriesStatus = document.getElementById('deletePlannerEntriesStatus');
     const classnameInput = document.getElementById('classnameInput');
+    let plannerClassOptions = [];
 
     async function loadPlannerClassOptions() {
       const fallbackClasses = [
@@ -413,8 +419,13 @@
         console.warn('Failed to load planner class options, using fallback defaults.', err);
       }
 
-      const topUsed = classes.filter((item) => Number(item.usageCount) > 0);
-      const remaining = classes.filter((item) => Number(item.usageCount) <= 0);
+      plannerClassOptions = classes.map((item) => ({
+        ...item,
+        stream: item.stream || inferPlannerStream(item.code || '')
+      }));
+
+      const topUsed = plannerClassOptions.filter((item) => Number(item.usageCount) > 0);
+      const remaining = plannerClassOptions.filter((item) => Number(item.usageCount) <= 0);
       const currentValue = String(classnameInput.value || '').trim();
 
       const options = [];
@@ -436,6 +447,40 @@
 
       const nextValue = currentValue || getDefaultClassNameForStream(document.getElementById('plannerStreamSelect').value || 'Middle');
       setGlobalClassValue(nextValue);
+      populateDeletePlannerClassOptions();
+    }
+
+    function inferPlannerStream(code) {
+      const value = String(code || '').trim().toUpperCase();
+      if (!value) return 'Other';
+      if (value.includes('JFOOD')) return 'Junior';
+      if (value.includes('HOSP')) return 'Senior';
+      if (value.includes('MFOOD')) return 'Middle';
+      return 'Other';
+    }
+
+    function populateDeletePlannerClassOptions() {
+      const selectedStream = String(deletePlannerStreamSelect.value || 'All').trim();
+      const currentValue = String(deletePlannerClassSelect.value || '').trim();
+
+      let filtered = plannerClassOptions.slice();
+      if (selectedStream !== 'All') {
+        filtered = filtered.filter((item) => String(item.stream || inferPlannerStream(item.code || '')).trim() === selectedStream);
+      }
+
+      const options = ['<option value="">All classes in selected school</option>'];
+      filtered.forEach((item) => {
+        const labelParts = [item.code];
+        if (item.name) labelParts.push(item.name);
+        options.push(`<option value="${escHtml(item.code || '')}">${escHtml(labelParts.join(' - '))}</option>`);
+      });
+      deletePlannerClassSelect.innerHTML = options.join('');
+
+      if (currentValue && filtered.some((item) => item.code === currentValue)) {
+        deletePlannerClassSelect.value = currentValue;
+      } else {
+        deletePlannerClassSelect.value = '';
+      }
     }
 
     function setGlobalClassValue(value) {
@@ -525,6 +570,8 @@
         classnameAutoHint.style.display = '';
       }
     });
+
+    deletePlannerStreamSelect.addEventListener('change', populateDeletePlannerClassOptions);
 
     rawToggleBtn.addEventListener('click', () => {
       const hidden = rawTextBox.hidden;
@@ -872,7 +919,10 @@
 
     deletePlannerEntriesBtn.addEventListener('click', async () => {
       const stream = (deletePlannerStreamSelect.value || 'All').trim();
-      const label = stream === 'All' ? 'all planner entries' : `${stream} planner entries`;
+      const className = (deletePlannerClassSelect.value || '').trim();
+      const label = className
+        ? (stream === 'All' ? `planner entries for ${className}` : `${stream} planner entries for ${className}`)
+        : (stream === 'All' ? 'all planner entries' : `${stream} planner entries`);
       if (!confirm(`Delete ${label}? This cannot be undone.`)) {
         return;
       }
@@ -883,6 +933,7 @@
 
       try {
         const qs = new URLSearchParams({ stream });
+        if (className) qs.set('className', className);
         const res = await fetch(`/api/bookings/clear-planners?${qs.toString()}`, { method: 'DELETE' });
         const data = await res.json();
 

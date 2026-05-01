@@ -11,6 +11,23 @@ async function ensureSchema() {
   schemaReady = true;
 }
 
+function getLegacyClassNamesForStream(stream) {
+  const normalized = String(stream || '').trim().toLowerCase();
+  if (normalized === 'middle') return ['MFOOD'];
+  if (normalized === 'junior') return ['JFOOD'];
+  if (normalized === 'senior') return ['HOSP', '11HOSP', '12HOSP', '13HOSP', '100HOSP', '200HOSP', '300HOSP'];
+  return [];
+}
+
+function inferPlannerStreamFromCode(code) {
+  const value = String(code || '').trim().toUpperCase();
+  if (!value) return 'Other';
+  if (value.includes('JFOOD')) return 'Junior';
+  if (value.includes('HOSP')) return 'Senior';
+  if (value.includes('MFOOD')) return 'Middle';
+  return 'Other';
+}
+
 // Update a booking by ID
 router.put('/:id', async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = req.body;
@@ -28,27 +45,42 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /api/bookings/clear-planners - Clear planner bookings (admin function)
-// Optional query param: stream=Middle|Junior|Senior|All
+// Optional query params: stream=Middle|Junior|Senior|All, className=<TT code>
 router.delete('/clear-planners', async (req, res) => {
   try {
     await ensureSchema();
     const requestedStream = String(req.query.stream || 'All').trim();
     const normalized = requestedStream.toLowerCase();
+    const requestedClassName = String(req.query.className || '').trim().toUpperCase();
 
     let result;
     let scopeLabel = 'all planners';
 
-    if (normalized === 'all' || !normalized) {
+    if (requestedClassName) {
+      const params = [requestedClassName];
+      let sql = `DELETE FROM bookings WHERE period = 'Planner' AND upper(trim(coalesce(class_name, ''))) = $1`;
+
+      if (normalized && normalized !== 'all') {
+        const streamLabel = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+        const legacyClassNames = getLegacyClassNamesForStream(streamLabel);
+        params.push(streamLabel, legacyClassNames);
+        sql += `
+          AND (
+            lower(coalesce(planner_stream, '')) = lower($2)
+            OR upper(trim(coalesce(class_name, ''))) = ANY($3::text[])
+          )`;
+        scopeLabel = `${streamLabel} planner for class ${requestedClassName}`;
+      } else {
+        scopeLabel = `planner entries for class ${requestedClassName}`;
+      }
+
+      result = await pool.query(sql, params);
+    } else if (normalized === 'all' || !normalized) {
       result = await pool.query("DELETE FROM bookings WHERE period = 'Planner'");
     } else if (normalized === 'middle' || normalized === 'junior' || normalized === 'senior') {
       const streamLabel = normalized.charAt(0).toUpperCase() + normalized.slice(1);
       scopeLabel = `${streamLabel} planner`;
-
-      // Keep compatibility with older planner rows that may not have planner_stream populated.
-      const legacyClassNames =
-        normalized === 'middle' ? ['MFOOD'] :
-        normalized === 'junior' ? ['JFOOD'] :
-        ['HOSP', '13HOSP'];
+      const legacyClassNames = getLegacyClassNamesForStream(streamLabel);
 
       result = await pool.query(
         `DELETE FROM bookings
@@ -119,48 +151,49 @@ router.post('/batch', async (req, res) => {
         [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
       );
       ids.push(result.rows[0].id);
-
-    // GET /api/bookings/planner-class-options - current Upload Subjects TT codes ranked by usage
-    router.get('/planner-class-options', async (req, res) => {
-      try {
-        await ensureSchema();
-        const result = await pool.query(
-          `SELECT
-             upper(trim(cu.code)) AS class_code,
-             trim(coalesce(cu.class_name, '')) AS class_name,
-             trim(coalesce(cu.year_level, '')) AS year_level,
-             trim(coalesce(cu.year, '')) AS qualification,
-             trim(coalesce(cu.department, '')) AS department,
-             count(b.id)::int AS usage_count
-           FROM class_upload cu
-           LEFT JOIN bookings b
-             ON upper(trim(coalesce(b.class_name, ''))) = upper(trim(coalesce(cu.code, '')))
-           WHERE coalesce(cu.status, 'Current') = 'Current'
-             AND trim(coalesce(cu.code, '')) <> ''
-           GROUP BY cu.code, cu.class_name, cu.year_level, cu.year, cu.department
-           ORDER BY count(b.id) DESC, upper(trim(cu.code)) ASC`
-        );
-
-        const classes = result.rows.map((row) => ({
-          code: row.class_code,
-          name: row.class_name,
-          yearLevel: row.year_level,
-          qualification: row.qualification,
-          department: row.department,
-          usageCount: row.usage_count || 0
-        }));
-
-        res.json({ success: true, classes });
-      } catch (err) {
-        console.error('Failed to fetch planner class options:', err.message);
-        res.status(500).json({ success: false, error: 'Failed to fetch planner class options.' });
-      }
-    });
     }
     res.json({ success: true, saved: ids.length, ids });
   } catch (err) {
     console.error('Failed to batch create bookings:', err.message);
     res.status(500).json({ error: 'Failed to save bookings.' });
+  }
+});
+
+// GET /api/bookings/planner-class-options - current Upload Subjects TT codes ranked by usage
+router.get('/planner-class-options', async (req, res) => {
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      `SELECT
+         upper(trim(cu.code)) AS class_code,
+         trim(coalesce(cu.class_name, '')) AS class_name,
+         trim(coalesce(cu.year_level, '')) AS year_level,
+         trim(coalesce(cu.year, '')) AS qualification,
+         trim(coalesce(cu.department, '')) AS department,
+         count(b.id)::int AS usage_count
+       FROM class_upload cu
+       LEFT JOIN bookings b
+         ON upper(trim(coalesce(b.class_name, ''))) = upper(trim(coalesce(cu.code, '')))
+       WHERE coalesce(cu.status, 'Current') = 'Current'
+         AND trim(coalesce(cu.code, '')) <> ''
+       GROUP BY cu.code, cu.class_name, cu.year_level, cu.year, cu.department
+       ORDER BY count(b.id) DESC, upper(trim(cu.code)) ASC`
+    );
+
+    const classes = result.rows.map((row) => ({
+      code: row.class_code,
+      name: row.class_name,
+      yearLevel: row.year_level,
+      qualification: row.qualification,
+      department: row.department,
+      usageCount: row.usage_count || 0,
+      stream: inferPlannerStreamFromCode(row.class_code)
+    }));
+
+    res.json({ success: true, classes });
+  } catch (err) {
+    console.error('Failed to fetch planner class options:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch planner class options.' });
   }
 });
 
