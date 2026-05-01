@@ -749,6 +749,7 @@
 
       let saved = 0;
       let failed = 0;
+      let savedIds = [];
       try {
         const res = await fetch('/api/bookings/batch', {
           method: 'POST',
@@ -758,6 +759,7 @@
         const data = await res.json();
         if (res.ok) {
           saved = data.saved || bookings.length;
+          savedIds = Array.isArray(data.ids) ? data.ids : [];
           
           // Auto-match recipes after successful save
           if (saved > 0) {
@@ -766,7 +768,7 @@
               const matchRes = await fetch('/api/recipe-matching/auto-match', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ bookings })
+                body: JSON.stringify(savedIds.length ? { bookingIds: savedIds } : { bookings })
               });
               const matchData = await matchRes.json();
               if (matchRes.ok) {
@@ -778,7 +780,8 @@
               }
             } catch (matchErr) {
               console.warn('Auto-match failed (non-critical):', matchErr);
-              saveStatus.textContent = `✓ Saved ${saved} booking(s). Recipe matching will be available in Admin > Match Planner Recipes.`;
+              saveStatus.textContent = `✓ Saved ${saved} booking(s). Auto-match could not run; use `;
+              saveStatus.innerHTML += `<a href="admin_match_recipes.html" style="color:#1565c0;text-decoration:underline;font-weight:600;">Match Planner Recipes</a>.`;
             }
           }
         } else {

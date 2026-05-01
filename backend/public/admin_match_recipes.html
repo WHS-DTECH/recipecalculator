@@ -490,6 +490,7 @@
     let filterStatus = '';
     let searchTerm = '';
     let currentBookingId = null;
+    let availableRecipesCache = null;
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
@@ -656,31 +657,57 @@
       }
     }
 
-    function openLinkModal(bookingId, recipeId, recipeName) {
+    async function fetchAvailableRecipes() {
+      if (Array.isArray(availableRecipesCache) && availableRecipesCache.length > 0) {
+        return availableRecipesCache;
+      }
+
+      const response = await fetch('/api/recipes');
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to load recipes list.');
+      }
+
+      const rows = Array.isArray(data) ? data : [];
+      const dedupe = new Map();
+      for (const row of rows) {
+        const id = Number(row && row.id);
+        if (!Number.isInteger(id) || id <= 0) continue;
+        if (!dedupe.has(id)) {
+          dedupe.set(id, {
+            id,
+            name: String((row && row.name) || '').trim() || `Recipe ${id}`
+          });
+        }
+      }
+
+      availableRecipesCache = Array.from(dedupe.values())
+        .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+      return availableRecipesCache;
+    }
+
+    async function openLinkModal(bookingId, recipeId, recipeName) {
       currentBookingId = bookingId;
       document.getElementById('linkRecipeName').value = recipeName;
-      
-      // Populate available recipes
-      const allRecipes = Array.from(new Set(allBookings
-        .filter(b => b.recipe_id)
-        .map(b => ({ id: b.recipe_id, name: b.recipe }))
-        .concat(
-          allBookings.flatMap(b => b.suggestions || [])
-            .map(s => ({ id: s.id, name: s.name }))
-        )
-      )).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
-      let html = '<option value="">-- Choose a recipe --</option>';
-      for (const recipe of allRecipes) {
-        html += `<option value="${recipe.id}">${recipe.name || 'Unknown'}</option>`;
-      }
-      document.getElementById('linkRecipeSelect').innerHTML = html;
-      
-      if (recipeId) {
-        document.getElementById('linkRecipeSelect').value = recipeId;
-      }
-      
+      const selectEl = document.getElementById('linkRecipeSelect');
+      selectEl.innerHTML = '<option value="">Loading recipes...</option>';
       document.getElementById('linkModal').classList.add('active');
+
+      try {
+        const allRecipes = await fetchAvailableRecipes();
+        let html = '<option value="">-- Choose a recipe --</option>';
+        for (const recipe of allRecipes) {
+          html += `<option value="${recipe.id}">${recipe.name || 'Unknown'}</option>`;
+        }
+        selectEl.innerHTML = html;
+        if (recipeId) {
+          selectEl.value = recipeId;
+        }
+      } catch (err) {
+        selectEl.innerHTML = '<option value="">-- Unable to load recipes --</option>';
+        showToast(`Error: ${err.message}`, 'error');
+      }
     }
 
     function closeLinkModal() {

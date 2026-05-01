@@ -40,11 +40,12 @@ function normalizeRecipeName(name) {
   return String(name || '')
     .toLowerCase()
     .trim()
+    .replace(/^copy\s+of\s+/i, '')
     // Remove common articles/prepositions
     .replace(/\b(the|a|an|and|with|in|on|at)\b/gi, '')
     // Normalize whitespace and special chars
     .replace(/\s+/g, ' ')
-    .replace(/['-]/g, '')
+    .replace(/[^a-z0-9\s]/g, '')
     .trim();
 }
 
@@ -102,8 +103,8 @@ async function findRecipeMatches(plannerRecipe, storedRecipes) {
     const maxLen = Math.max(normalized.length, storedName.length);
     const similarity = maxLen > 0 ? 1 - (distance / maxLen) : 0;
 
-    // Only include if similarity is above 65%
-    if (similarity > 0.65) {
+    // Suggestions can be broader than auto-match so users see useful options.
+    if (similarity >= 0.45) {
       fuzzyMatches.push({
         ...stored,
         matchScore: similarity,

@@ -21,9 +21,44 @@ const matchEngine = require('../recipeMatchEngine');
  */
 router.post('/auto-match', async (req, res) => {
   try {
-    const { bookings } = req.body;
-    if (!Array.isArray(bookings)) {
-      return res.status(400).json({ error: 'bookings array required' });
+    const { bookings, bookingIds } = req.body || {};
+
+    let targetBookings = [];
+    if (Array.isArray(bookingIds) && bookingIds.length > 0) {
+      const ids = bookingIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+      if (!ids.length) {
+        return res.status(400).json({ error: 'bookingIds must contain valid numeric IDs' });
+      }
+
+      const bookingsResult = await pool.query(
+        `SELECT *
+         FROM bookings
+         WHERE id = ANY($1::int[])`,
+        [ids]
+      );
+      targetBookings = bookingsResult.rows;
+    } else if (Array.isArray(bookings)) {
+      targetBookings = bookings;
+    } else {
+      return res.status(400).json({ error: 'bookings array or bookingIds array required' });
+    }
+
+    if (!targetBookings.length) {
+      return res.json({
+        success: true,
+        summary: {
+          total: 0,
+          autoMatched: 0,
+          alreadyLinked: 0,
+          needsReview: 0,
+          databaseUpdated: 0
+        },
+        matched: [],
+        unmatched: []
+      });
     }
 
     // Fetch all stored recipes
@@ -31,7 +66,7 @@ router.post('/auto-match', async (req, res) => {
     const storedRecipes = recipesResult.rows;
 
     // Match bookings
-    const { matched, unmatched } = await matchEngine.matchPlannerBookings(bookings, storedRecipes);
+    const { matched, unmatched } = await matchEngine.matchPlannerBookings(targetBookings, storedRecipes);
 
     // Update matched bookings in database
     let updateCount = 0;
@@ -52,7 +87,7 @@ router.post('/auto-match', async (req, res) => {
     return res.json({
       success: true,
       summary: {
-        total: bookings.length,
+        total: targetBookings.length,
         autoMatched: matched.filter(b => b.status === 'auto_matched').length,
         alreadyLinked: matched.filter(b => b.status === 'already_linked').length,
         needsReview: unmatched.length,
@@ -231,11 +266,11 @@ router.get('/unmatched', async (req, res) => {
     const offset = parseInt(req.query.offset) || 0;
 
     const result = await pool.query(
-      'SELECT * FROM bookings WHERE recipe_id IS NULL ORDER BY booking_date DESC, period LIMIT $1 OFFSET $2',
+      "SELECT * FROM bookings WHERE recipe_id IS NULL AND period = 'Planner' ORDER BY booking_date DESC, period LIMIT $1 OFFSET $2",
       [limit, offset]
     );
 
-    const countResult = await pool.query('SELECT COUNT(*) as count FROM bookings WHERE recipe_id IS NULL');
+    const countResult = await pool.query("SELECT COUNT(*) as count FROM bookings WHERE recipe_id IS NULL AND period = 'Planner'");
     const totalUnmatched = parseInt(countResult.rows[0].count);
 
     // Get recipe suggestions for each
