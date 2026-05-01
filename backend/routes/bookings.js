@@ -27,56 +27,6 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Delete a booking by ID
-router.delete('/:id', async (req, res) => {
-  try {
-    await pool.query('DELETE FROM bookings WHERE id=$1', [req.params.id]);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to delete booking.' });
-  }
-});
-
-// Create a new booking
-router.post('/', async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = req.body;
-  try {
-    await ensureSchema();
-    const result = await pool.query(
-      "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
-      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
-    );
-    res.json({ success: true, booking_id: result.rows[0].id });
-  } catch (err) {
-    console.error('Failed to create booking:', err.message);
-    res.status(500).json({ error: 'Failed to create booking.' });
-  }
-});
-
-// Batch create bookings (used by Upload Planners page)
-router.post('/batch', async (req, res) => {
-  const items = req.body && Array.isArray(req.body.bookings) ? req.body.bookings : null;
-  if (!items || !items.length) {
-    return res.status(400).json({ error: 'bookings array is required.' });
-  }
-  try {
-    await ensureSchema();
-    const ids = [];
-    for (const b of items) {
-      const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
-      const result = await pool.query(
-        "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
-        [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
-      );
-      ids.push(result.rows[0].id);
-    }
-    res.json({ success: true, saved: ids.length, ids });
-  } catch (err) {
-    console.error('Failed to batch create bookings:', err.message);
-    res.status(500).json({ error: 'Failed to save bookings.' });
-  }
-});
-
 // DELETE /api/bookings/clear-planners - Clear planner bookings (admin function)
 // Optional query param: stream=Middle|Junior|Senior|All
 router.delete('/clear-planners', async (req, res) => {
@@ -124,6 +74,56 @@ router.delete('/clear-planners', async (req, res) => {
   } catch (err) {
     console.error('Failed to clear planner bookings:', err.message);
     res.status(500).json({ error: 'Failed to clear planner bookings.' });
+  }
+});
+
+// Delete a booking by ID
+router.delete('/:id', async (req, res) => {
+  try {
+    await pool.query('DELETE FROM bookings WHERE id=$1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete booking.' });
+  }
+});
+
+// Create a new booking
+router.post('/', async (req, res) => {
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = req.body;
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+      [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
+    );
+    res.json({ success: true, booking_id: result.rows[0].id });
+  } catch (err) {
+    console.error('Failed to create booking:', err.message);
+    res.status(500).json({ error: 'Failed to create booking.' });
+  }
+});
+
+// Batch create bookings (used by Upload Planners page)
+router.post('/batch', async (req, res) => {
+  const items = req.body && Array.isArray(req.body.bookings) ? req.body.bookings : null;
+  if (!items || !items.length) {
+    return res.status(400).json({ error: 'bookings array is required.' });
+  }
+  try {
+    await ensureSchema();
+    const ids = [];
+    for (const b of items) {
+      const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
+      const result = await pool.query(
+        "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
+        [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream || 'Middle']
+      );
+      ids.push(result.rows[0].id);
+    }
+    res.json({ success: true, saved: ids.length, ids });
+  } catch (err) {
+    console.error('Failed to batch create bookings:', err.message);
+    res.status(500).json({ error: 'Failed to save bookings.' });
   }
 });
 
