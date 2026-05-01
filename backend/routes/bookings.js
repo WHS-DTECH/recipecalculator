@@ -53,7 +53,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-// Batch create bookings (used by recipe_calendar_upload page)
+// Batch create bookings (used by Upload Planners page)
 router.post('/batch', async (req, res) => {
   const items = req.body && Array.isArray(req.body.bookings) ? req.body.bookings : null;
   if (!items || !items.length) {
