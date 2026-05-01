@@ -77,14 +77,50 @@ router.post('/batch', async (req, res) => {
   }
 });
 
-// DELETE /api/bookings/clear-planners - Clear all planner bookings (admin function)
+// DELETE /api/bookings/clear-planners - Clear planner bookings (admin function)
+// Optional query param: stream=Middle|Junior|Senior|All
 router.delete('/clear-planners', async (req, res) => {
   try {
     await ensureSchema();
-    const result = await pool.query("DELETE FROM bookings WHERE period = 'Planner'");
+    const requestedStream = String(req.query.stream || 'All').trim();
+    const normalized = requestedStream.toLowerCase();
+
+    let result;
+    let scopeLabel = 'all planners';
+
+    if (normalized === 'all' || !normalized) {
+      result = await pool.query("DELETE FROM bookings WHERE period = 'Planner'");
+    } else if (normalized === 'middle' || normalized === 'junior' || normalized === 'senior') {
+      const streamLabel = normalized.charAt(0).toUpperCase() + normalized.slice(1);
+      scopeLabel = `${streamLabel} planner`;
+
+      // Keep compatibility with older planner rows that may not have planner_stream populated.
+      const legacyClassNames =
+        normalized === 'middle' ? ['MFOOD'] :
+        normalized === 'junior' ? ['JFOOD'] :
+        ['HOSP', '13HOSP'];
+
+      result = await pool.query(
+        `DELETE FROM bookings
+         WHERE period = 'Planner'
+           AND (
+             lower(coalesce(planner_stream, '')) = lower($1)
+             OR upper(coalesce(class_name, '')) = ANY($2::text[])
+           )`,
+        [streamLabel, legacyClassNames]
+      );
+    } else {
+      return res.status(400).json({ error: 'Invalid stream. Use All, Middle, Junior, or Senior.' });
+    }
+
     const deletedCount = result.rowCount || 0;
-    console.log(`[ADMIN] Cleared ${deletedCount} planner bookings`);
-    res.json({ success: true, message: `Deleted ${deletedCount} planner booking(s).`, deleted: deletedCount });
+    console.log(`[ADMIN] Cleared ${deletedCount} ${scopeLabel} booking(s)`);
+    res.json({
+      success: true,
+      message: `Deleted ${deletedCount} ${scopeLabel} booking(s).`,
+      deleted: deletedCount,
+      stream: requestedStream
+    });
   } catch (err) {
     console.error('Failed to clear planner bookings:', err.message);
     res.status(500).json({ error: 'Failed to clear planner bookings.' });

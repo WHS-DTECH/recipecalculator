@@ -311,6 +311,21 @@
         3. Google will check for updates automatically (usually every 24 hours).
       </div>
 
+      <div style="margin-top:1rem;padding:0.75rem 0.9rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+        <div style="font-size:0.9rem;font-weight:600;color:#9a3412;margin-bottom:0.45rem;">Delete Planner Entries</div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+          <label for="deletePlannerStreamSelect" style="font-size:0.88rem;color:#7c2d12;">Planner to delete:</label>
+          <select id="deletePlannerStreamSelect" style="border:1px solid #fdba74;border-radius:6px;padding:0.32rem 0.55rem;font-size:0.9rem;background:#fff;">
+            <option value="All" selected>All planners</option>
+            <option value="Middle">Middle</option>
+            <option value="Junior">Junior</option>
+            <option value="Senior">Senior (HOSP)</option>
+          </select>
+          <button class="rcal-btn" id="deletePlannerEntriesBtn" type="button" style="background:#b91c1c;">Delete Planner Entries</button>
+          <span id="deletePlannerEntriesStatus" style="font-size:0.86rem;color:#7c2d12;"></span>
+        </div>
+      </div>
+
       <!-- Mini calendar preview -->
       <div style="margin-top:1.25rem;border-top:1px solid #e5e7eb;padding-top:1rem;">
         <!-- Legend -->
@@ -371,6 +386,9 @@
     const rawTextBox = document.getElementById('rawTextBox');
     const saveBtn = document.getElementById('saveBtn');
     const saveStatus = document.getElementById('saveStatus');
+    const deletePlannerStreamSelect = document.getElementById('deletePlannerStreamSelect');
+    const deletePlannerEntriesBtn = document.getElementById('deletePlannerEntriesBtn');
+    const deletePlannerEntriesStatus = document.getElementById('deletePlannerEntriesStatus');
 
     function getDefaultClassNameForStream(stream) {
       if (stream === 'Senior') return '13HOSP';
@@ -782,6 +800,37 @@
       } else {
         saveStatus.className = 'rcal-status error';
         saveStatus.textContent = `Saved ${saved} booking(s), but ${failed} failed. Check the console for details.`;
+      }
+    });
+
+    deletePlannerEntriesBtn.addEventListener('click', async () => {
+      const stream = (deletePlannerStreamSelect.value || 'All').trim();
+      const label = stream === 'All' ? 'all planner entries' : `${stream} planner entries`;
+      if (!confirm(`Delete ${label}? This cannot be undone.`)) {
+        return;
+      }
+
+      deletePlannerEntriesBtn.disabled = true;
+      deletePlannerEntriesStatus.style.color = '#7c2d12';
+      deletePlannerEntriesStatus.textContent = `Deleting ${label}...`;
+
+      try {
+        const qs = new URLSearchParams({ stream });
+        const res = await fetch(`/api/bookings/clear-planners?${qs.toString()}`, { method: 'DELETE' });
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error || 'Failed to delete planner entries.');
+        }
+
+        deletePlannerEntriesStatus.style.color = '#166534';
+        deletePlannerEntriesStatus.textContent = data.message || `Deleted ${label}.`;
+        await renderMiniCal();
+      } catch (err) {
+        deletePlannerEntriesStatus.style.color = '#b91c1c';
+        deletePlannerEntriesStatus.textContent = err.message || 'Failed to delete planner entries.';
+      } finally {
+        deletePlannerEntriesBtn.disabled = false;
       }
     });
 
