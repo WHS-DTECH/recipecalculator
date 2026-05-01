@@ -587,7 +587,7 @@
                     <div class="suggestion-name">${s.name || 'Unknown'}</div>
                     <div class="suggestion-score">${((s.matchScore || 0) * 100).toFixed(0)}%</div>
                     <div class="suggestion-actions">
-                      <button class="btn btn-sm btn-success" onclick="openLinkModal(${booking.id}, ${s.id}, '${(booking.recipe || '').replace(/'/g, '\\'')}')" title="Link to this recipe">Link</button>
+                      <button class="btn btn-sm btn-success" onclick="openLinkModal(${booking.id}, ${s.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Link to this recipe">Link</button>
                     </div>
                   </div>
                 `).join('')}
@@ -619,8 +619,8 @@
             ${suggestionsHtml}
             ${!isMatched ? `
               <div class="action-row" style="margin-top: 10px;">
-                <button class="btn btn-primary btn-sm" onclick="openLinkModal(${booking.id}, null, '${(booking.recipe || '').replace(/'/g, '\\'')}')" title="Link to existing recipe">Link Existing</button>
-                <button class="btn btn-success btn-sm" onclick="openCreateModal(${booking.id}, '${(booking.recipe || '').replace(/'/g, '\\'')}')" title="Create new recipe">Create New</button>
+                <button class="btn btn-primary btn-sm" onclick="openLinkModal(${booking.id}, null, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Link to existing recipe">Link Existing</button>
+                <button class="btn btn-success btn-sm" onclick="openCreateModal(${booking.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Create new recipe">Create New</button>
               </div>
             ` : ''}
           </div>
