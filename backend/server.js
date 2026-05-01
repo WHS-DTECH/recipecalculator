@@ -254,7 +254,7 @@ function buildSuggestionEmailPayload(suggestion) {
   <div style="font-family:Segoe UI, Arial, sans-serif; background:#f5f8fc; padding:20px; color:#1b2733;">
     <div style="max-width:680px; margin:0 auto; background:#ffffff; border:1px solid #dbe5f0; border-radius:12px; overflow:hidden;">
       <div style="padding:16px 20px; background:linear-gradient(120deg,#1f69ad,#4b91cc); color:#ffffff;">
-        <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; opacity:0.9;">Food Room Inventory</div>
+        <div style="font-size:12px; letter-spacing:0.08em; text-transform:uppercase; opacity:0.9;">Food Room</div>
         <h2 style="margin:6px 0 0; font-size:22px; line-height:1.2;">New Recipe Suggestion</h2>
       </div>
 
