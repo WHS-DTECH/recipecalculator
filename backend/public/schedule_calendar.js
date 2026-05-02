@@ -468,7 +468,7 @@ function getStartOfWeek(referenceDate) {
 
 // Days and periods for the calendar grid
 const periods = [1, 2, 3, 4, 5];
-let showWeekends = true;
+let showWeekends = false;
 
 function getVisibleDayIndices(weekDates, includeWeekends = showWeekends) {
   const indices = [];

@@ -433,7 +433,7 @@
         <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.75rem;">
           <button id="miniCalPrevBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8249;</button>
           <strong id="miniCalMonthLabel" style="flex:1;text-align:center;font-size:0.97rem;color:#1f2937;"></strong>
-          <button id="miniCalWeekendBtn" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:5px;padding:0.28rem 0.6rem;font-size:0.8rem;cursor:pointer;line-height:1.2;">Hide Weekend</button>
+          <button id="miniCalWeekendBtn" style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:5px;padding:0.28rem 0.6rem;font-size:0.8rem;cursor:pointer;line-height:1.2;">Show Weekend</button>
           <button id="miniCalNextBtn" style="background:#f3f4f6;border:1px solid #d1d5db;border-radius:5px;padding:0.25rem 0.65rem;font-size:1.1rem;cursor:pointer;line-height:1;">&#8250;</button>
         </div>
         <div id="miniCalGrid" style="font-size:0.87rem;">Loading…</div>
@@ -1117,7 +1117,7 @@
     // --- Mini month calendar ---
     let miniCalDate = new Date();
     miniCalDate.setDate(1);
-    let miniCalShowWeekends = true;
+    let miniCalShowWeekends = false;
 
     function normalizePlannerStream(booking) {
       const explicit = String(booking && booking.planner_stream ? booking.planner_stream : '').trim().toLowerCase();
