@@ -1358,7 +1358,11 @@ window.addEventListener('DOMContentLoaded', () => {
 
   const dateInput = document.getElementById('dateInput');
   if (dateInput && !dateInput.value) {
-    dateInput.value = toLocalIsoDate(new Date());
+    const today = new Date();
+    const dow = today.getDay(); // 0 = Sun, 6 = Sat
+    if (dow === 6) today.setDate(today.getDate() + 2); // Sat → Mon
+    else if (dow === 0) today.setDate(today.getDate() + 1); // Sun → Mon
+    dateInput.value = toLocalIsoDate(today);
   }
   updateBookingDateDayLabel();
   updateTeacherTimetableDaySelector();
