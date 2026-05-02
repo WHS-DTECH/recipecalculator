@@ -402,7 +402,11 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         )::int AS rows_for_current_recipe,
         COALESCE(inv.inventory_rows, 0)::int AS inventory_rows,
         CASE
-          WHEN EXISTS (SELECT 1 FROM browse br WHERE br.id = b.recipe_id) THEN 'id'
+          WHEN EXISTS (
+            SELECT 1
+            FROM browse br
+            WHERE br.id::text = coalesce(b.recipe_id::text, '')
+          ) THEN 'id'
           WHEN EXISTS (
             SELECT 1
             FROM browse br
