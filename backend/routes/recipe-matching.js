@@ -135,7 +135,8 @@ router.get('/suggestions/:bookingId', async (req, res) => {
       suggestions: {
         exactMatch: matches.exactMatch,
         urlMatch: matches.urlMatch,
-        fuzzyMatches: matches.fuzzyMatches
+        fuzzyMatches: matches.fuzzyMatches,
+        combined: matchEngine.buildSuggestionList(matches, 5)
       }
     });
   } catch (err) {
@@ -282,11 +283,7 @@ router.get('/unmatched', async (req, res) => {
         const matches = await matchEngine.findRecipeMatches(booking, storedRecipes);
         return {
           ...booking,
-          suggestions: [
-            matches.exactMatch,
-            matches.urlMatch,
-            ...matches.fuzzyMatches
-          ].filter(Boolean).slice(0, 3)
+          suggestions: matchEngine.buildSuggestionList(matches, 3)
         };
       })
     );

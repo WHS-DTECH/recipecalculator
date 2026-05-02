@@ -84,6 +84,75 @@ function extractDomain(url) {
   }
 }
 
+function suggestionRank(matchType) {
+  if (matchType === 'exact') return 4;
+  if (matchType === 'url+name') return 3;
+  if (matchType === 'name-partial') return 2;
+  if (matchType === 'name-overlap') return 1;
+  return 0;
+}
+
+function dedupeSuggestions(suggestions, limit = 5) {
+  const byKey = new Map();
+
+  for (const suggestion of suggestions || []) {
+    if (!suggestion) continue;
+
+    const id = Number(suggestion.id || 0);
+    const score = Number(suggestion.matchScore || 0);
+    const type = String(suggestion.matchType || 'name');
+    const nameKey = normalizeRecipeName(suggestion.name || '');
+    const key = nameKey || (id > 0 ? `id:${id}` : `anon:${Math.random()}`);
+
+    const candidate = {
+      ...suggestion,
+      matchScore: score,
+      matchType: type,
+      _rank: suggestionRank(type)
+    };
+
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, candidate);
+      continue;
+    }
+
+    const isBetter =
+      candidate._rank > existing._rank
+      || (candidate._rank === existing._rank && candidate.matchScore > existing.matchScore)
+      || (candidate._rank === existing._rank
+        && candidate.matchScore === existing.matchScore
+        && Number(candidate.id || Number.MAX_SAFE_INTEGER) < Number(existing.id || Number.MAX_SAFE_INTEGER));
+
+    if (isBetter) {
+      byKey.set(key, candidate);
+    }
+  }
+
+  return Array.from(byKey.values())
+    .sort((a, b) => {
+      if (b._rank !== a._rank) return b._rank - a._rank;
+      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
+      return Number(a.id || Number.MAX_SAFE_INTEGER) - Number(b.id || Number.MAX_SAFE_INTEGER);
+    })
+    .slice(0, limit)
+    .map(({ _rank, ...rest }) => rest);
+}
+
+function buildSuggestionList(matches, limit = 5) {
+  const combined = [];
+  if (matches && matches.exactMatch) {
+    combined.push({ ...matches.exactMatch, matchType: 'exact', matchScore: 1 });
+  }
+  if (matches && matches.urlMatch) {
+    combined.push(matches.urlMatch);
+  }
+  if (matches && Array.isArray(matches.fuzzyMatches)) {
+    combined.push(...matches.fuzzyMatches);
+  }
+  return dedupeSuggestions(combined, limit);
+}
+
 /**
  * Find best matches for a planner recipe
  * Returns: { exactMatch, fuzzyMatches, urlMatch }
@@ -232,11 +301,7 @@ async function matchPlannerBookings(bookings, storedRecipes) {
       const matches = await findRecipeMatches(booking, storedRecipes);
       unmatched.push({
         ...booking,
-        suggestions: [
-          matches.exactMatch,
-          matches.urlMatch,
-          ...matches.fuzzyMatches
-        ].filter(Boolean),
+        suggestions: buildSuggestionList(matches, 5),
         status: 'needs_review'
       });
     }
@@ -249,6 +314,7 @@ module.exports = {
   levenshteinDistance,
   normalizeRecipeName,
   extractDomain,
+  buildSuggestionList,
   findRecipeMatches,
   autoMatchRecipe,
   matchPlannerBookings
