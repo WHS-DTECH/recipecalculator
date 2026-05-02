@@ -926,6 +926,9 @@
       if (!output) return;
 
       const candidates = Array.isArray(payload && payload.candidates) ? payload.candidates : [];
+      const comparison = payload && payload.comparison ? payload.comparison : {};
+      const hasInventoryCount = Number(comparison.recipe_has_inventory || 0);
+      const missingInventoryCount = Number(comparison.recipe_missing_inventory || 0);
       if (!candidates.length) {
         output.textContent = 'No re-save candidates found.';
         return;
@@ -933,6 +936,8 @@
 
       const lines = [];
       lines.push(`Candidates: ${candidates.length}`);
+      lines.push(`Recipes found in Ingredient Directory: ${hasInventoryCount}`);
+      lines.push(`Recipes NOT found in Ingredient Directory: ${missingInventoryCount}`);
       lines.push('');
       candidates.forEach((row) => {
         lines.push([
@@ -942,7 +947,9 @@
           row.staff_name || '(No teacher)',
           row.class_name || '(No class)',
           row.recipe || '(No recipe)',
-          row.reason || ''
+          row.reason || '',
+          row.inventory_status || '',
+          `inventory_rows=${Number(row.inventory_rows || 0)}`
         ].join(' | '));
       });
 

@@ -379,6 +379,11 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
 
     params.push(limit);
     const sql = `
+      WITH inv AS (
+        SELECT recipe_id::text AS recipe_id_text, COUNT(*)::int AS inventory_rows
+        FROM ingredients_inventory
+        GROUP BY recipe_id::text
+      )
       SELECT
         b.id AS booking_id,
         b.booking_date,
@@ -390,12 +395,15 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         COUNT(dsi.id)::int AS ingredient_rows,
         COUNT(*) FILTER (
           WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
-        )::int AS rows_for_current_recipe
+        )::int AS rows_for_current_recipe,
+        COALESCE(inv.inventory_rows, 0)::int AS inventory_rows
       FROM bookings b
       LEFT JOIN desired_servings_ingredients dsi
         ON dsi.booking_id = b.id
+      LEFT JOIN inv
+        ON inv.recipe_id_text = coalesce(b.recipe_id::text, '')
       WHERE ${where.join(' AND ')}
-      GROUP BY b.id, b.booking_date, b.period, b.staff_name, b.class_name, b.recipe, b.recipe_id
+      GROUP BY b.id, b.booking_date, b.period, b.staff_name, b.class_name, b.recipe, b.recipe_id, inv.inventory_rows
       HAVING COUNT(dsi.id) = 0
          OR COUNT(*) FILTER (
               WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
@@ -416,13 +424,24 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
       rows_for_current_recipe: row.rows_for_current_recipe,
       reason: Number(row.ingredient_rows) === 0
         ? 'missing_desired_servings_rows'
-        : 'ingredients_linked_to_other_recipe_only'
+        : 'ingredients_linked_to_other_recipe_only',
+      inventory_rows: Number(row.inventory_rows) || 0,
+      inventory_status: Number(row.inventory_rows) > 0
+        ? 'recipe_has_inventory'
+        : 'recipe_missing_inventory'
     }));
+
+    const withInventory = candidates.filter((r) => r.inventory_status === 'recipe_has_inventory').length;
+    const missingInventory = candidates.filter((r) => r.inventory_status === 'recipe_missing_inventory').length;
 
     res.json({
       success: true,
       filters: { startDate: startDate || null, endDate: endDate || null, limit },
       count: candidates.length,
+      comparison: {
+        recipe_has_inventory: withInventory,
+        recipe_missing_inventory: missingInventory
+      },
       candidates
     });
   } catch (err) {
