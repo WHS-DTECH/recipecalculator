@@ -308,11 +308,23 @@ function splitExtractedIngredientsPreserveOrder(rawExtractedIngredients) {
     .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
 }
 
-// PUT /api/recipes/:id/raw - Save raw data for a recipe (file only)
+// PUT /api/recipes/:id/raw - Save raw data for a recipe (DB + file)
 router.put('/:id/raw', async (req, res) => {
   const { id } = req.params;
   const { raw_data } = req.body;
   if (!raw_data) return res.status(400).json({ success: false, error: 'Missing raw_data' });
+
+  // Save to DB (primary, persists across deploys)
+  try {
+    await pool.query(
+      'UPDATE uploads SET raw_data = $1 WHERE id = (SELECT uploaded_recipe_id FROM recipes WHERE id = $2)',
+      [raw_data, id]
+    );
+  } catch (dbErr) {
+    console.error('[PUT /:id/raw] Failed to save raw_data to DB:', dbErr.message);
+  }
+
+  // Save to file (secondary, may not survive Render deploys)
   const rawDataDir = path.join(__dirname, '../public/RawDataTXT');
   if (!fs.existsSync(rawDataDir)) {
     fs.mkdirSync(rawDataDir, { recursive: true });
@@ -320,7 +332,7 @@ router.put('/:id/raw', async (req, res) => {
   const filePath = path.join(rawDataDir, `${id}.txt`);
   fs.writeFile(filePath, raw_data, (fileErr) => {
     if (fileErr) {
-      return res.status(500).json({ success: false, error: 'Failed to write raw data file', details: fileErr.message });
+      console.error('[PUT /:id/raw] Failed to write raw data file:', fileErr.message);
     }
     res.json({ success: true });
   });

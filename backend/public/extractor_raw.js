@@ -72,9 +72,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function loadRawDataFromFile(recipeId) {
+        // Try DB first (survives Render deploys)
+        const recipe = await getRecipeById(recipeId);
+        if (recipe && recipe.upload_raw_data) {
+            return recipe.upload_raw_data;
+        }
+        // Fall back to static file
         const res = await fetch(`/RawDataTXT/${recipeId}.txt`);
         if (!res.ok) {
-            throw new Error('File not found');
+            throw new Error('Raw data not found in database or file');
         }
         return res.text();
     }
@@ -143,6 +149,8 @@ document.addEventListener('DOMContentLoaded', function () {
             const details = data && data.error ? `: ${data.error}` : '';
             throw new Error(`Failed to save raw data${details}`);
         }
+        // Refresh cache so subsequent loads pick up the newly saved DB value
+        await getRecipes(true);
         return data;
     }
 
