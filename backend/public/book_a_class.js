@@ -83,6 +83,32 @@ function setTopSelection(key, value) {
   localStorage.setItem(key, JSON.stringify(arr));
 }
 
+function getStaffUsageCounts() {
+  try {
+    const raw = JSON.parse(localStorage.getItem('staffUsageCounts') || '{}');
+    if (!raw || typeof raw !== 'object') return {};
+    return raw;
+  } catch {
+    return {};
+  }
+}
+
+function incrementStaffUsageCount(staffId) {
+  const id = String(staffId || '').trim();
+  if (!id) return;
+  const counts = getStaffUsageCounts();
+  const current = Number(counts[id] || 0);
+  counts[id] = Number.isFinite(current) ? current + 1 : 1;
+  localStorage.setItem('staffUsageCounts', JSON.stringify(counts));
+}
+
+function getStaffDisplayLabel(staff) {
+  if (!staff) return '';
+  return staff.code
+    ? `${staff.last_name}, ${staff.first_name} (${staff.code})`
+    : `${staff.last_name}, ${staff.first_name}`;
+}
+
 function populateStaffDropdown(staffList = null) {
   const loadStaff = Array.isArray(staffList)
     ? Promise.resolve({ staff: staffList })
@@ -91,6 +117,7 @@ function populateStaffDropdown(staffList = null) {
   return loadStaff.then(data => {
     const select = document.getElementById('staffSelect');
     if (!select) return;
+    const currentValue = String(select.value || '').trim();
     select.innerHTML = '';
     const defaultOption = document.createElement('option');
     defaultOption.value = '';
@@ -98,25 +125,54 @@ function populateStaffDropdown(staffList = null) {
     defaultOption.disabled = true;
     defaultOption.selected = true;
     select.appendChild(defaultOption);
-    const staffArr = data.staff || [];
-    const topStaff = getTopSelections('topStaff');
-    const topList = topStaff.map(id => staffArr.find(s => String(s.id) === String(id))).filter(Boolean);
-    const restList = staffArr.filter(s => !topStaff.includes(String(s.id)));
-    const sorted = [...topList, ...restList];
-    sorted.forEach((staff, idx) => {
-      if (topList.length > 0 && idx === topList.length) {
-        const sep = document.createElement('option');
-        sep.disabled = true;
-        sep.textContent = '──────────────';
-        select.appendChild(sep);
-      }
+    const staffArr = (data.staff || []).slice().sort((a, b) => {
+      return getStaffDisplayLabel(a).localeCompare(getStaffDisplayLabel(b), undefined, { sensitivity: 'base' });
+    });
+
+    const usageCounts = getStaffUsageCounts();
+    const recentStaffIds = getTopSelections('topStaff').slice(0, 5);
+    const mostUsedId = staffArr
+      .map((s) => ({ id: String(s.id || ''), count: Number(usageCounts[String(s.id || '')] || 0) }))
+      .sort((a, b) => b.count - a.count)[0];
+    const mostUsedStaffId = mostUsedId && mostUsedId.count > 0 ? mostUsedId.id : '';
+
+    const featuredIds = [];
+    if (mostUsedStaffId) featuredIds.push(mostUsedStaffId);
+    recentStaffIds.forEach((id) => {
+      const sid = String(id || '');
+      if (sid && !featuredIds.includes(sid)) featuredIds.push(sid);
+    });
+
+    const featuredList = featuredIds
+      .map((id) => staffArr.find((s) => String(s.id) === String(id)))
+      .filter(Boolean);
+
+    // Featured block: most used first, then recent 5. Kept duplicated in full alphabetical list below.
+    featuredList.forEach((staff) => {
       const opt = document.createElement('option');
       opt.value = staff.id;
-      opt.textContent = staff.code
-        ? `${staff.last_name}, ${staff.first_name} (${staff.code})`
-        : `${staff.last_name}, ${staff.first_name}`;
+      opt.textContent = getStaffDisplayLabel(staff);
       select.appendChild(opt);
     });
+
+    if (featuredList.length > 0) {
+      const sep = document.createElement('option');
+      sep.disabled = true;
+      sep.textContent = '──────────────';
+      select.appendChild(sep);
+    }
+
+    // Full alphabetical list (includes featured users in their natural place as requested).
+    staffArr.forEach((staff) => {
+      const opt = document.createElement('option');
+      opt.value = staff.id;
+      opt.textContent = getStaffDisplayLabel(staff);
+      select.appendChild(opt);
+    });
+
+    if (currentValue && Array.from(select.options).some((opt) => String(opt.value || '') === currentValue)) {
+      select.value = currentValue;
+    }
   });
 }
 
@@ -931,6 +987,7 @@ function saveBooking(options = {}) {
 
   // Track most selected
   setTopSelection('topStaff', staffId);
+  incrementStaffUsageCount(staffId);
   setTopSelection('topClasses', className);
   const editId = document.getElementById('saveBookingBtn').dataset.editId;
   const method = editId ? 'PUT' : 'POST';
@@ -1142,6 +1199,9 @@ window.addEventListener('DOMContentLoaded', () => {
       _staffArrCache = data.staff || [];
       const currentUser = await readCurrentStaffUserWithAuthFallback();
       _preferredStaffId = resolveLoggedInStaffId(_staffArrCache, currentUser);
+      if (_preferredStaffId) {
+        setTopSelection('topStaff', _preferredStaffId);
+      }
       return populateStaffDropdown(_staffArrCache).then(() => {
         const sharedState = readSharedEmbedState();
         const firstStaffId = sharedState && sharedState.staffId
@@ -1228,6 +1288,8 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('staffSelect').addEventListener('change', function() {
     const staffId = this.value;
+    setTopSelection('topStaff', staffId);
+    incrementStaffUsageCount(staffId);
     const staffCode = getStaffCodeById(staffId, _staffArrCache);
     populateClassDropdown(staffCode);
     fetchTeacherTimetableForSelectedDate();
