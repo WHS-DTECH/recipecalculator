@@ -52,8 +52,9 @@ function publishBookingToBookClassForm(booking) {
     updatedAt: Date.now(),
     staffId: String(booking.staff_id || ''),
     className: String(booking.class_name || ''),
-    bookingDate: String(booking.booking_date || ''),
-    period: String(booking.period || ''),
+    // Planner-like clicks only transfer recipe info — do not override the user's chosen date/period.
+    bookingDate: plannerLike ? '' : String(booking.booking_date || ''),
+    period: plannerLike ? '' : String(booking.period || ''),
     recipeId: booking.recipe_id != null ? String(booking.recipe_id) : '',
     recipeName: String(booking.recipe || ''),
     recipeSelectionInfo: String(booking.recipe_selection_info || ''),
