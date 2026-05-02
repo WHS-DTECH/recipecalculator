@@ -502,8 +502,7 @@
 
       function setQuickImageDisabled(disabled) {
         const off = !!disabled;
-        if (quickImageFileInput) quickImageFileInput.disabled = off;
-        if (quickImageUrlInput) quickImageUrlInput.disabled = off;
+        // Keep inputs available so users can prepare file/URL before publish.
         if (quickImageUploadBtn) quickImageUploadBtn.disabled = off;
         if (quickImageSaveUrlBtn) quickImageSaveUrlBtn.disabled = off;
         if (quickImageClearBtn) quickImageClearBtn.disabled = off;
