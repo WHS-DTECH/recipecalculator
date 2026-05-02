@@ -366,6 +366,35 @@ document.addEventListener('DOMContentLoaded', function() {
     return `https://${raw}`;
   }
 
+  function isLikelyImagePath(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+    if (/^https?:\/\//i.test(raw)) return true;
+    if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(raw)) return true;
+    return false;
+  }
+
+  function normalizeRecipeImageUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+    if (!isLikelyImagePath(raw)) return '';
+
+    if (/^https?:\/\//i.test(raw)) {
+      return raw;
+    }
+
+    if (raw.startsWith('/')) {
+      return raw;
+    }
+
+    if (/^images\//i.test(raw)) {
+      return `/${raw}`;
+    }
+
+    // Legacy stored filenames are expected in the uploads folder.
+    return `/images/recipe_user_uploads/${raw}`;
+  }
+
   function hostFromUrl(value) {
     try {
       const host = new URL(value).hostname.replace(/^www\./i, '');
@@ -462,7 +491,8 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = row.name || '(No Name)';
     const recipeNumber = row.recipeid || row.recipe_id || row.id;
     const category = getDishCategory(name);
-    const imageUrl = String(row.image_url || '').trim() || getDishImage(name, row.id, category, index);
+    const normalizedImageUrl = normalizeRecipeImageUrl(row.image_url);
+    const imageUrl = normalizedImageUrl || getDishImage(name, row.id, category, index);
     const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
     const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
     const categoryChipHtml = category === 'Student Favourites'
