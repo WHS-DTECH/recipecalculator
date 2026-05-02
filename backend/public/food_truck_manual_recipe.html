@@ -174,6 +174,41 @@
     .ft-status.success { color: var(--ft-success); }
     .ft-status.error { color: var(--ft-error); }
 
+    .ft-image-panel {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid var(--ft-border);
+    }
+
+    .ft-image-preview-wrap {
+      width: 100%;
+      max-width: 520px;
+      aspect-ratio: 16 / 10;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #c9dbee;
+      background: #f0f4f8;
+      margin-bottom: 0.6rem;
+    }
+
+    .ft-image-preview-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .ft-image-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.55rem;
+    }
+
+    .ft-btn.danger {
+      background: #a52a2a;
+    }
+
     @media (max-width: 900px) {
       .ft-grid {
         grid-template-columns: 1fr;
@@ -242,6 +277,34 @@
       </form>
 
       <div id="manualStatus" class="ft-status"></div>
+
+      <section class="ft-image-panel">
+        <h2 style="margin:0 0 0.3rem;font-size:1.15rem;color:var(--ft-heading);">Recipe Image Uploader</h2>
+        <p class="ft-hint" id="imageMetaText">Save a recipe first, then upload or set its image.</p>
+        <div id="imageStatus" class="ft-status" style="margin-top:0.35rem;"></div>
+
+        <div class="ft-image-preview-wrap">
+          <img id="imagePreview" alt="Recipe image preview" src="images/whs%20logo%20circular%20reo%20.png">
+        </div>
+
+        <div class="ft-grid">
+          <div class="ft-field full">
+            <label for="imageFileInput">Choose Image File</label>
+            <input id="imageFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
+          </div>
+
+          <div class="ft-field full">
+            <label for="imageUrlInput">Or Image URL</label>
+            <input id="imageUrlInput" type="text" placeholder="https://example.com/image.jpg or /images/...">
+          </div>
+        </div>
+
+        <div class="ft-image-actions">
+          <button id="imageUploadBtn" type="button" class="ft-btn">Upload File</button>
+          <button id="imageSaveUrlBtn" type="button" class="ft-btn">Save Image URL</button>
+          <button id="imageClearBtn" type="button" class="ft-btn danger">Clear Custom Image</button>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -252,12 +315,123 @@
       const nextIdEl = document.getElementById('nextRecipeId');
       const saveBtn = document.getElementById('saveManualBtn');
       const clearBtn = document.getElementById('clearManualBtn');
+      const imageMetaText = document.getElementById('imageMetaText');
+      const imageStatus = document.getElementById('imageStatus');
+      const imagePreview = document.getElementById('imagePreview');
+      const imageFileInput = document.getElementById('imageFileInput');
+      const imageUrlInput = document.getElementById('imageUrlInput');
+      const imageUploadBtn = document.getElementById('imageUploadBtn');
+      const imageSaveUrlBtn = document.getElementById('imageSaveUrlBtn');
+      const imageClearBtn = document.getElementById('imageClearBtn');
+
+      const FALLBACK_IMAGE = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+      let currentRecipeId = null;
+      let currentDisplayRecipe = null;
+      let currentUserEmail = '';
 
       function setStatus(message, type) {
         statusEl.textContent = message || '';
         statusEl.classList.remove('success', 'error');
         if (type === 'success') statusEl.classList.add('success');
         if (type === 'error') statusEl.classList.add('error');
+      }
+
+      function setImageStatus(message, type) {
+        imageStatus.textContent = message || '';
+        imageStatus.classList.remove('success', 'error');
+        if (type === 'success') imageStatus.classList.add('success');
+        if (type === 'error') imageStatus.classList.add('error');
+      }
+
+      function setImageActionsEnabled(enabled) {
+        const on = !!enabled;
+        imageUploadBtn.disabled = !on;
+        imageSaveUrlBtn.disabled = !on;
+        imageClearBtn.disabled = !on;
+      }
+
+      function updateImageUI() {
+        if (!currentRecipeId) {
+          imageMetaText.textContent = 'Save a recipe first, then upload or set its image.';
+          imagePreview.src = FALLBACK_IMAGE;
+          imageUrlInput.value = '';
+          setImageActionsEnabled(false);
+          return;
+        }
+
+        if (!currentDisplayRecipe) {
+          imageMetaText.textContent = `RecipeID ${currentRecipeId} is not available for image editing yet.`;
+          imagePreview.src = FALLBACK_IMAGE;
+          imageUrlInput.value = '';
+          setImageActionsEnabled(false);
+          return;
+        }
+
+        imageMetaText.textContent = `RecipeID ${currentDisplayRecipe.recipeid} | Display ID ${currentDisplayRecipe.id}`;
+        imagePreview.src = String(currentDisplayRecipe.image_url || '').trim() || FALLBACK_IMAGE;
+        imageUrlInput.value = currentDisplayRecipe.image_url || '';
+        setImageActionsEnabled(true);
+      }
+
+      async function ensureAuthUserEmail() {
+        if (currentUserEmail) return currentUserEmail;
+        const res = await fetch('/api/auth/me', { credentials: 'include' });
+        const data = await res.json().catch(() => ({}));
+        const email = String(data && data.user && data.user.email || '').trim().toLowerCase();
+        if (!email) throw new Error('Sign in required for image edits.');
+        currentUserEmail = email;
+        return currentUserEmail;
+      }
+
+      async function imageApi(path, options) {
+        const email = await ensureAuthUserEmail();
+        const response = await fetch(path, Object.assign({}, options || {}, {
+          credentials: 'include',
+          headers: Object.assign({}, options && options.headers ? options.headers : {}, {
+            'x-user-email': email
+          })
+        }));
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) {
+          throw new Error(payload.error || `Request failed (${response.status})`);
+        }
+        return payload;
+      }
+
+      async function ensureDisplayRow(recipeId) {
+        const res = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error((data && (data.error || data.message)) || 'Failed to prepare recipe display row.');
+        }
+      }
+
+      async function loadImageContextForRecipe(recipeId) {
+        currentDisplayRecipe = null;
+        updateImageUI();
+        try {
+          const payload = await imageApi('/api/admin/recipe-images', { method: 'GET' });
+          const rows = Array.isArray(payload.recipes) ? payload.recipes : [];
+          currentDisplayRecipe = rows.find((row) => String(row && row.recipeid) === String(recipeId)) || null;
+          updateImageUI();
+          if (!currentDisplayRecipe) {
+            setImageStatus('Image editor is ready after recipe display row is created.', '');
+          } else {
+            setImageStatus('', '');
+          }
+        } catch (err) {
+          updateImageUI();
+          setImageStatus(err && err.message ? err.message : 'Failed to load image editor.', 'error');
+        }
+      }
+
+      function fileToDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Failed to read selected image file.'));
+          reader.readAsDataURL(file);
+        });
       }
 
       async function refreshNextId() {
@@ -316,6 +490,13 @@
           }
 
           const recipeId = data.recipeId;
+          currentRecipeId = Number(recipeId);
+          try {
+            await ensureDisplayRow(currentRecipeId);
+            await loadImageContextForRecipe(currentRecipeId);
+          } catch (displayErr) {
+            setImageStatus(displayErr && displayErr.message ? displayErr.message : 'Image editor setup failed.', 'error');
+          }
           setStatus(`Recipe saved successfully. Assigned RecipeID ${recipeId}.`, 'success');
           form.reset();
           await refreshNextId();
@@ -333,7 +514,89 @@
         setStatus('', '');
       });
 
+      imageUploadBtn.addEventListener('click', async function() {
+        if (!currentDisplayRecipe) {
+          setImageStatus('Save a recipe first so an image target exists.', 'error');
+          return;
+        }
+
+        const file = imageFileInput.files && imageFileInput.files[0] ? imageFileInput.files[0] : null;
+        if (!file) {
+          setImageStatus('Choose an image file first.', 'error');
+          return;
+        }
+
+        try {
+          setImageStatus('Uploading image...', '');
+          const imageData = await fileToDataUrl(file);
+          const payload = await imageApi(`/api/admin/recipe-images/${currentDisplayRecipe.id}/upload`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_data: imageData, file_name: file.name })
+          });
+          currentDisplayRecipe = payload.recipe || currentDisplayRecipe;
+          imageFileInput.value = '';
+          updateImageUI();
+          setImageStatus('Image uploaded and saved.', 'success');
+        } catch (err) {
+          setImageStatus(err && err.message ? err.message : 'Failed to upload image.', 'error');
+        }
+      });
+
+      imageSaveUrlBtn.addEventListener('click', async function() {
+        if (!currentDisplayRecipe) {
+          setImageStatus('Save a recipe first so an image target exists.', 'error');
+          return;
+        }
+
+        const imageUrl = String(imageUrlInput.value || '').trim();
+        if (!imageUrl) {
+          setImageStatus('Enter an image URL, or click Clear Custom Image.', 'error');
+          return;
+        }
+        if (!/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl)) {
+          setImageStatus('Image URL must start with https:// or /images/.', 'error');
+          return;
+        }
+
+        try {
+          setImageStatus('Saving image URL...', '');
+          const payload = await imageApi(`/api/admin/recipe-images/${currentDisplayRecipe.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: imageUrl })
+          });
+          currentDisplayRecipe = payload.recipe || currentDisplayRecipe;
+          updateImageUI();
+          setImageStatus('Image URL saved.', 'success');
+        } catch (err) {
+          setImageStatus(err && err.message ? err.message : 'Failed to save image URL.', 'error');
+        }
+      });
+
+      imageClearBtn.addEventListener('click', async function() {
+        if (!currentDisplayRecipe) {
+          setImageStatus('Save a recipe first so an image target exists.', 'error');
+          return;
+        }
+
+        try {
+          setImageStatus('Clearing custom image...', '');
+          const payload = await imageApi(`/api/admin/recipe-images/${currentDisplayRecipe.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ image_url: '' })
+          });
+          currentDisplayRecipe = payload.recipe || currentDisplayRecipe;
+          updateImageUI();
+          setImageStatus('Custom image cleared. Stock fallback will be used.', 'success');
+        } catch (err) {
+          setImageStatus(err && err.message ? err.message : 'Failed to clear image.', 'error');
+        }
+      });
+
       refreshNextId();
+      updateImageUI();
     })();
   </script>
 </body>
