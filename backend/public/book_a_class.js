@@ -737,12 +737,45 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
     return;
   }
 
-  const rows = periods.map(p => {
-    const classTokens = expandTimetableClassTokens(p.classes);
+  const normalizedPeriods = (Array.isArray(periods) ? periods : []).map(p => ({
+    ...p,
+    classes: expandTimetableClassTokens(p && p.classes)
+  }));
+
+  // Kamar places Whanau entries inside P1; show them on a dedicated display row above P1.
+  const p1Entry = normalizedPeriods.find(p => String(p && p.period).toUpperCase() === 'P1');
+  const whanauTokens = p1Entry
+    ? p1Entry.classes.filter(cls => /WHANAU/i.test(String(cls || '')))
+    : [];
+  if (p1Entry && whanauTokens.length) {
+    p1Entry.classes = p1Entry.classes.filter(cls => !/WHANAU/i.test(String(cls || '')));
+  }
+
+  const displayPeriods = normalizedPeriods.map(p => ({
+    ...p,
+    displayPeriod: p.period
+  }));
+
+  if (whanauTokens.length) {
+    const p1Index = displayPeriods.findIndex(p => String(p && p.period).toUpperCase() === 'P1');
+    const whanauRow = {
+      period: 'P1',
+      displayPeriod: 'Whānau',
+      classes: whanauTokens
+    };
+    if (p1Index >= 0) {
+      displayPeriods.splice(p1Index, 0, whanauRow);
+    } else {
+      displayPeriods.unshift(whanauRow);
+    }
+  }
+
+  const rows = displayPeriods.map(p => {
+    const classTokens = Array.isArray(p.classes) ? p.classes : expandTimetableClassTokens(p.classes);
     const classText = classTokens.length
       ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;font-size:1rem;">${cls}</button>`).join('')
       : '<span style="color:#999;">No class</span>';
-    return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
+    return `<tr><td style="font-weight:bold;width:60px;">${p.displayPeriod || p.period}</td><td>${classText}</td></tr>`;
   }).join('');
   body.innerHTML = `
     <table class="bookings-table" style="margin-top:0.5rem;">
@@ -751,10 +784,7 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
     </table>
   `;
 
-  _currentTeacherTimetablePeriods = (Array.isArray(periods) ? periods : []).map(p => ({
-    ...p,
-    classes: expandTimetableClassTokens(p && p.classes)
-  }));
+  _currentTeacherTimetablePeriods = normalizedPeriods;
 
   syncClassDropdownFromTimetable(_currentTeacherTimetablePeriods);
   autoSelectClassFromSelectedPeriod();
