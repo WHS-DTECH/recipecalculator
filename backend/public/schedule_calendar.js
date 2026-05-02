@@ -730,20 +730,15 @@ function getISODate(date) {
 
 // Fetch bookings for the current week
 async function fetchBookingsForWeek(monday) {
-  // Get all bookings (ideally, backend should filter by week, but we filter here for now)
-  const res = await fetch('/api/bookings/all');
-  const data = await res.json();
-  if (!data.bookings) return [];
   // Align filtering to the user's regional week start.
   const weekStartDate = getStartOfWeek(monday);
-  let weekDates = [];
-  for (let i = 0; i < WEEK_DAYS_COUNT; ++i) {
-    const d = new Date(weekStartDate);
-    d.setDate(weekStartDate.getDate() + i);
-    weekDates.push(getISODate(d));
-  }
-  // Filter bookings for this week
-  return data.bookings.filter(b => weekDates.includes(b.booking_date));
+  const weekEndDate = new Date(weekStartDate);
+  weekEndDate.setDate(weekStartDate.getDate() + WEEK_DAYS_COUNT - 1);
+  const start = toLocalIsoDate(weekStartDate);
+  const end = toLocalIsoDate(weekEndDate);
+  const res = await fetch(`/api/bookings/all?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  const data = await res.json();
+  return Array.isArray(data.bookings) ? data.bookings : [];
 }
 
 function formatDateShort(date) {

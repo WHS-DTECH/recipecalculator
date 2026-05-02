@@ -289,11 +289,29 @@ router.get('/planner-class-options', async (req, res) => {
   }
 });
 
-// Get all bookings
+// Get all bookings — optional ?start=YYYY-MM-DD&end=YYYY-MM-DD to filter by date range
 router.get('/all', async (req, res) => {
   try {
     await ensureSchema();
-    const result = await pool.query('SELECT * FROM bookings ORDER BY booking_date DESC, period');
+    const { start, end } = req.query;
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    if ((start && !dateRe.test(start)) || (end && !dateRe.test(end))) {
+      return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+    }
+    let query = 'SELECT * FROM bookings';
+    const params = [];
+    if (start && end) {
+      query += ' WHERE booking_date >= $1 AND booking_date <= $2';
+      params.push(start, end);
+    } else if (start) {
+      query += ' WHERE booking_date >= $1';
+      params.push(start);
+    } else if (end) {
+      query += ' WHERE booking_date <= $1';
+      params.push(end);
+    }
+    query += ' ORDER BY booking_date DESC, period';
+    const result = await pool.query(query, params);
     res.json({ bookings: result.rows });
   } catch (err) {
     console.error('Failed to fetch bookings:', err.message);

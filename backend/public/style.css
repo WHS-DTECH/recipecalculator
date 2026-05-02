@@ -105,13 +105,7 @@
     border: none;
     border-radius: 5px;
     padding: 0.45rem 1rem;
-}
-.add-booking-print-btn {
-    background: #1976d2;
-    color: #fff;
-    border: none;
-    border-radius: 5px;
-    padding: 0.45rem 1rem;
+    cursor: pointer;
 }
 .add-booking-calendar-wrap {
     margin-top: 0;
