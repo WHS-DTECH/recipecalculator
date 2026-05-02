@@ -441,8 +441,12 @@ router.post('/link-multi', async (req, res) => {
 router.get('/linked-recipes/:bookingId', async (req, res) => {
   try {
     await ensureBookingRecipesTable();
-    const { bookingId } = req.params;
-    const result = await pool.query(
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) {
+      return res.status(400).json({ error: 'Valid bookingId is required.' });
+    }
+
+    let result = await pool.query(
       `SELECT br.recipe_id, r.name, r.url
        FROM booking_recipes br
        JOIN recipes r ON r.id = br.recipe_id
@@ -450,6 +454,33 @@ router.get('/linked-recipes/:bookingId', async (req, res) => {
        ORDER BY br.linked_at`,
       [bookingId]
     );
+
+    // Backward-compatibility: older links may exist only as bookings.recipe_id.
+    if (!result.rows.length) {
+      const fallback = await pool.query(
+        `SELECT b.recipe_id, r.name, r.url
+         FROM bookings b
+         JOIN recipes r ON r.id = b.recipe_id
+         WHERE b.id = $1
+           AND b.recipe_id IS NOT NULL
+         LIMIT 1`,
+        [bookingId]
+      );
+
+      if (fallback.rows.length) {
+        const primaryRecipeId = Number(fallback.rows[0].recipe_id);
+        if (Number.isInteger(primaryRecipeId) && primaryRecipeId > 0) {
+          await pool.query(
+            `INSERT INTO booking_recipes (booking_id, recipe_id)
+             VALUES ($1, $2)
+             ON CONFLICT DO NOTHING`,
+            [bookingId, primaryRecipeId]
+          );
+        }
+        result = fallback;
+      }
+    }
+
     res.json({ recipes: result.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
