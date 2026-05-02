@@ -583,8 +583,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const emptyEl = options.emptyEl;
     const orderedRows = Array.isArray(options.orderedRows) ? options.orderedRows : [];
     const recipeById = options.recipeById;
-    const featuredKeys = options.featuredKeys || new Set();
-    const sortMode = String(options.sortMode || 'featured');
+    const sortMode = String(options.sortMode || 'az');
     const searchTerm = String(options.searchTerm || '').trim().toLowerCase();
 
     let filtered = orderedRows.filter((row) => {
@@ -592,21 +591,14 @@ document.addEventListener('DOMContentLoaded', function() {
       return recipeSearchText(row).includes(searchTerm);
     });
 
-    if (sortMode === 'az') {
-      filtered = filtered.slice().sort((a, b) =>
-        String(a && a.name || '').localeCompare(String(b && b.name || ''), undefined, { sensitivity: 'base' })
-      );
-    } else if (sortMode === 'za') {
+    if (sortMode === 'za') {
       filtered = filtered.slice().sort((a, b) =>
         String(b && b.name || '').localeCompare(String(a && a.name || ''), undefined, { sensitivity: 'base' })
       );
     } else {
-      filtered = filtered.slice().sort((a, b) => {
-        const aFeatured = featuredKeys.has(rowRecipeKey(a)) ? 1 : 0;
-        const bFeatured = featuredKeys.has(rowRecipeKey(b)) ? 1 : 0;
-        if (aFeatured !== bFeatured) return bFeatured - aFeatured;
-        return 0;
-      });
+      filtered = filtered.slice().sort((a, b) =>
+        String(a && a.name || '').localeCompare(String(b && b.name || ''), undefined, { sensitivity: 'base' })
+      );
     }
 
     renderRecipeCards(cardList, filtered, recipeById, 0);
@@ -711,8 +703,7 @@ document.addEventListener('DOMContentLoaded', function() {
           emptyEl: recipeFilterEmpty,
           orderedRows,
           recipeById,
-          featuredKeys,
-          sortMode: recipeIndexSort ? recipeIndexSort.value : 'featured',
+          sortMode: recipeIndexSort ? recipeIndexSort.value : 'az',
           searchTerm: recipeIndexSearch ? recipeIndexSearch.value : ''
         });
       };
