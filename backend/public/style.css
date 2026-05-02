@@ -458,6 +458,11 @@
 }
 .book-form-actions-top {
     margin-bottom: 0.6rem;
+    font-size: 0.9rem;
+}
+.book-form-actions-top button {
+    font-size: 0.9rem;
+    padding: 0.4rem 1rem;
 }
 .book-form-row button {
     padding: 0.5rem 1.2rem;
