@@ -190,6 +190,7 @@ function getStaffCodeById(staffId, staffArr) {
 let _staffArrCache = [];
 let _currentTeacherTimetablePeriods = [];
 let _preferredStaffId = '';
+let _studentsFetchRequestSeq = 0;
 
 function normalizeToken(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -886,6 +887,8 @@ function fetchStudentsForClass(classCode) {
   const tbody = document.getElementById('classStudentsBody');
   if (!meta || !tbody) return;
 
+  const requestSeq = ++_studentsFetchRequestSeq;
+
   if (!classCode) {
     meta.textContent = 'Choose a class to view students.';
     tbody.innerHTML = '<tr><td colspan="4">No class selected.</td></tr>';
@@ -906,8 +909,13 @@ function fetchStudentsForClass(classCode) {
   meta.textContent = 'Loading students...';
   fetch(url)
     .then(res => res.json())
-    .then(data => renderClassStudents(data.students || []))
+    .then(data => {
+      // Ignore stale responses that arrive after a newer class selection.
+      if (requestSeq !== _studentsFetchRequestSeq) return;
+      renderClassStudents(data.students || []);
+    })
     .catch(() => {
+      if (requestSeq !== _studentsFetchRequestSeq) return;
       meta.textContent = 'Failed to load students for this class.';
       tbody.innerHTML = '<tr><td colspan="4">Could not load students.</td></tr>';
     });
