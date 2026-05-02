@@ -245,16 +245,42 @@
       font-size: 13px;
     }
 
+    .suggestion-main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      min-width: 0;
+    }
+
     .suggestion-name {
       font-weight: 500;
       color: #1976d2;
-      flex: 1;
       cursor: pointer;
       text-decoration: underline;
     }
 
     .suggestion-name:hover {
       color: #1565c0;
+    }
+
+    .suggestion-source {
+      font-size: 11px;
+      color: #888;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 500px;
+    }
+
+    .suggestion-source a {
+      color: #888;
+      text-decoration: none;
+    }
+
+    .suggestion-source a:hover {
+      text-decoration: underline;
+      color: #555;
     }
 
     .suggestion-score {
@@ -702,7 +728,10 @@
               <div class="suggestion-list">
                 ${suggestions.map(s => `
                   <div class="suggestion-item">
-                    <div class="suggestion-name" onclick="openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${s.name || 'Unknown'}</div>
+                    <div class="suggestion-main">
+                      <div class="suggestion-name" onclick="openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${s.name || 'Unknown'}</div>
+                      <div class="suggestion-source">${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" title="${s.url}">${s.url}</a>` : '<em>No source URL</em>'}</div>
+                    </div>
                     <div class="suggestion-score">${((s.matchScore || 0) * 100).toFixed(0)}%</div>
                     <div class="suggestion-actions">
                       <button class="btn btn-sm btn-secondary" onclick="openRecipePreviewModal(${s.id})" title="Preview recipe details">Preview</button>
