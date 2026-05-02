@@ -573,7 +573,7 @@ function autoSelectClassFromSelectedPeriod() {
   }
 }
 
-function selectClassOptionFromToken(classToken) {
+function selectClassOptionFromToken(classToken, studentDisplayToken) {
   const classSelect = document.getElementById('classSelect');
   if (!classSelect || !classToken) return false;
 
@@ -625,7 +625,10 @@ function selectClassOptionFromToken(classToken) {
 
   if (matchedOption) {
     classSelect.value = matchedOption.value;
-    fetchStudentsForClass(classSelect.value);
+    // Use the full timetable token (includes room, e.g. 82B-MFOOD-22) for the student
+    // lookup so the LIKE query only returns students in that specific period group,
+    // not all students across both room assignments for the same class.
+    fetchStudentsForClass(studentDisplayToken || classSelect.value);
     return true;
   }
 
@@ -640,7 +643,7 @@ function selectClassOptionFromToken(classToken) {
   fallbackOpt.textContent = `${rawToken} (from timetable)`;
   classSelect.appendChild(fallbackOpt);
   classSelect.value = rawToken;
-  fetchStudentsForClass(classSelect.value);
+  fetchStudentsForClass(studentDisplayToken || classSelect.value);
   return true;
 }
 
@@ -757,7 +760,10 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
       }
 
       const classToken = btn.getAttribute('data-class-token') || '';
-      const wasMatched = selectClassOptionFromToken(classToken);
+      // Pass classToken as both the dropdown match token AND the student display token
+      // so the student panel filters by the full room-specific code (e.g. 82B-MFOOD-22),
+      // not just the broader class code (e.g. 82B-MFOOD) which would combine both room groups.
+      const wasMatched = selectClassOptionFromToken(classToken, classToken);
       if (!wasMatched) {
         autoSelectClassFromSelectedPeriod();
       }
