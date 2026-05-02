@@ -856,9 +856,11 @@ function fetchStudentsForClass(classCode) {
     return;
   }
 
-  // Pass the current staff code so the backend can triangulate the exact student token
+  // Pass the current staff timetable code so the backend can triangulate the exact student token
   // e.g. teacher token 82B-MFOOD-F + staffCode RR → search for RR-MFOOD-F in student timetable
-  const staffCode = document.getElementById('staffSelect')?.value || '';
+  // staffSelect.value is a DB id; look up the actual timetable code via _staffArrCache.
+  const staffId = document.getElementById('staffSelect')?.value || '';
+  const staffCode = getStaffCodeById(staffId, _staffArrCache);
   const url = staffCode
     ? `/api/student_upload/by-class/${encodeURIComponent(classCode)}?staffCode=${encodeURIComponent(staffCode)}`
     : `/api/student_upload/by-class/${encodeURIComponent(classCode)}`;
