@@ -142,12 +142,19 @@ function uploadStudentsWithProgress(payload, onProgress) {
   });
 }
 
+let allStudentRows = [];
+
+const PERIOD_KEYS = DISPLAY_COLUMNS
+  .filter(c => !['id','student_name','id_number','form_class','year_level','upload_year','upload_term','upload_date','status'].includes(c.key))
+  .map(c => c.key);
+
 function fetchAndRenderStudentTable() {
   fetch('/api/student_upload/all')
     .then(res => res.json())
     .then(result => {
       if (result && Array.isArray(result.students)) {
-        renderStudentTable(result.students);
+        allStudentRows = result.students;
+        renderStudentTable();
       }
     })
     .catch(() => {
@@ -156,11 +163,24 @@ function fetchAndRenderStudentTable() {
     });
 }
 
-function renderStudentTable(rows) {
+function renderStudentTable() {
   const container = document.getElementById('studentTableContainer');
   if (!container) return;
 
+  const filterEl = document.getElementById('studentClassFilter');
+  const filter = filterEl ? filterEl.value.trim().toLowerCase() : '';
+
+  const filteredRows = filter
+    ? allStudentRows.filter(row => {
+        const name = String(row.student_name || '').toLowerCase();
+        const form = String(row.form_class || '').toLowerCase();
+        if (name.includes(filter) || form.includes(filter)) return true;
+        return PERIOD_KEYS.some(k => String(row[k] || '').toLowerCase().includes(filter));
+      })
+    : allStudentRows;
+
   let html = '<h2>Student Timetable Table</h2>';
+  html += `<div style="font-size:0.9rem;color:#475569;margin-bottom:0.5rem;">Showing ${filteredRows.length} of ${allStudentRows.length} students</div>`;
   html += '<div style="overflow-x:auto;">';
   html += '<table class="styled-table"><thead><tr>';
   DISPLAY_COLUMNS.forEach(col => {
@@ -168,7 +188,7 @@ function renderStudentTable(rows) {
   });
   html += '</tr></thead><tbody>';
 
-  rows.forEach(row => {
+  filteredRows.forEach(row => {
     html += '<tr>';
     DISPLAY_COLUMNS.forEach(col => {
       const cellValue = col.key === 'upload_date' ? formatDisplayDate(row[col.key]) : (row[col.key] || '');
@@ -178,10 +198,39 @@ function renderStudentTable(rows) {
   });
 
   html += '</tbody></table></div>';
-  container.innerHTML = html;
+
+  // Only replace the table area — keep the filter bar intact
+  let tableArea = document.getElementById('studentTableArea');
+  if (!tableArea) {
+    tableArea = document.createElement('div');
+    tableArea.id = 'studentTableArea';
+    container.appendChild(tableArea);
+  }
+  tableArea.innerHTML = html;
 }
 
 window.addEventListener('DOMContentLoaded', fetchAndRenderStudentTable);
+window.addEventListener('DOMContentLoaded', function () {
+  const container = document.getElementById('studentTableContainer');
+  if (!container) return;
+
+  const filterBar = document.createElement('div');
+  filterBar.style.cssText = 'display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;margin-bottom:0.75rem;';
+  filterBar.innerHTML = `
+    <label for="studentClassFilter" style="font-weight:700;color:#1f2937;">Find by class or student:</label>
+    <input id="studentClassFilter" type="text" placeholder="e.g. MI-WHANAU-MR or Adams"
+      style="min-width:280px;padding:0.4rem 0.55rem;border:1px solid #cbd5e1;border-radius:8px;" />
+    <button id="studentClassFilterClear" type="button"
+      style="padding:0.4rem 0.7rem;border:1px solid #94a3b8;border-radius:8px;background:#fff;cursor:pointer;">Clear</button>
+  `;
+  container.insertBefore(filterBar, container.firstChild);
+
+  document.getElementById('studentClassFilter').addEventListener('input', renderStudentTable);
+  document.getElementById('studentClassFilterClear').addEventListener('click', function () {
+    document.getElementById('studentClassFilter').value = '';
+    renderStudentTable();
+  });
+});
 
 document.getElementById('uploadForm').addEventListener('submit', function(e) {
   e.preventDefault();
