@@ -141,6 +141,3 @@ router.delete('/all', async (req, res) => {
 });
 
 module.exports = router;
-
-// GET /desired_servings_ingredients
-router.get('/', (req, res) => {
