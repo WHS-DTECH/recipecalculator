@@ -350,6 +350,53 @@ router.get('/bookings', async (req, res) => {
 });
 
 /**
+ * GET /api/recipe-matching/versions/by-recipe/:recipeId
+ * Return other linked recipes that are associated to the same planner bookings.
+ */
+router.get('/versions/by-recipe/:recipeId', async (req, res) => {
+  try {
+    await ensureBookingRecipesTable();
+
+    const recipeId = Number(req.params.recipeId);
+    if (!Number.isInteger(recipeId) || recipeId <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid recipeId is required.' });
+    }
+
+    const relatedResult = await pool.query(
+      `WITH target_bookings AS (
+         SELECT DISTINCT booking_id
+         FROM booking_recipes
+         WHERE recipe_id = $1
+       ), related AS (
+         SELECT br.recipe_id, COUNT(DISTINCT br.booking_id)::int AS shared_bookings
+         FROM booking_recipes br
+         INNER JOIN target_bookings tb ON tb.booking_id = br.booking_id
+         WHERE br.recipe_id <> $1
+         GROUP BY br.recipe_id
+       )
+       SELECT
+         r.recipe_id,
+         rec.name,
+         rec.url,
+         r.shared_bookings
+       FROM related r
+       INNER JOIN recipes rec ON rec.id = r.recipe_id
+       ORDER BY r.shared_bookings DESC, rec.name ASC`,
+      [recipeId]
+    );
+
+    return res.json({
+      success: true,
+      recipeId,
+      versions: relatedResult.rows
+    });
+  } catch (err) {
+    console.error('[RECIPE-MATCH] Error fetching versions by recipe:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * PUT /api/recipe-matching/set-primary
  * Set which linked recipe is the primary (shown on index / planner calendar).
  * Body: { bookingId: number, recipeId: number }

@@ -289,6 +289,91 @@
     .recipe-nav-item.active .recipe-nav-id {
       opacity: 0.95;
     }
+
+    .recipe-versions-dock {
+      position: fixed;
+      right: max(0.8rem, calc((100vw - 1180px) / 2 - 320px));
+      top: 5.4rem;
+      width: 300px;
+      max-height: calc(100vh - 6.2rem);
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+      background: #fff;
+      border: 1px solid #d9e5f0;
+      border-radius: 14px;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
+      z-index: 20;
+    }
+
+    .recipe-versions-dock.active {
+      display: flex;
+    }
+
+    .recipe-versions-head {
+      padding: 0.8rem 0.9rem;
+      border-bottom: 1px solid #e4edf6;
+      background: #f5f9ff;
+    }
+
+    .recipe-versions-title {
+      margin: 0;
+      font-size: 0.96rem;
+      color: #15324c;
+      font-weight: 700;
+    }
+
+    .recipe-versions-subtitle {
+      margin: 0.2rem 0 0;
+      font-size: 0.78rem;
+      color: #5d748c;
+    }
+
+    .recipe-versions-list {
+      padding: 0.65rem;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.48rem;
+    }
+
+    .recipe-version-item {
+      width: 100%;
+      text-align: left;
+      border: 1px solid #dce7f2;
+      background: #f8fbff;
+      border-radius: 9px;
+      padding: 0.55rem 0.62rem;
+      cursor: pointer;
+      transition: border-color 0.18s ease, background 0.18s ease;
+    }
+
+    .recipe-version-item:hover {
+      border-color: #7fb2de;
+      background: #edf6ff;
+    }
+
+    .recipe-version-name {
+      margin: 0;
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #15324c;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .recipe-version-meta {
+      margin: 0.22rem 0 0;
+      font-size: 0.74rem;
+      color: #5d748c;
+    }
+
+    @media (max-width: 1480px) {
+      .recipe-versions-dock {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -343,6 +428,14 @@
       </section>
     </div>
   </main>
+
+  <aside id="recipeVersionsDock" class="recipe-versions-dock" aria-label="Recipe versions" style="display:none;">
+    <div class="recipe-versions-head">
+      <h3 class="recipe-versions-title">Other Versions</h3>
+      <p class="recipe-versions-subtitle">Click a version to open its details.</p>
+    </div>
+    <div id="recipeVersionsList" class="recipe-versions-list"></div>
+  </aside>
 
   <div id="adminEditPanel" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9000;overflow-y:auto;padding:2rem 1rem;">
     <div style="background:#fff;max-width:700px;margin:0 auto;border-radius:10px;padding:2rem;box-shadow:0 4px 32px rgba(0,0,0,0.25);">

@@ -218,6 +218,92 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  function sourceFromAnyUrl(url) {
+    const value = String(url || '').trim();
+    if (!value) return '-';
+    return sourceFromUrl(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+  }
+
+  function findDisplayRowByRecipeId(recipeId) {
+    const wanted = String(recipeId || '').trim();
+    if (!wanted) return null;
+    return allRecipes.find((row) => String(row.recipeid || row.recipe_id || '').trim() === wanted) || null;
+  }
+
+  function renderRecipeVersionsDock(versions, currentRecipeId) {
+    const dock = document.getElementById('recipeVersionsDock');
+    const list = document.getElementById('recipeVersionsList');
+    if (!dock || !list) return;
+
+    const rows = Array.isArray(versions) ? versions : [];
+    if (!rows.length) {
+      dock.classList.remove('active');
+      dock.style.display = 'none';
+      list.innerHTML = '';
+      return;
+    }
+
+    const items = rows
+      .map((v) => {
+        const displayRow = findDisplayRowByRecipeId(v.recipe_id);
+        const displayId = displayRow ? displayRow.id : null;
+        const label = String(v.name || `Recipe ${v.recipe_id || '-'}`);
+        const source = sourceFromAnyUrl(v.url);
+        const bookings = Number(v.shared_bookings || 0);
+
+        if (!displayId) {
+          return `
+            <div class="recipe-version-item" title="This version is not currently in recipe_display">
+              <p class="recipe-version-name">${label}</p>
+              <p class="recipe-version-meta">Not in browse list yet | Source: ${source}</p>
+            </div>
+          `;
+        }
+
+        const isCurrent = String(v.recipe_id) === String(currentRecipeId);
+        return `
+          <button class="recipe-version-item" data-display-id="${displayId}" ${isCurrent ? 'disabled' : ''}>
+            <p class="recipe-version-name">${label}</p>
+            <p class="recipe-version-meta">Shared bookings: ${bookings} | Source: ${source}</p>
+          </button>
+        `;
+      })
+      .join('');
+
+    list.innerHTML = items;
+    list.querySelectorAll('button.recipe-version-item[data-display-id]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const displayId = btn.getAttribute('data-display-id');
+        if (!displayId) return;
+        navigateToRecipe(displayId);
+      });
+    });
+
+    dock.style.display = '';
+    dock.classList.add('active');
+  }
+
+  async function loadRecipeVersions(recipeId) {
+    try {
+      const numericId = Number(recipeId);
+      if (!Number.isInteger(numericId) || numericId <= 0) {
+        renderRecipeVersionsDock([], recipeId);
+        return;
+      }
+
+      const response = await fetch(`/api/recipe-matching/versions/by-recipe/${numericId}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.success === false) {
+        renderRecipeVersionsDock([], recipeId);
+        return;
+      }
+
+      renderRecipeVersionsDock(data.versions, recipeId);
+    } catch (_) {
+      renderRecipeVersionsDock([], recipeId);
+    }
+  }
+
   fetch('/api/auth/me', { credentials: 'include' })
     .then(res => res.json())
     .then(auth => {
@@ -286,6 +372,8 @@ document.addEventListener('DOMContentLoaded', function() {
           }
 
           document.title = `${title} | Recipe Details`;
+
+          loadRecipeVersions(recipeNumber);
 
           const ingredientLines = splitIngredientItems(recipe.ingredients);
           renderList(document.getElementById('ingredientsList'), ingredientLines);
