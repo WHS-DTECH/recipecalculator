@@ -230,7 +230,15 @@ function renderTimetableTable() {
   if (filterInput) {
     filterInput.addEventListener('input', (event) => {
       teacherFilterTerm = event.target.value || '';
+      const caretPos = event.target.selectionStart;
       renderTimetableTable();
+      const newInput = document.getElementById('teacherNameFilter');
+      if (newInput) {
+        newInput.focus();
+        if (typeof caretPos === 'number') {
+          newInput.setSelectionRange(caretPos, caretPos);
+        }
+      }
     });
   }
 }
