@@ -1,6 +1,6 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260502d';
+  var ASSET_VERSION = '20260502e';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
     '/navbar.css'
@@ -65,7 +65,7 @@
     var drawerState = drawerConfigs.map(function(cfg) {
       return {
         cfg: cfg,
-        isOpen: false,
+        isOpen: !cfg.drawer.hidden || !cfg.backdrop.hidden,
         lastFocusedElement: null,
         closeBtn: cfg.drawer.querySelector('.navbar-drawer-close')
       };
@@ -84,7 +84,7 @@
     }
 
     function closeDrawer(state, restoreFocus) {
-      if (!state || !state.isOpen) return;
+      if (!state) return;
       state.isOpen = false;
       state.cfg.drawer.hidden = true;
       state.cfg.backdrop.hidden = true;

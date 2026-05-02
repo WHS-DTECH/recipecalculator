@@ -106,7 +106,11 @@
     // Hide admin sections if user is not admin
     const adminSections = document.querySelectorAll('[data-role="admin"]');
     adminSections.forEach(section => {
-      const isDrawerStateElement = section.id === 'adminManagementDrawer' || section.id === 'adminDrawerBackdrop';
+      const isDrawerStateElement =
+        section.id === 'adminManagementDrawer'
+        || section.id === 'adminDrawerBackdrop'
+        || section.id === 'planningDrawer'
+        || section.id === 'planningDrawerBackdrop';
 
       if (normalized === 'admin') {
         section.style.display = '';
