@@ -342,7 +342,7 @@ function ensureClassOption(select, className) {
   if (hasOption) return;
   const option = document.createElement('option');
   option.value = className;
-  option.textContent = `${className} (shared)`;
+  option.textContent = className;
   option.setAttribute('data-shared-option', '1');
   select.appendChild(option);
 }
@@ -518,7 +518,7 @@ function syncClassDropdownFromTimetable(periods) {
   const classSelect = document.getElementById('classSelect');
   if (!classSelect) return;
 
-  // Use the full raw timetable tokens (e.g. 82B-MFOOD-22, 82B-MFOOD-F) so the dropdown
+  // Use the full raw timetable tokens (e.g. 3-13HOSP-F) so the dropdown
   // has precise options for each room/group rather than just the stripped subject code.
   const rawTokens = (Array.isArray(periods) ? periods : [])
     .flatMap(p => expandTimetableClassTokens(p && p.classes))
@@ -527,20 +527,22 @@ function syncClassDropdownFromTimetable(periods) {
   if (!rawTokens.length) return;
 
   const uniqueTokens = [...new Set(rawTokens)];
-  const existingNorm = new Set(
-    Array.from(classSelect.options)
-      .map(opt => normalizeClassToken(opt.value))
-      .filter(Boolean)
-  );
+
+  // Replace the dropdown entirely with only timetable-sourced classes.
+  classSelect.innerHTML = '';
+  const defaultOpt = document.createElement('option');
+  defaultOpt.value = '';
+  defaultOpt.textContent = 'Choose Class';
+  defaultOpt.disabled = true;
+  defaultOpt.selected = true;
+  classSelect.appendChild(defaultOpt);
 
   uniqueTokens.forEach(token => {
-    if (existingNorm.has(normalizeClassToken(token))) return;
     const opt = document.createElement('option');
     opt.value = token;
-    opt.textContent = `${token} (from timetable)`;
+    opt.textContent = token;
     opt.setAttribute('data-timetable-fallback', '1');
     classSelect.appendChild(opt);
-    existingNorm.add(normalizeClassToken(token)); // prevent dups within this batch
   });
 }
 
