@@ -406,6 +406,60 @@
         }
       }
 
+      async function postJsonChecked(url, payload, label) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload || {})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error((data && (data.error || data.message)) || `${label} failed.`);
+        }
+        return data;
+      }
+
+      async function waitForCleanupCompletion(progressUrl, timeoutMs = 120000, pollMs = 750) {
+        const startedAt = Date.now();
+        while ((Date.now() - startedAt) < timeoutMs) {
+          const progressRes = await fetch(progressUrl, { cache: 'no-store' });
+          const progressData = await progressRes.json().catch(() => ({}));
+          if (!progressData || progressData.running === false) return;
+          await new Promise((resolve) => setTimeout(resolve, pollMs));
+        }
+        throw new Error('Timed out waiting for cleanup to complete.');
+      }
+
+      async function runManualPublishFlow(recipeId) {
+        const warnings = [];
+        setStatus('Running publish steps: Cleanup Instructions...', '');
+        try {
+          await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+          await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress');
+        } catch (err) {
+          warnings.push(`Cleanup Instructions skipped: ${err && err.message ? err.message : err}`);
+        }
+
+        setStatus('Running publish steps: Cleanup Ingredients...', '');
+        try {
+          await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+          await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress');
+        } catch (err) {
+          warnings.push(`Cleanup Ingredients skipped: ${err && err.message ? err.message : err}`);
+        }
+
+        setStatus('Running publish steps: Inventory Sync...', '');
+        try {
+          await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
+        } catch (err) {
+          warnings.push(`Inventory Sync skipped: ${err && err.message ? err.message : err}`);
+        }
+
+        setStatus('Running publish steps: Publish to Display...', '');
+        await ensureDisplayRow(recipeId);
+        return warnings;
+      }
+
       async function loadImageContextForRecipe(recipeId) {
         currentDisplayRecipe = null;
         updateImageUI();
@@ -491,13 +545,20 @@
 
           const recipeId = data.recipeId;
           currentRecipeId = Number(recipeId);
+
+          const warnings = await runManualPublishFlow(currentRecipeId);
+
           try {
-            await ensureDisplayRow(currentRecipeId);
             await loadImageContextForRecipe(currentRecipeId);
           } catch (displayErr) {
             setImageStatus(displayErr && displayErr.message ? displayErr.message : 'Image editor setup failed.', 'error');
           }
-          setStatus(`Recipe saved successfully. Assigned RecipeID ${recipeId}.`, 'success');
+
+          if (warnings.length) {
+            setStatus(`Recipe saved and published (RecipeID ${recipeId}) with warnings: ${warnings.join(' ')}`, 'success');
+          } else {
+            setStatus(`Recipe saved and published successfully. Assigned RecipeID ${recipeId}.`, 'success');
+          }
           form.reset();
           await refreshNextId();
         } catch (err) {
