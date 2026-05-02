@@ -152,18 +152,42 @@ router.get('/by-class/:ttcode', async (req, res) => {
   const ttcode = (req.params.ttcode || '').trim();
   if (!ttcode) return res.json({ students: [] });
 
+  // Triangulate between teacher and student timetable token formats.
+  // Teacher tokens use a line-number prefix: 82B-MFOOD-22
+  // Student tokens use a teacher-code prefix:  RR-MFOOD-22
+  // Both share the subject-room suffix:        MFOOD-22
+  // So we search for the full token AND the suffix (everything after the first '-' segment)
+  // to match either format.
+  const firstDash = ttcode.indexOf('-');
+  const coreSuffix = (firstDash > 0 && firstDash < ttcode.length - 1)
+    ? ttcode.slice(firstDash + 1)
+    : null;
+  // Only use the core suffix if it is specific enough (contains a hyphen and is 4+ chars)
+  const useCore = coreSuffix && coreSuffix.includes('-') && coreSuffix.length >= 4;
+
   try {
     await ensureSchema();
-    const whereClause = PERIOD_COLUMNS.map((col, i) => `upper(COALESCE(${col}, '')) LIKE '%' || upper($${i + 1}) || '%'`).join(' OR ');
-    const values = PERIOD_COLUMNS.map(() => ttcode);
+
+    // Build parameterised search for both the full token and core suffix
+    const params = [];
+    const colConditions = PERIOD_COLUMNS.map(col => {
+      params.push(ttcode);
+      const idx = params.length;
+      if (useCore) {
+        params.push(coreSuffix);
+        const idx2 = params.length;
+        return `(upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx}) || '%' OR upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx2}) || '%')`;
+      }
+      return `upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx}) || '%'`;
+    });
 
     const result = await pool.query(
       `SELECT id, student_name, id_number, form_class, year_level
        FROM student_timetable
        WHERE COALESCE(status, 'Current') = 'Current'
-         AND (${whereClause})
+         AND (${colConditions.join(' OR ')})
        ORDER BY student_name, id_number`,
-      values
+      params
     );
     res.json({ students: result.rows });
   } catch (err) {
