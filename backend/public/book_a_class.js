@@ -22,6 +22,35 @@ const bookClassSharedChannel = isTeacherEmbedView && 'BroadcastChannel' in windo
   : null;
 let isApplyingSharedState = false;
 let lastSharedStateAppliedAt = 0;
+let pendingSharedRecipeId = '';
+let pendingSharedRecipeName = '';
+
+function applyRecipeSelection(targetRecipeId = '', targetRecipeName = '') {
+  const select = document.getElementById('recipeSelect');
+  if (!select) return false;
+
+  const idToUse = String(targetRecipeId || '').trim();
+  const nameToUse = String(targetRecipeName || '').trim().toLowerCase();
+
+  if (idToUse && Array.from(select.options).some((opt) => String(opt.value) === idToUse)) {
+    select.value = idToUse;
+    select.dispatchEvent(new Event('change'));
+    return true;
+  }
+
+  if (nameToUse) {
+    const byName = Array.from(select.options).find((opt) =>
+      String(opt.getAttribute('data-recipe-name') || '').trim().toLowerCase() === nameToUse
+    );
+    if (byName) {
+      select.value = byName.value;
+      select.dispatchEvent(new Event('change'));
+      return true;
+    }
+  }
+
+  return false;
+}
 
 function toLocalIsoDate(date) {
   const y = date.getFullYear();
@@ -326,6 +355,7 @@ function applySharedEmbedState(state = {}) {
   const targetDate = state.bookingDate || '';
   const targetPeriod = state.period || '';
   const targetRecipeId = state.recipeId || '';
+  const targetRecipeName = state.recipeName || '';
   const targetClassSize = state.classSize || '';
   const targetEditBookingId = state.editBookingId || '';
   lastSharedStateAppliedAt = state.updatedAt || Date.now();
@@ -339,8 +369,12 @@ function applySharedEmbedState(state = {}) {
   if (periodSelect && targetPeriod) {
     periodSelect.value = targetPeriod;
   }
-  if (recipeSelect && targetRecipeId) {
-    recipeSelect.value = targetRecipeId;
+  if (targetRecipeId || targetRecipeName) {
+    const selected = applyRecipeSelection(targetRecipeId, targetRecipeName);
+    if (!selected) {
+      pendingSharedRecipeId = String(targetRecipeId || '').trim();
+      pendingSharedRecipeName = String(targetRecipeName || '').trim();
+    }
   }
   if (classSizeInput && targetClassSize) {
     classSizeInput.value = targetClassSize;
@@ -764,6 +798,14 @@ function populateRecipeDropdown() {
         opt.setAttribute('data-recipe-name', recipeName);
         select.appendChild(opt);
       });
+
+      if (pendingSharedRecipeId || pendingSharedRecipeName) {
+        const selected = applyRecipeSelection(pendingSharedRecipeId, pendingSharedRecipeName);
+        if (selected) {
+          pendingSharedRecipeId = '';
+          pendingSharedRecipeName = '';
+        }
+      }
     });
 }
 

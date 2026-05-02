@@ -54,6 +54,7 @@ function publishBookingToBookClassForm(booking) {
     bookingDate: String(booking.booking_date || ''),
     period: String(booking.period || ''),
     recipeId: booking.recipe_id != null ? String(booking.recipe_id) : '',
+    recipeName: String(booking.recipe || ''),
     classSize: booking.class_size != null ? String(booking.class_size) : '',
     editBookingId: String(booking.id || '')
   };
