@@ -325,6 +325,10 @@
       overflow-y: auto;
     }
 
+    .modal-content.wide {
+      max-width: 900px;
+    }
+
     .modal-header {
       margin-bottom: 15px;
       border-bottom: 1px solid var(--border);
@@ -369,6 +373,83 @@
       margin-top: 20px;
       border-top: 1px solid var(--border);
       padding-top: 15px;
+    }
+
+    .recipe-index-list {
+      max-height: 240px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: #fff;
+    }
+
+    .recipe-index-item {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid #f0f0f0;
+      background: transparent;
+      padding: 8px 10px;
+      font-size: 13px;
+      cursor: pointer;
+      color: #1f2937;
+    }
+
+    .recipe-index-item:hover {
+      background: #f5f9ff;
+    }
+
+    .recipe-index-item.active {
+      background: #e3f2fd;
+      font-weight: 600;
+    }
+
+    .preview-layout {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .preview-block {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fafafa;
+    }
+
+    .preview-block h3 {
+      margin: 0 0 8px 0;
+      font-size: 14px;
+      color: #1f2937;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .preview-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 13px;
+      color: #222;
+      line-height: 1.4;
+    }
+
+    .preview-meta {
+      margin-bottom: 12px;
+      font-size: 13px;
+      color: #4b5563;
+    }
+
+    .preview-description {
+      margin: 0 0 12px 0;
+      font-size: 13px;
+      color: #1f2937;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 900px) {
+      .preview-layout {
+        grid-template-columns: 1fr;
+      }
     }
 
     .toast {
@@ -447,9 +528,38 @@
           <option value="">-- Choose a recipe --</option>
         </select>
       </div>
+      <div class="form-group">
+        <label>Recipe Index:</label>
+        <input type="text" id="linkRecipeSearch" placeholder="Search recipe index...">
+        <div id="recipeIndexList" class="recipe-index-list"></div>
+      </div>
       <div class="modal-footer">
+        <button class="btn btn-primary" onclick="previewSelectedRecipe()">Preview Selected</button>
         <button class="btn btn-secondary" onclick="closeLinkModal()">Cancel</button>
         <button class="btn btn-success" onclick="saveRecipeLink()">Link Recipe</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="recipePreviewModal" class="modal">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h2 id="previewRecipeTitle">Recipe Details</h2>
+      </div>
+      <div id="previewRecipeMeta" class="preview-meta">Loading...</div>
+      <p id="previewRecipeDescription" class="preview-description"></p>
+      <div class="preview-layout">
+        <section class="preview-block">
+          <h3>Ingredients</h3>
+          <ol id="previewIngredientsList" class="preview-list"></ol>
+        </section>
+        <section class="preview-block">
+          <h3>Instructions</h3>
+          <ol id="previewInstructionsList" class="preview-list"></ol>
+        </section>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeRecipePreviewModal()">Close</button>
       </div>
     </div>
   </div>
@@ -491,6 +601,7 @@
     let searchTerm = '';
     let currentBookingId = null;
     let availableRecipesCache = null;
+    const recipeDetailsCache = new Map();
 
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
@@ -687,6 +798,159 @@
       return availableRecipesCache;
     }
 
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function extractListItems(value) {
+      if (Array.isArray(value)) {
+        return value.map((item) => String(item || '').trim()).filter(Boolean);
+      }
+
+      const text = String(value || '').trim();
+      if (!text) return [];
+
+      const liMatches = [];
+      const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+      let match;
+      while ((match = liRegex.exec(text)) !== null) {
+        const cleaned = String(match[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+        if (cleaned) liMatches.push(cleaned);
+      }
+      if (liMatches.length) return liMatches;
+
+      if (text.startsWith('[') && text.endsWith(']')) {
+        try {
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed)) {
+            return parsed.map((item) => String(item || '').trim()).filter(Boolean);
+          }
+        } catch (_) {
+          // Ignore parse errors and fallback to line splitting.
+        }
+      }
+
+      return text
+        .replace(/<br\s*\/?>/gi, '\n')
+        .split(/\r?\n/)
+        .map((line) => line.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
+    }
+
+    function renderRecipeIndex(filterText = '') {
+      const listEl = document.getElementById('recipeIndexList');
+      if (!listEl) return;
+
+      const source = Array.isArray(availableRecipesCache) ? availableRecipesCache : [];
+      const filter = String(filterText || '').toLowerCase().trim();
+      const filtered = source
+        .filter((recipe) => {
+          if (!filter) return true;
+          return String(recipe.name || '').toLowerCase().includes(filter)
+            || String(recipe.id || '').includes(filter);
+        })
+        .slice(0, 300);
+
+      if (!filtered.length) {
+        listEl.innerHTML = '<div style="padding:10px;color:#666;font-size:12px;">No recipes found.</div>';
+        return;
+      }
+
+      const selectedId = Number(document.getElementById('linkRecipeSelect').value || 0);
+      listEl.innerHTML = filtered.map((recipe) => `
+        <button class="recipe-index-item ${selectedId === Number(recipe.id) ? 'active' : ''}" onclick="previewRecipeFromIndex(${Number(recipe.id)})">
+          ${escapeHtml(recipe.name || 'Unknown')} <span style="color:#6b7280;">(ID ${Number(recipe.id)})</span>
+        </button>
+      `).join('');
+    }
+
+    function previewRecipeFromIndex(recipeId) {
+      const selectEl = document.getElementById('linkRecipeSelect');
+      if (selectEl) selectEl.value = String(recipeId);
+      renderRecipeIndex(document.getElementById('linkRecipeSearch').value);
+      openRecipePreviewModal(recipeId);
+    }
+
+    function previewSelectedRecipe() {
+      const recipeId = Number(document.getElementById('linkRecipeSelect').value || 0);
+      if (!recipeId) {
+        showToast('Please choose a recipe first.', 'error');
+        return;
+      }
+      openRecipePreviewModal(recipeId);
+    }
+
+    function renderPreviewList(targetId, items, fallbackText) {
+      const el = document.getElementById(targetId);
+      if (!el) return;
+      if (!Array.isArray(items) || items.length === 0) {
+        el.innerHTML = `<li>${escapeHtml(fallbackText)}</li>`;
+        return;
+      }
+      el.innerHTML = items.map((item) => `<li>${escapeHtml(item)}</li>`).join('');
+    }
+
+    async function fetchRecipeDetails(recipeId) {
+      if (recipeDetailsCache.has(recipeId)) {
+        return recipeDetailsCache.get(recipeId);
+      }
+      const response = await fetch(`/api/recipes/${recipeId}`);
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data && data.error ? data.error : 'Failed to load recipe details.');
+      }
+      recipeDetailsCache.set(recipeId, data);
+      return data;
+    }
+
+    async function openRecipePreviewModal(recipeId) {
+      const modal = document.getElementById('recipePreviewModal');
+      modal.classList.add('active');
+
+      document.getElementById('previewRecipeTitle').textContent = 'Loading recipe...';
+      document.getElementById('previewRecipeMeta').textContent = 'Loading details...';
+      document.getElementById('previewRecipeDescription').textContent = '';
+      renderPreviewList('previewIngredientsList', [], 'Loading...');
+      renderPreviewList('previewInstructionsList', [], 'Loading...');
+
+      try {
+        const recipe = await fetchRecipeDetails(Number(recipeId));
+        document.getElementById('previewRecipeTitle').textContent = recipe && recipe.name ? recipe.name : `Recipe ${recipeId}`;
+
+        const serving = recipe && recipe.serving_size ? String(recipe.serving_size).trim() : '';
+        const url = recipe && recipe.url ? String(recipe.url).trim() : '';
+        document.getElementById('previewRecipeMeta').innerHTML = `
+          <strong>Recipe ID:</strong> ${Number(recipeId)}
+          ${serving ? ` | <strong>Serves:</strong> ${escapeHtml(serving)}` : ''}
+          ${url ? ` | <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1976d2;">Open Source URL</a>` : ''}
+        `;
+
+        const description = recipe && recipe.description ? String(recipe.description).trim() : '';
+        document.getElementById('previewRecipeDescription').textContent = description;
+
+        const ingredientsItems = extractListItems((recipe && recipe.ingredients_display) || (recipe && recipe.ingredients) || '');
+        const instructionItems = extractListItems((recipe && recipe.instructions_display) || (recipe && recipe.instructions_extracted) || (recipe && recipe.instructions) || '');
+
+        renderPreviewList('previewIngredientsList', ingredientsItems, 'No ingredients listed.');
+        renderPreviewList('previewInstructionsList', instructionItems, 'No instructions listed.');
+      } catch (err) {
+        document.getElementById('previewRecipeTitle').textContent = 'Unable to load recipe details';
+        document.getElementById('previewRecipeMeta').textContent = err.message;
+        document.getElementById('previewRecipeDescription').textContent = '';
+        renderPreviewList('previewIngredientsList', [], 'Unable to load ingredients.');
+        renderPreviewList('previewInstructionsList', [], 'Unable to load instructions.');
+      }
+    }
+
+    function closeRecipePreviewModal() {
+      document.getElementById('recipePreviewModal').classList.remove('active');
+    }
+
     async function openLinkModal(bookingId, recipeId, recipeName) {
       currentBookingId = bookingId;
       document.getElementById('linkRecipeName').value = recipeName;
@@ -705,6 +969,18 @@
         if (recipeId) {
           selectEl.value = recipeId;
         }
+
+        const searchEl = document.getElementById('linkRecipeSearch');
+        if (searchEl) {
+          searchEl.value = '';
+          searchEl.oninput = () => renderRecipeIndex(searchEl.value);
+        }
+
+        selectEl.onchange = () => {
+          renderRecipeIndex(document.getElementById('linkRecipeSearch').value);
+        };
+
+        renderRecipeIndex('');
       } catch (err) {
         selectEl.innerHTML = '<option value="">-- Unable to load recipes --</option>';
         showToast(`Error: ${err.message}`, 'error');
@@ -713,6 +989,7 @@
 
     function closeLinkModal() {
       document.getElementById('linkModal').classList.remove('active');
+      closeRecipePreviewModal();
     }
 
     function openCreateModal(bookingId, recipeName) {
