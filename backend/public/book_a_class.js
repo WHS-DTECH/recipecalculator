@@ -645,6 +645,54 @@ function updateBookingDateDayLabel() {
   dayLabel.textContent = `(${shortWeekdayFormatter.format(parsed)})`;
 }
 
+function getWeekMonday(dateObj) {
+  const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+  const weekday = d.getDay();
+  const daysSinceMonday = (weekday + 6) % 7;
+  d.setDate(d.getDate() - daysSinceMonday);
+  return d;
+}
+
+function updateTeacherTimetableDaySelector() {
+  const dayButtons = Array.from(document.querySelectorAll('#teacherTimetableDaySelector .teacher-day-btn'));
+  if (!dayButtons.length) return;
+
+  const dateInput = document.getElementById('dateInput');
+  const parsed = parseLocalIsoDate(dateInput && dateInput.value ? dateInput.value : '') || new Date();
+  const selectedWeekday = parsed.getDay();
+
+  dayButtons.forEach((btn) => {
+    const btnWeekday = Number(btn.getAttribute('data-weekday') || 0);
+    const isActive = btnWeekday === selectedWeekday;
+    btn.style.background = isActive ? '#1e40af' : '#e2e8f0';
+    btn.style.color = isActive ? '#fff' : '#334155';
+    btn.style.border = isActive ? '1px solid #1e40af' : '1px solid #cbd5e1';
+    btn.style.borderRadius = '6px';
+    btn.style.padding = '0.26rem 0.52rem';
+    btn.style.fontSize = '0.82rem';
+    btn.style.cursor = 'pointer';
+    btn.style.fontWeight = isActive ? '700' : '600';
+  });
+}
+
+function jumpTeacherTimetableToWeekday(weekdayMonToFri) {
+  const dayIndex = Number(weekdayMonToFri);
+  if (![1, 2, 3, 4, 5].includes(dayIndex)) return;
+
+  const dateInput = document.getElementById('dateInput');
+  if (!dateInput) return;
+
+  const parsed = parseLocalIsoDate(dateInput.value || '') || new Date();
+  const monday = getWeekMonday(parsed);
+  monday.setDate(monday.getDate() + (dayIndex - 1));
+  dateInput.value = toLocalIsoDate(monday);
+
+  updateBookingDateDayLabel();
+  updateTeacherTimetableDaySelector();
+  fetchTeacherTimetableForSelectedDate();
+  writeSharedEmbedState(getCurrentEmbedState(), { force: true });
+}
+
 function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   const meta = document.getElementById('teacherTimetableMeta');
   const body = document.getElementById('teacherTimetableBody');
@@ -1222,6 +1270,7 @@ window.addEventListener('DOMContentLoaded', () => {
     dateInput.value = toLocalIsoDate(new Date());
   }
   updateBookingDateDayLabel();
+  updateTeacherTimetableDaySelector();
 
   populateRecipeDropdown();
   fetchAndRenderBookings();
@@ -1297,8 +1346,15 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('dateInput').addEventListener('change', function() {
     updateBookingDateDayLabel();
+    updateTeacherTimetableDaySelector();
     fetchTeacherTimetableForSelectedDate();
     writeSharedEmbedState(getCurrentEmbedState());
+  });
+
+  document.querySelectorAll('#teacherTimetableDaySelector .teacher-day-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      jumpTeacherTimetableToWeekday(btn.getAttribute('data-weekday'));
+    });
   });
   document.getElementById('periodSelect').addEventListener('change', function() {
     autoSelectClassFromSelectedPeriod();

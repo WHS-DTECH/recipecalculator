@@ -163,6 +163,13 @@
                 </div>
                 <div class="scheduled-bookings" id="teacherTimetableSection" style="margin-top:1rem;">
                     <h2>Teacher Timetable for Selected Date</h2>
+                    <div id="teacherTimetableDaySelector" class="teacher-timetable-day-selector" style="display:flex;gap:0.35rem;flex-wrap:wrap;margin:0.4rem 0 0.55rem;">
+                        <button type="button" class="teacher-day-btn" data-weekday="1">Mon</button>
+                        <button type="button" class="teacher-day-btn" data-weekday="2">Tue</button>
+                        <button type="button" class="teacher-day-btn" data-weekday="3">Wed</button>
+                        <button type="button" class="teacher-day-btn" data-weekday="4">Thu</button>
+                        <button type="button" class="teacher-day-btn" data-weekday="5">Fri</button>
+                    </div>
                     <div id="teacherTimetableMeta" class="class-students-meta">Select teacher and date to view timetable.</div>
                     <div id="teacherTimetableBody"></div>
                     <div id="timetableStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>

@@ -55,8 +55,8 @@
     align-self: start;
     position: sticky;
     top: 1rem;
-    max-height: calc(100vh - 2rem);
-    overflow-y: auto;
+    max-height: none;
+    overflow: visible;
 }
 .add-booking-left-panel {
     display: flex;
@@ -174,7 +174,7 @@
 }
 .add-booking-timetable-iframe {
     width: 100%;
-    height: 360px;
+    height: 640px;
     border: 1px solid #d0d7de;
     border-radius: 10px;
     background: #fff;
@@ -1018,7 +1018,7 @@
     }
 
     .add-booking-timetable-iframe {
-        height: 320px;
+        height: 540px;
     }
 
     .admin-user-roles-grid {
@@ -1523,7 +1523,7 @@
     }
 
     .add-booking-timetable-iframe {
-        height: 340px;
+        height: 560px;
     }
 
     .shopping-layout-wrap {
@@ -1845,7 +1845,7 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
     }
 
     .add-booking-timetable-iframe {
-        height: 340px;
+        height: 500px;
     }
 
     .shopping-layout-wrap {
