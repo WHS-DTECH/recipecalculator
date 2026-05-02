@@ -68,6 +68,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const asyncSyncBtn = document.getElementById('async-sync-btn');
   const asyncSyncStatus = document.getElementById('async-sync-status');
+  const auditSyncAllBtn = document.getElementById('audit-sync-all-btn');
+  const auditSyncAllStatus = document.getElementById('audit-sync-all-status');
   if (asyncSyncBtn) {
     asyncSyncBtn.onclick = async function() {
       const startInput = prompt('Sync from which RecipeID onward?', '7');
@@ -141,6 +143,102 @@ document.addEventListener('DOMContentLoaded', function() {
       } finally {
         asyncSyncBtn.disabled = false;
         asyncSyncBtn.textContent = 'Async Sync (From RecipeID)';
+      }
+    };
+  }
+
+  if (auditSyncAllBtn) {
+    auditSyncAllBtn.onclick = async function() {
+      const doReseed = confirm('Reseed missing recipes while syncing? Click OK for yes, Cancel for no.');
+
+      auditSyncAllBtn.disabled = true;
+      auditSyncAllBtn.textContent = 'Auditing...';
+      if (auditSyncAllStatus) auditSyncAllStatus.textContent = 'Loading published recipes and inventory...';
+
+      try {
+        const [dropdownResp, inventoryResp] = await Promise.all([
+          fetch('/api/recipes/display-dropdown'),
+          fetch('/api/ingredients/inventory/all?_t=' + Date.now(), { cache: 'no-store' })
+        ]);
+
+        if (!dropdownResp.ok) {
+          throw new Error(`Failed to load published recipes: ${dropdownResp.status} ${dropdownResp.statusText}`);
+        }
+        if (!inventoryResp.ok) {
+          throw new Error(`Failed to load ingredients inventory: ${inventoryResp.status} ${inventoryResp.statusText}`);
+        }
+
+        const dropdownData = await dropdownResp.json();
+        const inventoryData = await inventoryResp.json();
+
+        const published = Array.isArray(dropdownData?.recipes) ? dropdownData.recipes : [];
+        const inventoryRows = Array.isArray(inventoryData?.data) ? inventoryData.data : [];
+
+        const publishedRecipeIds = [...new Set(
+          published
+            .map(r => Number(r.recipeid))
+            .filter(id => Number.isInteger(id) && id > 0)
+        )].sort((a, b) => a - b);
+
+        const inventoryCountByRecipe = new Map();
+        for (const row of inventoryRows) {
+          const id = Number(row.recipe_id);
+          if (!Number.isInteger(id) || id <= 0) continue;
+          inventoryCountByRecipe.set(id, (inventoryCountByRecipe.get(id) || 0) + 1);
+        }
+
+        const missingRecipeIds = publishedRecipeIds.filter(id => (inventoryCountByRecipe.get(id) || 0) === 0);
+        const alreadyLoadedCount = publishedRecipeIds.length - missingRecipeIds.length;
+
+        if (!publishedRecipeIds.length) {
+          if (auditSyncAllStatus) auditSyncAllStatus.textContent = 'No published recipes found to audit.';
+          notify('No published recipes found to audit.', 'info', 4200);
+          return;
+        }
+
+        if (!missingRecipeIds.length) {
+          const summary = `Audit complete. Published: ${publishedRecipeIds.length}, already loaded: ${alreadyLoadedCount}, missing: 0.`;
+          if (auditSyncAllStatus) auditSyncAllStatus.textContent = summary;
+          notify(summary, 'success', 5200);
+          return;
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+
+        auditSyncAllBtn.textContent = 'Syncing Missing...';
+        for (let i = 0; i < missingRecipeIds.length; i++) {
+          const recipeId = missingRecipeIds[i];
+          if (auditSyncAllStatus) {
+            auditSyncAllStatus.textContent =
+              `Audit: ${publishedRecipeIds.length} total, ${missingRecipeIds.length} missing. Syncing ${i + 1}/${missingRecipeIds.length} (RecipeID ${recipeId})...`;
+          }
+
+          try {
+            const resp = await fetch('/api/ingredients/inventory/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipeId, reseed: doReseed })
+            });
+            const data = await resp.json();
+            if (resp.ok && data && data.success) successCount++;
+            else failCount++;
+          } catch (_) {
+            failCount++;
+          }
+        }
+
+        const summary = `Audit+sync complete. Published: ${publishedRecipeIds.length}, already loaded: ${alreadyLoadedCount}, missing: ${missingRecipeIds.length}, synced: ${successCount}, failed: ${failCount}.`;
+        if (auditSyncAllStatus) auditSyncAllStatus.textContent = summary;
+        notify(summary, failCount > 0 ? 'warning' : 'success', failCount > 0 ? 7000 : 5200);
+        setTimeout(() => location.reload(), 600);
+      } catch (err) {
+        const message = err && err.message ? err.message : String(err);
+        if (auditSyncAllStatus) auditSyncAllStatus.textContent = `Audit failed: ${message}`;
+        notify(`Audit failed: ${message}`, 'error', 7000);
+      } finally {
+        auditSyncAllBtn.disabled = false;
+        auditSyncAllBtn.textContent = 'Audit All + Load Missing Ingredients';
       }
     };
   }
