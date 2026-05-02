@@ -112,6 +112,12 @@
             <div class="book-class-left">
                 <h1 id="bookClassHeading">Book a Class</h1>
                 <div class="book-form-row" id="bookingFormSection">
+                    <div class="book-form-actions book-form-actions-top">
+                        <button id="saveBookingBtn" class="btn btn-primary">Save booking</button>
+                        <button id="masterSaveBtn" type="button" class="btn btn-success">SAVE</button>
+                        <button id="deleteBookingBtn" type="button" class="btn delete-btn" style="display:none;">DELETE</button>
+                        <button id="resetBtn" type="button" class="btn btn-secondary">RESET</button>
+                    </div>
                     <div class="book-form-grid">
                         <div class="book-form-field">
                             <label for="staffSelect">Staff</label>
@@ -155,12 +161,6 @@
                             <label for="classSizeInput">Class Size</label>
                             <input type="number" id="classSizeInput" value="4" min="1">
                         </div>
-                    </div>
-                    <div class="book-form-actions">
-                        <button id="saveBookingBtn" class="btn btn-primary">Save booking</button>
-                        <button id="masterSaveBtn" type="button" class="btn btn-success">SAVE</button>
-                        <button id="deleteBookingBtn" type="button" class="btn delete-btn" style="display:none;">DELETE</button>
-                        <button id="resetBtn" type="button" class="btn btn-secondary">RESET</button>
                     </div>
                 </div>
                 <div class="scheduled-bookings" id="teacherTimetableSection" style="margin-top:1rem;">

@@ -97,10 +97,6 @@
     gap: 0.55rem;
     justify-content: flex-end;
 }
-.add-booking-timetable-actions {
-    margin-top: 0.8rem;
-    justify-content: flex-start;
-}
 .add-booking-toolbar-actions button,
 .add-booking-print-btn {
     margin: 0;
@@ -459,6 +455,9 @@
     display: flex;
     gap: 0.75rem;
     flex-wrap: wrap;
+}
+.book-form-actions-top {
+    margin-bottom: 0.6rem;
 }
 .book-form-row button {
     padding: 0.5rem 1.2rem;
