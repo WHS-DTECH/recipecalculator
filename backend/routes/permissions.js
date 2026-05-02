@@ -49,8 +49,17 @@ const DEFAULT_ROLES = {
 
 const ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'admin'];
 
-// Initialize permissions table
-const schemaReady = (async () => {
+function buildDefaultRolesRows() {
+  return Object.entries(DEFAULT_ROLES)
+    .map(([role_name, values]) => ({ role_name, ...values }));
+}
+
+let schemaAvailable = false;
+let schemaReadyPromise = null;
+let lastSchemaInitAttempt = 0;
+const SCHEMA_INIT_RETRY_MS = 60 * 1000;
+
+async function initializePermissionsSchema() {
   try {
     // Create table once and preserve existing permission rows across restarts.
     await pool.query(`
@@ -85,17 +94,48 @@ const schemaReady = (async () => {
       ]);
     }
 
+    schemaAvailable = true;
     console.log('[PERMISSIONS] Schema ready');
+    return true;
   } catch (err) {
+    schemaAvailable = false;
     console.error('[PERMISSIONS] Schema initialization error:', err);
-    throw err;
+    return false;
   }
-})();
+}
+
+async function ensureSchemaReady() {
+  if (schemaAvailable) return true;
+
+  const now = Date.now();
+  const shouldRetry = !schemaReadyPromise || (now - lastSchemaInitAttempt) > SCHEMA_INIT_RETRY_MS;
+  if (shouldRetry) {
+    lastSchemaInitAttempt = now;
+    schemaReadyPromise = initializePermissionsSchema();
+  }
+
+  return schemaReadyPromise;
+}
+
+// Kick off initialization without crashing startup if DB is temporarily unavailable.
+ensureSchemaReady().catch((err) => {
+  console.error('[PERMISSIONS] Unexpected schema initialization error:', err);
+});
 
 // GET /api/permissions - Fetch all role permissions
 router.get('/all', async (req, res) => {
   try {
-    await schemaReady;
+    const ready = await ensureSchemaReady();
+    if (!ready) {
+      return res.json({
+        success: true,
+        degraded: true,
+        warning: 'Permissions database is temporarily unavailable. Showing default permissions.',
+        roles: buildDefaultRolesRows(),
+        routes: ROUTES
+      });
+    }
+
     const result = await pool.query(`
       SELECT role_name, recipes, add_recipes, inventory, shopping, booking, admin
       FROM role_permissions
@@ -125,7 +165,13 @@ router.put('/:roleName', requireAdmin, async (req, res) => {
   }
 
   try {
-    await schemaReady;
+    const ready = await ensureSchemaReady();
+    if (!ready) {
+      return res.status(503).json({
+        success: false,
+        error: 'Permissions database is temporarily unavailable. Please try again shortly.'
+      });
+    }
     
     await pool.query(`
       UPDATE role_permissions
@@ -152,7 +198,14 @@ router.put('/:roleName', requireAdmin, async (req, res) => {
 // POST /api/permissions/reset - Reset to default permissions
 router.post('/reset', requireAdmin, async (req, res) => {
   try {
-    await schemaReady;
+    const ready = await ensureSchemaReady();
+    if (!ready) {
+      return res.status(503).json({
+        success: false,
+        error: 'Permissions database is temporarily unavailable. Please try again shortly.'
+      });
+    }
+
     await pool.query('TRUNCATE TABLE role_permissions RESTART IDENTITY');
 
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
