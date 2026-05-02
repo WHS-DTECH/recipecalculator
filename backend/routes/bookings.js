@@ -383,6 +383,10 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         SELECT recipe_id::text AS recipe_id_text, COUNT(*)::int AS inventory_rows
         FROM ingredients_inventory
         GROUP BY recipe_id::text
+      ),
+      browse AS (
+        SELECT id, lower(trim(name)) AS normalized_name
+        FROM recipes
       )
       SELECT
         b.id AS booking_id,
@@ -396,7 +400,16 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         COUNT(*) FILTER (
           WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
         )::int AS rows_for_current_recipe,
-        COALESCE(inv.inventory_rows, 0)::int AS inventory_rows
+        COALESCE(inv.inventory_rows, 0)::int AS inventory_rows,
+        CASE
+          WHEN EXISTS (SELECT 1 FROM browse br WHERE br.id = b.recipe_id) THEN 'id'
+          WHEN EXISTS (
+            SELECT 1
+            FROM browse br
+            WHERE br.normalized_name = lower(trim(coalesce(b.recipe, '')))
+          ) THEN 'name'
+          ELSE 'none'
+        END AS browse_match_type
       FROM bookings b
       LEFT JOIN desired_servings_ingredients dsi
         ON dsi.booking_id = b.id
@@ -428,11 +441,17 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
       inventory_rows: Number(row.inventory_rows) || 0,
       inventory_status: Number(row.inventory_rows) > 0
         ? 'recipe_has_inventory'
-        : 'recipe_missing_inventory'
+        : 'recipe_missing_inventory',
+      browse_match_type: row.browse_match_type || 'none',
+      browse_status: (row.browse_match_type && row.browse_match_type !== 'none')
+        ? 'recipe_in_browse_list'
+        : 'recipe_missing_from_browse_list'
     }));
 
     const withInventory = candidates.filter((r) => r.inventory_status === 'recipe_has_inventory').length;
     const missingInventory = candidates.filter((r) => r.inventory_status === 'recipe_missing_inventory').length;
+    const inBrowseList = candidates.filter((r) => r.browse_status === 'recipe_in_browse_list').length;
+    const missingBrowseList = candidates.filter((r) => r.browse_status === 'recipe_missing_from_browse_list').length;
 
     res.json({
       success: true,
@@ -440,7 +459,9 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
       count: candidates.length,
       comparison: {
         recipe_has_inventory: withInventory,
-        recipe_missing_inventory: missingInventory
+        recipe_missing_inventory: missingInventory,
+        recipe_in_browse_list: inBrowseList,
+        recipe_missing_from_browse_list: missingBrowseList
       },
       candidates
     });

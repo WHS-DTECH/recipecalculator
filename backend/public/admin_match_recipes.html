@@ -929,6 +929,8 @@
       const comparison = payload && payload.comparison ? payload.comparison : {};
       const hasInventoryCount = Number(comparison.recipe_has_inventory || 0);
       const missingInventoryCount = Number(comparison.recipe_missing_inventory || 0);
+      const inBrowseListCount = Number(comparison.recipe_in_browse_list || 0);
+      const missingBrowseListCount = Number(comparison.recipe_missing_from_browse_list || 0);
       if (!candidates.length) {
         output.textContent = 'No re-save candidates found.';
         return;
@@ -938,6 +940,8 @@
       lines.push(`Candidates: ${candidates.length}`);
       lines.push(`Recipes found in Ingredient Directory: ${hasInventoryCount}`);
       lines.push(`Recipes NOT found in Ingredient Directory: ${missingInventoryCount}`);
+      lines.push(`Recipes found in Browse Recipe list: ${inBrowseListCount}`);
+      lines.push(`Recipes NOT found in Browse Recipe list: ${missingBrowseListCount}`);
       lines.push('');
       candidates.forEach((row) => {
         lines.push([
@@ -949,7 +953,9 @@
           row.recipe || '(No recipe)',
           row.reason || '',
           row.inventory_status || '',
-          `inventory_rows=${Number(row.inventory_rows || 0)}`
+          `inventory_rows=${Number(row.inventory_rows || 0)}`,
+          row.browse_status || '',
+          `browse_match=${row.browse_match_type || 'none'}`
         ].join(' | '));
       });
 
