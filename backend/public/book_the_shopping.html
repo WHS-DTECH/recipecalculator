@@ -14,25 +14,22 @@
             <section class="shopping-calendar-column">
                 <div class="calendar-app">
                     <h1>Schedule Calendar</h1>
-                    <div class="shopping-calendar-header">
-                        <div id="calendarWeekLabel" class="shopping-week-label">Week of ...</div>
-                        <div class="ui-action-bar shopping-calendar-nav">
-                            <button id="prevWeekBtn" class="btn btn-secondary">← Previous</button>
-                            <button id="todayBtn" class="btn btn-secondary">Today</button>
-                            <button id="nextWeekBtn" class="btn btn-secondary">Next →</button>
-                            <button id="printScheduleByRecipeBtn" class="btn btn-primary" type="button">Print Calendar by Recipe</button>
-                        </div>
-                        <div class="shopping-teacher-quick-select">
-                            <label for="quickSelectTeacher">Quick select teacher:</label>
-                            <select id="quickSelectTeacher" aria-label="Quick select teacher bookings"></select>
-                            <button id="selectTeacherBookingsBtn" class="btn btn-secondary" type="button">Select Teacher</button>
-                            <button id="clearTeacherSelectionBtn" class="btn btn-secondary" type="button">Clear</button>
-                        </div>
-                        <div class="shopping-teacher-quick-select">
-                            <label for="scheduleViewModeSelect">Schedule view:</label>
-                            <select id="scheduleViewModeSelect" aria-label="Choose schedule cell display mode">
-                                <option value="class">Class details</option>
-                                <option value="recipe">Recipe focus</option>
+                    <div class="shopping-teacher-quick-select">
+                        <label for="quickSelectTeacher">Quick select teacher:</label>
+                        <select id="quickSelectTeacher" aria-label="Quick select teacher bookings"></select>
+                        <button id="selectTeacherBookingsBtn" class="btn btn-secondary" type="button">Select Teacher</button>
+                        <button id="clearTeacherSelectionBtn" class="btn btn-secondary" type="button">Clear</button>
+                    </div>
+                    <div class="add-booking-toolbar shopping-calendar-header">
+                        <div id="calendarWeekLabel" class="add-booking-week-label">Week of ...</div>
+                        <div class="add-booking-toolbar-actions">
+                            <button id="prevWeekBtn">&larr; Previous</button>
+                            <button id="todayBtn">Today</button>
+                            <button id="nextWeekBtn">Next &rarr;</button>
+                            <button id="printScheduleByRecipeBtn" class="add-booking-print-btn" type="button">Print Calendar by Recipe</button>
+                            <select id="scheduleViewModeSelect" title="Calendar cell display mode" style="padding:0.4rem 0.6rem;border:1px solid #90a4ae;border-radius:5px;font-size:0.92rem;background:#fff;cursor:pointer;">
+                                <option value="class">Show: Class</option>
+                                <option value="recipe">Show: Recipe</option>
                             </select>
                         </div>
                     </div>
