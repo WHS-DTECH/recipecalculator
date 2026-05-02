@@ -12,6 +12,11 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
+function formatTimetableCell(value) {
+  // Kamar exports often use semicolons as separators; show each segment on a new line.
+  return escapeHtml(value).replace(/;\s*/g, '<br>');
+}
+
 function sortRowsByTeacherName(rows) {
   return rows.slice().sort((a, b) => {
     const aName = String(a?.Teacher_Name || a?.teacher_name || '').trim().toLowerCase();
@@ -216,7 +221,7 @@ function renderTimetableTable() {
   timetableHeaders.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
   html += '</tr></thead><tbody>';
   filteredRows.forEach(row => {
-    html += '<tr>' + timetableHeaders.map(h => `<td>${escapeHtml(row[h])}</td>`).join('') + '</tr>';
+    html += '<tr>' + timetableHeaders.map(h => `<td>${formatTimetableCell(row[h])}</td>`).join('') + '</tr>';
   });
   html += '</tbody></table>';
   container.innerHTML = html;
