@@ -355,6 +355,82 @@ router.get('/planner-class-options', async (req, res) => {
   }
 });
 
+// GET /api/bookings/admin/resave-candidates
+// Admin-only audit endpoint to find bookings that likely need re-save after SQLite->Postgres migration.
+router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
+  try {
+    await ensureSchema();
+
+    const startDate = parseIsoDate(req.query.startDate) ? String(req.query.startDate).trim() : '';
+    const endDate = parseIsoDate(req.query.endDate) ? String(req.query.endDate).trim() : '';
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(1000, Math.floor(limitRaw))) : 300;
+
+    const params = [];
+    const where = ["trim(coalesce(b.recipe, '')) <> ''"];
+    if (startDate) {
+      params.push(startDate);
+      where.push(`b.booking_date >= $${params.length}`);
+    }
+    if (endDate) {
+      params.push(endDate);
+      where.push(`b.booking_date <= $${params.length}`);
+    }
+
+    params.push(limit);
+    const sql = `
+      SELECT
+        b.id AS booking_id,
+        b.booking_date,
+        b.period,
+        b.staff_name,
+        b.class_name,
+        b.recipe,
+        b.recipe_id,
+        COUNT(dsi.id)::int AS ingredient_rows,
+        COUNT(*) FILTER (
+          WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
+        )::int AS rows_for_current_recipe
+      FROM bookings b
+      LEFT JOIN desired_servings_ingredients dsi
+        ON dsi.booking_id = b.id
+      WHERE ${where.join(' AND ')}
+      GROUP BY b.id, b.booking_date, b.period, b.staff_name, b.class_name, b.recipe, b.recipe_id
+      HAVING COUNT(dsi.id) = 0
+         OR COUNT(*) FILTER (
+              WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
+            ) = 0
+      ORDER BY b.booking_date ASC, b.period ASC, b.staff_name ASC, b.class_name ASC
+      LIMIT $${params.length}`;
+
+    const result = await pool.query(sql, params);
+    const candidates = result.rows.map((row) => ({
+      booking_id: row.booking_id,
+      booking_date: row.booking_date,
+      period: row.period,
+      staff_name: row.staff_name,
+      class_name: row.class_name,
+      recipe: row.recipe,
+      recipe_id: row.recipe_id,
+      ingredient_rows: row.ingredient_rows,
+      rows_for_current_recipe: row.rows_for_current_recipe,
+      reason: Number(row.ingredient_rows) === 0
+        ? 'missing_desired_servings_rows'
+        : 'ingredients_linked_to_other_recipe_only'
+    }));
+
+    res.json({
+      success: true,
+      filters: { startDate: startDate || null, endDate: endDate || null, limit },
+      count: candidates.length,
+      candidates
+    });
+  } catch (err) {
+    console.error('Failed to fetch re-save candidates:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch re-save candidates.' });
+  }
+});
+
 // POST /api/bookings/prefill-from-planner
 // Admin-only utility: creates class bookings for Food/HOSP double periods from planner recipes.
 // Body (optional): { startDate, endDate, dryRun }

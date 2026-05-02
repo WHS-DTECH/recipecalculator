@@ -456,13 +456,20 @@
       gap: 0.28rem;
       text-decoration: none;
       min-width: 0;
-      max-width: 7.7rem;
+      max-width: 14rem;
+      border: 1px solid #b9cfe5;
+      background: #f1f7fd;
+      border-radius: 999px;
+      padding: 0.12rem 0.4rem 0.12rem 0.14rem;
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
     }
 
-    .recipe-source-link:focus-visible .recipe-source-logo,
-    .recipe-source-link:hover .recipe-source-logo {
+    .recipe-source-link:focus-visible,
+    .recipe-source-link:hover {
       border-color: #7aa7cf;
       background: #e7f1fb;
+      transform: translateY(-1px);
     }
 
     .recipe-source-link-disabled {
@@ -494,6 +501,16 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      text-decoration: underline;
+      text-underline-offset: 0.12rem;
+    }
+
+    .recipe-source-cta {
+      color: #0d4d87;
+      font-size: 0.7rem;
+      font-weight: 800;
+      white-space: nowrap;
+      margin-left: 0.12rem;
     }
 
     .recipe-card-title {

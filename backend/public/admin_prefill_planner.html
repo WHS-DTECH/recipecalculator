@@ -71,6 +71,9 @@
     .prefill-btn-run {
       background: #2e7d32;
     }
+    .prefill-btn-audit {
+      background: #6b4f1d;
+    }
     .prefill-status {
       min-height: 1.4rem;
       font-size: 0.9rem;
@@ -90,6 +93,21 @@
       white-space: pre-wrap;
       max-height: 360px;
       overflow: auto;
+    }
+    .prefill-audit-wrap {
+      margin-top: 0.95rem;
+      padding-top: 0.8rem;
+      border-top: 1px solid #e2e8f0;
+    }
+    .prefill-audit-title {
+      margin: 0 0 0.35rem;
+      font-size: 0.95rem;
+      color: #1f2937;
+    }
+    .prefill-audit-copy {
+      margin: 0 0 0.55rem;
+      color: #4b5563;
+      font-size: 0.88rem;
     }
     @media (max-width: 700px) {
       .prefill-grid {
@@ -125,6 +143,15 @@
 
       <div id="prefillStatus" class="prefill-status" aria-live="polite"></div>
       <pre id="prefillResults" class="prefill-results">No results yet.</pre>
+
+      <div class="prefill-audit-wrap">
+        <h2 class="prefill-audit-title">Needs Re-save Audit</h2>
+        <p class="prefill-audit-copy">Lists bookings that have a recipe but are missing desired servings rows, or rows linked to a different recipe version.</p>
+        <div class="prefill-actions">
+          <button id="prefillResaveAuditBtn" class="prefill-btn prefill-btn-audit" type="button">Find Re-save Candidates</button>
+        </div>
+        <pre id="prefillAuditResults" class="prefill-results">No audit run yet.</pre>
+      </div>
     </section>
   </main>
 

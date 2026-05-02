@@ -504,9 +504,10 @@ document.addEventListener('DOMContentLoaded', function() {
       : `<span class="recipe-chip">${category}</span>`;
     const src = sourceInfo(recipeUrl, name);
     const sourceLink = src.href
-      ? `<a class="recipe-source-link" href="${src.href}" target="_blank" rel="noopener noreferrer" title="Open original recipe on ${src.label}">
+      ? `<a class="recipe-source-link" href="${src.href}" target="_blank" rel="noopener noreferrer" title="Open source recipe on ${src.label}">
            <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>
            <span class="recipe-source-name">${src.label}</span>
+           <span class="recipe-source-cta" aria-hidden="true">Open ↗</span>
          </a>`
       : `<span class="recipe-source-link recipe-source-link-disabled" title="No source URL">
            <span class="recipe-source-logo" aria-hidden="true">${src.monogram}</span>

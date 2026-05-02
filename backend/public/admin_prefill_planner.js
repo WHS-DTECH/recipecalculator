@@ -38,6 +38,33 @@ function setResults(payload) {
   resultsEl.textContent = JSON.stringify(payload || {}, null, 2);
 }
 
+function setAuditResults(payload) {
+  const resultsEl = document.getElementById('prefillAuditResults');
+  if (!resultsEl) return;
+
+  const candidates = Array.isArray(payload && payload.candidates) ? payload.candidates : [];
+  if (!candidates.length) {
+    resultsEl.textContent = 'No re-save candidates found for the selected date range.';
+    return;
+  }
+
+  const lines = [];
+  lines.push(`Candidates: ${candidates.length}`);
+  lines.push('');
+  for (const row of candidates) {
+    lines.push([
+      `Booking #${row.booking_id}`,
+      row.booking_date || '',
+      `P${row.period || ''}`,
+      row.staff_name || '(No teacher)',
+      row.class_name || '(No class)',
+      row.recipe || '(No recipe)',
+      row.reason || ''
+    ].join(' | '));
+  }
+  resultsEl.textContent = lines.join('\n');
+}
+
 async function runPrefill(dryRun) {
   const startEl = document.getElementById('prefillStartDate');
   const endEl = document.getElementById('prefillEndDate');
@@ -89,10 +116,55 @@ async function runPrefill(dryRun) {
   }
 }
 
+async function runResaveAudit() {
+  const startEl = document.getElementById('prefillStartDate');
+  const endEl = document.getElementById('prefillEndDate');
+  const auditBtn = document.getElementById('prefillResaveAuditBtn');
+  const email = getCurrentStaffEmail();
+
+  if (!email) {
+    setStatus('Could not determine admin email from session.', true);
+    return;
+  }
+
+  const params = new URLSearchParams();
+  if (startEl && startEl.value) params.set('startDate', startEl.value);
+  if (endEl && endEl.value) params.set('endDate', endEl.value);
+  params.set('limit', '500');
+
+  if (auditBtn) auditBtn.disabled = true;
+  setStatus('Checking bookings that likely need re-save...', false);
+
+  try {
+    const resp = await fetch(`/api/bookings/admin/resave-candidates?${params.toString()}`, {
+      headers: {
+        'x-user-email': email
+      }
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || data.success === false) {
+      throw new Error(data.error || `Request failed (${resp.status})`);
+    }
+    setAuditResults(data);
+    setStatus('Re-save audit complete.', false);
+    if (window.QC && typeof window.QC.toast === 'function') {
+      window.QC.toast('Re-save audit complete', 'success');
+    }
+  } catch (err) {
+    setStatus(err.message || 'Audit request failed.', true);
+    if (window.QC && typeof window.QC.toast === 'function') {
+      window.QC.toast(err.message || 'Audit request failed', 'error');
+    }
+  } finally {
+    if (auditBtn) auditBtn.disabled = false;
+  }
+}
+
 window.addEventListener('DOMContentLoaded', () => {
   setDefaultDates();
   const dryBtn = document.getElementById('prefillDryRunBtn');
   const runBtn = document.getElementById('prefillRunBtn');
+  const auditBtn = document.getElementById('prefillResaveAuditBtn');
 
   if (dryBtn) {
     dryBtn.addEventListener('click', () => runPrefill(true));
@@ -103,5 +175,8 @@ window.addEventListener('DOMContentLoaded', () => {
       if (!yes) return;
       runPrefill(false);
     });
+  }
+  if (auditBtn) {
+    auditBtn.addEventListener('click', runResaveAudit);
   }
 });
