@@ -763,6 +763,7 @@
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button class="btn btn-warning" id="resaveAuditBtn">Find Re-save Candidates</button>
         <button class="btn btn-primary" id="autoMatchBtn">Auto-Match All Unmatched</button>
+        <button class="btn btn-primary" id="auditLoadMissingBtn">Audit All + Load Missing Ingredients</button>
       </div>
     </div>
 
@@ -1007,11 +1008,99 @@
       }
     }
 
+    async function runAuditLoadMissingIngredients() {
+      const btn = document.getElementById('auditLoadMissingBtn');
+      if (btn) btn.disabled = true;
+      if (btn) btn.textContent = 'Auditing...';
+
+      try {
+        const doReseed = window.confirm('Reseed missing recipes while syncing? Click OK for yes, Cancel for no.');
+
+        const [dropdownResp, inventoryResp] = await Promise.all([
+          fetch('/api/recipes/display-dropdown'),
+          fetch('/api/ingredients/inventory/all?_t=' + Date.now(), { cache: 'no-store' })
+        ]);
+
+        if (!dropdownResp.ok) {
+          throw new Error(`Failed to load published recipes: ${dropdownResp.status} ${dropdownResp.statusText}`);
+        }
+        if (!inventoryResp.ok) {
+          throw new Error(`Failed to load ingredients inventory: ${inventoryResp.status} ${inventoryResp.statusText}`);
+        }
+
+        const dropdownData = await dropdownResp.json();
+        const inventoryData = await inventoryResp.json();
+
+        const published = Array.isArray(dropdownData && dropdownData.recipes) ? dropdownData.recipes : [];
+        const inventoryRows = Array.isArray(inventoryData && inventoryData.data) ? inventoryData.data : [];
+
+        const publishedRecipeIds = [...new Set(
+          published
+            .map((r) => Number(r.recipeid))
+            .filter((id) => Number.isInteger(id) && id > 0)
+        )].sort((a, b) => a - b);
+
+        const inventoryCountByRecipe = new Map();
+        for (const row of inventoryRows) {
+          const id = Number(row.recipe_id);
+          if (!Number.isInteger(id) || id <= 0) continue;
+          inventoryCountByRecipe.set(id, (inventoryCountByRecipe.get(id) || 0) + 1);
+        }
+
+        const missingRecipeIds = publishedRecipeIds.filter((id) => (inventoryCountByRecipe.get(id) || 0) === 0);
+        const alreadyLoadedCount = publishedRecipeIds.length - missingRecipeIds.length;
+
+        if (!publishedRecipeIds.length) {
+          showToast('No published recipes found to audit.', 'info');
+          return;
+        }
+
+        if (!missingRecipeIds.length) {
+          showToast(`Audit complete. Published: ${publishedRecipeIds.length}, already loaded: ${alreadyLoadedCount}, missing: 0.`, 'success');
+          await runResaveAudit();
+          return;
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+        if (btn) btn.textContent = 'Syncing Missing...';
+
+        for (let i = 0; i < missingRecipeIds.length; i++) {
+          const recipeId = missingRecipeIds[i];
+          try {
+            const resp = await fetch('/api/ingredients/inventory/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipeId, reseed: doReseed })
+            });
+            const data = await resp.json();
+            if (resp.ok && data && data.success) successCount++;
+            else failCount++;
+          } catch (_) {
+            failCount++;
+          }
+        }
+
+        showToast(
+          `Audit+sync complete. Published: ${publishedRecipeIds.length}, already loaded: ${alreadyLoadedCount}, missing: ${missingRecipeIds.length}, synced: ${successCount}, failed: ${failCount}.`,
+          failCount > 0 ? 'warning' : 'success'
+        );
+
+        await runResaveAudit();
+      } catch (err) {
+        showToast(err.message || 'Audit+sync failed', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+        if (btn) btn.textContent = 'Audit All + Load Missing Ingredients';
+      }
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       loadUnmatchedRecipes();
       document.getElementById('autoMatchBtn').addEventListener('click', autoMatchAll);
       document.getElementById('resaveAuditBtn').addEventListener('click', runResaveAudit);
+      document.getElementById('auditLoadMissingBtn').addEventListener('click', runAuditLoadMissingIngredients);
       document.getElementById('resaveAuditRefreshBtn').addEventListener('click', runResaveAudit);
       document.getElementById('prevBtn').addEventListener('click', prevPage);
       document.getElementById('nextBtn').addEventListener('click', nextPage);
