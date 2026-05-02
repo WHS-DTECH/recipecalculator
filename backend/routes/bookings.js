@@ -1,6 +1,7 @@
 ﻿const express = require('express');
 const router = express.Router();
 const pool = require('../db');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
 let schemaReady = false;
 let plannerUploadSchemaReady = false;
@@ -49,6 +50,71 @@ function inferPlannerStreamFromCode(code) {
   if (value.includes('HOSP')) return 'Senior';
   if (value.includes('MFOOD')) return 'Middle';
   return 'Other';
+}
+
+function toIsoDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function parseIsoDate(value) {
+  const match = /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+  if (!match) return null;
+  const parsed = new Date(`${String(value).trim()}T00:00:00`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
+function weekMondayIso(isoDate) {
+  const parsed = parseIsoDate(isoDate);
+  if (!parsed) return '';
+  const day = parsed.getDay();
+  const diff = (day + 6) % 7;
+  parsed.setDate(parsed.getDate() - diff);
+  return toIsoDate(parsed);
+}
+
+function normalizeClassToken(value) {
+  return String(value || '').trim().toUpperCase();
+}
+
+function inferStreamFromClassToken(classToken) {
+  const value = normalizeClassToken(classToken);
+  if (!value) return '';
+  if (value.includes('HOSP')) return 'Senior';
+  if (value.includes('JFOOD')) return 'Junior';
+  if (value.includes('MFOOD') || value.includes('FOOD')) return 'Middle';
+  return '';
+}
+
+function buildTeacherName(staffRow, fallbackCode) {
+  if (!staffRow) return fallbackCode || '';
+  const first = String(staffRow.first_name || '').trim();
+  const last = String(staffRow.last_name || '').trim();
+  const code = String(staffRow.code || fallbackCode || '').trim();
+  const joined = [last, first].filter(Boolean).join(', ');
+  if (joined && code) return `${joined} (${code})`;
+  return joined || code;
+}
+
+function splitClasses(rawValues) {
+  const seen = new Set();
+  const out = [];
+  for (const raw of rawValues || []) {
+    const parts = String(raw || '')
+      .split(/[;|]/g)
+      .map((v) => String(v || '').trim())
+      .filter(Boolean);
+    for (const item of parts) {
+      const key = normalizeClassToken(item);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(item);
+    }
+  }
+  return out;
 }
 
 // Update a booking by ID
@@ -286,6 +352,244 @@ router.get('/planner-class-options', async (req, res) => {
   } catch (err) {
     console.error('Failed to fetch planner class options:', err.message);
     res.status(500).json({ success: false, error: 'Failed to fetch planner class options.' });
+  }
+});
+
+// POST /api/bookings/prefill-from-planner
+// Admin-only utility: creates class bookings for Food/HOSP double periods from planner recipes.
+// Body (optional): { startDate, endDate, dryRun }
+router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
+  try {
+    await ensureSchema();
+
+    const body = req.body || {};
+    const dryRun = body.dryRun === true || String(body.dryRun || '').toLowerCase() === 'true';
+
+    const startDateObj = parseIsoDate(body.startDate) || new Date();
+    const yearEnd = new Date(startDateObj.getFullYear(), 11, 31);
+    const endDateObj = parseIsoDate(body.endDate) || yearEnd;
+
+    if (startDateObj > endDateObj) {
+      return res.status(400).json({ success: false, error: 'startDate must be before endDate.' });
+    }
+
+    const startDate = toIsoDate(startDateObj);
+    const endDate = toIsoDate(endDateObj);
+
+    const plannerResult = await pool.query(
+      `SELECT id, booking_date, class_name, planner_stream, recipe, recipe_url, recipe_id
+       FROM bookings
+       WHERE period = 'Planner'
+         AND booking_date >= $1
+         AND booking_date <= $2
+         AND trim(coalesce(recipe, '')) <> ''
+       ORDER BY booking_date ASC, id ASC`,
+      [startDate, endDate]
+    );
+
+    const plannerByDateAndStream = new Map();
+    for (const row of plannerResult.rows) {
+      const stream = String(row.planner_stream || inferStreamFromClassToken(row.class_name) || inferPlannerStreamFromCode(row.class_name) || '').trim();
+      if (!stream || stream === 'Other') continue;
+      const date = String(row.booking_date || '').slice(0, 10);
+      const key = `${date}|${stream}`;
+      if (!plannerByDateAndStream.has(key)) {
+        plannerByDateAndStream.set(key, row);
+      }
+    }
+
+    if (!plannerByDateAndStream.size) {
+      return res.json({
+        success: true,
+        dryRun,
+        summary: {
+          startDate,
+          endDate,
+          plannerRecipesFound: 0,
+          candidates: 0,
+          inserted: 0,
+          skippedExisting: 0,
+          skippedNoPlanner: 0,
+          skippedNonFood: 0,
+          skippedNotDouble: 0
+        }
+      });
+    }
+
+    const staffResult = await pool.query(
+      `SELECT id, code, first_name, last_name
+       FROM staff_upload`
+    );
+    const staffByCode = new Map();
+    for (const s of staffResult.rows) {
+      const key = normalizeClassToken(s.code);
+      if (key) staffByCode.set(key, s);
+    }
+
+    const timetableResult = await pool.query(
+      `SELECT "Teacher", "D1_P1_1", "D1_P1_2", "D1_P2", "D1_P3", "D1_P4", "D1_P5",
+              "D2_P1_1", "D2_P1_2", "D2_P2", "D2_P3", "D2_P4", "D2_P5",
+              "D3_P1_1", "D3_P1_2", "D3_P2", "D3_P3", "D3_P4", "D3_P5",
+              "D4_P1_1", "D4_P1_2", "D4_P2", "D4_P3", "D4_P4", "D4_P5",
+              "D5_P1_1", "D5_P1_2", "D5_P2", "D5_P3", "D5_P4", "D5_P5"
+       FROM kamar_timetable
+       WHERE coalesce(status, 'Current') = 'Current'`
+    );
+
+    const existingResult = await pool.query(
+      `SELECT booking_date, period, class_name
+       FROM bookings
+       WHERE booking_date >= $1
+         AND booking_date <= $2
+         AND period IN ('1','2','3','4','5')`,
+      [startDate, endDate]
+    );
+    const existingSlots = new Set(
+      existingResult.rows.map((r) => `${String(r.booking_date || '').slice(0, 10)}|${String(r.period || '').trim()}|${normalizeClassToken(r.class_name)}`)
+    );
+
+    const inserts = [];
+    const stats = {
+      plannerRecipesFound: plannerByDateAndStream.size,
+      candidates: 0,
+      inserted: 0,
+      skippedExisting: 0,
+      skippedNoPlanner: 0,
+      skippedNonFood: 0,
+      skippedNotDouble: 0
+    };
+
+    const cursor = new Date(startDateObj);
+    cursor.setHours(0, 0, 0, 0);
+
+    while (cursor <= endDateObj) {
+      const day = cursor.getDay();
+      if (day >= 1 && day <= 5) {
+        const dayPrefix = `D${day}`;
+        const dateIso = toIsoDate(cursor);
+
+        for (const row of timetableResult.rows) {
+          const teacherCode = normalizeClassToken(row.Teacher);
+          if (!teacherCode) continue;
+
+          const periodClasses = {
+            1: splitClasses([row[`${dayPrefix}_P1_1`], row[`${dayPrefix}_P1_2`]]),
+            2: splitClasses([row[`${dayPrefix}_P2`]]),
+            3: splitClasses([row[`${dayPrefix}_P3`]]),
+            4: splitClasses([row[`${dayPrefix}_P4`]]),
+            5: splitClasses([row[`${dayPrefix}_P5`]])
+          };
+
+          const classPeriodMap = new Map();
+          for (const [period, classes] of Object.entries(periodClasses)) {
+            for (const cls of classes) {
+              const key = normalizeClassToken(cls);
+              if (!key) continue;
+              const arr = classPeriodMap.get(key) || [];
+              arr.push(Number(period));
+              classPeriodMap.set(key, arr);
+            }
+          }
+
+          for (const [classTokenKey, periods] of classPeriodMap.entries()) {
+            if (periods.length < 2) {
+              stats.skippedNotDouble += periods.length;
+              continue;
+            }
+
+            const stream = inferStreamFromClassToken(classTokenKey);
+            if (!stream) {
+              stats.skippedNonFood += periods.length;
+              continue;
+            }
+
+            const plannerKey = `${dateIso}|${stream}`;
+            const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
+            const planner = plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
+            if (!planner) {
+              stats.skippedNoPlanner += periods.length;
+              continue;
+            }
+
+            const staffRow = staffByCode.get(teacherCode);
+            const staffId = staffRow ? String(staffRow.id || '') : '';
+            const staffName = buildTeacherName(staffRow, teacherCode);
+
+            for (const period of periods) {
+              stats.candidates += 1;
+              const slotKey = `${dateIso}|${period}|${classTokenKey}`;
+              if (existingSlots.has(slotKey)) {
+                stats.skippedExisting += 1;
+                continue;
+              }
+
+              const booking = {
+                staff_id: staffId,
+                staff_name: staffName,
+                class_name: classTokenKey,
+                booking_date: dateIso,
+                period: String(period),
+                recipe: planner.recipe,
+                recipe_url: planner.recipe_url || '',
+                recipe_id: planner.recipe_id || null,
+                class_size: null,
+                planner_stream: stream
+              };
+              inserts.push(booking);
+              existingSlots.add(slotKey);
+            }
+          }
+        }
+      }
+      cursor.setDate(cursor.getDate() + 1);
+    }
+
+    if (!dryRun && inserts.length) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        for (const b of inserts) {
+          await client.query(
+            `INSERT INTO bookings
+             (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+            [
+              b.staff_id,
+              b.staff_name,
+              b.class_name,
+              b.booking_date,
+              b.period,
+              b.recipe,
+              b.recipe_url,
+              b.recipe_id,
+              b.class_size,
+              b.planner_stream
+            ]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    stats.inserted = inserts.length;
+    return res.json({
+      success: true,
+      dryRun,
+      summary: {
+        startDate,
+        endDate,
+        ...stats
+      },
+      preview: inserts.slice(0, 25)
+    });
+  } catch (err) {
+    console.error('Failed to prefill bookings from planner:', err.message);
+    return res.status(500).json({ success: false, error: 'Failed to prefill bookings from planner.' });
   }
 });
 
