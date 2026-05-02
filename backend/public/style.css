@@ -73,6 +73,9 @@
     padding: 1.35rem;
     min-width: 0;
 }
+.add-booking-inline-form-card {
+    margin-top: 1rem;
+}
 .add-booking-main-panel h1 {
     margin: 0 0 1rem;
 }
@@ -150,7 +153,7 @@
 }
 .add-booking-form-iframe {
     width: 100%;
-    height: 580px;
+    height: 760px;
     border: 1px solid #d0d7de;
     border-radius: 10px;
     background: #fff;
@@ -1007,7 +1010,7 @@
     }
 
     .add-booking-form-iframe {
-        height: 520px;
+        height: 620px;
     }
 
     .add-booking-students-iframe {
@@ -1512,7 +1515,7 @@
     }
 
     .add-booking-form-iframe {
-        height: 820px;
+        height: 700px;
     }
 
     .add-booking-students-iframe {
@@ -1834,7 +1837,7 @@ input[type="text"]:focus, input[type="email"]:focus, input[type="url"]:focus, in
     }
 
     .add-booking-form-iframe {
-        height: 520px;
+        height: 620px;
     }
 
     .add-booking-students-iframe {
