@@ -570,6 +570,13 @@
       async function getRawData(recipeId) {
         const existing = (rawDataInput && rawDataInput.value ? rawDataInput.value : '').trim();
         if (existing) return existing;
+        // Check DB cache first (survives Render deploys)
+        const recipe = await getRecipeById(recipeId);
+        if (recipe && recipe.upload_raw_data) {
+          if (rawDataInput) rawDataInput.value = recipe.upload_raw_data;
+          return recipe.upload_raw_data;
+        }
+        // Fall back to static file
         const res = await fetch(`/RawDataTXT/${recipeId}.txt`);
         if (!res.ok) return '';
         const raw = await res.text();

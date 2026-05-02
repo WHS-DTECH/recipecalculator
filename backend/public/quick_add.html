@@ -775,6 +775,10 @@
       }
 
       async function getRawData(recipeId) {
+        // Check DB cache first (survives Render deploys)
+        const recipe = await getRecipeById(recipeId);
+        if (recipe && recipe.upload_raw_data) return recipe.upload_raw_data;
+        // Fall back to static file
         const res = await fetch(`/RawDataTXT/${recipeId}.txt`);
         if (!res.ok) return '';
         return await res.text();
@@ -1197,7 +1201,13 @@
             if (!recipeId) return;
 
             setExtractAllStatus(`Save complete for RecipeID ${recipeId}. Running Auto Extract...`, 'info');
-            await runAutoExtractFlow();
+            try {
+              await runAutoExtractFlow();
+            } catch (extractErr) {
+              const extractMsg = extractErr && extractErr.message ? extractErr.message : String(extractErr);
+              setExtractAllStatus(`Auto Extract skipped: ${extractMsg}. Use Raw Data Extractor to extract manually.`, 'warning');
+              notify(`Auto Extract skipped: ${extractMsg}`, 'warning', 6500);
+            }
           } catch (err) {
             const message = err && err.message ? err.message : err;
             setSaveRecipeStatus(`Save + Auto Extract failed: ${message}`, 'error');

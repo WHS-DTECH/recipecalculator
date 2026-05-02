@@ -160,7 +160,31 @@ document.addEventListener('DOMContentLoaded', function () {
             rawDataInput.value = fromFile;
             return 'file';
         } catch (_) {
-            const rendered = await extractRenderedHtmlByRecipeId(recipeId);
+            // Try rendered HTML (Puppeteer)
+            let rendered = null;
+            try {
+                rendered = await extractRenderedHtmlByRecipeId(recipeId);
+            } catch (_renderedErr) {
+                // fall through to visible text
+            }
+
+            if (!rendered) {
+                // Try visible text (direct fetch fallback)
+                try {
+                    rendered = await extractVisibleTextByRecipeId(recipeId);
+                } catch (_visibleErr) {
+                    // fall through to error
+                }
+            }
+
+            if (!rendered) {
+                throw new Error(
+                    'This site blocks automated extraction (e.g. Cloudflare protection). ' +
+                    'To add raw data manually: open the recipe URL in your browser, ' +
+                    'select all text (Ctrl+A), copy (Ctrl+C), paste it into the text area below, then click Save Raw Data.'
+                );
+            }
+
             rawDataInput.value = rendered;
             if (autoSave) {
                 await saveRawData(recipeId, rendered);
