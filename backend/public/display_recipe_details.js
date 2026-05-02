@@ -154,8 +154,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   const params = new URLSearchParams(window.location.search);
-  const id = params.get('id');
-  if (!id) return;
+  let id = params.get('id');
 
   let allRecipes = [];
 
@@ -224,7 +223,8 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(auth => {
       const isAuthenticated = Boolean(auth && auth.authenticated && auth.user && auth.user.email);
       if (!isAuthenticated) {
-        window.location.href = `google_login.html?next=${encodeURIComponent(`recipe_display.html?id=${id}`)}`;
+        const nextUrl = id ? `recipe_display.html?id=${id}` : 'recipe_display.html';
+        window.location.href = `google_login.html?next=${encodeURIComponent(nextUrl)}`;
         return;
       }
 
@@ -234,7 +234,14 @@ document.addEventListener('DOMContentLoaded', function() {
           allRecipes = rows.slice().sort((a, b) =>
             String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
           );
-          const recipe = rows.find(r => String(r.id) === String(id));
+          let recipe = rows.find(r => String(r.id) === String(id));
+          if (!recipe && allRecipes.length > 0) {
+            recipe = allRecipes[0];
+            id = String(recipe.id);
+            const next = new URL(window.location.href);
+            next.searchParams.set('id', id);
+            window.history.replaceState({}, '', next.toString());
+          }
           if (!recipe) return;
 
           updateRecipeList(allRecipes, id);
@@ -290,6 +297,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     })
     .catch(() => {
-      window.location.href = `google_login.html?next=${encodeURIComponent(`recipe_display.html?id=${id}`)}`;
+      const nextUrl = id ? `recipe_display.html?id=${id}` : 'recipe_display.html';
+      window.location.href = `google_login.html?next=${encodeURIComponent(nextUrl)}`;
     });
 });
