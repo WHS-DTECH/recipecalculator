@@ -939,6 +939,22 @@
       }
 
       const lines = [];
+      const browseButMissingInventoryUnique = [];
+      const seenBrowseButMissing = new Set();
+      candidates.forEach((row) => {
+        const isBrowse = String(row.browse_status || '') === 'recipe_in_browse_list';
+        const isMissingInventory = String(row.inventory_status || '') === 'recipe_missing_inventory';
+        if (!isBrowse || !isMissingInventory) return;
+
+        const recipeKey = String(row.recipe || '').trim().toLowerCase();
+        if (!recipeKey || seenBrowseButMissing.has(recipeKey)) return;
+        seenBrowseButMissing.add(recipeKey);
+        browseButMissingInventoryUnique.push({
+          recipe: String(row.recipe || '').trim(),
+          recipeId: row.recipe_id
+        });
+      });
+
       lines.push(`Planner recipe rows total: ${Number(plannerTotals.planner_recipe_rows_total || 0)}`);
       lines.push(`Planner distinct recipes total: ${Number(plannerTotals.planner_recipes_distinct_total || 0)}`);
       lines.push(`Junior planner recipes: ${Number(plannerTotals.junior_recipe_rows || 0)} rows (${Number(plannerTotals.junior_recipes_distinct || 0)} distinct)`);
@@ -953,6 +969,14 @@
       lines.push(`Recipes NOT found in Ingredient Directory: ${missingInventoryCount}`);
       lines.push(`Recipes found in Browse Recipe list: ${inBrowseListCount}`);
       lines.push(`Recipes NOT found in Browse Recipe list: ${missingBrowseListCount}`);
+      lines.push(`Unique recipes in Browse list but missing Ingredient Directory: ${browseButMissingInventoryUnique.length}`);
+      const quickThree = browseButMissingInventoryUnique.slice(0, 3);
+      if (quickThree.length) {
+        lines.push(`Quick 3 to check:`);
+        quickThree.forEach((item, idx) => {
+          lines.push(`${idx + 1}. ${item.recipe || '(No recipe name)'}${item.recipeId ? ` (RecipeID ${item.recipeId})` : ''}`);
+        });
+      }
       lines.push('');
       candidates.forEach((row) => {
         lines.push([
