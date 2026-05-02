@@ -1352,7 +1352,9 @@ window.addEventListener('DOMContentLoaded', () => {
         }
         const effectiveStaffId = ensureStaffSelected(firstStaffId);
         const staffCode = getStaffCodeById(effectiveStaffId, _staffArrCache);
-        return populateClassDropdown(staffCode).then(() => applySharedEmbedState(sharedState || getCurrentEmbedState()));
+          // Trigger timetable immediately — don't wait for class dropdown population
+          fetchTeacherTimetableForSelectedDate();
+          return populateClassDropdown(staffCode).then(() => applySharedEmbedState(sharedState || getCurrentEmbedState()));
       });
     });
 
