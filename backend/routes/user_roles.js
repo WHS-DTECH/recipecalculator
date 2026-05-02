@@ -195,9 +195,10 @@ const schemaReady = (async () => {
     await pool.query("UPDATE student_timetable SET primary_role = 'student' WHERE primary_role IS NULL OR trim(primary_role) = ''");
 
     console.log('[USER ROLES] Schema ready');
+    return true;
   } catch (err) {
     console.error('[USER ROLES] Schema initialization error:', err);
-    throw err;
+    return false;
   }
 })();
 

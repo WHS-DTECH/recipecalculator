@@ -62,9 +62,10 @@ const schemaReady = (async () => {
     // Reset the sequence to the max(id) + 1 to avoid duplicate key errors
     await pool.query(`SELECT setval(pg_get_serial_sequence('department', 'id'), COALESCE((SELECT MAX(id) FROM department), 0) + 1)`);
     console.log('[DEPARTMENT] Schema ready');
+    return true;
   } catch (err) {
     console.error('[DEPARTMENT] Schema initialization error:', err);
-    throw err;
+    return false;
   }
 })();
 
