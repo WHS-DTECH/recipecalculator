@@ -49,6 +49,12 @@ function teacherColorFromName(name) {
   if (!input) {
     return { bg: '#e8f5e9', border: '#c8e6c9', text: '#1f2937', teacherText: '#2e7d32' };
   }
+
+  // Keep key staff visually distinct and stable across reloads.
+  if (input.includes('lisa-jane') || input.includes('lawson')) {
+    return { bg: '#ede9fe', border: '#c4b5fd', text: '#1f2937', teacherText: '#5b21b6' };
+  }
+
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
     hash = ((hash << 5) - hash) + input.charCodeAt(i);
