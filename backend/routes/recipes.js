@@ -247,6 +247,32 @@ function cleanIngredientsForDisplay(raw) {
     .join('\n');
 }
 
+function normalizeMultilineText(value) {
+  return String(value || '')
+    .replace(/\r/g, '')
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function escapeHtml(value) {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function multilineTextToHtmlList(value, ordered) {
+  const lines = normalizeMultilineText(value).split('\n').filter(Boolean);
+  if (lines.length === 0) return '';
+  const tag = ordered ? 'ol' : 'ul';
+  const items = lines.map((line) => `<li>${escapeHtml(line)}</li>`).join('');
+  return `<${tag}>${items}</${tag}>`;
+}
+
 const INGREDIENT_UNITS_PATTERN = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
 const INGREDIENT_QTY_PATTERN = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
 const leadingMeasureRegex = new RegExp(`^(${INGREDIENT_QTY_PATTERN}(?:\\s*[-–]\\s*${INGREDIENT_QTY_PATTERN})?)\\s*(${INGREDIENT_UNITS_PATTERN})\\b\\s*(.+)?$`, 'i');
@@ -760,6 +786,92 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('[DEBUG /api/recipes] Error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// Get the next auto-assigned recipe ID preview for manual entry.
+router.get('/next-id', async (_req, res) => {
+  try {
+    const result = await pool.query('SELECT COALESCE(MAX(id), 0) + 1 AS next_id FROM recipes');
+    const nextId = Number(result.rows[0] && result.rows[0].next_id) || 1;
+    res.json({ success: true, nextId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to fetch next recipe ID.' });
+  }
+});
+
+// Create a recipe by manual copy/paste entry.
+router.post('/manual', async (req, res) => {
+  const name = String(req.body && req.body.name || '').trim();
+  const description = String(req.body && req.body.description || '').trim();
+  const url = String(req.body && req.body.url || '').trim();
+  const servingRaw = String(req.body && req.body.serving_size || '').trim();
+  const ingredientsText = normalizeMultilineText(req.body && req.body.ingredients_text);
+  const instructionsText = normalizeMultilineText(req.body && req.body.instructions_text);
+  const rawText = normalizeMultilineText(req.body && req.body.raw_text);
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'Recipe name is required.' });
+  }
+
+  if (!ingredientsText && !instructionsText && !rawText) {
+    return res.status(400).json({
+      success: false,
+      error: 'Paste at least ingredients, instructions, or full raw text.'
+    });
+  }
+
+  const servingSize = servingRaw === '' ? null : Number(servingRaw);
+  if (servingRaw !== '' && (!Number.isFinite(servingSize) || servingSize < 0)) {
+    return res.status(400).json({ success: false, error: 'Serving size must be a positive number.' });
+  }
+
+  const ingredientsDisplay = multilineTextToHtmlList(ingredientsText, false);
+  const instructionsDisplay = multilineTextToHtmlList(instructionsText, true);
+
+  try {
+    const insertResult = await pool.query(
+      `INSERT INTO recipes (
+        name,
+        description,
+        url,
+        serving_size,
+        ingredients,
+        instructions,
+        extracted_ingredients,
+        instructions_extracted,
+        ingredients_display,
+        instructions_display
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+      RETURNING id`,
+      [
+        name,
+        description || null,
+        url || null,
+        servingSize,
+        ingredientsText || null,
+        instructionsText || null,
+        ingredientsText || null,
+        instructionsText || null,
+        ingredientsDisplay || null,
+        instructionsDisplay || null
+      ]
+    );
+
+    const recipeId = Number(insertResult.rows[0] && insertResult.rows[0].id);
+
+    if (recipeId && rawText) {
+      const rawDataDir = path.join(__dirname, '../public/RawDataTXT');
+      if (!fs.existsSync(rawDataDir)) {
+        fs.mkdirSync(rawDataDir, { recursive: true });
+      }
+      const filePath = path.join(rawDataDir, `${recipeId}.txt`);
+      fs.writeFileSync(filePath, rawText, 'utf8');
+    }
+
+    res.json({ success: true, recipeId });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to save manual recipe.' });
   }
 });
 
