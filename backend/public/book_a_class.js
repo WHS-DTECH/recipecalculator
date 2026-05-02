@@ -523,6 +523,7 @@ function deriveClassCodeFromTimetableToken(token) {
 function syncClassDropdownFromTimetable(periods) {
   const classSelect = document.getElementById('classSelect');
   if (!classSelect) return;
+  const previousValue = String(classSelect.value || '').trim();
 
   // Use the full raw timetable tokens (e.g. 3-13HOSP-F) so the dropdown
   // has precise options for each room/group rather than just the stripped subject code.
@@ -550,6 +551,10 @@ function syncClassDropdownFromTimetable(periods) {
     opt.setAttribute('data-timetable-fallback', '1');
     classSelect.appendChild(opt);
   });
+
+  if (previousValue && uniqueTokens.some(token => String(token) === previousValue)) {
+    classSelect.value = previousValue;
+  }
 }
 
 function autoSelectClassFromSelectedPeriod() {
@@ -747,12 +752,12 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   const whanauTokens = p1Entry
     ? p1Entry.classes.filter(cls => /WHANAU/i.test(String(cls || '')))
     : [];
-  if (p1Entry && whanauTokens.length) {
-    p1Entry.classes = p1Entry.classes.filter(cls => !/WHANAU/i.test(String(cls || '')));
-  }
 
   const displayPeriods = normalizedPeriods.map(p => ({
     ...p,
+    classes: (String(p && p.period).toUpperCase() === 'P1')
+      ? (Array.isArray(p.classes) ? p.classes.filter(cls => !/WHANAU/i.test(String(cls || ''))) : [])
+      : p.classes,
     displayPeriod: p.period
   }));
 
@@ -787,7 +792,10 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   _currentTeacherTimetablePeriods = normalizedPeriods;
 
   syncClassDropdownFromTimetable(_currentTeacherTimetablePeriods);
-  autoSelectClassFromSelectedPeriod();
+  const classSelect = document.getElementById('classSelect');
+  if (classSelect && !String(classSelect.value || '').trim()) {
+    autoSelectClassFromSelectedPeriod();
+  }
 
   body.querySelectorAll('.timetable-class-chip').forEach(btn => {
     btn.addEventListener('click', () => {
