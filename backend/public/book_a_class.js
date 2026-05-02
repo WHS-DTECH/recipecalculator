@@ -723,7 +723,7 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   const rows = periods.map(p => {
     const classTokens = expandTimetableClassTokens(p.classes);
     const classText = classTokens.length
-      ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;">${cls}</button>`).join('')
+      ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;font-size:1rem;">${cls}</button>`).join('')
       : '<span style="color:#999;">No class</span>';
     return `<tr><td style="font-weight:bold;width:60px;">${p.period}</td><td>${classText}</td></tr>`;
   }).join('');
