@@ -1488,21 +1488,29 @@
 
             setSaveRecipeBusy(true, 'Save Recipe: Extracting Visible Text...');
             setSaveRecipeStatus('Extracting visible text...', 'info');
-            const visibleText = await extractVisibleTextByRecipeId(recipeId);
-            if (!visibleText) {
-              throw new Error('Visible text extraction returned empty content.');
+            let visibleText = null;
+            let extractionError = null;
+            try {
+              visibleText = await extractVisibleTextByRecipeId(recipeId);
+            } catch (extractErr) {
+              extractionError = extractErr.message || 'Extraction failed';
             }
-            if (rawDataInput) rawDataInput.value = visibleText;
 
-            setSaveRecipeBusy(true, 'Save Recipe: Saving Raw Data...');
-            setSaveRecipeStatus('Saving raw data file...', 'info');
-            await saveRawDataByRecipeId(recipeId, visibleText);
+            if (visibleText) {
+              if (rawDataInput) rawDataInput.value = visibleText;
+              setSaveRecipeBusy(true, 'Save Recipe: Saving Raw Data...');
+              setSaveRecipeStatus('Saving raw data file...', 'info');
+              await saveRawDataByRecipeId(recipeId, visibleText);
+            }
             await refreshRecipeMatrix();
 
-            const successMessage = recipeMatch && recipeMatch.reusedExisting
-              ? `Recipe already exists. Reusing RecipeID ${recipeId}. Upload + Sync + Extract Visible Text + Save Raw Data finished.`
-              : `Save complete for RecipeID ${recipeId}. Upload + Sync + Extract Visible Text + Save Raw Data finished.`;
-            setSaveRecipeStatus(successMessage, 'success');
+            const baseMessage = recipeMatch && recipeMatch.reusedExisting
+              ? `Recipe already exists. Reusing RecipeID ${recipeId}.`
+              : `Save complete for RecipeID ${recipeId}.`;
+            const successMessage = extractionError
+              ? `${baseMessage} Note: auto-extraction failed (${extractionError}) — use the Raw Data Extractor page to extract manually.`
+              : `${baseMessage} Upload + Sync + Extract + Save Raw Data finished.`;
+            setSaveRecipeStatus(successMessage, extractionError ? 'warning' : 'success');
           } catch (err) {
             const message = err && err.message ? err.message : String(err);
             setSaveRecipeStatus(`Save Recipe failed: ${message}`, 'error');

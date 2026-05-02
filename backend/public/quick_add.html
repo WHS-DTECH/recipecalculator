@@ -880,23 +880,33 @@
         if (!recipeId) throw new Error('Upload succeeded, but no recipe could be matched.');
 
         setSaveRecipeStatus(`RecipeID ${recipeId} synced. Extracting visible text...`, 'info');
-        const visibleText = await extractVisibleTextByRecipeId(recipeId);
-        if (!visibleText) throw new Error('Visible text extraction returned empty content.');
+        let visibleText = null;
+        let extractionError = null;
+        try {
+          visibleText = await extractVisibleTextByRecipeId(recipeId);
+        } catch (extractErr) {
+          extractionError = extractErr.message || 'Extraction failed';
+        }
 
-        setSaveProgress(82);
-        setSaveRecipeStatus(`RecipeID ${recipeId} extracted. Saving raw data...`, 'info');
-        await saveRawDataByRecipeId(recipeId, visibleText);
+        if (visibleText) {
+          setSaveProgress(82);
+          setSaveRecipeStatus(`RecipeID ${recipeId} extracted. Saving raw data...`, 'info');
+          await saveRawDataByRecipeId(recipeId, visibleText);
+        }
 
         setSaveProgress(96);
         selectedRecipeId = String(recipeId);
         await refreshRecipeMatrix(recipeId);
         setSaveProgress(100);
 
-        const successMessage = recipeMatch && recipeMatch.reusedExisting
-          ? `Recipe already exists. Reusing RecipeID ${recipeId} and showing it in the table.`
+        const baseMessage = recipeMatch && recipeMatch.reusedExisting
+          ? `Recipe already exists. Reusing RecipeID ${recipeId}.`
           : `Saved successfully. RecipeID ${recipeId} is now shown in the table.`;
-        setSaveRecipeStatus(successMessage, 'success');
-        notify(successMessage, 'success');
+        const successMessage = extractionError
+          ? `${baseMessage} Note: auto-extraction failed (${extractionError}) — use the Raw Data Extractor page to extract manually.`
+          : baseMessage;
+        setSaveRecipeStatus(successMessage, extractionError ? 'warning' : 'success');
+        notify(successMessage, extractionError ? 'warning' : 'success');
         return recipeId;
       }
 
