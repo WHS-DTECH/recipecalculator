@@ -370,6 +370,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const raw = String(value || '').trim();
     if (!raw) return false;
     if (/^https?:\/\//i.test(raw)) return true;
+    if (/^data:image\//i.test(raw)) return true;
     if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(raw)) return true;
     return false;
   }
@@ -378,6 +379,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const raw = String(value || '').trim();
     if (!raw) return '';
     if (!isLikelyImagePath(raw)) return '';
+
+    // Data URLs are already complete — return as-is.
+    if (/^data:image\//i.test(raw)) return raw;
 
     if (/^https?:\/\//i.test(raw)) {
       return raw;

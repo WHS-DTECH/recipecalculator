@@ -1918,8 +1918,8 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       const { id } = req.params;
       const imageUrl = String((req.body && req.body.image_url) || '').trim();
 
-      if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl)) {
-        return res.status(400).json({ success: false, error: 'Image URL must start with http(s):// or /images/.' });
+      if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl) && !/^data:image\//i.test(imageUrl)) {
+        return res.status(400).json({ success: false, error: 'Image URL must start with http(s)://, /images/, or data:image/.' });
       }
 
       try {
@@ -1959,23 +1959,16 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       try {
         await ensureRecipeDisplayImageColumn();
 
-        const dir = path.join(__dirname, 'public', 'images', 'recipe_user_uploads');
-        await fs.promises.mkdir(dir, { recursive: true });
+        // Store image as base64 data URL directly in the database so it persists
+        // across deploys (Render's filesystem is ephemeral and wiped on redeploy).
+        const dataUrl = String(imageData || '').trim();
 
-        const baseName = sanitizeImageFileBase(req.body && req.body.file_name);
-        const stamp = `${Date.now()}_${Math.floor(Math.random() * 100000)}`;
-        const fileName = `${baseName}_${stamp}.${parsed.ext}`;
-        const filePath = path.join(dir, fileName);
-
-        await fs.promises.writeFile(filePath, parsed.buffer);
-
-        const publicImageUrl = `/images/recipe_user_uploads/${encodeURIComponent(fileName)}`;
         const updateResult = await pool.query(
           `UPDATE recipe_display
            SET image_url = $1
            WHERE id = $2
            RETURNING id, recipeid, name, url, image_url`,
-          [publicImageUrl, id]
+          [dataUrl, id]
         );
 
         if (!updateResult.rowCount) {
