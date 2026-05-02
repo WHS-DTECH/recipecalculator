@@ -1066,6 +1066,39 @@ router.post('/:id/adjust', async (req, res) => {
     }
 
     const newId = insertResult.rows[0].id;
+
+    // Make adjusted versions immediately selectable in Book a Class.
+    try {
+      const adjustedRecipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [newId]);
+      if (adjustedRecipeResult.rows.length > 0) {
+        const adjusted = adjustedRecipeResult.rows[0];
+        const displayIngredients = adjusted.ingredients_display || adjusted.ingredients;
+        const displayInstructions = adjusted.instructions_display || adjusted.instructions;
+        await pool.query(
+          `INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (recipeid) DO UPDATE SET
+             name = EXCLUDED.name,
+             description = EXCLUDED.description,
+             ingredients = EXCLUDED.ingredients,
+             serving_size = EXCLUDED.serving_size,
+             url = EXCLUDED.url,
+             instructions = EXCLUDED.instructions`,
+          [
+            adjusted.name,
+            adjusted.description,
+            displayIngredients,
+            adjusted.serving_size,
+            adjusted.url,
+            displayInstructions,
+            adjusted.id
+          ]
+        );
+      }
+    } catch (publishErr) {
+      console.warn('[adjust recipe] Auto publish to recipe_display failed:', publishErr && publishErr.message ? publishErr.message : publishErr);
+    }
+
     res.json({ success: true, recipeId: newId, name });
   } catch (err) {
     console.error('[adjust recipe]', err);

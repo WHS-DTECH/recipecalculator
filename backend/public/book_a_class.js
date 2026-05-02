@@ -450,6 +450,7 @@ function applySharedEmbedState(state = {}) {
     if (!selected) {
       pendingSharedRecipeId = String(targetRecipeId || '').trim();
       pendingSharedRecipeName = String(targetRecipeName || '').trim();
+      populateRecipeDropdown();
     }
   }
   setRecipeSelectionInfo(targetRecipeSelectionInfo);
