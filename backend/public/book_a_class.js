@@ -488,10 +488,16 @@ function normalizeClassToken(value) {
 }
 
 function expandTimetableClassTokens(values) {
+  const seen = new Set();
   return (Array.isArray(values) ? values : [])
     .flatMap(v => String(v || '').split(/[;|]/g))
     .map(v => v.trim())
-    .filter(Boolean);
+    .filter(v => {
+      if (!v) return false;
+      if (seen.has(v.toUpperCase())) return false;
+      seen.add(v.toUpperCase());
+      return true;
+    });
 }
 
 function deriveClassCodeFromTimetableToken(token) {

@@ -97,11 +97,18 @@ router.get('/teacher-day', async (req, res) => {
     };
 
     const periods = Object.keys(periodCols).map(period => {
+      const seen = new Set();
       const classList = periodCols[period]
         .map(col => row[col])
         .map(v => (v || '').toString().trim())
         .filter(Boolean)
-        .filter((v, i, arr) => arr.indexOf(v) === i);
+        .flatMap(v => v.split(/[;|]/g).map(t => t.trim()).filter(Boolean))
+        .filter(v => {
+          const key = v.toUpperCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
       return { period, classes: classList };
     });
 
