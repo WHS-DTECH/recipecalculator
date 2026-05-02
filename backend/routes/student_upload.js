@@ -167,22 +167,43 @@ router.get('/by-class/:ttcode', async (req, res) => {
   // Precise 3-way token: staffCode + subject + room, e.g. RR-MFOOD-F
   const exactStudentToken = (staffCode && useCore) ? `${staffCode}-${coreSuffix}` : null;
 
+  function buildExactConditions(token) {
+    const params = [];
+    const colConditions = PERIOD_COLUMNS.map(col => {
+      params.push(token);
+      return `upper(COALESCE(${col}, '')) LIKE '%' || upper($${params.length}) || '%'`;
+    });
+    return { params, colConditions };
+  }
+
   try {
     await ensureSchema();
 
-    const params = [];
-    const colConditions = PERIOD_COLUMNS.map(col => {
-      if (exactStudentToken) {
-        params.push(exactStudentToken);
-        const idx = params.length;
-        return `upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx}) || '%'`;
+    // Phase 1: if we have an exact student token, try that first.
+    if (exactStudentToken) {
+      const { params, colConditions } = buildExactConditions(exactStudentToken);
+      const exact = await pool.query(
+        `SELECT id, student_name, id_number, form_class, year_level
+         FROM student_timetable
+         WHERE COALESCE(status, 'Current') = 'Current'
+           AND (${colConditions.join(' OR ')})
+         ORDER BY student_name, id_number`,
+        params
+      );
+      if (exact.rows.length > 0) {
+        return res.json({ students: exact.rows });
       }
-      // Fallback: full token OR core suffix
-      params.push(ttcode);
-      const idx = params.length;
+      // Exact token matched nothing — fall through to suffix/full-token search.
+    }
+
+    // Phase 2 (fallback): search by full ttcode OR coreSuffix.
+    const params2 = [];
+    const colConditions2 = PERIOD_COLUMNS.map(col => {
+      params2.push(ttcode);
+      const idx = params2.length;
       if (useCore) {
-        params.push(coreSuffix);
-        const idx2 = params.length;
+        params2.push(coreSuffix);
+        const idx2 = params2.length;
         return `(upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx}) || '%' OR upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx2}) || '%')`;
       }
       return `upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx}) || '%'`;
@@ -192,9 +213,9 @@ router.get('/by-class/:ttcode', async (req, res) => {
       `SELECT id, student_name, id_number, form_class, year_level
        FROM student_timetable
        WHERE COALESCE(status, 'Current') = 'Current'
-         AND (${colConditions.join(' OR ')})
+         AND (${colConditions2.join(' OR ')})
        ORDER BY student_name, id_number`,
-      params
+      params2
     );
     res.json({ students: result.rows });
   } catch (err) {
