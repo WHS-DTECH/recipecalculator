@@ -239,6 +239,57 @@
       background: linear-gradient(90deg, #1f4e79 0%, #2b7a78 100%) !important;
     }
 
+    .quick-image-panel {
+      border: 1px solid #d7e3f4;
+      border-radius: 10px;
+      padding: 0.7rem;
+      background: #fff;
+    }
+
+    .quick-image-status {
+      font-size: 0.85rem;
+      min-height: 1.15rem;
+      color: #1f4e79;
+      margin-bottom: 0.5rem;
+    }
+
+    .quick-image-preview {
+      width: 100%;
+      max-width: 420px;
+      aspect-ratio: 16 / 10;
+      border-radius: 10px;
+      border: 1px solid #d9e2ec;
+      overflow: hidden;
+      background: #f0f4f8;
+      margin-bottom: 0.55rem;
+    }
+
+    .quick-image-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .quick-image-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      margin-top: 0.5rem;
+    }
+
+    .quick-image-actions .btn {
+      min-height: 36px;
+      padding: 0.45rem 0.7rem;
+      font-size: 0.84rem;
+    }
+
+    #quickImageClearBtn {
+      background: #b71c1c !important;
+      border-color: #8e1515 !important;
+      color: #fff !important;
+    }
+
     @media (max-width: 1100px) {
       .main-content-margins {
         padding: 0.72rem;
@@ -358,6 +409,29 @@
       </div>
     </div>
 
+    <div class="setup-section ops-card" style="margin-top:0.75rem;">
+      <h3 class="ops-title">Recipe Image Uploader</h3>
+      <p class="ops-note">Attach or update image for the selected recipe card in Recipe Book.</p>
+
+      <div class="quick-image-panel">
+        <div id="quickImageMeta" style="font-size:0.84rem;color:#5d7186;margin-bottom:0.35rem;">Pick or save a recipe to enable image editing.</div>
+        <div id="quickImageStatus" class="quick-image-status"></div>
+
+        <div class="quick-image-preview">
+          <img id="quickImagePreview" alt="Recipe image preview" src="images/whs%20logo%20circular%20reo%20.png">
+        </div>
+
+        <input id="quickImageFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif" style="width:100%;margin-bottom:0.45rem;">
+        <input id="quickImageUrlInput" type="text" placeholder="Or paste image URL (https://...)" style="width:100%;padding:0.48rem 0.58rem;border:1px solid #c7d4e3;border-radius:7px;box-sizing:border-box;">
+
+        <div class="quick-image-actions">
+          <button id="quickImageUploadBtn" class="btn btn-primary" type="button">Upload File</button>
+          <button id="quickImageSaveUrlBtn" class="btn btn-primary" type="button">Save Image URL</button>
+          <button id="quickImageClearBtn" class="btn" type="button">Clear Custom Image</button>
+        </div>
+      </div>
+    </div>
+
       </div>
     </div>
   </div>
@@ -388,6 +462,14 @@
       const recipeMatrixHead = document.getElementById('recipeMatrixHead');
       const recipeMatrixBody = document.getElementById('recipeMatrixBody');
       const recipeMatrixStatus = document.getElementById('recipeMatrixStatus');
+      const quickImageMeta = document.getElementById('quickImageMeta');
+      const quickImageStatus = document.getElementById('quickImageStatus');
+      const quickImagePreview = document.getElementById('quickImagePreview');
+      const quickImageFileInput = document.getElementById('quickImageFileInput');
+      const quickImageUrlInput = document.getElementById('quickImageUrlInput');
+      const quickImageUploadBtn = document.getElementById('quickImageUploadBtn');
+      const quickImageSaveUrlBtn = document.getElementById('quickImageSaveUrlBtn');
+      const quickImageClearBtn = document.getElementById('quickImageClearBtn');
 
       let selectedPdfFile = null;
       let allRecipeRowsCache = [];
@@ -396,6 +478,125 @@
       let extractedTitle = '';
       let extractedInstructions = '';
       let extractedIngredients = '';
+      let currentUserEmail = '';
+      let quickImageRecipesCache = [];
+      let quickImageDisplayRecipe = null;
+
+      const QUICK_IMAGE_FALLBACK = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+
+      function setQuickImageStatus(message, type) {
+        if (!quickImageStatus) return;
+        quickImageStatus.textContent = message || '';
+        const t = String(type || 'info').toLowerCase();
+        quickImageStatus.style.color = t === 'error' ? '#b71c1c' : (t === 'success' ? '#2e7d32' : '#1f4e79');
+      }
+
+      function setQuickImageBusy(isBusy) {
+        const busy = !!isBusy;
+        if (quickImageFileInput) quickImageFileInput.disabled = busy;
+        if (quickImageUrlInput) quickImageUrlInput.disabled = busy;
+        if (quickImageUploadBtn) quickImageUploadBtn.disabled = busy;
+        if (quickImageSaveUrlBtn) quickImageSaveUrlBtn.disabled = busy;
+        if (quickImageClearBtn) quickImageClearBtn.disabled = busy;
+      }
+
+      function setQuickImageDisabled(disabled) {
+        const off = !!disabled;
+        if (quickImageFileInput) quickImageFileInput.disabled = off;
+        if (quickImageUrlInput) quickImageUrlInput.disabled = off;
+        if (quickImageUploadBtn) quickImageUploadBtn.disabled = off;
+        if (quickImageSaveUrlBtn) quickImageSaveUrlBtn.disabled = off;
+        if (quickImageClearBtn) quickImageClearBtn.disabled = off;
+      }
+
+      function pickQuickImageUrl(recipe) {
+        const raw = String(recipe && recipe.image_url || '').trim();
+        return raw || QUICK_IMAGE_FALLBACK;
+      }
+
+      async function ensureAuthUserEmail() {
+        if (currentUserEmail) return currentUserEmail;
+        const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+        const authData = await authRes.json();
+        const email = String(authData && authData.user && authData.user.email || '').trim().toLowerCase();
+        if (!email) throw new Error('Sign in required for image edits.');
+        currentUserEmail = email;
+        return currentUserEmail;
+      }
+
+      async function quickImageApi(path, options) {
+        const email = await ensureAuthUserEmail();
+        const merged = Object.assign({}, options || {});
+        merged.credentials = 'include';
+        merged.headers = Object.assign({}, options && options.headers ? options.headers : {}, {
+          'x-user-email': email
+        });
+        const response = await fetch(path, merged);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok || payload.success === false) {
+          throw new Error(payload.error || `Request failed (${response.status})`);
+        }
+        return payload;
+      }
+
+      function refreshQuickImageUI() {
+        if (!quickImageMeta || !quickImagePreview || !quickImageUrlInput) return;
+
+        if (!selectedRecipeId) {
+          quickImageDisplayRecipe = null;
+          quickImageMeta.textContent = 'Pick or save a recipe to enable image editing.';
+          quickImagePreview.src = QUICK_IMAGE_FALLBACK;
+          quickImageUrlInput.value = '';
+          setQuickImageDisabled(true);
+          return;
+        }
+
+        if (!quickImageDisplayRecipe) {
+          quickImageMeta.textContent = `RecipeID ${selectedRecipeId} is not in Recipe Display yet. Click Publish first.`;
+          quickImagePreview.src = QUICK_IMAGE_FALLBACK;
+          quickImageUrlInput.value = '';
+          setQuickImageDisabled(true);
+          return;
+        }
+
+        quickImageMeta.textContent = `Display ID ${quickImageDisplayRecipe.id} | RecipeID ${quickImageDisplayRecipe.recipeid} | ${quickImageDisplayRecipe.image_url ? 'Custom image set' : 'Using stock fallback'}`;
+        quickImagePreview.src = pickQuickImageUrl(quickImageDisplayRecipe);
+        quickImageUrlInput.value = quickImageDisplayRecipe.image_url || '';
+        setQuickImageDisabled(false);
+      }
+
+      async function refreshQuickImageRecipe() {
+        if (!selectedRecipeId) {
+          quickImageDisplayRecipe = null;
+          refreshQuickImageUI();
+          return;
+        }
+
+        try {
+          const payload = await quickImageApi('/api/admin/recipe-images', { method: 'GET' });
+          quickImageRecipesCache = Array.isArray(payload.recipes) ? payload.recipes : [];
+          quickImageDisplayRecipe = quickImageRecipesCache.find((item) => String(item && item.recipeid) === String(selectedRecipeId)) || null;
+          refreshQuickImageUI();
+          if (!quickImageDisplayRecipe) {
+            setQuickImageStatus('Recipe image editing is available after Publish creates/updates Recipe Display.', 'info');
+          } else {
+            setQuickImageStatus('', 'info');
+          }
+        } catch (err) {
+          quickImageDisplayRecipe = null;
+          refreshQuickImageUI();
+          setQuickImageStatus(err && err.message ? err.message : 'Unable to load image settings.', 'error');
+        }
+      }
+
+      async function quickFileToDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Failed to read selected image file.'));
+          reader.readAsDataURL(file);
+        });
+      }
 
       function getPreferredRecipeId() {
         const params = new URLSearchParams(window.location.search);
@@ -669,8 +870,10 @@
             selectedRecipeId = String(allRecipeRowsCache[0].id || '');
           }
           applyRecipeMatrixFilter();
+          await refreshQuickImageRecipe();
         } catch (err) {
           setRecipeMatrixError(err && err.message ? err.message : 'Failed to load recipe table.');
+          setQuickImageStatus(err && err.message ? err.message : 'Failed to load recipe context.', 'error');
         }
       }
 
@@ -1324,6 +1527,7 @@
             });
 
             await refreshRecipeMatrix(recipeId);
+            await refreshQuickImageRecipe();
             setAutoPublishStatus(
               `Done. Success: ${syncResult.successCount}, Failed: ${syncResult.failCount}. Table refreshed.`,
               syncResult.failCount > 0 ? 'error' : 'success'
@@ -1348,6 +1552,107 @@
       }
 
       if (!uploadArea || !pdfInput) return;
+
+      if (quickImageUploadBtn) {
+        quickImageUploadBtn.addEventListener('click', async function() {
+          if (!quickImageDisplayRecipe) {
+            setQuickImageStatus('Publish the recipe first so it exists in Recipe Display.', 'error');
+            return;
+          }
+
+          const file = quickImageFileInput && quickImageFileInput.files && quickImageFileInput.files[0]
+            ? quickImageFileInput.files[0]
+            : null;
+          if (!file) {
+            setQuickImageStatus('Choose an image file first.', 'error');
+            return;
+          }
+
+          try {
+            setQuickImageBusy(true);
+            setQuickImageStatus('Uploading image...', 'info');
+            const imageData = await quickFileToDataUrl(file);
+            const payload = await quickImageApi(`/api/admin/recipe-images/${quickImageDisplayRecipe.id}/upload`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_data: imageData, file_name: file.name })
+            });
+            quickImageDisplayRecipe = payload.recipe || quickImageDisplayRecipe;
+            if (quickImageFileInput) quickImageFileInput.value = '';
+            refreshQuickImageUI();
+            setQuickImageStatus('Image uploaded and saved.', 'success');
+            notify('Recipe image uploaded.', 'success', 2800);
+          } catch (err) {
+            setQuickImageStatus(err && err.message ? err.message : 'Failed to upload image.', 'error');
+          } finally {
+            setQuickImageBusy(false);
+          }
+        });
+      }
+
+      if (quickImageSaveUrlBtn) {
+        quickImageSaveUrlBtn.addEventListener('click', async function() {
+          if (!quickImageDisplayRecipe) {
+            setQuickImageStatus('Publish the recipe first so it exists in Recipe Display.', 'error');
+            return;
+          }
+
+          const imageUrl = String(quickImageUrlInput && quickImageUrlInput.value || '').trim();
+          if (!imageUrl) {
+            setQuickImageStatus('Enter an image URL, or click Clear Custom Image.', 'error');
+            return;
+          }
+          if (!/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl)) {
+            setQuickImageStatus('Image URL must start with https:// or /images/.', 'error');
+            return;
+          }
+
+          try {
+            setQuickImageBusy(true);
+            setQuickImageStatus('Saving image URL...', 'info');
+            const payload = await quickImageApi(`/api/admin/recipe-images/${quickImageDisplayRecipe.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: imageUrl })
+            });
+            quickImageDisplayRecipe = payload.recipe || quickImageDisplayRecipe;
+            refreshQuickImageUI();
+            setQuickImageStatus('Image URL saved.', 'success');
+            notify('Recipe image URL saved.', 'success', 2800);
+          } catch (err) {
+            setQuickImageStatus(err && err.message ? err.message : 'Failed to save image URL.', 'error');
+          } finally {
+            setQuickImageBusy(false);
+          }
+        });
+      }
+
+      if (quickImageClearBtn) {
+        quickImageClearBtn.addEventListener('click', async function() {
+          if (!quickImageDisplayRecipe) {
+            setQuickImageStatus('Publish the recipe first so it exists in Recipe Display.', 'error');
+            return;
+          }
+
+          try {
+            setQuickImageBusy(true);
+            setQuickImageStatus('Clearing custom image...', 'info');
+            const payload = await quickImageApi(`/api/admin/recipe-images/${quickImageDisplayRecipe.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ image_url: '' })
+            });
+            quickImageDisplayRecipe = payload.recipe || quickImageDisplayRecipe;
+            refreshQuickImageUI();
+            setQuickImageStatus('Custom image cleared. Stock fallback will be used.', 'success');
+            notify('Recipe image cleared.', 'success', 2800);
+          } catch (err) {
+            setQuickImageStatus(err && err.message ? err.message : 'Failed to clear image.', 'error');
+          } finally {
+            setQuickImageBusy(false);
+          }
+        });
+      }
 
       function setDefaultStyle() {
         uploadArea.style.borderColor = '#1a73e8';
