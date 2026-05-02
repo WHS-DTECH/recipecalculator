@@ -12,15 +12,22 @@
     <div class="calendar-app add-booking-page">
         <div class="add-booking-shell">
             <aside class="add-booking-left-panel">
-                <div class="add-booking-side-card add-booking-students-card">
-                    <div class="add-booking-side-title">Students In Selected Class</div>
-                    <div class="add-booking-side-copy">The selected class list stays visible on the left-hand side of the calendar on wide screens.</div>
+                <div class="add-booking-side-card">
+                    <div class="add-booking-side-title">Teacher Timetable</div>
                     <iframe
-                        src="book_a_class.html?view=teacher_embed&student_list_only=1"
-                        title="Students In Selected Class"
-                        class="add-booking-students-iframe"
+                        src="book_a_class.html?view=teacher_embed&hide_save_booking=1&hide_booking_form=1&hide_student_panel=1"
+                        title="Teacher Timetable"
+                        class="add-booking-timetable-iframe"
+                        data-min-height="340"
                         loading="lazy">
                     </iframe>
+
+                    <div class="add-booking-toolbar-actions add-booking-timetable-actions">
+                        <button id="prevWeekBtn">&larr; Previous</button>
+                        <button id="todayBtn">Today</button>
+                        <button id="nextWeekBtn">Next &rarr;</button>
+                        <button id="printScheduleBtn" class="add-booking-print-btn">Print Schedule (A4)</button>
+                    </div>
                 </div>
             </aside>
 
@@ -28,12 +35,6 @@
                 <h1>Add Booking</h1>
                 <div class="add-booking-toolbar">
                     <div id="calendarWeekLabel" class="add-booking-week-label">Week of 02/02/26 to 06/02/26</div>
-                    <div class="add-booking-toolbar-actions">
-                        <button id="prevWeekBtn">&larr; Previous</button>
-                        <button id="todayBtn">Today</button>
-                        <button id="nextWeekBtn">Next &rarr;</button>
-                        <button id="printScheduleBtn" class="add-booking-print-btn">Print Schedule (A4)</button>
-                    </div>
                 </div>
                 <div class="calendar-wrap add-booking-calendar-wrap">
                     <table class="calendar-table" id="scheduleCalendarTable"></table>
@@ -53,13 +54,13 @@
             </section>
 
             <aside class="add-booking-right-panel">
-                <div class="add-booking-side-card">
-                    <div class="add-booking-side-title">Teacher Timetable</div>
+                <div class="add-booking-side-card add-booking-students-card">
+                    <div class="add-booking-side-title">Students In Selected Class</div>
+                    <div class="add-booking-side-copy">The selected class list stays visible on the right-hand side of the calendar on wide screens.</div>
                     <iframe
-                        src="book_a_class.html?view=teacher_embed&hide_save_booking=1&hide_booking_form=1&hide_student_panel=1"
-                        title="Teacher Timetable"
-                        class="add-booking-timetable-iframe"
-                        data-min-height="340"
+                        src="book_a_class.html?view=teacher_embed&student_list_only=1"
+                        title="Students In Selected Class"
+                        class="add-booking-students-iframe"
                         loading="lazy">
                     </iframe>
                 </div>

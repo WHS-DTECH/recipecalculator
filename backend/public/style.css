@@ -50,6 +50,10 @@
 }
 .add-booking-right-panel {
     display: flex;
+    align-self: stretch;
+}
+.add-booking-left-panel {
+    display: flex;
     flex-direction: column;
     gap: 1rem;
     align-self: start;
@@ -57,10 +61,6 @@
     top: 1rem;
     max-height: none;
     overflow: visible;
-}
-.add-booking-left-panel {
-    display: flex;
-    align-self: stretch;
 }
 .add-booking-main-panel,
 .add-booking-side-card {
@@ -96,6 +96,10 @@
     flex-wrap: wrap;
     gap: 0.55rem;
     justify-content: flex-end;
+}
+.add-booking-timetable-actions {
+    margin-top: 0.8rem;
+    justify-content: flex-start;
 }
 .add-booking-toolbar-actions button,
 .add-booking-print-btn {

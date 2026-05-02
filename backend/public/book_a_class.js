@@ -343,6 +343,19 @@ function ensureClassOption(select, className) {
   select.appendChild(option);
 }
 
+function setRecipeSelectionInfo(message) {
+  const el = document.getElementById('recipeSelectionInfo');
+  if (!el) return;
+  const text = String(message || '').trim();
+  if (!text) {
+    el.textContent = '';
+    el.style.display = 'none';
+    return;
+  }
+  el.textContent = text;
+  el.style.display = '';
+}
+
 function getCurrentEmbedState() {
   const saveBtn = document.getElementById('saveBookingBtn');
   return {
@@ -351,6 +364,7 @@ function getCurrentEmbedState() {
     bookingDate: document.getElementById('dateInput')?.value || '',
     period: document.getElementById('periodSelect')?.value || '',
     recipeId: document.getElementById('recipeSelect')?.value || '',
+    recipeSelectionInfo: document.getElementById('recipeSelectionInfo')?.textContent || '',
     classSize: document.getElementById('classSizeInput')?.value || '',
     editBookingId: saveBtn && saveBtn.dataset ? (saveBtn.dataset.editId || '') : ''
   };
@@ -412,6 +426,7 @@ function applySharedEmbedState(state = {}) {
   const targetPeriod = state.period || '';
   const targetRecipeId = state.recipeId || '';
   const targetRecipeName = state.recipeName || '';
+  const targetRecipeSelectionInfo = state.recipeSelectionInfo || '';
   const targetClassSize = state.classSize || '';
   const targetEditBookingId = state.editBookingId || '';
   lastSharedStateAppliedAt = state.updatedAt || Date.now();
@@ -432,6 +447,7 @@ function applySharedEmbedState(state = {}) {
       pendingSharedRecipeName = String(targetRecipeName || '').trim();
     }
   }
+  setRecipeSelectionInfo(targetRecipeSelectionInfo);
   if (classSizeInput && targetClassSize) {
     classSizeInput.value = targetClassSize;
   }
@@ -1316,6 +1332,7 @@ window.addEventListener('DOMContentLoaded', () => {
     clearFormEditMode();
     document.getElementById('classSizeInput').value = 1;
     document.getElementById('recipeSelect').selectedIndex = 0;
+    setRecipeSelectionInfo('');
     document.getElementById('periodSelect').selectedIndex = 0;
     document.getElementById('dateInput').value = toLocalIsoDate(new Date());
     updateBookingDateDayLabel();
@@ -1358,6 +1375,10 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('periodSelect').addEventListener('change', function() {
     autoSelectClassFromSelectedPeriod();
+    writeSharedEmbedState(getCurrentEmbedState());
+  });
+  document.getElementById('recipeSelect').addEventListener('change', function() {
+    setRecipeSelectionInfo('');
     writeSharedEmbedState(getCurrentEmbedState());
   });
   document.getElementById('classSelect').addEventListener('change', function() {

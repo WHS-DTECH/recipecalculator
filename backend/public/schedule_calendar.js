@@ -56,6 +56,7 @@ function publishBookingToBookClassForm(booking) {
     period: String(booking.period || ''),
     recipeId: booking.recipe_id != null ? String(booking.recipe_id) : '',
     recipeName: String(booking.recipe || ''),
+    recipeSelectionInfo: String(booking.recipe_selection_info || ''),
     classSize: booking.class_size != null ? String(booking.class_size) : '',
     // Planner selections should prefill as a new booking, not edit the planner row.
     editBookingId: plannerLike ? '' : String(booking.id || '')
@@ -367,10 +368,12 @@ async function handlePlannerChipClick(bookingId) {
     if (result && result.action === 'adjust') {
       const adjustedRecipe = await showAdjustRecipeModal(result.recipe, plannerBooking);
       if (!adjustedRecipe) return;
+      const baseId = result.recipe && (result.recipe.recipe_id != null ? result.recipe.recipe_id : result.recipe.id);
       const bookingForForm = {
         ...plannerBooking,
         recipe_id: adjustedRecipe.recipeId,
-        recipe: adjustedRecipe.name
+        recipe: adjustedRecipe.name,
+        recipe_selection_info: `Adjusted from version ID ${baseId || '-'} (${result.recipe && result.recipe.name ? result.recipe.name : 'base recipe'})`
       };
       publishBookingToBookClassForm(bookingForForm);
       showInfoToast(`Adjusted recipe saved: ${adjustedRecipe.name}`);
@@ -383,7 +386,8 @@ async function handlePlannerChipClick(bookingId) {
     const bookingForForm = {
       ...plannerBooking,
       recipe_id: selectedRecipeId,
-      recipe: selectedRecipeName
+      recipe: selectedRecipeName,
+      recipe_selection_info: `Using linked version ID ${selectedRecipeId || '-'} (${selectedRecipeName})`
     };
     publishBookingToBookClassForm(bookingForForm);
     showInfoToast(`Selected recipe version: ${selectedRecipeName}`);
