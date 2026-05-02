@@ -1,5 +1,6 @@
 (function() {
   var statusEl = null;
+  var plannerUploadInfoEl = null;
   var ROLE_STORAGE_KEY = 'navbar_user_role';
 
   function setStatus(message, type) {
@@ -7,6 +8,79 @@
     if (!statusEl) return;
     statusEl.textContent = message || '';
     statusEl.className = 'login-status' + (type ? ' ' + type : '');
+  }
+
+  function setPlannerUploadInfo(html) {
+    if (!plannerUploadInfoEl) plannerUploadInfoEl = document.getElementById('plannerUploadInfo');
+    if (!plannerUploadInfoEl) return;
+
+    if (!html) {
+      plannerUploadInfoEl.hidden = true;
+      plannerUploadInfoEl.innerHTML = '';
+      return;
+    }
+
+    plannerUploadInfoEl.innerHTML = html;
+    plannerUploadInfoEl.hidden = false;
+  }
+
+  function formatUploadDate(value) {
+    if (!value) return '-';
+    var d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function loadPlannerUploadInfo(user) {
+    var email = String(user && user.email || '').trim().toLowerCase();
+    if (!email) {
+      setPlannerUploadInfo('');
+      return Promise.resolve(0);
+    }
+
+    return fetchJson('/api/bookings/planner-upload-history?email=' + encodeURIComponent(email) + '&limit=5', {
+      credentials: 'include'
+    }).then(function(result) {
+      if (!result.ok || !result.data || !Array.isArray(result.data.uploads)) {
+        setPlannerUploadInfo('');
+        return 0;
+      }
+
+      var uploads = result.data.uploads;
+      if (!uploads.length) {
+        setPlannerUploadInfo('');
+        return 0;
+      }
+
+      var rows = uploads.map(function(item) {
+        var name = escapeHtml(String(item.file_name || 'Planner upload'));
+        var staffCode = escapeHtml(String(item.uploaded_by_staff_code || '-'));
+        var when = escapeHtml(formatUploadDate(item.uploaded_at));
+        return '<div class="login-upload-row">' +
+          '<strong>' + name + '</strong><br>' +
+          'Uploaded ' + when + ' | Staff Code: ' + staffCode +
+          '</div>';
+      }).join('');
+
+      setPlannerUploadInfo(
+        '<div class="login-upload-info-title">Your Recent Planner Uploads</div>' + rows
+      );
+      return uploads.length;
+    }).catch(function() {
+      setPlannerUploadInfo('');
+      return 0;
+    });
   }
 
   function fetchJson(url, options) {
@@ -86,8 +160,13 @@
       return verifySession();
     }).then(function(user) {
       rememberRole(user);
-      setStatus('Signed in successfully. Redirecting...', 'success');
-      window.location.href = 'index.html';
+      return loadPlannerUploadInfo(user).then(function(uploadCount) {
+        var extra = uploadCount > 0 ? (' You have uploaded ' + uploadCount + ' planner file' + (uploadCount === 1 ? '' : 's') + '.') : '';
+        setStatus('Signed in successfully.' + extra + ' Redirecting...', 'success');
+        setTimeout(function() {
+          window.location.href = 'index.html';
+        }, 2200);
+      });
     }).catch(function(err) {
       setStatus(err.message || 'Sign-in failed.', 'error');
     });
@@ -118,9 +197,14 @@
       .then(function(meResult) {
         if (meResult.ok && meResult.data && meResult.data.authenticated && meResult.data.user) {
           rememberRole(meResult.data.user);
-          setStatus('Already signed in. Redirecting to Recipe Book...', 'success');
-          window.location.href = 'index.html';
-          return null;
+          return loadPlannerUploadInfo(meResult.data.user).then(function(uploadCount) {
+            var extra = uploadCount > 0 ? (' You have uploaded ' + uploadCount + ' planner file' + (uploadCount === 1 ? '' : 's') + '.') : '';
+            setStatus('Already signed in.' + extra + ' Redirecting to Recipe Book...', 'success');
+            setTimeout(function() {
+              window.location.href = 'index.html';
+            }, 2200);
+            return null;
+          });
         }
 
         return fetchJson('/api/auth/google/config', { credentials: 'include' });

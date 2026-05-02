@@ -33,6 +33,26 @@
     }
     .login-status.error { color: #b00020; }
     .login-status.success { color: #0f7a33; }
+    .login-upload-info {
+      margin-top: 0.85rem;
+      padding: 0.8rem 0.9rem;
+      border: 1px solid #cfe2f3;
+      background: #eef6ff;
+      border-radius: 10px;
+      color: #1f2937;
+      font-size: 0.9rem;
+    }
+    .login-upload-info-title {
+      margin: 0 0 0.45rem;
+      font-weight: 700;
+      color: #124f87;
+      font-size: 0.92rem;
+    }
+    .login-upload-row {
+      margin: 0.25rem 0;
+      color: #314255;
+      font-size: 0.84rem;
+    }
   </style>
 </head>
 <body>
@@ -44,6 +64,7 @@
     <p class="login-help">Use your school Google account to sign in.</p>
     <div id="googleSigninMount"></div>
     <div id="loginStatus" class="login-status"></div>
+    <div id="plannerUploadInfo" class="login-upload-info" hidden></div>
   </main>
 
   <script src="google_login.js"></script>

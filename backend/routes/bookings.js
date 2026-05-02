@@ -3,12 +3,35 @@ const router = express.Router();
 const pool = require('../db');
 
 let schemaReady = false;
+let plannerUploadSchemaReady = false;
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 async function ensureSchema() {
   if (schemaReady) return;
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS recipe_url TEXT DEFAULT ''");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS planner_stream TEXT DEFAULT 'Middle'");
   await pool.query("UPDATE bookings SET planner_stream='Middle' WHERE planner_stream IS NULL OR planner_stream=''");
   schemaReady = true;
+}
+
+async function ensurePlannerUploadSchema() {
+  if (plannerUploadSchemaReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS planner_upload_history (
+      id SERIAL PRIMARY KEY,
+      file_name TEXT,
+      uploaded_by_email TEXT,
+      uploaded_by_name TEXT,
+      uploaded_by_staff_code TEXT,
+      planner_stream TEXT,
+      bookings_saved INTEGER DEFAULT 0,
+      uploaded_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  plannerUploadSchemaReady = true;
 }
 
 function getLegacyClassNamesForStream(stream) {
@@ -138,11 +161,13 @@ router.post('/', async (req, res) => {
 // Batch create bookings (used by Upload Planners page)
 router.post('/batch', async (req, res) => {
   const items = req.body && Array.isArray(req.body.bookings) ? req.body.bookings : null;
+  const meta = req.body && req.body.meta ? req.body.meta : {};
   if (!items || !items.length) {
     return res.status(400).json({ error: 'bookings array is required.' });
   }
   try {
     await ensureSchema();
+    await ensurePlannerUploadSchema();
     const ids = [];
     for (const b of items) {
       const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
@@ -152,10 +177,77 @@ router.post('/batch', async (req, res) => {
       );
       ids.push(result.rows[0].id);
     }
+
+    // Record this batch upload for planner file explorer/history UI.
+    let uploaderEmail = normalizeEmail(req.authUserEmail || meta.uploaded_by_email || '');
+    const uploaderName = String(meta.uploaded_by_name || '').trim();
+    const fileName = String(meta.file_name || '').trim();
+    const stream = String(meta.planner_stream || (items[0] && items[0].planner_stream) || 'Middle').trim() || 'Middle';
+    let uploaderStaffCode = '';
+
+    if (!uploaderEmail && items[0] && items[0].staff_id) {
+      uploaderStaffCode = String(items[0].staff_id || '').trim();
+    }
+
+    if (uploaderEmail) {
+      const staffResult = await pool.query(
+        `SELECT trim(coalesce(code, '')) AS code
+         FROM staff_upload
+         WHERE lower(trim(email_school)) = lower(trim($1))
+         LIMIT 1`,
+        [uploaderEmail]
+      );
+      uploaderStaffCode = String((staffResult.rows[0] && staffResult.rows[0].code) || '').trim();
+    }
+
+    await pool.query(
+      `INSERT INTO planner_upload_history
+       (file_name, uploaded_by_email, uploaded_by_name, uploaded_by_staff_code, planner_stream, bookings_saved)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        fileName,
+        uploaderEmail || null,
+        uploaderName || null,
+        uploaderStaffCode || null,
+        stream,
+        ids.length
+      ]
+    );
+
     res.json({ success: true, saved: ids.length, ids });
   } catch (err) {
     console.error('Failed to batch create bookings:', err.message);
     res.status(500).json({ error: 'Failed to save bookings.' });
+  }
+});
+
+// GET /api/bookings/planner-upload-history
+// Optional query params: email=<uploader email>, limit=<n>
+router.get('/planner-upload-history', async (req, res) => {
+  try {
+    await ensurePlannerUploadSchema();
+    const email = normalizeEmail(req.query.email || '');
+    const limit = Math.max(1, Math.min(500, Number(req.query.limit) || 200));
+
+    let sql = `
+      SELECT id, file_name, uploaded_by_email, uploaded_by_name,
+             uploaded_by_staff_code, planner_stream, bookings_saved, uploaded_at
+      FROM planner_upload_history`;
+    const params = [];
+
+    if (email) {
+      params.push(email);
+      sql += ` WHERE lower(trim(coalesce(uploaded_by_email, ''))) = lower(trim($1))`;
+    }
+
+    params.push(limit);
+    sql += ` ORDER BY uploaded_at DESC, id DESC LIMIT $${params.length}`;
+
+    const result = await pool.query(sql, params);
+    res.json({ success: true, uploads: result.rows });
+  } catch (err) {
+    console.error('Failed to fetch planner upload history:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch planner upload history.' });
   }
 });
 
