@@ -322,6 +322,40 @@
       font-weight: 700;
     }
 
+    .gallery-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+
+    .gallery-controls input,
+    .gallery-controls select {
+      border: 1px solid #c5d8ea;
+      border-radius: 8px;
+      padding: 0.42rem 0.55rem;
+      font-size: 0.86rem;
+      background: #f8fbff;
+      color: #143a5d;
+    }
+
+    .gallery-controls input {
+      min-width: 220px;
+    }
+
+    .gallery-controls input:focus,
+    .gallery-controls select:focus {
+      outline: 2px solid #7fb2de;
+      outline-offset: 1px;
+    }
+
+    .gallery-empty {
+      margin: 0.4rem 0 0;
+      color: #4b6c8a;
+      font-size: 0.9rem;
+      font-weight: 600;
+    }
+
     .recipe-card-list {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -596,9 +630,18 @@
       <section class="gallery-shell">
         <div class="gallery-toolbar">
           <h2 class="gallery-title">Possible Recipes the Students Are Cooking</h2>
+          <div class="gallery-controls">
+            <input id="recipeIndexSearch" type="text" placeholder="Search recipes (e.g. potato)" aria-label="Search recipe cards">
+            <select id="recipeIndexSort" aria-label="Sort recipes">
+              <option value="featured">Sort: Featured First</option>
+              <option value="az">Sort: A-Z</option>
+              <option value="za">Sort: Z-A</option>
+            </select>
+          </div>
           <div id="recipeCategoryChips" class="main-subaction"></div>
         </div>
         <div id="recipeCardList" class="recipe-card-list"></div>
+        <p id="recipeFilterEmpty" class="gallery-empty" style="display:none;">No recipes match that search.</p>
         <p class="card-disclaimer">Tap the source badge next to each RecipeID to open the original recipe website.</p>
       </section>
 

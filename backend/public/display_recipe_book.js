@@ -532,6 +532,55 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
+  function recipeSearchText(row) {
+    return [
+      row && row.name,
+      row && row.url,
+      row && row.ingredients,
+      row && row.instructions,
+      getDishCategory(row && row.name)
+    ]
+      .map((part) => String(part || '').toLowerCase())
+      .join(' ');
+  }
+
+  function applyRecipeFilters(options) {
+    const cardList = options.cardList;
+    const emptyEl = options.emptyEl;
+    const orderedRows = Array.isArray(options.orderedRows) ? options.orderedRows : [];
+    const recipeById = options.recipeById;
+    const featuredKeys = options.featuredKeys || new Set();
+    const sortMode = String(options.sortMode || 'featured');
+    const searchTerm = String(options.searchTerm || '').trim().toLowerCase();
+
+    let filtered = orderedRows.filter((row) => {
+      if (!searchTerm) return true;
+      return recipeSearchText(row).includes(searchTerm);
+    });
+
+    if (sortMode === 'az') {
+      filtered = filtered.slice().sort((a, b) =>
+        String(a && a.name || '').localeCompare(String(b && b.name || ''), undefined, { sensitivity: 'base' })
+      );
+    } else if (sortMode === 'za') {
+      filtered = filtered.slice().sort((a, b) =>
+        String(b && b.name || '').localeCompare(String(a && a.name || ''), undefined, { sensitivity: 'base' })
+      );
+    } else {
+      filtered = filtered.slice().sort((a, b) => {
+        const aFeatured = featuredKeys.has(rowRecipeKey(a)) ? 1 : 0;
+        const bFeatured = featuredKeys.has(rowRecipeKey(b)) ? 1 : 0;
+        if (aFeatured !== bFeatured) return bFeatured - aFeatured;
+        return 0;
+      });
+    }
+
+    renderRecipeCards(cardList, filtered, recipeById, 0);
+    if (emptyEl) {
+      emptyEl.style.display = filtered.length ? 'none' : '';
+    }
+  }
+
   Promise.all([
     refreshAuthState(),
     fetch('/api/recipes/display-table').then(res => res.json()).catch(() => []),
@@ -544,6 +593,9 @@ document.addEventListener('DOMContentLoaded', function() {
       const cardList = document.getElementById('recipeCardList');
       const badge = document.getElementById('recipeCountBadge');
       const chips = document.getElementById('recipeCategoryChips');
+      const recipeIndexSearch = document.getElementById('recipeIndexSearch');
+      const recipeIndexSort = document.getElementById('recipeIndexSort');
+      const recipeFilterEmpty = document.getElementById('recipeFilterEmpty');
       const weeklyBox = document.getElementById('weeklyRecipeBox');
       const weeklyDateLabel = document.getElementById('weeklyRecipeDateLabel');
       const weeklyList = document.getElementById('weeklyRecipeList');
@@ -619,7 +671,27 @@ document.addEventListener('DOMContentLoaded', function() {
           .join('');
       }
 
-      renderRecipeCards(cardList, orderedRows, recipeById, featuredRows.length);
+      const refreshGallery = () => {
+        applyRecipeFilters({
+          cardList,
+          emptyEl: recipeFilterEmpty,
+          orderedRows,
+          recipeById,
+          featuredKeys,
+          sortMode: recipeIndexSort ? recipeIndexSort.value : 'featured',
+          searchTerm: recipeIndexSearch ? recipeIndexSearch.value : ''
+        });
+      };
+
+      if (recipeIndexSearch) {
+        recipeIndexSearch.addEventListener('input', refreshGallery);
+      }
+
+      if (recipeIndexSort) {
+        recipeIndexSort.addEventListener('change', refreshGallery);
+      }
+
+      refreshGallery();
     });
 
   document.addEventListener('click', toggleInlineLoginFromNavbar);
