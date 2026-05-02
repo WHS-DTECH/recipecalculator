@@ -728,6 +728,12 @@
         <option value="matched">Matched</option>
         <option value="unmatched">Needs Review</option>
       </select>
+      <select id="filterSchool">
+        <option value="">All School</option>
+      </select>
+      <select id="filterClass">
+        <option value="">All Class</option>
+      </select>
       <input type="text" id="searchInput" placeholder="Search recipe name...">
       <button class="btn btn-secondary btn-sm" id="refreshBtn">Refresh</button>
     </div>
@@ -841,6 +847,8 @@
     let allBookings = [];
     let displayedBookings = [];
     let filterStatus = '';
+    let filterSchool = '';
+    let filterClass = '';
     let searchTerm = '';
     let currentBookingId = null;
     let availableRecipesCache = null;
@@ -858,6 +866,16 @@
         currentPage = 0;
         applyFilters();
       });
+      document.getElementById('filterSchool').addEventListener('change', (e) => {
+        filterSchool = e.target.value;
+        currentPage = 0;
+        applyFilters();
+      });
+      document.getElementById('filterClass').addEventListener('change', (e) => {
+        filterClass = e.target.value;
+        currentPage = 0;
+        applyFilters();
+      });
       document.getElementById('searchInput').addEventListener('input', (e) => {
         searchTerm = e.target.value.toLowerCase();
         currentPage = 0;
@@ -870,11 +888,48 @@
         const response = await fetch('/api/recipe-matching/bookings');
         const data = await response.json();
         allBookings = data.bookings || [];
+        populateFilterOptions();
         updateStats();
         applyFilters();
       } catch (err) {
         showToast(`Error loading recipes: ${err.message}`, 'error');
       }
+    }
+
+    function getSchoolValue(booking) {
+      return String(
+        (booking && (booking.planner_stream || booking.school || booking.school_name || booking.stream)) || ''
+      ).trim();
+    }
+
+    function getClassValue(booking) {
+      return String((booking && (booking.class_name || booking.class)) || '').trim();
+    }
+
+    function populateFilterOptions() {
+      const schoolSelect = document.getElementById('filterSchool');
+      const classSelect = document.getElementById('filterClass');
+      if (!schoolSelect || !classSelect) return;
+
+      const schools = Array.from(new Set(
+        allBookings.map(getSchoolValue).filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b));
+
+      const classes = Array.from(new Set(
+        allBookings.map(getClassValue).filter(Boolean)
+      )).sort((a, b) => a.localeCompare(b));
+
+      schoolSelect.innerHTML = '<option value="">All School</option>' +
+        schools.map((s) => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+
+      classSelect.innerHTML = '<option value="">All Class</option>' +
+        classes.map((c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+
+      schoolSelect.value = schools.includes(filterSchool) ? filterSchool : '';
+      filterSchool = schoolSelect.value;
+
+      classSelect.value = classes.includes(filterClass) ? filterClass : '';
+      filterClass = classSelect.value;
     }
 
     function updateStats() {
@@ -906,10 +961,18 @@
         filtered = filtered.filter(b => !b.recipe_id);
       }
 
+      if (filterSchool) {
+        filtered = filtered.filter((b) => getSchoolValue(b).toLowerCase() === filterSchool.toLowerCase());
+      }
+
+      if (filterClass) {
+        filtered = filtered.filter((b) => getClassValue(b).toLowerCase() === filterClass.toLowerCase());
+      }
+
       if (searchTerm) {
         filtered = filtered.filter(b => 
           (b.recipe || '').toLowerCase().includes(searchTerm) ||
-          (b.class_name || '').toLowerCase().includes(searchTerm)
+          getClassValue(b).toLowerCase().includes(searchTerm)
         );
       }
 
