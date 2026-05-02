@@ -64,6 +64,15 @@ function teacherColorFromName(name) {
 }
 
 function getCalendarCellBaseStyle(booking) {
+  if (scheduleViewMode === 'recipe') {
+    const plannerStyle = plannerChipStyle(normalizePlannerStream(booking));
+    return {
+      bg: plannerStyle.bg,
+      border: plannerStyle.border,
+      text: plannerStyle.text,
+      teacherText: plannerStyle.text
+    };
+  }
   if (scheduleViewMode !== 'class') {
     return { bg: '#e8f5e9', border: '#c8e6c9', text: '#1f2937', teacherText: '#2e7d32' };
   }
