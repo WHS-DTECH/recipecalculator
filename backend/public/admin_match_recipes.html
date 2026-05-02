@@ -931,10 +931,15 @@
 
         const serving = recipe && recipe.serving_size ? String(recipe.serving_size).trim() : '';
         const url = recipe && recipe.url ? String(recipe.url).trim() : '';
+        let sourceDomain = '';
+        if (url) {
+          try { sourceDomain = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { sourceDomain = ''; }
+        }
         document.getElementById('previewRecipeMeta').innerHTML = `
           <strong>Recipe ID:</strong> ${Number(recipeId)}
           ${serving ? ` | <strong>Serves:</strong> ${escapeHtml(serving)}` : ''}
-          ${url ? ` | <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1976d2;">Open Source URL</a>` : ''}
+          ${sourceDomain ? ` | <strong>Source:</strong> <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1976d2;">${escapeHtml(sourceDomain)}</a>` : (url ? ` | <a href="${escapeHtml(url)}" target="_blank" rel="noopener" style="color:#1976d2;">Open Source URL</a>` : '')}
+          ${!url ? ' | <span style="color:#999;">No source URL</span>' : ''}
         `;
 
         const description = recipe && recipe.description ? String(recipe.description).trim() : '';
