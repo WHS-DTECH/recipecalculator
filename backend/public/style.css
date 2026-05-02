@@ -121,6 +121,41 @@
     color: #1f2937;
     margin-bottom: 0.3rem;
 }
+.add-booking-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.45rem;
+}
+.add-booking-side-title-inline {
+    margin-bottom: 0;
+}
+.add-booking-form-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.add-booking-form-action-btn {
+    border: none;
+    border-radius: 5px;
+    color: #fff;
+    padding: 0.45rem 1.05rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+}
+.add-booking-form-action-btn-save {
+    background: #1b8a43;
+}
+.add-booking-form-action-btn-reset {
+    background: #8fa1b3;
+}
+.add-booking-form-action-btn-delete {
+    background: #c0392b;
+}
 .add-booking-side-copy {
     font-size: 0.95rem;
     color: #4a5568;
@@ -1009,6 +1044,16 @@
 
     .add-booking-toolbar-actions button {
         flex: 1 1 140px;
+    }
+
+    .add-booking-card-header {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .add-booking-form-actions {
+        justify-content: flex-start;
+        width: 100%;
     }
 
     .add-booking-form-iframe {

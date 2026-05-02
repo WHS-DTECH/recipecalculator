@@ -68,6 +68,9 @@
         .hide-teacher-timetable-mode #teacherTimetableSection {
             display: none !important;
         }
+        .hide-timetable-actions-mode #timetableFormActions {
+            display: none !important;
+        }
     </style>
 </head>
 <body>
@@ -80,6 +83,7 @@
             const hideBookingForm = new URLSearchParams(window.location.search).get('hide_booking_form') === '1';
             const hideStudentPanel = new URLSearchParams(window.location.search).get('hide_student_panel') === '1';
             const hideTeacherTimetable = new URLSearchParams(window.location.search).get('hide_teacher_timetable') === '1';
+            const hideTimetableActions = new URLSearchParams(window.location.search).get('hide_timetable_actions') === '1';
             const isTeacherEmbedMode = embedView === 'teacher_embed';
             if (isTeacherEmbedMode) {
                 document.documentElement.classList.add('teacher-embed-mode');
@@ -105,6 +109,9 @@
             }
             if (hideTeacherTimetable) {
                 document.documentElement.classList.add('hide-teacher-timetable-mode');
+            }
+            if (hideTimetableActions) {
+                document.documentElement.classList.add('hide-timetable-actions-mode');
             }
         </script>
     
