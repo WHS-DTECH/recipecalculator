@@ -1004,32 +1004,66 @@ router.post('/:id/adjust', async (req, res) => {
     const ingredientsDisplay = finalIngredients ? multilineTextToHtmlList(finalIngredients, false) : (base.ingredients_display || null);
     const finalServing = (servingSize != null && Number.isFinite(servingSize)) ? servingSize : base.serving_size;
 
-    const insertResult = await pool.query(
-      `INSERT INTO recipes (
-        name, description, url,
-        serving_size,
-        ingredients, instructions, extracted_ingredients, instructions_extracted,
-        ingredients_display, instructions_display, ingredients_inventories,
-        adjusted_from_id, created_by_email, created_by_name
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
-      RETURNING id`,
-      [
-        name,
-        description || `Adjusted from "${base.name}"`,
-        base.url || null,
-        finalServing,
-        finalIngredients,
-        base.instructions || null,
-        finalIngredients,
-        base.instructions_extracted || null,
-        ingredientsDisplay,
-        base.instructions_display || null,
-        base.ingredients_inventories || null,
-        baseId,
-        createdByEmail,
-        createdByName
-      ]
-    );
+    const insertWithInventorySql = `INSERT INTO recipes (
+      name, description, url,
+      serving_size,
+      ingredients, instructions, extracted_ingredients, instructions_extracted,
+      ingredients_display, instructions_display, ingredients_inventories,
+      adjusted_from_id, created_by_email, created_by_name
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+    RETURNING id`;
+
+    const insertWithoutInventorySql = `INSERT INTO recipes (
+      name, description, url,
+      serving_size,
+      ingredients, instructions, extracted_ingredients, instructions_extracted,
+      ingredients_display, instructions_display,
+      adjusted_from_id, created_by_email, created_by_name
+    ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    RETURNING id`;
+
+    const insertWithInventoryParams = [
+      name,
+      description || `Adjusted from "${base.name}"`,
+      base.url || null,
+      finalServing,
+      finalIngredients,
+      base.instructions || null,
+      finalIngredients,
+      base.instructions_extracted || null,
+      ingredientsDisplay,
+      base.instructions_display || null,
+      base.ingredients_inventories || null,
+      baseId,
+      createdByEmail,
+      createdByName
+    ];
+
+    let insertResult;
+    try {
+      insertResult = await pool.query(insertWithInventorySql, insertWithInventoryParams);
+    } catch (insertErr) {
+      // Some deployed DBs do not yet have the ingredients_inventories column.
+      if (insertErr && insertErr.code === '42703') {
+        insertResult = await pool.query(insertWithoutInventorySql, [
+          name,
+          description || `Adjusted from "${base.name}"`,
+          base.url || null,
+          finalServing,
+          finalIngredients,
+          base.instructions || null,
+          finalIngredients,
+          base.instructions_extracted || null,
+          ingredientsDisplay,
+          base.instructions_display || null,
+          baseId,
+          createdByEmail,
+          createdByName
+        ]);
+      } else {
+        throw insertErr;
+      }
+    }
 
     const newId = insertResult.rows[0].id;
     res.json({ success: true, recipeId: newId, name });
