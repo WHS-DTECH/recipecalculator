@@ -201,4 +201,53 @@ router.post('/', async (req, res) => {
   }
 });
 
+// PUT /api/upload_timetable/row/:teacherCode
+router.put('/row/:teacherCode', async (req, res) => {
+  const teacherCode = String(req.params.teacherCode || '').trim();
+  const updates = req.body?.row;
+
+  if (!teacherCode) {
+    return res.status(400).json({ success: false, error: 'teacherCode is required.' });
+  }
+
+  if (!updates || typeof updates !== 'object') {
+    return res.status(400).json({ success: false, error: 'row object is required.' });
+  }
+
+  const updatableColumns = TIMETABLE_COLUMNS.filter(c => c !== 'Teacher');
+  const setParts = [];
+  const values = [];
+
+  for (const col of updatableColumns) {
+    if (!Object.prototype.hasOwnProperty.call(updates, col)) continue;
+    setParts.push(`"${col}" = $${values.length + 1}`);
+    values.push((updates[col] || '').toString().trim());
+  }
+
+  if (setParts.length === 0) {
+    return res.status(400).json({ success: false, error: 'No valid timetable columns were provided.' });
+  }
+
+  // Keep edited rows active in the current timetable set.
+  setParts.push(`status = 'Current'`);
+  values.push(teacherCode);
+
+  const sql = `
+    UPDATE kamar_timetable
+    SET ${setParts.join(', ')}
+    WHERE upper(trim("Teacher")) = upper(trim($${values.length}))
+    RETURNING *
+  `;
+
+  try {
+    const result = await pool.query(sql, values);
+    if (!result.rows.length) {
+      return res.status(404).json({ success: false, error: 'Teacher row not found.' });
+    }
+    return res.json({ success: true, row: result.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

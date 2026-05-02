@@ -2,6 +2,7 @@
 let timetableHeaders = [];
 let timetableRows = [];
 let teacherFilterTerm = '';
+let timetableEditMode = false;
 
 function escapeHtml(value) {
   return String(value ?? '')
@@ -23,6 +24,34 @@ function sortRowsByTeacherName(rows) {
     const bName = String(b?.Teacher_Name || b?.teacher_name || '').trim().toLowerCase();
     return aName.localeCompare(bName);
   });
+}
+
+function getTeacherKey(row) {
+  return String(row?.Teacher || row?.teacher || '').trim();
+}
+
+function findRowByTeacher(teacherKey) {
+  return timetableRows.find(r => getTeacherKey(r).toLowerCase() === String(teacherKey || '').trim().toLowerCase());
+}
+
+function saveTeacherRow(teacherKey) {
+  const row = findRowByTeacher(teacherKey);
+  if (!row) {
+    return Promise.reject(new Error('Teacher row not found in table state.'));
+  }
+
+  return fetch(`/api/upload_timetable/row/${encodeURIComponent(teacherKey)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ row })
+  })
+    .then(async (res) => {
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok || !payload.success) {
+        throw new Error(payload.error || 'Failed to save row.');
+      }
+      return payload.row;
+    });
 }
 
 function fetchAndRenderTimetableTable() {
@@ -210,18 +239,37 @@ function renderTimetableTable() {
           placeholder="Type a name e.g. maryke"
           style="min-width:260px;padding:0.4rem 0.55rem;border:1px solid #cbd5e1;border-radius:8px;"
         />
+        <button
+          id="toggleTimetableEditMode"
+          type="button"
+          style="padding:0.4rem 0.7rem;border:1px solid #94a3b8;border-radius:8px;background:${timetableEditMode ? '#dbeafe' : '#ffffff'};cursor:pointer;font-weight:600;"
+        >${timetableEditMode ? 'Editing enabled' : 'Enable editing'}</button>
       </div>
       <div style="font-size:0.9rem;color:#475569;">
         Showing ${filteredRows.length} of ${timetableRows.length} teachers (sorted A-Z by Teacher_Name)
       </div>
     </div>
+    <div style="font-size:0.82rem;color:#64748b;margin-bottom:0.6rem;">
+      ${timetableEditMode ? 'Edit mode is ON: click a cell to edit, then click Save row.' : 'Edit mode is OFF.'}
+    </div>
   `;
 
   html += '<table class="styled-table"><thead><tr>';
+  html += '<th>Actions</th>';
   timetableHeaders.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
   html += '</tr></thead><tbody>';
   filteredRows.forEach(row => {
-    html += '<tr>' + timetableHeaders.map(h => `<td>${formatTimetableCell(row[h])}</td>`).join('') + '</tr>';
+    const teacherKey = getTeacherKey(row);
+    html += '<tr>';
+    html += `<td><button type="button" class="save-teacher-row" data-teacher="${escapeHtml(teacherKey)}" style="padding:0.3rem 0.55rem;border:1px solid #94a3b8;border-radius:6px;background:#fff;cursor:pointer;">Save row</button></td>`;
+    html += timetableHeaders.map(h => {
+      const isEditable = timetableEditMode && h !== 'Teacher';
+      const cellStyle = isEditable
+        ? 'cursor:pointer;outline:1px dashed #93c5fd;outline-offset:-3px;'
+        : '';
+      return `<td class="tt-edit-cell" data-teacher="${escapeHtml(teacherKey)}" data-col="${escapeHtml(h)}" style="${cellStyle}">${formatTimetableCell(row[h])}</td>`;
+    }).join('');
+    html += '</tr>';
   });
   html += '</tbody></table>';
   container.innerHTML = html;
@@ -241,4 +289,59 @@ function renderTimetableTable() {
       }
     });
   }
+
+  const editToggle = document.getElementById('toggleTimetableEditMode');
+  if (editToggle) {
+    editToggle.addEventListener('click', () => {
+      timetableEditMode = !timetableEditMode;
+      renderTimetableTable();
+    });
+  }
+
+  const editableCells = container.querySelectorAll('.tt-edit-cell');
+  editableCells.forEach((cell) => {
+    cell.addEventListener('click', () => {
+      if (!timetableEditMode) return;
+      const teacherKey = cell.getAttribute('data-teacher') || '';
+      const col = cell.getAttribute('data-col') || '';
+      if (!teacherKey || !col || col === 'Teacher') return;
+
+      const row = findRowByTeacher(teacherKey);
+      if (!row) return;
+
+      const currentValue = (row[col] ?? '').toString();
+      const nextValue = window.prompt(`Edit ${col}`, currentValue);
+      if (nextValue === null) return;
+      row[col] = nextValue;
+      if (col === 'Teacher_Name' || col === 'teacher_name') {
+        timetableRows = sortRowsByTeacherName(timetableRows);
+      }
+      renderTimetableTable();
+    });
+  });
+
+  const saveButtons = container.querySelectorAll('.save-teacher-row');
+  saveButtons.forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const teacherKey = btn.getAttribute('data-teacher') || '';
+      if (!teacherKey) return;
+
+      const originalText = btn.textContent;
+      btn.textContent = 'Saving...';
+      btn.disabled = true;
+
+      saveTeacherRow(teacherKey)
+        .then((updatedRow) => {
+          const idx = timetableRows.findIndex(r => getTeacherKey(r).toLowerCase() === teacherKey.toLowerCase());
+          if (idx >= 0) timetableRows[idx] = updatedRow;
+          timetableRows = sortRowsByTeacherName(timetableRows);
+          renderTimetableTable();
+        })
+        .catch((err) => {
+          window.alert(`Could not save row for ${teacherKey}: ${err.message || err}`);
+          btn.textContent = originalText;
+          btn.disabled = false;
+        });
+    });
+  });
 }
