@@ -120,6 +120,11 @@
       color: white;
     }
 
+    .btn-warning {
+      background: var(--warning);
+      color: white;
+    }
+
     .btn-secondary {
       background: #6c757d;
       color: white;
@@ -706,6 +711,46 @@
     .linked-recipe-source a:hover {
       text-decoration: underline;
     }
+
+    .resave-audit-panel {
+      display: none;
+      background: #fff8e1;
+      border: 1px solid #ffecb3;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 0 0 16px 0;
+    }
+
+    .resave-audit-panel.active {
+      display: block;
+    }
+
+    .resave-audit-head {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .resave-audit-note {
+      font-size: 12px;
+      color: #5d4037;
+      margin: 0;
+    }
+
+    .resave-audit-results {
+      margin: 8px 0 0 0;
+      background: #fff;
+      border: 1px solid #ffe082;
+      border-radius: 6px;
+      padding: 8px;
+      max-height: 220px;
+      overflow: auto;
+      font-family: Consolas, Menlo, Monaco, monospace;
+      font-size: 12px;
+      white-space: pre-wrap;
+    }
   </style>
 </head>
 <body>
@@ -715,7 +760,19 @@
   <div class="container">
     <div class="header">
       <h1>Match Planner Recipes</h1>
-      <button class="btn btn-primary" id="autoMatchBtn">Auto-Match All Unmatched</button>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-warning" id="resaveAuditBtn">Find Re-save Candidates</button>
+        <button class="btn btn-primary" id="autoMatchBtn">Auto-Match All Unmatched</button>
+      </div>
+    </div>
+
+    <div id="resaveAuditPanel" class="resave-audit-panel">
+      <div class="resave-audit-head">
+        <strong>Needs Re-save Audit</strong>
+        <button class="btn btn-secondary btn-sm" id="resaveAuditRefreshBtn">Refresh</button>
+      </div>
+      <p class="resave-audit-note">Shows bookings with recipes that are missing desired servings rows or linked to an older recipe version.</p>
+      <pre id="resaveAuditResults" class="resave-audit-results">No audit run yet.</pre>
     </div>
 
     <div class="stats" id="statsContainer">
@@ -854,10 +911,85 @@
     let availableRecipesCache = null;
     const recipeDetailsCache = new Map();
 
+    function getCurrentStaffEmail() {
+      try {
+        const raw = sessionStorage.getItem('currentStaffUser');
+        const parsed = raw ? JSON.parse(raw) : null;
+        return String(parsed && parsed.email_school ? parsed.email_school : '').trim().toLowerCase();
+      } catch (_) {
+        return '';
+      }
+    }
+
+    function setResaveAuditResults(payload) {
+      const output = document.getElementById('resaveAuditResults');
+      if (!output) return;
+
+      const candidates = Array.isArray(payload && payload.candidates) ? payload.candidates : [];
+      if (!candidates.length) {
+        output.textContent = 'No re-save candidates found.';
+        return;
+      }
+
+      const lines = [];
+      lines.push(`Candidates: ${candidates.length}`);
+      lines.push('');
+      candidates.forEach((row) => {
+        lines.push([
+          `Booking #${row.booking_id}`,
+          row.booking_date || '',
+          `P${row.period || ''}`,
+          row.staff_name || '(No teacher)',
+          row.class_name || '(No class)',
+          row.recipe || '(No recipe)',
+          row.reason || ''
+        ].join(' | '));
+      });
+
+      output.textContent = lines.join('\n');
+    }
+
+    async function runResaveAudit() {
+      const btn = document.getElementById('resaveAuditBtn');
+      const panel = document.getElementById('resaveAuditPanel');
+      const email = getCurrentStaffEmail();
+
+      if (!email) {
+        showToast('Could not determine admin email from session.', 'error');
+        return;
+      }
+
+      if (panel) panel.classList.add('active');
+      if (btn) btn.disabled = true;
+
+      try {
+        const response = await fetch('/api/bookings/admin/resave-candidates?limit=500', {
+          headers: {
+            'x-user-email': email
+          }
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.success === false) {
+          throw new Error(data.error || `Audit failed (${response.status})`);
+        }
+
+        setResaveAuditResults(data);
+        showToast('Re-save audit complete');
+      } catch (err) {
+        const output = document.getElementById('resaveAuditResults');
+        if (output) output.textContent = `Audit failed: ${err.message || 'Unknown error'}`;
+        showToast(err.message || 'Audit failed', 'error');
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       loadUnmatchedRecipes();
       document.getElementById('autoMatchBtn').addEventListener('click', autoMatchAll);
+      document.getElementById('resaveAuditBtn').addEventListener('click', runResaveAudit);
+      document.getElementById('resaveAuditRefreshBtn').addEventListener('click', runResaveAudit);
       document.getElementById('prevBtn').addEventListener('click', prevPage);
       document.getElementById('nextBtn').addEventListener('click', nextPage);
       document.getElementById('refreshBtn').addEventListener('click', () => location.reload());
