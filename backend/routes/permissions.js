@@ -61,7 +61,7 @@ const DEFAULT_ROLES = {
   }
 };
 
-const ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'planning', 'admin'];
+const ROUTES = ['inventory', 'add_recipes', 'recipes', 'shopping', 'booking', 'planning', 'admin'];
 
 function buildDefaultRolesRows() {
   return Object.entries(DEFAULT_ROLES)

@@ -1,5 +1,5 @@
 let permissionsData = [];
-let ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'planning', 'admin'];
+let ROUTES = ['inventory', 'add_recipes', 'recipes', 'shopping', 'booking', 'planning', 'admin'];
 
 function getCurrentStaffEmail() {
   try {
