@@ -850,8 +850,15 @@ function fetchStudentsForClass(classCode) {
     return;
   }
 
+  // Pass the current staff code so the backend can triangulate the exact student token
+  // e.g. teacher token 82B-MFOOD-F + staffCode RR → search for RR-MFOOD-F in student timetable
+  const staffCode = document.getElementById('staffSelect')?.value || '';
+  const url = staffCode
+    ? `/api/student_upload/by-class/${encodeURIComponent(classCode)}?staffCode=${encodeURIComponent(staffCode)}`
+    : `/api/student_upload/by-class/${encodeURIComponent(classCode)}`;
+
   meta.textContent = 'Loading students...';
-  fetch(`/api/student_upload/by-class/${encodeURIComponent(classCode)}`)
+  fetch(url)
     .then(res => res.json())
     .then(data => renderClassStudents(data.students || []))
     .catch(() => {

@@ -153,24 +153,31 @@ router.get('/by-class/:ttcode', async (req, res) => {
   if (!ttcode) return res.json({ students: [] });
 
   // Triangulate between teacher and student timetable token formats.
-  // Teacher tokens use a line-number prefix: 82B-MFOOD-22
-  // Student tokens use a teacher-code prefix:  RR-MFOOD-22
-  // Both share the subject-room suffix:        MFOOD-22
-  // So we search for the full token AND the suffix (everything after the first '-' segment)
-  // to match either format.
+  // Teacher tokens use a line-number prefix: 82B-MFOOD-F
+  // Student tokens use a teacher-code prefix:  RR-MFOOD-F
+  // If staffCode is provided, construct the precise student token: {staffCode}-{subjectRoom}
+  // e.g. staffCode=RR + 82B-MFOOD-F => search for RR-MFOOD-F exactly.
+  const staffCode = (req.query.staffCode || '').trim().toUpperCase();
   const firstDash = ttcode.indexOf('-');
   const coreSuffix = (firstDash > 0 && firstDash < ttcode.length - 1)
     ? ttcode.slice(firstDash + 1)
     : null;
-  // Only use the core suffix if it is specific enough (contains a hyphen and is 4+ chars)
   const useCore = coreSuffix && coreSuffix.includes('-') && coreSuffix.length >= 4;
+
+  // Precise 3-way token: staffCode + subject + room, e.g. RR-MFOOD-F
+  const exactStudentToken = (staffCode && useCore) ? `${staffCode}-${coreSuffix}` : null;
 
   try {
     await ensureSchema();
 
-    // Build parameterised search for both the full token and core suffix
     const params = [];
     const colConditions = PERIOD_COLUMNS.map(col => {
+      if (exactStudentToken) {
+        params.push(exactStudentToken);
+        const idx = params.length;
+        return `upper(COALESCE(${col}, '')) LIKE '%' || upper($${idx}) || '%'`;
+      }
+      // Fallback: full token OR core suffix
       params.push(ttcode);
       const idx = params.length;
       if (useCore) {
