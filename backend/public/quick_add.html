@@ -481,8 +481,14 @@
       let currentUserEmail = '';
       let quickImageRecipesCache = [];
       let quickImageDisplayRecipe = null;
+      let publishAvailabilityCheckToken = 0;
 
       const QUICK_IMAGE_FALLBACK = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+      const RAW_DATA_EXTRACTOR_URL = 'raw_data_extractor.html';
+
+      function rawDataExtractorLinkHtml() {
+        return `<a href="${RAW_DATA_EXTRACTOR_URL}" target="_blank" rel="noopener">Raw Data Extractor</a>`;
+      }
 
       function setQuickImageStatus(message, type) {
         if (!quickImageStatus) return;
@@ -625,9 +631,11 @@
         }, durationMs);
       }
 
-      function setSaveRecipeStatus(message, type) {
+      function setSaveRecipeStatus(message, type, options) {
         if (!saveRecipeStatus) return;
-        saveRecipeStatus.textContent = message || '';
+        const allowHtml = !!(options && options.allowHtml);
+        if (allowHtml) saveRecipeStatus.innerHTML = message || '';
+        else saveRecipeStatus.textContent = message || '';
         if (!message) {
           saveRecipeStatus.style.display = 'none';
           return;
@@ -660,9 +668,11 @@
         saveRecipeProgressFill.style.width = '0%';
       }
 
-      function setExtractAllStatus(message, type) {
+      function setExtractAllStatus(message, type, options) {
         if (!extractAllStatus) return;
-        extractAllStatus.textContent = message || '';
+        const allowHtml = !!(options && options.allowHtml);
+        if (allowHtml) extractAllStatus.innerHTML = message || '';
+        else extractAllStatus.textContent = message || '';
         if (!message) {
           extractAllStatus.style.display = 'none';
           return;
@@ -870,9 +880,14 @@
           }
           applyRecipeMatrixFilter();
           await refreshQuickImageRecipe();
+          await refreshAutoPublishAvailability(selectedRecipeId);
         } catch (err) {
           setRecipeMatrixError(err && err.message ? err.message : 'Failed to load recipe table.');
           setQuickImageStatus(err && err.message ? err.message : 'Failed to load recipe context.', 'error');
+          if (autoPublishBtn) {
+            autoPublishBtn.disabled = true;
+            autoPublishBtn.textContent = 'PUBLISH';
+          }
         }
       }
 
@@ -984,6 +999,31 @@
         const res = await fetch(`/RawDataTXT/${recipeId}.txt`);
         if (!res.ok) return '';
         return await res.text();
+      }
+
+      function hasRawText(value) {
+        return String(value || '').trim().length > 0;
+      }
+
+      async function hasRawDataForRecipe(recipeId) {
+        const id = Number(recipeId);
+        if (!Number.isInteger(id) || id <= 0) return false;
+
+        try {
+          const recipe = await getRecipeById(id);
+          if (recipe && hasRawText(recipe.upload_raw_data)) return true;
+        } catch (_) {
+          // Fall through to file check.
+        }
+
+        try {
+          const res = await fetch(`/RawDataTXT/${id}.txt`, { cache: 'no-store' });
+          if (!res.ok) return false;
+          const fileRaw = await res.text();
+          return hasRawText(fileRaw);
+        } catch (_) {
+          return false;
+        }
       }
 
       async function runServingAutoExtract(recipeId) {
@@ -1109,10 +1149,15 @@
           ? `Recipe already exists. Reusing RecipeID ${recipeId}.`
           : `Saved successfully. RecipeID ${recipeId} is now shown in the table.`;
         const successMessage = extractionError
-          ? `${baseMessage} Note: auto-extraction failed (${extractionError}) — use the Raw Data Extractor page to extract manually.`
+          ? `${baseMessage} Note: auto-extraction failed (${escapeHtml(extractionError)}) - use the ${rawDataExtractorLinkHtml()} page to extract manually.`
           : baseMessage;
-        setSaveRecipeStatus(successMessage, extractionError ? 'warning' : 'success');
-        notify(successMessage, extractionError ? 'warning' : 'success');
+        setSaveRecipeStatus(successMessage, extractionError ? 'warning' : 'success', { allowHtml: !!extractionError });
+        notify(
+          extractionError
+            ? `${baseMessage} Note: auto-extraction failed (${extractionError}) - use Raw Data Extractor to extract manually.`
+            : baseMessage,
+          extractionError ? 'warning' : 'success'
+        );
         return recipeId;
       }
 
@@ -1238,9 +1283,11 @@
         }
       }
 
-      function setAutoPublishStatus(message, type) {
+      function setAutoPublishStatus(message, type, options) {
         if (!autoPublishStatus) return;
-        autoPublishStatus.textContent = message || '';
+        const allowHtml = !!(options && options.allowHtml);
+        if (allowHtml) autoPublishStatus.innerHTML = message || '';
+        else autoPublishStatus.textContent = message || '';
         if (!message) {
           autoPublishStatus.style.color = '#3949ab';
           return;
@@ -1254,6 +1301,38 @@
           return;
         }
         autoPublishStatus.style.color = '#3949ab';
+      }
+
+      async function refreshAutoPublishAvailability(preferredRecipeId) {
+        if (!autoPublishBtn) return;
+
+        const recipeId = Number(preferredRecipeId || selectedRecipeId);
+        const token = ++publishAvailabilityCheckToken;
+
+        if (!Number.isInteger(recipeId) || recipeId <= 0) {
+          autoPublishBtn.disabled = true;
+          autoPublishBtn.textContent = 'PUBLISH';
+          setAutoPublishStatus('No selected recipe. Save a recipe first.', 'error');
+          return;
+        }
+
+        autoPublishBtn.disabled = true;
+        autoPublishBtn.textContent = 'PUBLISH';
+
+        const hasRaw = await hasRawDataForRecipe(recipeId);
+        if (token !== publishAvailabilityCheckToken) return;
+
+        if (!hasRaw) {
+          setAutoPublishStatus(
+            `Publish disabled for RecipeID ${recipeId}: raw data not found. Use ${rawDataExtractorLinkHtml()} to extract manually.`,
+            'error',
+            { allowHtml: true }
+          );
+          return;
+        }
+
+        autoPublishBtn.disabled = false;
+        setAutoPublishStatus('', 'info');
       }
 
       function resetAutoPublishProgressPanel() {
@@ -1407,7 +1486,11 @@
               await runAutoExtractFlow();
             } catch (extractErr) {
               const extractMsg = extractErr && extractErr.message ? extractErr.message : String(extractErr);
-              setExtractAllStatus(`Auto Extract skipped: ${extractMsg}. Use Raw Data Extractor to extract manually.`, 'warning');
+              setExtractAllStatus(
+                `Auto Extract skipped: ${escapeHtml(extractMsg)}. Use ${rawDataExtractorLinkHtml()} to extract manually.`,
+                'warning',
+                { allowHtml: true }
+              );
               notify(`Auto Extract skipped: ${extractMsg}`, 'warning', 6500);
             }
           } catch (err) {
@@ -1485,6 +1568,17 @@
             return;
           }
 
+          const hasRaw = await hasRawDataForRecipe(recipeId);
+          if (!hasRaw) {
+            autoPublishBtn.disabled = true;
+            setAutoPublishStatus(
+              `Publish disabled for RecipeID ${recipeId}: raw data not found. Use ${rawDataExtractorLinkHtml()} to extract manually.`,
+              'error',
+              { allowHtml: true }
+            );
+            return;
+          }
+
           autoPublishBtn.disabled = true;
           autoPublishBtn.textContent = 'Running...';
           setAutoPublishStatus(`Starting Auto Publish + Async Sync for RecipeID ${recipeId}...`, 'info');
@@ -1541,8 +1635,8 @@
             setAutoPublishStatus(`Auto Publish + Async Sync failed: ${message}`, 'error');
             notify(`Auto Publish + Async Sync failed: ${message}`, 'error', 6500);
           } finally {
-            autoPublishBtn.disabled = false;
             autoPublishBtn.textContent = 'PUBLISH';
+            await refreshAutoPublishAvailability(recipeId);
             window.setTimeout(function() {
               resetAutoPublishProgressPanel();
             }, 450);
@@ -1723,6 +1817,15 @@
         dt.items.add(file);
         pdfInput.files = dt.files;
         setSelectedFile(file);
+      });
+
+      if (autoPublishBtn) {
+        autoPublishBtn.disabled = true;
+        autoPublishBtn.textContent = 'PUBLISH';
+      }
+
+      window.addEventListener('focus', function() {
+        refreshAutoPublishAvailability(selectedRecipeId);
       });
 
       refreshRecipeMatrix(getPreferredRecipeId());
