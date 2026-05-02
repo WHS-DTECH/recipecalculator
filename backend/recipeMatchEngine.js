@@ -49,6 +49,29 @@ function normalizeRecipeName(name) {
     .trim();
 }
 
+function tokenizeRecipeName(name) {
+  const normalized = normalizeRecipeName(name);
+  if (!normalized) return [];
+  return normalized
+    .split(' ')
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3);
+}
+
+function wordOverlapScore(nameA, nameB) {
+  const tokensA = new Set(tokenizeRecipeName(nameA));
+  const tokensB = new Set(tokenizeRecipeName(nameB));
+  if (!tokensA.size || !tokensB.size) return 0;
+
+  let overlap = 0;
+  for (const token of tokensA) {
+    if (tokensB.has(token)) overlap++;
+  }
+
+  const smallerSize = Math.min(tokensA.size, tokensB.size);
+  return smallerSize > 0 ? overlap / smallerSize : 0;
+}
+
 /**
  * Extract domain from URL
  */
@@ -99,16 +122,31 @@ async function findRecipeMatches(plannerRecipe, storedRecipes) {
     }
 
     // Fuzzy name match
-    const distance = levenshteinDistance(normalized, normalizeRecipeName(storedName));
-    const maxLen = Math.max(normalized.length, storedName.length);
-    const similarity = maxLen > 0 ? 1 - (distance / maxLen) : 0;
+    const normalizedStoredName = normalizeRecipeName(storedName);
+    const distance = levenshteinDistance(normalized, normalizedStoredName);
+    const maxLen = Math.max(normalized.length, normalizedStoredName.length);
+    const levenshteinSimilarity = maxLen > 0 ? 1 - (distance / maxLen) : 0;
+
+    // Catch partial-title matches (e.g., "burger" in "deconstructed burger beef mixture").
+    const containsMatch = Boolean(
+      normalized && normalizedStoredName && (
+        (normalized.length >= 4 && normalizedStoredName.includes(normalized)) ||
+        (normalizedStoredName.length >= 4 && normalized.includes(normalizedStoredName))
+      )
+    );
+    const overlapSimilarity = wordOverlapScore(normalized, normalizedStoredName);
+    const similarity = Math.max(
+      levenshteinSimilarity,
+      containsMatch ? 0.62 : 0,
+      overlapSimilarity * 0.85
+    );
 
     // Suggestions can be broader than auto-match so users see useful options.
     if (similarity >= 0.45) {
       fuzzyMatches.push({
         ...stored,
         matchScore: similarity,
-        matchType: 'name'
+        matchType: containsMatch ? 'name-partial' : (overlapSimilarity >= 0.6 ? 'name-overlap' : 'name')
       });
     }
   }
