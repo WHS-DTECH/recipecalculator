@@ -696,6 +696,14 @@
       });
     }
 
+    function forceApplyGlobalClassNameToRows() {
+      const nextValue = classnameInput.value.trim();
+      if (!nextValue) return;
+      document.querySelectorAll('.rcal-classname').forEach((input) => {
+        input.value = nextValue;
+      });
+    }
+
     pdfFileInput.addEventListener('change', () => {
       parseBtn.disabled = !pdfFileInput.files.length;
       parseStatus.textContent = '';
@@ -966,7 +974,8 @@
     // Track previous value so applyGlobalClassNameToRows can also update rows that still hold the old default
     let _prevGlobalClassName = classnameInput.value.trim();
     classnameInput.addEventListener('change', function() {
-      applyGlobalClassNameToRows(_prevGlobalClassName);
+      // "Class name for all rows" should explicitly overwrite each row when changed by user.
+      forceApplyGlobalClassNameToRows();
       _prevGlobalClassName = this.value.trim();
     });
 

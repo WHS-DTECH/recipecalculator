@@ -462,6 +462,7 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         SELECT
           lower(trim(b.recipe)) AS recipe_key,
           upper(trim(coalesce(b.class_name, ''))) AS class_token,
+          regexp_replace(upper(trim(coalesce(b.class_name, ''))), '\\s+', '', 'g') AS class_token_compact,
           CASE
             WHEN lower(trim(coalesce(b.planner_stream, ''))) IN ('junior', 'middle', 'senior')
               THEN initcap(lower(trim(coalesce(b.planner_stream, ''))))
@@ -486,12 +487,12 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         COUNT(DISTINCT recipe_key) FILTER (WHERE resolved_stream = 'Middle')::int AS middle_recipes_distinct,
         COUNT(*) FILTER (WHERE resolved_stream = 'Senior')::int AS senior_recipe_rows,
         COUNT(DISTINCT recipe_key) FILTER (WHERE resolved_stream = 'Senior')::int AS senior_recipes_distinct,
-        COUNT(*) FILTER (WHERE class_token LIKE '11HOSP%')::int AS hosp11_recipe_rows,
-        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token LIKE '11HOSP%')::int AS hosp11_recipes_distinct,
-        COUNT(*) FILTER (WHERE class_token LIKE '12HOSP%')::int AS hosp12_recipe_rows,
-        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token LIKE '12HOSP%')::int AS hosp12_recipes_distinct,
-        COUNT(*) FILTER (WHERE class_token LIKE '13HOSP%')::int AS hosp13_recipe_rows,
-        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token LIKE '13HOSP%')::int AS hosp13_recipes_distinct
+        COUNT(*) FILTER (WHERE class_token_compact LIKE '%11HOSP%')::int AS hosp11_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token_compact LIKE '%11HOSP%')::int AS hosp11_recipes_distinct,
+        COUNT(*) FILTER (WHERE class_token_compact LIKE '%12HOSP%')::int AS hosp12_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token_compact LIKE '%12HOSP%')::int AS hosp12_recipes_distinct,
+        COUNT(*) FILTER (WHERE class_token_compact LIKE '%13HOSP%')::int AS hosp13_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token_compact LIKE '%13HOSP%')::int AS hosp13_recipes_distinct
       FROM planner_source
     `;
     const plannerTotalsResult = await pool.query(plannerTotalsSql);
