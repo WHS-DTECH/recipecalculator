@@ -44,6 +44,32 @@ function getCellPrimaryText(booking) {
   return `Class: ${booking.class_name || ''}`;
 }
 
+function teacherColorFromName(name) {
+  const input = String(name || '').trim().toLowerCase();
+  if (!input) {
+    return { bg: '#e8f5e9', border: '#c8e6c9', text: '#1f2937', teacherText: '#2e7d32' };
+  }
+  let hash = 0;
+  for (let i = 0; i < input.length; i += 1) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(i);
+    hash |= 0;
+  }
+  const hue = Math.abs(hash) % 360;
+  return {
+    bg: `hsl(${hue}, 58%, 93%)`,
+    border: `hsl(${hue}, 55%, 76%)`,
+    text: '#1f2937',
+    teacherText: `hsl(${hue}, 55%, 32%)`
+  };
+}
+
+function getCalendarCellBaseStyle(booking) {
+  if (scheduleViewMode !== 'class') {
+    return { bg: '#e8f5e9', border: '#c8e6c9', text: '#1f2937', teacherText: '#2e7d32' };
+  }
+  return teacherColorFromName(booking && booking.staff_name ? booking.staff_name : '');
+}
+
 function publishBookingToBookClassForm(booking) {
   if (!booking) return;
   const plannerLike = isPlannerLikeBooking(booking);
@@ -804,14 +830,15 @@ async function renderScheduleCalendar() {
       const dayIdx = visibleDayIndices[d];
       const cell = grid[p][dayIdx];
         if (cell) {
+          const cellStyle = getCalendarCellBaseStyle(cell);
           // Add a unique id for each booking cell
           const bookingId = `booking-${cell.id}`;
           const cellLabel = `${escHtml(getCellPrimaryText(cell))}, Teacher: ${escHtml(cell.staff_name)}`;
           // Add a class for selected state
           html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>
-            <div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${cell.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:#e8f5e9;border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
-              <div style='font-weight:bold;font-size:0.98em;'>${escHtml(getCellPrimaryText(cell))}</div>
-              <div style='font-weight:bold;color:#388e3c;font-size:0.95em;'>Teacher: ${escHtml(cell.staff_name)}</div>
+            <div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${cell.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
+              <div style='font-weight:bold;font-size:0.98em;color:${cellStyle.text};'>${escHtml(getCellPrimaryText(cell))}</div>
+              <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:0.95em;'>Teacher: ${escHtml(cell.staff_name)}</div>
             </div>
           </td>`;
       } else {
@@ -831,13 +858,32 @@ async function renderScheduleCalendar() {
     legendEl.id = 'planner-stream-legend';
     table.parentNode.insertBefore(legendEl, table);
   }
+  const teacherLegend = (() => {
+    if (scheduleViewMode !== 'class') return '';
+    const names = [...new Set(bookings.map((b) => String(b.staff_name || '').trim()).filter(Boolean))]
+      .sort((a, b) => a.localeCompare(b));
+    if (!names.length) return '';
+    const chips = names.slice(0, 14).map((name) => {
+      const style = teacherColorFromName(name);
+      return `<span style="background:${style.bg};border:1px solid ${style.border};color:${style.teacherText};border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; ${escHtml(name)}</span>`;
+    }).join('');
+    const overflow = names.length > 14
+      ? `<span style="font-size:0.75rem;color:#6b7280;">+${names.length - 14} more</span>`
+      : '';
+    return `<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;font-size:0.8rem;margin-bottom:0.45rem;">
+      <span style="font-weight:600;color:#374151;">Teachers:</span>
+      ${chips}
+      ${overflow}
+    </div>`;
+  })();
+
   legendEl.innerHTML = `<div style="display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;font-size:0.8rem;margin-bottom:0.45rem;">
     <span style="font-weight:600;color:#374151;">Planner:</span>
     <span style="background:#dbeafe;border:1px solid #93c5fd;color:#1e40af;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Middle School</span>
     <span style="background:#dcfce7;border:1px solid #86efac;color:#166534;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Junior School</span>
     <span style="background:#ffedd5;border:1px solid #fdba74;color:#9a3412;border-radius:4px;padding:1px 7px;font-weight:600;">&#9632; Senior (HOSP)</span>
     <span style="font-size:0.75rem;color:#6b7280;margin-left:0.25rem;">Click &#x2715; on a chip to delete it.</span>
-  </div>`;
+  </div>${teacherLegend}`;
   // Add or update the Selected Bookings list below the calendar
   let selectedListDiv = document.getElementById('selected-bookings-list');
   if (!selectedListDiv) {
@@ -889,8 +935,10 @@ async function renderScheduleCalendar() {
         bookingDiv.style.boxShadow = '0 0 0 3px #1976d2, 0 1px 4px #0001';
         bookingDiv.style.background = '#bbdefb';
       } else {
+        const baseStyle = getCalendarCellBaseStyle(cell);
         bookingDiv.style.boxShadow = '0 1px 4px #0001';
-        bookingDiv.style.background = '#e8f5e9';
+        bookingDiv.style.background = baseStyle.bg;
+        bookingDiv.style.border = `1px solid ${baseStyle.border}`;
       }
     });
   }
