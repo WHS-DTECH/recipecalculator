@@ -662,21 +662,22 @@
         return availableRecipesCache;
       }
 
-      const response = await fetch('/api/recipes');
+      const response = await fetch('/api/recipes/display-dropdown');
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.error || 'Failed to load recipes list.');
       }
 
-      const rows = Array.isArray(data) ? data : [];
+      const rows = Array.isArray(data && data.recipes) ? data.recipes : [];
       const dedupe = new Map();
       for (const row of rows) {
-        const id = Number(row && row.id);
+        const id = Number(row && row.recipeid);
         if (!Number.isInteger(id) || id <= 0) continue;
+        const name = String((row && row.name) || '').trim() || `Recipe ${id}`;
         if (!dedupe.has(id)) {
           dedupe.set(id, {
             id,
-            name: String((row && row.name) || '').trim() || `Recipe ${id}`
+            name
           });
         }
       }
