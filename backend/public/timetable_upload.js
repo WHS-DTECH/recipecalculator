@@ -1,12 +1,33 @@
 // Fetch and render the latest timetable from the database
+let timetableHeaders = [];
+let timetableRows = [];
+let teacherFilterTerm = '';
+
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function sortRowsByTeacherName(rows) {
+  return rows.slice().sort((a, b) => {
+    const aName = String(a?.Teacher_Name || a?.teacher_name || '').trim().toLowerCase();
+    const bName = String(b?.Teacher_Name || b?.teacher_name || '').trim().toLowerCase();
+    return aName.localeCompare(bName);
+  });
+}
+
 function fetchAndRenderTimetableTable() {
   fetch('/api/timetable/all')
     .then(res => res.json())
     .then(result => {
       if (result && Array.isArray(result.timetable) && result.timetable.length > 0) {
-        const headers = Object.keys(result.timetable[0]);
-        const data = result.timetable.map(row => headers.map(h => row[h]));
-        renderTimetableTable(headers, data);
+        timetableHeaders = Object.keys(result.timetable[0]);
+        timetableRows = sortRowsByTeacherName(result.timetable);
+        renderTimetableTable();
       }
     });
 }
@@ -161,14 +182,50 @@ document.getElementById('uploadForm').addEventListener('submit', function(e) {
   reader.readAsText(file);
 });
 
-function renderTimetableTable(headers, data) {
+function renderTimetableTable() {
   const container = document.getElementById('timetableTableContainer');
-  let html = '<table class="styled-table"><thead><tr>';
-  headers.forEach(h => { html += `<th>${h}</th>`; });
+  if (!container || !Array.isArray(timetableHeaders) || timetableHeaders.length === 0) return;
+
+  const filter = teacherFilterTerm.trim().toLowerCase();
+  const filteredRows = timetableRows.filter(row => {
+    if (!filter) return true;
+    const teacherName = String(row?.Teacher_Name || row?.teacher_name || '').toLowerCase();
+    const teacherCode = String(row?.Teacher || row?.teacher || '').toLowerCase();
+    return teacherName.includes(filter) || teacherCode.includes(filter);
+  });
+
+  let html = `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:center;gap:0.6rem;">
+        <label for="teacherNameFilter" style="font-weight:700;color:#1f2937;">Find teacher:</label>
+        <input
+          id="teacherNameFilter"
+          type="text"
+          value="${escapeHtml(teacherFilterTerm)}"
+          placeholder="Type a name e.g. maryke"
+          style="min-width:260px;padding:0.4rem 0.55rem;border:1px solid #cbd5e1;border-radius:8px;"
+        />
+      </div>
+      <div style="font-size:0.9rem;color:#475569;">
+        Showing ${filteredRows.length} of ${timetableRows.length} teachers (sorted A-Z by Teacher_Name)
+      </div>
+    </div>
+  `;
+
+  html += '<table class="styled-table"><thead><tr>';
+  timetableHeaders.forEach(h => { html += `<th>${escapeHtml(h)}</th>`; });
   html += '</tr></thead><tbody>';
-  data.forEach(row => {
-    html += '<tr>' + row.map(cell => `<td>${cell}</td>`).join('') + '</tr>';
+  filteredRows.forEach(row => {
+    html += '<tr>' + timetableHeaders.map(h => `<td>${escapeHtml(row[h])}</td>`).join('') + '</tr>';
   });
   html += '</tbody></table>';
   container.innerHTML = html;
+
+  const filterInput = document.getElementById('teacherNameFilter');
+  if (filterInput) {
+    filterInput.addEventListener('input', (event) => {
+      teacherFilterTerm = event.target.value || '';
+      renderTimetableTable();
+    });
+  }
 }
