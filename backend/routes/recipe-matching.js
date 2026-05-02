@@ -302,4 +302,98 @@ router.get('/unmatched', async (req, res) => {
   }
 });
 
+// Ensure booking_recipes table exists
+async function ensureBookingRecipesTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS booking_recipes (
+      id SERIAL PRIMARY KEY,
+      booking_id INTEGER NOT NULL,
+      recipe_id INTEGER NOT NULL,
+      linked_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE(booking_id, recipe_id)
+    )
+  `);
+}
+
+/**
+ * POST /api/recipe-matching/link-multi
+ * Link multiple recipes to a single booking (many-to-many)
+ * Body: { bookingId: number, recipeIds: number[] }
+ */
+router.post('/link-multi', async (req, res) => {
+  try {
+    const { bookingId, recipeIds } = req.body;
+    if (!bookingId || !Array.isArray(recipeIds) || recipeIds.length === 0) {
+      return res.status(400).json({ error: 'bookingId and recipeIds[] required' });
+    }
+
+    await ensureBookingRecipesTable();
+
+    // Insert all selected recipe links, ignore duplicates
+    for (const rid of recipeIds) {
+      await pool.query(
+        'INSERT INTO booking_recipes (booking_id, recipe_id) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+        [bookingId, rid]
+      );
+    }
+
+    // Also set the primary recipe_id on bookings to the first selected (for backwards compat)
+    await pool.query('UPDATE bookings SET recipe_id = $1 WHERE id = $2', [recipeIds[0], bookingId]);
+
+    // Return the full list now linked to this booking
+    const linked = await pool.query(
+      `SELECT br.recipe_id, r.name, r.url
+       FROM booking_recipes br
+       JOIN recipes r ON r.id = br.recipe_id
+       WHERE br.booking_id = $1
+       ORDER BY br.linked_at`,
+      [bookingId]
+    );
+
+    return res.json({ success: true, bookingId, linked: linked.rows });
+  } catch (err) {
+    console.error('[RECIPE-MATCH] Error linking multi:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/recipe-matching/linked-recipes/:bookingId
+ * Get all recipes linked to a booking
+ */
+router.get('/linked-recipes/:bookingId', async (req, res) => {
+  try {
+    await ensureBookingRecipesTable();
+    const { bookingId } = req.params;
+    const result = await pool.query(
+      `SELECT br.recipe_id, r.name, r.url
+       FROM booking_recipes br
+       JOIN recipes r ON r.id = br.recipe_id
+       WHERE br.booking_id = $1
+       ORDER BY br.linked_at`,
+      [bookingId]
+    );
+    res.json({ recipes: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * DELETE /api/recipe-matching/link-multi
+ * Remove a specific recipe link from a booking
+ * Body: { bookingId: number, recipeId: number }
+ */
+router.delete('/link-multi', async (req, res) => {
+  try {
+    const { bookingId, recipeId } = req.body;
+    if (!bookingId || !recipeId) return res.status(400).json({ error: 'bookingId and recipeId required' });
+    await ensureBookingRecipesTable();
+    await pool.query('DELETE FROM booking_recipes WHERE booking_id = $1 AND recipe_id = $2', [bookingId, recipeId]);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

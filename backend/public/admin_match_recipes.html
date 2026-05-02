@@ -595,6 +595,44 @@
     .compare-col .compare-link-btn {
       margin-top: 12px;
     }
+
+    .suggestion-checkbox {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+      accent-color: #1976d2;
+      flex-shrink: 0;
+      margin-right: 8px;
+    }
+
+    .link-selected-btn {
+      margin-top: 10px;
+    }
+
+    .linked-recipes-list {
+      margin: 8px 0 0 0;
+      padding: 0;
+      list-style: none;
+      font-size: 12px;
+    }
+
+    .linked-recipe-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      color: #2e7d32;
+    }
+
+    .linked-recipe-item .remove-link {
+      color: #c62828;
+      cursor: pointer;
+      font-size: 11px;
+      border: none;
+      background: none;
+      padding: 0 3px;
+      line-height: 1;
+    }
   </style>
 </head>
 <body>
@@ -826,23 +864,27 @@
 
         let suggestionsHtml = '';
         if (suggestions.length > 0 && !isMatched) {
+          const checkboxRows = suggestions.map(s => `
+            <div class="suggestion-item">
+              <input type="checkbox" class="suggestion-checkbox" id="chk_${booking.id}_${s.id}" value="${s.id}" title="Select to link this version">
+              <div class="suggestion-main">
+                <label for="chk_${booking.id}_${s.id}" style="cursor:pointer;">
+                  <div class="suggestion-name" onclick="openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${s.name || 'Unknown'}</div>
+                </label>
+                <div class="suggestion-source">${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" title="${s.url}">${s.url}</a>` : '<em>No source URL</em>'}</div>
+              </div>
+              <div class="suggestion-score">${((s.matchScore || 0) * 100).toFixed(0)}%</div>
+              <div class="suggestion-actions">
+                <button class="btn btn-sm btn-secondary" onclick="openRecipePreviewModal(${s.id})" title="Preview recipe details">Preview</button>
+              </div>
+            </div>
+          `).join('');
           suggestionsHtml = `
             <div class="suggestions">
-              <div class="suggestions-title">Suggested Matches</div>
-              <div class="suggestion-list">
-                ${suggestions.map(s => `
-                  <div class="suggestion-item">
-                    <div class="suggestion-main">
-                      <div class="suggestion-name" onclick="openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${s.name || 'Unknown'}</div>
-                      <div class="suggestion-source">${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" title="${s.url}">${s.url}</a>` : '<em>No source URL</em>'}</div>
-                    </div>
-                    <div class="suggestion-score">${((s.matchScore || 0) * 100).toFixed(0)}%</div>
-                    <div class="suggestion-actions">
-                      <button class="btn btn-sm btn-secondary" onclick="openRecipePreviewModal(${s.id})" title="Preview recipe details">Preview</button>
-                      <button class="btn btn-sm btn-success" onclick="openLinkModal(${booking.id}, ${s.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Link to this recipe">Link</button>
-                    </div>
-                  </div>
-                `).join('')}
+              <div class="suggestions-title">Suggested Matches — tick the version(s) you want, then click Link Selected</div>
+              <div class="suggestion-list">${checkboxRows}</div>
+              <div class="link-selected-btn">
+                <button class="btn btn-success" onclick="linkSelectedRecipes(${booking.id})" title="Link all ticked recipes to this planner item">&#10003; Link Selected</button>
               </div>
             </div>
           `;
@@ -1098,6 +1140,45 @@
 
     function closeCompareModal() {
       document.getElementById('compareModal').classList.remove('active');
+    }
+
+    async function linkSelectedRecipes(bookingId) {
+      const booking = allBookings.find(b => b.id === bookingId);
+      if (!booking) return;
+      const suggestions = booking.suggestions || [];
+
+      const selected = suggestions
+        .map(s => s.id)
+        .filter(id => {
+          const chk = document.getElementById(`chk_${bookingId}_${id}`);
+          return chk && chk.checked;
+        });
+
+      if (selected.length === 0) {
+        showToast('Please tick at least one recipe to link.', 'error');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/recipe-matching/link-multi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, recipeIds: selected })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to link recipes');
+
+        const names = data.linked.map(r => r.name).join(', ');
+        showToast(`Linked ${data.linked.length} recipe${data.linked.length > 1 ? 's' : ''}: ${names}`);
+
+        // Mark booking as matched in local state and re-render
+        const b = allBookings.find(x => x.id === bookingId);
+        if (b) b.recipe_id = selected[0];
+        updateStats();
+        renderRecipes();
+      } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+      }
     }
 
     async function openCompareModal(bookingId) {
