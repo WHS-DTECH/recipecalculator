@@ -633,6 +633,60 @@
       padding: 0 3px;
       line-height: 1;
     }
+
+    .star-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 1.15rem;
+      line-height: 1;
+      padding: 0 2px;
+      color: #b0bec5;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+    .star-btn.is-primary {
+      color: #f59e0b;
+    }
+    .star-btn:hover {
+      color: #f59e0b;
+    }
+    .linked-recipe-primary-label {
+      font-size: 0.75rem;
+      color: #f59e0b;
+      font-weight: 600;
+      margin-left: 2px;
+    }
+    .linked-recipes-section {
+      margin-top: 10px;
+      padding: 8px 10px;
+      background: #f0f7ff;
+      border-radius: 6px;
+      border: 1px solid #bbdefb;
+    }
+    .linked-recipes-section-title {
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: #1565c0;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .linked-recipe-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 0;
+      border-bottom: 1px solid #d9eaf7;
+      font-size: 0.88rem;
+    }
+    .linked-recipe-row:last-child {
+      border-bottom: none;
+    }
+    .linked-recipe-name {
+      flex: 1;
+      color: #17324a;
+    }
   </style>
 </head>
 <body>
@@ -794,7 +848,7 @@
 
     async function loadUnmatchedRecipes() {
       try {
-        const response = await fetch(`/api/recipe-matching/unmatched?limit=1000&offset=0`);
+        const response = await fetch('/api/recipe-matching/bookings');
         const data = await response.json();
         allBookings = data.bookings || [];
         updateStats();
@@ -910,6 +964,17 @@
                 <value>${booking.recipe_url ? `<a href="${booking.recipe_url}" target="_blank" style="color: #1976d2;">View</a>` : '-'}</value>
               </div>
             </div>
+            ${isMatched && Array.isArray(booking.linked_recipes) && booking.linked_recipes.length > 0 ? `
+              <div class="linked-recipes-section">
+                <div class="linked-recipes-section-title">Linked Recipes ${booking.linked_recipes.length > 1 ? '— ★ = shown on index page' : ''}</div>
+                ${booking.linked_recipes.map(r => `
+                  <div class="linked-recipe-row">
+                    <button class="star-btn ${Number(r.recipe_id) === Number(booking.recipe_id) ? 'is-primary' : ''}" onclick="setAsPrimary(${booking.id}, ${r.recipe_id})" title="${Number(r.recipe_id) === Number(booking.recipe_id) ? 'Primary recipe (shown on index page)' : 'Click to make this the primary recipe'}">&#9733;</button>
+                    <span class="linked-recipe-name">${r.name || 'Unknown'}${Number(r.recipe_id) === Number(booking.recipe_id) && booking.linked_recipes.length > 1 ? '<span class="linked-recipe-primary-label"> primary</span>' : ''}</span>
+                  </div>
+                `).join('')}
+              </div>
+            ` : ''}
             ${suggestionsHtml}
             ${!isMatched ? `
               <div class="action-row" style="margin-top: 10px;">
@@ -1142,6 +1207,25 @@
       document.getElementById('compareModal').classList.remove('active');
     }
 
+    async function setAsPrimary(bookingId, recipeId) {
+      try {
+        const response = await fetch('/api/recipe-matching/set-primary', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, recipeId })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to set primary');
+
+        const b = allBookings.find(x => x.id === bookingId);
+        if (b) b.recipe_id = recipeId;
+        renderRecipes();
+        showToast('Primary recipe updated.');
+      } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
     async function linkSelectedRecipes(bookingId) {
       const booking = allBookings.find(b => b.id === bookingId);
       if (!booking) return;
@@ -1173,7 +1257,10 @@
 
         // Mark booking as matched in local state and re-render
         const b = allBookings.find(x => x.id === bookingId);
-        if (b) b.recipe_id = selected[0];
+        if (b) {
+          b.recipe_id = selected[0];
+          b.linked_recipes = data.linked.map(r => ({ recipe_id: r.recipe_id, name: r.name, url: r.url }));
+        }
         updateStats();
         renderRecipes();
       } catch (err) {

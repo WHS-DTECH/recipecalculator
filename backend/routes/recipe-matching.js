@@ -302,6 +302,83 @@ router.get('/unmatched', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/recipe-matching/bookings
+ * Get ALL Planner bookings (matched + unmatched) with linked_recipes from booking_recipes.
+ * Unmatched bookings also include recipe suggestions.
+ */
+router.get('/bookings', async (req, res) => {
+  try {
+    await ensureBookingRecipesTable();
+
+    const allResult = await pool.query(
+      "SELECT * FROM bookings WHERE period = 'Planner' ORDER BY booking_date DESC, id"
+    );
+
+    const recipesResult = await pool.query('SELECT id, name, url FROM recipes ORDER BY name');
+    const storedRecipes = recipesResult.rows;
+
+    const bookingsWithData = await Promise.all(
+      allResult.rows.map(async (booking) => {
+        // Fetch linked recipes from booking_recipes
+        const linkedResult = await pool.query(
+          `SELECT br.recipe_id, r.name, r.url
+           FROM booking_recipes br
+           JOIN recipes r ON r.id = br.recipe_id
+           WHERE br.booking_id = $1
+           ORDER BY br.linked_at`,
+          [booking.id]
+        );
+        const linked_recipes = linkedResult.rows;
+
+        // For unmatched (no recipe_id), also get suggestions
+        let suggestions = [];
+        if (!booking.recipe_id) {
+          const matches = await matchEngine.findRecipeMatches(booking, storedRecipes);
+          suggestions = matchEngine.buildSuggestionList(matches, 3);
+        }
+
+        return { ...booking, linked_recipes, suggestions };
+      })
+    );
+
+    return res.json({ bookings: bookingsWithData });
+  } catch (err) {
+    console.error('[RECIPE-MATCH] Error fetching all bookings:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * PUT /api/recipe-matching/set-primary
+ * Set which linked recipe is the primary (shown on index / planner calendar).
+ * Body: { bookingId: number, recipeId: number }
+ */
+router.put('/set-primary', async (req, res) => {
+  try {
+    const { bookingId, recipeId } = req.body;
+    if (!bookingId || !recipeId) {
+      return res.status(400).json({ error: 'bookingId and recipeId required' });
+    }
+
+    // Verify this recipe is actually linked to this booking
+    await ensureBookingRecipesTable();
+    const check = await pool.query(
+      'SELECT id FROM booking_recipes WHERE booking_id = $1 AND recipe_id = $2',
+      [bookingId, recipeId]
+    );
+    if (!check.rowCount) {
+      return res.status(400).json({ error: 'That recipe is not linked to this booking.' });
+    }
+
+    await pool.query('UPDATE bookings SET recipe_id = $1 WHERE id = $2', [recipeId, bookingId]);
+    return res.json({ success: true, bookingId, primaryRecipeId: recipeId });
+  } catch (err) {
+    console.error('[RECIPE-MATCH] Error setting primary:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // Ensure booking_recipes table exists
 async function ensureBookingRecipesTable() {
   await pool.query(`
