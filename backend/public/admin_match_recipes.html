@@ -509,6 +509,92 @@
         transform: translateX(0);
       }
     }
+
+    .versions-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: #e3f2fd;
+      color: #1565c0;
+      border: 1px solid #90caf9;
+      border-radius: 12px;
+      padding: 2px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-left: 10px;
+      white-space: nowrap;
+    }
+
+    .versions-badge:hover {
+      background: #bbdefb;
+    }
+
+    .recipe-name-clickable {
+      cursor: pointer;
+      color: #1f2937;
+    }
+
+    .recipe-name-clickable:hover {
+      color: #1976d2;
+      text-decoration: underline;
+    }
+
+    .compare-columns {
+      display: grid;
+      gap: 16px;
+      margin-top: 10px;
+    }
+
+    .compare-col {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      background: #fafafa;
+    }
+
+    .compare-col h3 {
+      margin: 0 0 6px 0;
+      font-size: 15px;
+      color: #1f2937;
+    }
+
+    .compare-col .compare-source {
+      font-size: 11px;
+      color: #888;
+      margin-bottom: 10px;
+      word-break: break-all;
+    }
+
+    .compare-col .compare-source a {
+      color: #1976d2;
+    }
+
+    .compare-col .compare-meta {
+      font-size: 12px;
+      color: #555;
+      margin-bottom: 10px;
+    }
+
+    .compare-section-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #888;
+      margin: 8px 0 4px 0;
+    }
+
+    .compare-list {
+      margin: 0;
+      padding-left: 16px;
+      font-size: 12px;
+      color: #333;
+      line-height: 1.5;
+    }
+
+    .compare-col .compare-link-btn {
+      margin-top: 12px;
+    }
   </style>
 </head>
 <body>
@@ -592,6 +678,20 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeRecipePreviewModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compare Versions Modal -->
+  <div id="compareModal" class="modal">
+    <div class="modal-content" style="max-width:1100px;width:95%;">
+      <div class="modal-header">
+        <h2 id="compareModalTitle">Available Versions</h2>
+      </div>
+      <p id="compareModalSubtitle" style="font-size:13px;color:#555;margin:0 0 14px 0;"></p>
+      <div id="compareColumns" class="compare-columns">Loading...</div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeCompareModal()">Close</button>
       </div>
     </div>
   </div>
@@ -720,6 +820,10 @@
                       `<span class="recipe-badge badge-pending">Needs Review</span>`;
         
         const suggestions = booking.suggestions || [];
+        const multiVersionBadge = (!isMatched && suggestions.length > 1)
+          ? `<span class="versions-badge" onclick="openCompareModal(${booking.id})" title="Compare all versions side by side">&#9741; ${suggestions.length} versions found</span>`
+          : '';
+
         let suggestionsHtml = '';
         if (suggestions.length > 0 && !isMatched) {
           suggestionsHtml = `
@@ -747,8 +851,8 @@
         html += `
           <div class="recipe-card ${cardClass}">
             <div class="recipe-header">
-              <h3 class="recipe-name">${booking.recipe || 'Unknown'}</h3>
-              ${badge}
+              <h3 class="recipe-name${suggestions.length > 1 && !isMatched ? ' recipe-name-clickable' : ''}" ${suggestions.length > 1 && !isMatched ? `onclick="openCompareModal(${booking.id})" title="Click to compare all versions"` : ''}>${booking.recipe || 'Unknown'}</h3>
+              <div style="display:flex;align-items:center;gap:6px;">${multiVersionBadge}${badge}</div>
             </div>
             <div class="recipe-info">
               <div class="info-item">
@@ -990,6 +1094,58 @@
 
     function closeRecipePreviewModal() {
       document.getElementById('recipePreviewModal').classList.remove('active');
+    }
+
+    function closeCompareModal() {
+      document.getElementById('compareModal').classList.remove('active');
+    }
+
+    async function openCompareModal(bookingId) {
+      const booking = allBookings.find(b => b.id === bookingId);
+      if (!booking) return;
+      const suggestions = booking.suggestions || [];
+
+      const modal = document.getElementById('compareModal');
+      const columnsEl = document.getElementById('compareColumns');
+      const titleEl = document.getElementById('compareModalTitle');
+      const subtitleEl = document.getElementById('compareModalSubtitle');
+
+      titleEl.textContent = `${suggestions.length} Versions Found: "${booking.recipe || 'Unknown'}"`;
+      subtitleEl.textContent = 'Compare the available versions below, then click "Use This" on the one you want.';
+      columnsEl.innerHTML = '<em style="color:#888;">Loading versions...</em>';
+      columnsEl.style.gridTemplateColumns = `repeat(${Math.min(suggestions.length, 3)}, 1fr)`;
+      modal.classList.add('active');
+
+      const cols = await Promise.all(suggestions.map(async (s) => {
+        try {
+          const recipe = await fetchRecipeDetails(Number(s.id));
+          const serving = recipe && recipe.serving_size ? String(recipe.serving_size).trim() : '';
+          const url = recipe && recipe.url ? String(recipe.url).trim() : '';
+          let sourceDomain = '';
+          if (url) { try { sourceDomain = new URL(url).hostname.replace(/^www\./, ''); } catch(e) {} }
+          const ingredients = extractListItems((recipe && recipe.ingredients_display) || (recipe && recipe.ingredients) || '');
+          const MAX_ING = 8;
+          const ingHtml = ingredients.length
+            ? ingredients.slice(0, MAX_ING).map(i => `<li>${escapeHtml(i)}</li>`).join('')
+              + (ingredients.length > MAX_ING ? `<li style="color:#aaa;font-style:italic;">...and ${ingredients.length - MAX_ING} more</li>` : '')
+            : '<li style="color:#aaa;">No ingredients listed</li>';
+          return `
+            <div class="compare-col">
+              <h3>${escapeHtml(recipe.name || 'Unknown')}</h3>
+              <div class="compare-source">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(sourceDomain || url)}</a>` : '<em>No source URL</em>'}</div>
+              <div class="compare-meta">${serving ? `<strong>Serves:</strong> ${escapeHtml(serving)}` : 'Serving size unknown'}</div>
+              <div class="compare-section-title">Ingredients</div>
+              <ol class="compare-list">${ingHtml}</ol>
+              <div class="compare-link-btn">
+                <button class="btn btn-success" onclick="closeCompareModal(); openLinkModal(${booking.id}, ${s.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))">Use This</button>
+              </div>
+            </div>
+          `;
+        } catch(e) {
+          return `<div class="compare-col"><h3 style="color:#c62828;">Failed to load</h3><p style="font-size:12px;color:#888;">${escapeHtml(s.name || '')}</p></div>`;
+        }
+      }));
+      columnsEl.innerHTML = cols.join('');
     }
 
     async function openLinkModal(bookingId, recipeId, recipeName) {
