@@ -13,6 +13,14 @@ const DEFAULT_ROLES = {
     booking: true,
     admin: true
   },
+  lead_teacher: {
+    inventory: true,
+    recipes: true,
+    add_recipes: true,
+    shopping: true,
+    booking: true,
+    admin: false
+  },
   teacher: {
     inventory: true,
     recipes: true,
@@ -141,10 +149,12 @@ router.get('/all', async (req, res) => {
       FROM role_permissions
       ORDER BY CASE 
         WHEN role_name = 'admin' THEN 1
-        WHEN role_name = 'teacher' THEN 2
-        WHEN role_name = 'technician' THEN 3
-        WHEN role_name = 'student' THEN 4
-        WHEN role_name = 'public_access' THEN 5
+        WHEN role_name = 'lead_teacher' THEN 2
+        WHEN role_name = 'teacher' THEN 3
+        WHEN role_name = 'technician' THEN 4
+        WHEN role_name = 'student' THEN 5
+        WHEN role_name = 'public_access' THEN 6
+        ELSE 99
       END
     `);
 

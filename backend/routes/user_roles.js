@@ -5,13 +5,14 @@ const { requireAdmin } = require('../middleware/requireAdmin');
 
 const DEFAULT_ROLE_OPTIONS = [
   'admin',
+  'lead_teacher',
   'teacher',
   'technician',
   'student',
   'public_access'
 ];
 
-const ROLE_PRIORITY = ['admin', 'teacher', 'technician', 'student', 'public_access'];
+const ROLE_PRIORITY = ['admin', 'lead_teacher', 'teacher', 'technician', 'student', 'public_access'];
 
 const WEEKDAY_MAP = [
   { day: 'Monday', key: 'D1' },
@@ -246,10 +247,11 @@ router.get('/options', async (req, res) => {
         FROM role_permissions
         ORDER BY CASE
           WHEN role_name = 'admin' THEN 1
-          WHEN role_name = 'teacher' THEN 2
-          WHEN role_name = 'technician' THEN 3
-          WHEN role_name = 'student' THEN 4
-          WHEN role_name = 'public_access' THEN 5
+          WHEN role_name = 'lead_teacher' THEN 2
+          WHEN role_name = 'teacher' THEN 3
+          WHEN role_name = 'technician' THEN 4
+          WHEN role_name = 'student' THEN 5
+          WHEN role_name = 'public_access' THEN 6
           ELSE 99
         END
       `);

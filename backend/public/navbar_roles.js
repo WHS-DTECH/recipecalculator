@@ -7,7 +7,7 @@
 
   // Store current user role in sessionStorage for use across pages
   const ROLE_STORAGE_KEY = 'navbar_user_role';
-  const SUPPORTED_ROLES = ['admin', 'teacher', 'technician', 'student', 'public_access'];
+  const SUPPORTED_ROLES = ['admin', 'lead_teacher', 'teacher', 'technician', 'student', 'public_access'];
 
   function normalizeRole(role) {
     const normalized = String(role || '').trim().toLowerCase();
@@ -118,6 +118,28 @@
         section.setAttribute('data-user-role', normalized);
 
         // Keep drawer/backdrop hidden state under navbar_loader.js control.
+        if (!isDrawerStateElement) {
+          section.hidden = false;
+        }
+      } else {
+        section.hidden = true;
+        section.style.display = 'none';
+        section.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    // Planning sections are available to admin and lead_teacher.
+    const planningSections = document.querySelectorAll('[data-role="planning"]');
+    planningSections.forEach(section => {
+      const isDrawerStateElement =
+        section.id === 'planningDrawer'
+        || section.id === 'planningDrawerBackdrop';
+
+      if (normalized === 'admin' || normalized === 'lead_teacher') {
+        section.style.display = '';
+        section.removeAttribute('aria-hidden');
+        section.setAttribute('data-user-role', normalized);
+
         if (!isDrawerStateElement) {
           section.hidden = false;
         }

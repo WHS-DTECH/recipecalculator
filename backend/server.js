@@ -121,7 +121,7 @@ async function resolveEffectiveRoleForEmail(email) {
     if (role) roleSet.add(role);
   });
 
-  const orderedPriority = ['admin', 'teacher', 'technician', 'student', 'public_access'];
+  const orderedPriority = ['admin', 'lead_teacher', 'teacher', 'technician', 'student', 'public_access'];
   let role = 'public_access';
   for (const candidate of orderedPriority) {
     if (roleSet.has(candidate)) {
@@ -167,7 +167,7 @@ async function getSuggestionRoleRecipients() {
     `SELECT DISTINCT lower(trim(email_school)) AS email
      FROM staff_upload
      WHERE COALESCE(status, 'Current') = 'Current'
-       AND lower(trim(COALESCE(primary_role, ''))) IN ('teacher', 'admin')
+       AND lower(trim(COALESCE(primary_role, ''))) IN ('lead_teacher', 'teacher', 'admin')
        AND trim(COALESCE(email_school, '')) <> ''`
   );
 
@@ -180,7 +180,7 @@ async function getSuggestionRoleRecipients() {
     `SELECT DISTINCT lower(trim(uar.email)) AS email
      FROM user_additional_roles uar
      WHERE lower(trim(uar.user_type)) = 'staff'
-       AND lower(trim(uar.role_name)) IN ('teacher', 'admin')
+       AND lower(trim(uar.role_name)) IN ('lead_teacher', 'teacher', 'admin')
        AND trim(COALESCE(uar.email, '')) <> ''`
   );
 
