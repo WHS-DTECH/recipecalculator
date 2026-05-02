@@ -927,6 +927,7 @@
 
       const candidates = Array.isArray(payload && payload.candidates) ? payload.candidates : [];
       const comparison = payload && payload.comparison ? payload.comparison : {};
+      const plannerTotals = payload && payload.planner_totals ? payload.planner_totals : {};
       const hasInventoryCount = Number(comparison.recipe_has_inventory || 0);
       const missingInventoryCount = Number(comparison.recipe_missing_inventory || 0);
       const inBrowseListCount = Number(comparison.recipe_in_browse_list || 0);
@@ -937,6 +938,15 @@
       }
 
       const lines = [];
+      lines.push(`Planner recipe rows total: ${Number(plannerTotals.planner_recipe_rows_total || 0)}`);
+      lines.push(`Planner distinct recipes total: ${Number(plannerTotals.planner_recipes_distinct_total || 0)}`);
+      lines.push(`Junior planner recipes: ${Number(plannerTotals.junior_recipe_rows || 0)} rows (${Number(plannerTotals.junior_recipes_distinct || 0)} distinct)`);
+      lines.push(`Middle planner recipes: ${Number(plannerTotals.middle_recipe_rows || 0)} rows (${Number(plannerTotals.middle_recipes_distinct || 0)} distinct)`);
+      lines.push(`Senior planner recipes: ${Number(plannerTotals.senior_recipe_rows || 0)} rows (${Number(plannerTotals.senior_recipes_distinct || 0)} distinct)`);
+      lines.push(`11HOSP planner recipes: ${Number(plannerTotals.hosp11_recipe_rows || 0)} rows (${Number(plannerTotals.hosp11_recipes_distinct || 0)} distinct)`);
+      lines.push(`12HOSP planner recipes: ${Number(plannerTotals.hosp12_recipe_rows || 0)} rows (${Number(plannerTotals.hosp12_recipes_distinct || 0)} distinct)`);
+      lines.push(`13HOSP planner recipes: ${Number(plannerTotals.hosp13_recipe_rows || 0)} rows (${Number(plannerTotals.hosp13_recipes_distinct || 0)} distinct)`);
+      lines.push('');
       lines.push(`Candidates: ${candidates.length}`);
       lines.push(`Recipes found in Ingredient Directory: ${hasInventoryCount}`);
       lines.push(`Recipes NOT found in Ingredient Directory: ${missingInventoryCount}`);

@@ -453,10 +453,66 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
     const inBrowseList = candidates.filter((r) => r.browse_status === 'recipe_in_browse_list').length;
     const missingBrowseList = candidates.filter((r) => r.browse_status === 'recipe_missing_from_browse_list').length;
 
+    const plannerTotalsSql = `
+      WITH planner_source AS (
+        SELECT
+          lower(trim(b.recipe)) AS recipe_key,
+          upper(trim(coalesce(b.class_name, ''))) AS class_token,
+          CASE
+            WHEN lower(trim(coalesce(b.planner_stream, ''))) IN ('junior', 'middle', 'senior')
+              THEN initcap(lower(trim(coalesce(b.planner_stream, ''))))
+            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%HOSP%'
+              THEN 'Senior'
+            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%JFOOD%'
+              THEN 'Junior'
+            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%MFOOD%'
+              THEN 'Middle'
+            ELSE 'Other'
+          END AS resolved_stream
+        FROM bookings b
+        WHERE b.period = 'Planner'
+          AND trim(coalesce(b.recipe, '')) <> ''
+      )
+      SELECT
+        COUNT(*)::int AS planner_recipe_rows_total,
+        COUNT(DISTINCT recipe_key)::int AS planner_recipes_distinct_total,
+        COUNT(*) FILTER (WHERE resolved_stream = 'Junior')::int AS junior_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE resolved_stream = 'Junior')::int AS junior_recipes_distinct,
+        COUNT(*) FILTER (WHERE resolved_stream = 'Middle')::int AS middle_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE resolved_stream = 'Middle')::int AS middle_recipes_distinct,
+        COUNT(*) FILTER (WHERE resolved_stream = 'Senior')::int AS senior_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE resolved_stream = 'Senior')::int AS senior_recipes_distinct,
+        COUNT(*) FILTER (WHERE class_token LIKE '11HOSP%')::int AS hosp11_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token LIKE '11HOSP%')::int AS hosp11_recipes_distinct,
+        COUNT(*) FILTER (WHERE class_token LIKE '12HOSP%')::int AS hosp12_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token LIKE '12HOSP%')::int AS hosp12_recipes_distinct,
+        COUNT(*) FILTER (WHERE class_token LIKE '13HOSP%')::int AS hosp13_recipe_rows,
+        COUNT(DISTINCT recipe_key) FILTER (WHERE class_token LIKE '13HOSP%')::int AS hosp13_recipes_distinct
+      FROM planner_source
+    `;
+    const plannerTotalsResult = await pool.query(plannerTotalsSql);
+    const plannerTotals = plannerTotalsResult.rows[0] || {};
+
     res.json({
       success: true,
       filters: { startDate: startDate || null, endDate: endDate || null, limit },
       count: candidates.length,
+      planner_totals: {
+        planner_recipe_rows_total: Number(plannerTotals.planner_recipe_rows_total || 0),
+        planner_recipes_distinct_total: Number(plannerTotals.planner_recipes_distinct_total || 0),
+        junior_recipe_rows: Number(plannerTotals.junior_recipe_rows || 0),
+        junior_recipes_distinct: Number(plannerTotals.junior_recipes_distinct || 0),
+        middle_recipe_rows: Number(plannerTotals.middle_recipe_rows || 0),
+        middle_recipes_distinct: Number(plannerTotals.middle_recipes_distinct || 0),
+        senior_recipe_rows: Number(plannerTotals.senior_recipe_rows || 0),
+        senior_recipes_distinct: Number(plannerTotals.senior_recipes_distinct || 0),
+        hosp11_recipe_rows: Number(plannerTotals.hosp11_recipe_rows || 0),
+        hosp11_recipes_distinct: Number(plannerTotals.hosp11_recipes_distinct || 0),
+        hosp12_recipe_rows: Number(plannerTotals.hosp12_recipe_rows || 0),
+        hosp12_recipes_distinct: Number(plannerTotals.hosp12_recipes_distinct || 0),
+        hosp13_recipe_rows: Number(plannerTotals.hosp13_recipe_rows || 0),
+        hosp13_recipes_distinct: Number(plannerTotals.hosp13_recipes_distinct || 0)
+      },
       comparison: {
         recipe_has_inventory: withInventory,
         recipe_missing_inventory: missingInventory,
