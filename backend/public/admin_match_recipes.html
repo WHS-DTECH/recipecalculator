@@ -247,8 +247,14 @@
 
     .suggestion-name {
       font-weight: 500;
-      color: #1f2937;
+      color: #1976d2;
       flex: 1;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .suggestion-name:hover {
+      color: #1565c0;
     }
 
     .suggestion-score {
@@ -696,9 +702,10 @@
               <div class="suggestion-list">
                 ${suggestions.map(s => `
                   <div class="suggestion-item">
-                    <div class="suggestion-name">${s.name || 'Unknown'}</div>
+                    <div class="suggestion-name" onclick="openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${s.name || 'Unknown'}</div>
                     <div class="suggestion-score">${((s.matchScore || 0) * 100).toFixed(0)}%</div>
                     <div class="suggestion-actions">
+                      <button class="btn btn-sm btn-secondary" onclick="openRecipePreviewModal(${s.id})" title="Preview recipe details">Preview</button>
                       <button class="btn btn-sm btn-success" onclick="openLinkModal(${booking.id}, ${s.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Link to this recipe">Link</button>
                     </div>
                   </div>
