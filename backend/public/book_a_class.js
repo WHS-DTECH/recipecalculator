@@ -518,27 +518,29 @@ function syncClassDropdownFromTimetable(periods) {
   const classSelect = document.getElementById('classSelect');
   if (!classSelect) return;
 
-  const tokens = (Array.isArray(periods) ? periods : [])
+  // Use the full raw timetable tokens (e.g. 82B-MFOOD-22, 82B-MFOOD-F) so the dropdown
+  // has precise options for each room/group rather than just the stripped subject code.
+  const rawTokens = (Array.isArray(periods) ? periods : [])
     .flatMap(p => expandTimetableClassTokens(p && p.classes))
-    .map(deriveClassCodeFromTimetableToken)
     .filter(Boolean);
 
-  if (!tokens.length) return;
+  if (!rawTokens.length) return;
 
-  const uniqueCodes = [...new Set(tokens)];
+  const uniqueTokens = [...new Set(rawTokens)];
   const existingNorm = new Set(
     Array.from(classSelect.options)
       .map(opt => normalizeClassToken(opt.value))
       .filter(Boolean)
   );
 
-  uniqueCodes.forEach(code => {
-    if (existingNorm.has(normalizeClassToken(code))) return;
+  uniqueTokens.forEach(token => {
+    if (existingNorm.has(normalizeClassToken(token))) return;
     const opt = document.createElement('option');
-    opt.value = code;
-    opt.textContent = `${code} (from timetable)`;
+    opt.value = token;
+    opt.textContent = `${token} (from timetable)`;
     opt.setAttribute('data-timetable-fallback', '1');
     classSelect.appendChild(opt);
+    existingNorm.add(normalizeClassToken(token)); // prevent dups within this batch
   });
 }
 
