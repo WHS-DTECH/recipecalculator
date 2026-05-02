@@ -460,7 +460,14 @@ router.get('/linked-recipes/:bookingId', async (req, res) => {
       const fallback = await pool.query(
         `SELECT b.recipe_id, r.name, r.url
          FROM bookings b
-         JOIN recipes r ON r.id = b.recipe_id
+         JOIN recipes r
+           ON r.id = CAST(
+             NULLIF(
+               regexp_replace(COALESCE(b.recipe_id::text, ''), '[^0-9]', '', 'g'),
+               ''
+             )
+             AS INTEGER
+           )
          WHERE b.id = $1
            AND b.recipe_id IS NOT NULL
          LIMIT 1`,
