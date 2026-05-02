@@ -63,6 +63,139 @@ function publishBookingToBookClassForm(booking) {
   }
 }
 
+function showInfoToast(message) {
+  const text = String(message || '').trim();
+  if (!text) return;
+  if (window.QC && typeof window.QC.toast === 'function') {
+    window.QC.toast(text, 'info');
+    return;
+  }
+  alert(text);
+}
+
+async function fetchLinkedRecipesForBooking(bookingId) {
+  const response = await fetch(`/api/recipe-matching/linked-recipes/${encodeURIComponent(String(bookingId))}`);
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data && data.error ? data.error : 'Failed to load linked recipes.');
+  }
+  return Array.isArray(data.recipes) ? data.recipes : [];
+}
+
+function choosePlannerRecipeVersion(booking, linkedRecipes) {
+  return new Promise((resolve) => {
+    const list = Array.isArray(linkedRecipes) ? linkedRecipes : [];
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:10001;';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,0.25);padding:1rem 1.1rem;max-width:760px;width:min(92vw,760px);max-height:85vh;overflow:auto;';
+
+    const plannerName = escHtml(String((booking && booking.recipe) || 'Planner Recipe'));
+    const choicesHtml = list.map((recipe, idx) => {
+      const recipeId = recipe && recipe.recipe_id != null ? recipe.recipe_id : recipe.id;
+      const safeId = escHtml(String(recipeId || ''));
+      const safeName = escHtml(String((recipe && recipe.name) || `Recipe ${safeId}`));
+      const url = String((recipe && recipe.url) || '').trim();
+      return `
+        <label style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:0.65rem 0.7rem;margin:0 0 0.55rem 0;cursor:pointer;">
+          <div style="display:flex;gap:0.55rem;align-items:flex-start;">
+            <input type="radio" name="plannerRecipeChoice" value="${safeId}" ${idx === 0 ? 'checked' : ''} style="margin-top:0.2rem;" />
+            <div>
+              <div style="font-weight:700;color:#1f2937;">${safeName}</div>
+              <div style="font-size:0.82rem;color:#6b7280;">ID: ${safeId}</div>
+              ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener" style="font-size:0.82rem;color:#1976d2;word-break:break-all;">${escHtml(url)}</a>` : '<div style="font-size:0.82rem;color:#9ca3af;">No source URL</div>'}
+            </div>
+          </div>
+        </label>
+      `;
+    }).join('');
+
+    modal.innerHTML = `
+      <div style="font-size:1.12rem;font-weight:700;color:#1f2937;margin-bottom:0.35rem;">Choose Recipe Version</div>
+      <div style="font-size:0.9rem;color:#4b5563;margin-bottom:0.8rem;">Planner item: <strong>${plannerName}</strong></div>
+      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:0.6rem;">Select the version to use when booking this class.</div>
+      ${choicesHtml || '<div style="color:#9ca3af;font-size:0.9rem;">No linked recipes found for this planner item.</div>'}
+      <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.8rem;border-top:1px solid #e5e7eb;padding-top:0.75rem;">
+        <button type="button" id="plannerVersionCancelBtn" style="padding:0.42rem 0.82rem;border:1px solid #cbd5e1;background:#f8fafc;border-radius:6px;cursor:pointer;">Cancel</button>
+        <button type="button" id="plannerVersionUseBtn" style="padding:0.42rem 0.82rem;border:none;background:#1976d2;color:#fff;border-radius:6px;cursor:pointer;${list.length ? '' : 'display:none;'}">Use This Version</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const cleanup = () => {
+      overlay.remove();
+    };
+
+    const cancelBtn = modal.querySelector('#plannerVersionCancelBtn');
+    const useBtn = modal.querySelector('#plannerVersionUseBtn');
+
+    if (cancelBtn) {
+      cancelBtn.onclick = () => {
+        cleanup();
+        resolve(null);
+      };
+    }
+
+    if (useBtn) {
+      useBtn.onclick = () => {
+        const selected = modal.querySelector('input[name="plannerRecipeChoice"]:checked');
+        if (!selected) {
+          resolve(null);
+          cleanup();
+          return;
+        }
+        const selectedId = String(selected.value || '').trim();
+        const selectedRecipe = list.find((item) => String(item.recipe_id != null ? item.recipe_id : item.id) === selectedId) || null;
+        cleanup();
+        resolve(selectedRecipe);
+      };
+    }
+
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay) {
+        cleanup();
+        resolve(null);
+      }
+    });
+  });
+}
+
+async function handlePlannerChipClick(bookingId) {
+  const normalizedId = Number(bookingId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return;
+  const bookings = Array.isArray(window.currentScheduleBookings) ? window.currentScheduleBookings : [];
+  const plannerBooking = bookings.find((b) => Number(b.id) === normalizedId);
+  if (!plannerBooking) {
+    showInfoToast('Could not find that planner event in this week.');
+    return;
+  }
+
+  try {
+    const linkedRecipes = await fetchLinkedRecipesForBooking(normalizedId);
+    if (!linkedRecipes.length) {
+      showInfoToast('This planner event has no linked recipe versions yet. Link versions in Match Planner Recipes first.');
+      return;
+    }
+
+    const selectedRecipe = await choosePlannerRecipeVersion(plannerBooking, linkedRecipes);
+    if (!selectedRecipe) return;
+
+    const selectedRecipeId = selectedRecipe.recipe_id != null ? selectedRecipe.recipe_id : selectedRecipe.id;
+    const selectedRecipeName = String(selectedRecipe.name || plannerBooking.recipe || '').trim();
+    const bookingForForm = {
+      ...plannerBooking,
+      recipe_id: selectedRecipeId,
+      recipe: selectedRecipeName
+    };
+    publishBookingToBookClassForm(bookingForForm);
+    showInfoToast(`Selected recipe version: ${selectedRecipeName}`);
+  } catch (err) {
+    showInfoToast(err && err.message ? err.message : 'Unable to load linked recipes for this planner event.');
+  }
+}
+
 function toLocalIsoDate(date) {
   const y = date.getFullYear();
   const m = String(date.getMonth() + 1).padStart(2, '0');
@@ -434,6 +567,7 @@ async function renderScheduleCalendar() {
 
   // Fetch bookings for this week
   const bookings = await fetchBookingsForWeek(currentMonday);
+  window.currentScheduleBookings = bookings;
 
   const grid = buildPrintGrid(bookings, weekDates);
 
@@ -458,7 +592,7 @@ async function renderScheduleCalendar() {
         plannerEntries.map(entry => {
           const style = plannerChipStyle(normalizePlannerStream(entry));
           const safeRecipe = escHtml(entry.recipe);
-          return `<div class='planner-chip' data-booking-id='${entry.id}' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div>`;
+          return `<div class='planner-chip' data-booking-id='${entry.id}' title='Click to choose a linked recipe version' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;cursor:pointer;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div>`;
         }).join('') +
         `</td>`;
     } else {
@@ -664,6 +798,16 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!res.ok) { alert('Failed to delete entry.'); btn.disabled = false; return; }
         await renderScheduleCalendar();
       } catch { alert('Error deleting entry.'); btn.disabled = false; }
+    });
+
+    document.addEventListener('click', async (e) => {
+      const chip = e.target.closest('.planner-chip');
+      if (!chip) return;
+      if (!chip.closest('#scheduleCalendarTable')) return;
+      if (e.target.closest('.planner-delete-btn')) return;
+      const bookingId = chip.getAttribute('data-booking-id');
+      if (!bookingId) return;
+      await handlePlannerChipClick(bookingId);
     });
   }
   renderScheduleCalendar();
