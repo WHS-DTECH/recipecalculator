@@ -242,6 +242,67 @@ function parseIngredientLines(text) {
   }).filter(Boolean);
 }
 
+function decodeHtmlEntities(text) {
+  const textarea = document.createElement('textarea');
+  textarea.innerHTML = String(text || '');
+  return textarea.value;
+}
+
+function htmlListToIngredientText(html) {
+  const value = String(html || '').trim();
+  if (!value) return '';
+
+  const liMatches = Array.from(value.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi));
+  if (liMatches.length) {
+    return liMatches
+      .map((m) => decodeHtmlEntities(String(m[1] || '').replace(/<br\s*\/?\s*>/gi, ' ').replace(/<[^>]+>/g, ' ')).trim())
+      .filter(Boolean)
+      .join('\n');
+  }
+
+  return decodeHtmlEntities(
+    value
+      .replace(/<br\s*\/?\s*>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, ' ')
+  )
+    .split('\n')
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join('\n');
+}
+
+function getAdjustableIngredientsText(recipe) {
+  const directIngredients = String((recipe && recipe.ingredients) || '').trim();
+  if (directIngredients) return directIngredients;
+
+  const displayIngredients = htmlListToIngredientText(recipe && recipe.ingredients_display);
+  if (displayIngredients) return displayIngredients;
+
+  const extractedRaw = String((recipe && recipe.extracted_ingredients) || '').trim();
+  if (!extractedRaw) return '';
+
+  if (extractedRaw.startsWith('[') && extractedRaw.endsWith(']')) {
+    try {
+      const parsed = JSON.parse(extractedRaw);
+      if (Array.isArray(parsed)) {
+        return parsed
+          .map((item) => {
+            if (typeof item === 'string') return item.trim();
+            if (item && typeof item.text === 'string') return item.text.trim();
+            return String(item || '').trim();
+          })
+          .filter(Boolean)
+          .join('\n');
+      }
+    } catch (_) {
+      // fall back to plain text handling below
+    }
+  }
+
+  return extractedRaw;
+}
+
 // Show the Adjust Recipe modal — lets user rename + edit ingredients before saving as new recipe
 async function showAdjustRecipeModal(baseRecipeRef, plannerBooking) {
   return new Promise(async (resolve) => {
@@ -265,7 +326,7 @@ async function showAdjustRecipeModal(baseRecipeRef, plannerBooking) {
 
     const baseName = String((fullRecipe && fullRecipe.name) || (plannerBooking && plannerBooking.recipe) || 'Recipe').trim();
     const defaultName = userName ? `${baseName} - ${userName}` : baseName;
-    const ingredientLines = parseIngredientLines((fullRecipe && fullRecipe.ingredients) || '');
+    const ingredientLines = parseIngredientLines(getAdjustableIngredientsText(fullRecipe));
     const servingSize = (fullRecipe && fullRecipe.serving_size) || '';
 
     const overlay = document.createElement('div');
