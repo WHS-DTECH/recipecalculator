@@ -228,6 +228,9 @@ document.addEventListener('DOMContentLoaded', function() {
         return;
       }
 
+      const isAdmin = String(auth && auth.user && auth.user.role || '').toLowerCase() === 'admin';
+      const currentUserEmail = String(auth && auth.user && auth.user.email || '').trim().toLowerCase();
+
       return fetch('/api/recipes/display-table')
         .then(res => res.json())
         .then(rows => {
@@ -294,6 +297,91 @@ document.addEventListener('DOMContentLoaded', function() {
 
           renderList(instructionsListEl, instructionLines);
           if (instructionsFallbackEl) instructionsFallbackEl.style.display = 'none';
+
+          // --- Admin inline edit ---
+          if (isAdmin) {
+            const adminEditBtn = document.getElementById('adminEditBtn');
+            const adminEditPanel = document.getElementById('adminEditPanel');
+            const adminEditCancelBtn = document.getElementById('adminEditCancelBtn');
+            const adminEditSaveBtn = document.getElementById('adminEditSaveBtn');
+            const adminEditStatus = document.getElementById('adminEditStatus');
+
+            if (adminEditBtn) adminEditBtn.style.display = 'inline-flex';
+
+            function openEditPanel() {
+              document.getElementById('editName').value = recipe.name || '';
+              document.getElementById('editServingSize').value = recipe.serving_size || '';
+              document.getElementById('editUrl').value = recipe.url || '';
+              document.getElementById('editIngredients').value = String(recipe.ingredients || '').trim();
+              document.getElementById('editInstructions').value = String(recipe.instructions || '').trim();
+              if (adminEditStatus) adminEditStatus.textContent = '';
+              if (adminEditPanel) adminEditPanel.style.display = 'block';
+              document.body.style.overflow = 'hidden';
+            }
+
+            function closeEditPanel() {
+              if (adminEditPanel) adminEditPanel.style.display = 'none';
+              document.body.style.overflow = '';
+            }
+
+            if (adminEditBtn) adminEditBtn.addEventListener('click', openEditPanel);
+            if (adminEditCancelBtn) adminEditCancelBtn.addEventListener('click', closeEditPanel);
+            if (adminEditPanel) {
+              adminEditPanel.addEventListener('click', function(e) {
+                if (e.target === adminEditPanel) closeEditPanel();
+              });
+            }
+
+            if (adminEditSaveBtn) {
+              adminEditSaveBtn.addEventListener('click', async () => {
+                const payload = {
+                  name: document.getElementById('editName').value.trim(),
+                  serving_size: document.getElementById('editServingSize').value.trim(),
+                  url: document.getElementById('editUrl').value.trim(),
+                  ingredients: document.getElementById('editIngredients').value.trim(),
+                  instructions: document.getElementById('editInstructions').value.trim()
+                };
+
+                if (!payload.name) {
+                  if (adminEditStatus) { adminEditStatus.textContent = 'Recipe name is required.'; adminEditStatus.style.color = '#b71c1c'; }
+                  return;
+                }
+
+                adminEditSaveBtn.disabled = true;
+                if (adminEditStatus) { adminEditStatus.textContent = 'Saving...'; adminEditStatus.style.color = '#1d4f79'; }
+
+                try {
+                  const res = await fetch(`/api/admin/recipe-display/${recipe.id}`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'x-user-email': currentUserEmail },
+                    body: JSON.stringify(payload)
+                  });
+                  const data = await res.json();
+                  if (!res.ok || data.success === false) throw new Error(data.error || 'Save failed.');
+
+                  // Update local recipe object and refresh display
+                  Object.assign(recipe, data.recipe);
+                  if (titleEl) titleEl.textContent = recipe.name || '(No Name)';
+                  if (servingsEl) servingsEl.textContent = `Serving Size: ${recipe.serving_size || '-'}`;
+                  if (sourceEl) sourceEl.textContent = `Source: ${sourceFromUrl(recipe.url)}`;
+                  if (urlEl) {
+                    if (recipe.url) { urlEl.href = String(recipe.url); urlEl.style.display = 'inline-flex'; }
+                    else urlEl.style.display = 'none';
+                  }
+                  document.title = `${recipe.name || '(No Name)'} | Recipe Details`;
+                  renderList(document.getElementById('ingredientsList'), splitIngredientItems(recipe.ingredients));
+                  renderList(document.getElementById('instructionsList'), splitInstructionItems(recipe.instructions));
+
+                  closeEditPanel();
+                } catch (err) {
+                  if (adminEditStatus) { adminEditStatus.textContent = err.message || 'Save failed.'; adminEditStatus.style.color = '#b71c1c'; }
+                } finally {
+                  adminEditSaveBtn.disabled = false;
+                }
+              });
+            }
+          }
         });
     })
     .catch(() => {

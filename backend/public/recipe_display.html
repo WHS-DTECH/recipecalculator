@@ -307,6 +307,7 @@
           <span id="recipeSource" class="recipe-pill">Source: -</span>
         </div>
         <a id="recipeUrlLink" class="recipe-hero-link" href="#" target="_blank" rel="noopener noreferrer" style="display:none;">Open Original Recipe</a>
+        <button id="adminEditBtn" class="recipe-hero-link" style="display:none;background:#1976d2;color:#fff;border:none;cursor:pointer;margin-top:0.5rem;">Edit Recipe</button>
       </div>
 
       <div class="recipe-hero-image-wrap">
@@ -342,6 +343,38 @@
       </section>
     </div>
   </main>
+
+  <div id="adminEditPanel" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.55);z-index:9000;overflow-y:auto;padding:2rem 1rem;">
+    <div style="background:#fff;max-width:700px;margin:0 auto;border-radius:10px;padding:2rem;box-shadow:0 4px 32px rgba(0,0,0,0.25);">
+      <h2 style="margin:0 0 1.2rem;color:#17324a;font-size:1.4rem;">Edit Recipe</h2>
+      <div id="adminEditStatus" style="margin-bottom:0.8rem;font-size:0.93rem;color:#1d4f79;"></div>
+
+      <label style="display:block;font-weight:600;margin-bottom:0.25rem;color:#17324a;">Recipe Name</label>
+      <input id="editName" type="text" style="width:100%;box-sizing:border-box;padding:0.5rem 0.7rem;border:1px solid #b0bec5;border-radius:6px;font-size:1rem;margin-bottom:1rem;">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:0.25rem;color:#17324a;">Serving Size</label>
+          <input id="editServingSize" type="text" style="width:100%;box-sizing:border-box;padding:0.5rem 0.7rem;border:1px solid #b0bec5;border-radius:6px;font-size:1rem;">
+        </div>
+        <div>
+          <label style="display:block;font-weight:600;margin-bottom:0.25rem;color:#17324a;">Source URL</label>
+          <input id="editUrl" type="text" placeholder="https://..." style="width:100%;box-sizing:border-box;padding:0.5rem 0.7rem;border:1px solid #b0bec5;border-radius:6px;font-size:1rem;">
+        </div>
+      </div>
+
+      <label style="display:block;font-weight:600;margin-bottom:0.25rem;color:#17324a;">Ingredients <span style="font-weight:400;color:#516375;">(one per line)</span></label>
+      <textarea id="editIngredients" rows="10" style="width:100%;box-sizing:border-box;padding:0.5rem 0.7rem;border:1px solid #b0bec5;border-radius:6px;font-size:0.95rem;font-family:inherit;margin-bottom:1rem;resize:vertical;"></textarea>
+
+      <label style="display:block;font-weight:600;margin-bottom:0.25rem;color:#17324a;">Instructions <span style="font-weight:400;color:#516375;">(one step per line)</span></label>
+      <textarea id="editInstructions" rows="12" style="width:100%;box-sizing:border-box;padding:0.5rem 0.7rem;border:1px solid #b0bec5;border-radius:6px;font-size:0.95rem;font-family:inherit;margin-bottom:1.5rem;resize:vertical;"></textarea>
+
+      <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
+        <button id="adminEditCancelBtn" type="button" style="padding:0.55rem 1.3rem;border:1px solid #b0bec5;border-radius:6px;background:#fff;cursor:pointer;font-size:0.97rem;">Cancel</button>
+        <button id="adminEditSaveBtn" type="button" style="padding:0.55rem 1.5rem;border:none;border-radius:6px;background:#1976d2;color:#fff;font-weight:700;cursor:pointer;font-size:0.97rem;">Save Changes</button>
+      </div>
+    </div>
+  </div>
 
   <script src="display_recipe_details.js"></script>
 </body>

@@ -1898,6 +1898,42 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       }
     });
 
+    // Admin: update recipe_display fields (name, serving_size, url, ingredients, instructions)
+    app.put('/api/admin/recipe-display/:id', requireAdmin, async (req, res) => {
+      const { id } = req.params;
+      const { name, serving_size, url, ingredients, instructions } = req.body || {};
+
+      if (!name || !String(name).trim()) {
+        return res.status(400).json({ success: false, error: 'Recipe name is required.' });
+      }
+
+      try {
+        const result = await pool.query(
+          `UPDATE recipe_display
+           SET name = $1, serving_size = $2, url = $3, ingredients = $4, instructions = $5
+           WHERE id = $6
+           RETURNING id, recipeid, name, serving_size, url, ingredients, instructions, image_url`,
+          [
+            String(name).trim(),
+            String(serving_size || '').trim() || null,
+            String(url || '').trim() || null,
+            String(ingredients || '').trim() || null,
+            String(instructions || '').trim() || null,
+            id
+          ]
+        );
+
+        if (!result.rowCount) {
+          return res.status(404).json({ success: false, error: 'Recipe not found in display table.' });
+        }
+
+        res.json({ success: true, recipe: result.rows[0] });
+      } catch (err) {
+        console.error('[ADMIN_RECIPE_DISPLAY][UPDATE][ERROR]', err);
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
     // Admin image management for recipe_display cards/details.
     app.get('/api/admin/recipe-images', requireAdmin, async (req, res) => {
       try {
