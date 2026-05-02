@@ -687,6 +687,25 @@
       flex: 1;
       color: #17324a;
     }
+    .linked-recipe-main {
+      flex: 1;
+      min-width: 0;
+    }
+    .linked-recipe-source {
+      margin-top: 1px;
+      font-size: 0.74rem;
+      color: #5f6f82;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .linked-recipe-source a {
+      color: #1976d2;
+      text-decoration: none;
+    }
+    .linked-recipe-source a:hover {
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -970,7 +989,10 @@
                 ${booking.linked_recipes.map(r => `
                   <div class="linked-recipe-row">
                     <button class="star-btn ${Number(r.recipe_id) === Number(booking.recipe_id) ? 'is-primary' : ''}" onclick="setAsPrimary(${booking.id}, ${r.recipe_id})" title="${Number(r.recipe_id) === Number(booking.recipe_id) ? 'Primary recipe (shown on index page)' : 'Click to make this the primary recipe'}">&#9733;</button>
-                    <span class="linked-recipe-name">${r.name || 'Unknown'}${Number(r.recipe_id) === Number(booking.recipe_id) && booking.linked_recipes.length > 1 ? '<span class="linked-recipe-primary-label"> primary</span>' : ''}</span>
+                    <div class="linked-recipe-main">
+                      <div class="linked-recipe-name">${r.name || 'Unknown'}${Number(r.recipe_id) === Number(booking.recipe_id) && booking.linked_recipes.length > 1 ? '<span class="linked-recipe-primary-label"> primary</span>' : ''}</div>
+                      <div class="linked-recipe-source">${formatLinkedRecipeSource(r.url)}</div>
+                    </div>
                   </div>
                 `).join('')}
               </div>
@@ -1052,6 +1074,20 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function formatLinkedRecipeSource(url) {
+      const value = String(url || '').trim();
+      if (!value) return '<em>No source URL</em>';
+
+      let label = value;
+      try {
+        label = new URL(value).hostname.replace(/^www\./i, '') || value;
+      } catch (_) {
+        // Keep original value when URL parsing fails.
+      }
+
+      return `<a href="${escapeHtml(value)}" target="_blank" rel="noopener" title="${escapeHtml(value)}">${escapeHtml(label)}</a>`;
     }
 
     function extractListItems(value) {
