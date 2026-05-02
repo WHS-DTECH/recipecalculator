@@ -46,6 +46,7 @@ function getCellPrimaryText(booking) {
 
 function publishBookingToBookClassForm(booking) {
   if (!booking) return;
+  const plannerLike = isPlannerLikeBooking(booking);
   const sharedState = {
     sourceId: scheduleCalendarSourceId,
     updatedAt: Date.now(),
@@ -56,7 +57,8 @@ function publishBookingToBookClassForm(booking) {
     recipeId: booking.recipe_id != null ? String(booking.recipe_id) : '',
     recipeName: String(booking.recipe || ''),
     classSize: booking.class_size != null ? String(booking.class_size) : '',
-    editBookingId: String(booking.id || '')
+    // Planner selections should prefill as a new booking, not edit the planner row.
+    editBookingId: plannerLike ? '' : String(booking.id || '')
   };
   localStorage.setItem(bookClassSharedStateKey, JSON.stringify(sharedState));
   if (scheduleCalendarSharedChannel) {
