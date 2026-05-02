@@ -31,7 +31,8 @@
         }
         .form-only-mode #teacherTimetableSection,
         .form-only-mode #classStudentsPanel,
-        .form-only-mode #bookClassHeading {
+        .form-only-mode #bookClassHeading,
+        .form-only-mode .book-form-actions-top {
             display: none !important;
         }
         .form-only-mode #bookClassLayout {
@@ -175,6 +176,11 @@
                     <div id="teacherTimetableMeta" class="class-students-meta">Select teacher and date to view timetable.</div>
                     <div id="teacherTimetableBody"></div>
                     <div id="timetableStatus" class="ui-state" style="display:none;margin-top:0.6rem;"></div>
+                    <div id="timetableFormActions" class="book-form-actions" style="margin-top:0.75rem;display:none;">
+                        <button id="timetableSaveBtn" type="button" class="btn btn-success" style="font-size:0.9rem;padding:0.4rem 1rem;">SAVE</button>
+                        <button id="timetableDeleteBtn" type="button" class="btn delete-btn" style="font-size:0.9rem;padding:0.4rem 1rem;display:none;">DELETE</button>
+                        <button id="timetableResetBtn" type="button" class="btn btn-secondary" style="font-size:0.9rem;padding:0.4rem 1rem;">RESET</button>
+                    </div>
                 </div>
                 <div class="scheduled-bookings" id="adminScheduledBookingsSection">
                     <h2>Scheduled Bookings</h2>

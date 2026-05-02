@@ -15,10 +15,14 @@ const isStudentListOnlyView = bookClassPageParams.get('student_list_only') === '
 const isTimetableOnlyView = bookClassPageParams.get('hide_booking_form') === '1' && bookClassPageParams.get('hide_student_panel') === '1';
 const canPublishSharedEmbedState = !isTeacherEmbedView || isFormOnlyView;
 const bookClassSharedStateKey = 'bookClassEmbedSharedState';
+const bookClassActionChannelName = 'bookClassActionChannel';
 const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
 const bookClassEmbedSourceId = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 const bookClassSharedChannel = isTeacherEmbedView && 'BroadcastChannel' in window
   ? new BroadcastChannel(bookClassSharedChannelName)
+  : null;
+const bookClassActionChannel = isTeacherEmbedView && 'BroadcastChannel' in window
+  ? new BroadcastChannel(bookClassActionChannelName)
   : null;
 let isApplyingSharedState = false;
 let lastSharedStateAppliedAt = 0;
@@ -1393,6 +1397,53 @@ window.addEventListener('DOMContentLoaded', () => {
   });
   fetchStudentsForClass('');
   fetchTeacherTimetableForSelectedDate();
+
+  // --- Timetable-panel action buttons (visible in timetable-only iframe) ---
+  if (isTimetableOnlyView && bookClassActionChannel) {
+    const timetableFormActions = document.getElementById('timetableFormActions');
+    if (timetableFormActions) timetableFormActions.style.display = 'flex';
+
+    document.getElementById('timetableSaveBtn').addEventListener('click', () => {
+      bookClassActionChannel.postMessage({ action: 'save', ts: Date.now() });
+    });
+    document.getElementById('timetableResetBtn').addEventListener('click', () => {
+      bookClassActionChannel.postMessage({ action: 'reset', ts: Date.now() });
+    });
+    const timetableDeleteBtn = document.getElementById('timetableDeleteBtn');
+    // Mirror delete-button visibility from shared state label changes
+    if (bookClassSharedChannel) {
+      bookClassSharedChannel.addEventListener('message', event => {
+        if (!event || !event.data) return;
+        const editId = String(event.data.editBookingId || '').trim();
+        if (timetableDeleteBtn) timetableDeleteBtn.style.display = editId ? '' : 'none';
+        // Also mirror save/reset label
+        const saveBtn = document.getElementById('timetableSaveBtn');
+        if (saveBtn) saveBtn.textContent = editId ? 'UPDATE' : 'SAVE';
+      });
+    }
+    if (timetableDeleteBtn) {
+      timetableDeleteBtn.addEventListener('click', () => {
+        bookClassActionChannel.postMessage({ action: 'delete', ts: Date.now() });
+      });
+    }
+  }
+
+  // --- Form iframe: listen for action commands from timetable panel ---
+  if (isFormOnlyView && bookClassActionChannel) {
+    bookClassActionChannel.addEventListener('message', event => {
+      if (!event || !event.data || !event.data.action) return;
+      if (event.data.action === 'save') {
+        const btn = document.getElementById('masterSaveBtn');
+        if (btn) btn.click();
+      } else if (event.data.action === 'reset') {
+        const btn = document.getElementById('resetBtn');
+        if (btn) btn.click();
+      } else if (event.data.action === 'delete') {
+        const btn = document.getElementById('deleteBookingBtn');
+        if (btn) btn.click();
+      }
+    });
+  }
 
   if (isTeacherEmbedView) {
     if (bookClassSharedChannel) {
