@@ -11,6 +11,7 @@ const DEFAULT_ROLES = {
     add_recipes: true,
     shopping: true,
     booking: true,
+    planning: true,
     admin: true
   },
   lead_teacher: {
@@ -19,6 +20,7 @@ const DEFAULT_ROLES = {
     add_recipes: true,
     shopping: true,
     booking: true,
+    planning: true,
     admin: false
   },
   teacher: {
@@ -27,6 +29,7 @@ const DEFAULT_ROLES = {
     add_recipes: true,
     shopping: true,
     booking: true,
+    planning: false,
     admin: false
   },
   technician: {
@@ -35,6 +38,7 @@ const DEFAULT_ROLES = {
     add_recipes: false,
     shopping: true,
     booking: false,
+    planning: false,
     admin: false
   },
   student: {
@@ -43,6 +47,7 @@ const DEFAULT_ROLES = {
     add_recipes: false,
     shopping: false,
     booking: false,
+    planning: false,
     admin: false
   },
   public_access: {
@@ -51,11 +56,12 @@ const DEFAULT_ROLES = {
     add_recipes: false,
     shopping: false,
     booking: false,
+    planning: false,
     admin: false
   }
 };
 
-const ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'admin'];
+const ROUTES = ['recipes', 'add_recipes', 'inventory', 'shopping', 'booking', 'planning', 'admin'];
 
 function buildDefaultRolesRows() {
   return Object.entries(DEFAULT_ROLES)
@@ -79,17 +85,21 @@ async function initializePermissionsSchema() {
         inventory BOOLEAN DEFAULT false,
         shopping BOOLEAN DEFAULT false,
         booking BOOLEAN DEFAULT false,
+        planning BOOLEAN DEFAULT false,
         admin BOOLEAN DEFAULT false,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
 
+    // Ensure planning column exists for pre-existing databases.
+    await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS planning BOOLEAN DEFAULT false');
+
     // Ensure all known roles exist without overwriting custom values.
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, admin)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, planning, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (role_name) DO NOTHING
       `, [
         roleName,
@@ -98,6 +108,7 @@ async function initializePermissionsSchema() {
         permissions.inventory,
         permissions.shopping,
         permissions.booking,
+        permissions.planning,
         permissions.admin
       ]);
     }
@@ -145,7 +156,7 @@ router.get('/all', async (req, res) => {
     }
 
     const result = await pool.query(`
-      SELECT role_name, recipes, add_recipes, inventory, shopping, booking, admin
+      SELECT role_name, recipes, add_recipes, inventory, shopping, booking, planning, admin
       FROM role_permissions
       ORDER BY CASE 
         WHEN role_name = 'admin' THEN 1
@@ -185,15 +196,16 @@ router.put('/:roleName', requireAdmin, async (req, res) => {
     
     await pool.query(`
       UPDATE role_permissions
-      SET recipes = $1, add_recipes = $2, inventory = $3, shopping = $4, booking = $5, admin = $6,
+      SET recipes = $1, add_recipes = $2, inventory = $3, shopping = $4, booking = $5, planning = $6, admin = $7,
           updated_at = CURRENT_TIMESTAMP
-      WHERE role_name = $7
+      WHERE role_name = $8
     `, [
       permissions.recipes || false,
       permissions.add_recipes || false,
       permissions.inventory || false,
       permissions.shopping || false,
       permissions.booking || false,
+      permissions.planning || false,
       permissions.admin || false,
       roleName
     ]);
@@ -220,8 +232,8 @@ router.post('/reset', requireAdmin, async (req, res) => {
 
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, admin)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, planning, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
       `, [
         roleName,
         permissions.recipes,
@@ -229,6 +241,7 @@ router.post('/reset', requireAdmin, async (req, res) => {
         permissions.inventory,
         permissions.shopping,
         permissions.booking,
+        permissions.planning,
         permissions.admin
       ]);
     }
