@@ -36,6 +36,12 @@ let scheduleViewMode = (() => {
   return saved === 'recipe' ? 'recipe' : 'class';
 })();
 
+function updatePrintButtonLabel() {
+  const btn = document.getElementById('printScheduleBtn');
+  if (!btn) return;
+  btn.textContent = scheduleViewMode === 'recipe' ? 'Print by Recipe' : 'Print Schedule (A4)';
+}
+
 function getCellPrimaryText(booking) {
   if (scheduleViewMode === 'recipe') {
     const recipeLabel = String(booking.recipe || '').trim();
@@ -1099,10 +1105,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const scheduleViewModeSelect = document.getElementById('scheduleViewModeSelect');
   if (scheduleViewModeSelect) {
     scheduleViewModeSelect.value = scheduleViewMode;
+    updatePrintButtonLabel();
     scheduleViewModeSelect.onchange = () => {
       const nextMode = String(scheduleViewModeSelect.value || '').trim().toLowerCase();
       scheduleViewMode = nextMode === 'recipe' ? 'recipe' : 'class';
       localStorage.setItem(scheduleViewModeStorageKey, scheduleViewMode);
+      updatePrintButtonLabel();
       renderScheduleCalendar();
     };
   }
@@ -1112,18 +1120,11 @@ document.addEventListener('DOMContentLoaded', () => {
     printScheduleBtn.onclick = async () => {
       const chosenMonday = await askWeekToPrint(currentMonday);
       if (!chosenMonday) return;
-      await printScheduleForWeek(chosenMonday, showWeekends, 'class');
+      await printScheduleForWeek(chosenMonday, showWeekends, scheduleViewMode);
     };
   }
 
-  const printScheduleByRecipeBtn = document.getElementById('printScheduleByRecipeBtn');
-  if (printScheduleByRecipeBtn) {
-    printScheduleByRecipeBtn.onclick = async () => {
-      const chosenMonday = await askWeekToPrint(currentMonday);
-      if (!chosenMonday) return;
-      await printScheduleForWeek(chosenMonday, showWeekends, 'recipe');
-    };
-  }
+  updatePrintButtonLabel();
   ensureWeekendToggleButton();
 
   if (scheduleCalendarSharedChannel) {
