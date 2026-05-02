@@ -1,6 +1,6 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260502c';
+  var ASSET_VERSION = '20260502d';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
     '/navbar.css'
@@ -45,18 +45,33 @@
   }
 
   function initializeNavbarBehavior(container) {
-    var toggle = document.querySelector('.navbar-admin-toggle');
     var mobileToggle = document.querySelector('.navbar-mobile-toggle');
     var mobileNav = document.getElementById('primaryNavbarLinks');
-    var drawer = document.getElementById('adminManagementDrawer');
-    var backdrop = document.getElementById('adminDrawerBackdrop');
-    var closeBtn = document.querySelector('.navbar-drawer-close');
-    var lastFocusedElement = null;
-    if (!toggle || !drawer || !backdrop) return;
+    var drawerConfigs = [
+      {
+        toggle: document.querySelector('.navbar-admin-toggle[aria-controls="adminManagementDrawer"]'),
+        drawer: document.getElementById('adminManagementDrawer'),
+        backdrop: document.getElementById('adminDrawerBackdrop')
+      },
+      {
+        toggle: document.querySelector('.navbar-admin-toggle[aria-controls="planningDrawer"]'),
+        drawer: document.getElementById('planningDrawer'),
+        backdrop: document.getElementById('planningDrawerBackdrop')
+      }
+    ].filter(function(cfg) {
+      return cfg.toggle && cfg.drawer && cfg.backdrop;
+    });
 
-    var isOpen = false;
+    var drawerState = drawerConfigs.map(function(cfg) {
+      return {
+        cfg: cfg,
+        isOpen: false,
+        lastFocusedElement: null,
+        closeBtn: cfg.drawer.querySelector('.navbar-drawer-close')
+      };
+    });
 
-    function getFocusableDrawerItems() {
+    function getFocusableDrawerItems(drawer) {
       return Array.prototype.slice.call(
         drawer.querySelectorAll('button, [href], summary, [tabindex]:not([tabindex="-1"])')
       ).filter(function(el) {
@@ -64,27 +79,41 @@
       });
     }
 
-    function openDrawer() {
-      isOpen = true;
-      lastFocusedElement = document.activeElement;
-      drawer.hidden = false;
-      backdrop.hidden = false;
-      toggle.setAttribute('aria-expanded', 'true');
-      document.body.style.overflow = 'hidden';
-      var focusable = getFocusableDrawerItems();
-      if (focusable.length) {
-        focusable[0].focus();
+    function isAnyDrawerOpen() {
+      return drawerState.some(function(state) { return state.isOpen; });
+    }
+
+    function closeDrawer(state, restoreFocus) {
+      if (!state || !state.isOpen) return;
+      state.isOpen = false;
+      state.cfg.drawer.hidden = true;
+      state.cfg.backdrop.hidden = true;
+      state.cfg.toggle.setAttribute('aria-expanded', 'false');
+      if (!isAnyDrawerOpen()) {
+        document.body.style.overflow = '';
+      }
+      if (restoreFocus && state.lastFocusedElement && typeof state.lastFocusedElement.focus === 'function') {
+        state.lastFocusedElement.focus();
       }
     }
 
-    function closeDrawer() {
-      isOpen = false;
-      drawer.hidden = true;
-      backdrop.hidden = true;
-      toggle.setAttribute('aria-expanded', 'false');
-      document.body.style.overflow = '';
-      if (lastFocusedElement && typeof lastFocusedElement.focus === 'function') {
-        lastFocusedElement.focus();
+    function closeAllDrawers(restoreFocus) {
+      drawerState.forEach(function(state) {
+        closeDrawer(state, restoreFocus);
+      });
+    }
+
+    function openDrawer(state) {
+      closeAllDrawers(false);
+      state.isOpen = true;
+      state.lastFocusedElement = document.activeElement;
+      state.cfg.drawer.hidden = false;
+      state.cfg.backdrop.hidden = false;
+      state.cfg.toggle.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+      var focusable = getFocusableDrawerItems(state.cfg.drawer);
+      if (focusable.length) {
+        focusable[0].focus();
       }
     }
 
@@ -106,22 +135,30 @@
       });
     }
 
-    toggle.addEventListener('click', function() {
-      if (isOpen) {
-        closeDrawer();
-      } else {
-        openDrawer();
+    drawerState.forEach(function(state) {
+      state.cfg.toggle.addEventListener('click', function() {
+        if (state.isOpen) {
+          closeDrawer(state, true);
+        } else {
+          openDrawer(state);
+        }
+      });
+
+      if (state.closeBtn) {
+        state.closeBtn.addEventListener('click', function() {
+          closeDrawer(state, true);
+        });
       }
-    });
 
-    if (closeBtn) {
-      closeBtn.addEventListener('click', closeDrawer);
-    }
+      state.cfg.backdrop.addEventListener('click', function() {
+        closeDrawer(state, true);
+      });
 
-    backdrop.addEventListener('click', closeDrawer);
-
-    drawer.querySelectorAll('a').forEach(function(link) {
-      link.addEventListener('click', closeDrawer);
+      state.cfg.drawer.querySelectorAll('a').forEach(function(link) {
+        link.addEventListener('click', function() {
+          closeDrawer(state, false);
+        });
+      });
     });
 
     document.addEventListener('keydown', function(event) {
@@ -129,13 +166,15 @@
         closeMobileNav();
       }
 
-      if (event.key === 'Escape' && isOpen) {
-        closeDrawer();
+      var openDrawerState = drawerState.find(function(state) { return state.isOpen; });
+
+      if (event.key === 'Escape' && openDrawerState) {
+        closeDrawer(openDrawerState, true);
         return;
       }
 
-      if (event.key === 'Tab' && isOpen) {
-        var focusable = getFocusableDrawerItems();
+      if (event.key === 'Tab' && openDrawerState) {
+        var focusable = getFocusableDrawerItems(openDrawerState.cfg.drawer);
         if (!focusable.length) return;
 
         var first = focusable[0];

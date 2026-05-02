@@ -31,6 +31,15 @@
     class="navbar-admin-toggle"
     data-role="admin"
     aria-expanded="false"
+    aria-controls="planningDrawer">
+    Planning
+  </button>
+
+  <button
+    type="button"
+    class="navbar-admin-toggle"
+    data-role="admin"
+    aria-expanded="false"
     aria-controls="adminManagementDrawer">
     Management
   </button>
@@ -42,6 +51,19 @@
 </header>
 
 <div id="adminDrawerBackdrop" class="navbar-drawer-backdrop" data-role="admin" hidden></div>
+<div id="planningDrawerBackdrop" class="navbar-drawer-backdrop" data-role="admin" hidden></div>
+
+<aside id="planningDrawer" class="navbar-admin-drawer" data-role="admin" hidden aria-label="Planning Menu">
+  <div class="navbar-drawer-header">
+    <div class="navbar-drawer-title">Planning</div>
+    <button type="button" class="navbar-drawer-close" aria-label="Close planning menu">×</button>
+  </div>
+
+  <div class="navbar-drawer-links" style="padding-top:0.6rem;">
+    <a href="recipe_calendar_upload.html" class="navbar-submenu-item">Upload Planners</a>
+    <a href="admin_match_recipes.html" class="navbar-submenu-item">Match Planner Recipes</a>
+  </div>
+</aside>
 
 <aside id="adminManagementDrawer" class="navbar-admin-drawer" data-role="admin" hidden aria-label="Management Menu">
   <div class="navbar-drawer-header">
@@ -83,14 +105,6 @@
       <a href="admin_aisle_keywords.html" class="navbar-submenu-item">Load Aisle Keywords</a>
       <a href="calculate_qty.html" class="navbar-submenu-item">Calculate Qty</a>
       <a href="calculate_servings.html" class="navbar-submenu-item">Calculate Servings</a>
-    </div>
-  </details>
-
-  <details class="navbar-drawer-group">
-    <summary>Planning</summary>
-    <div class="navbar-drawer-links">
-      <a href="recipe_calendar_upload.html" class="navbar-submenu-item">Upload Planners</a>
-      <a href="admin_match_recipes.html" class="navbar-submenu-item">Match Planner Recipes</a>
     </div>
   </details>
 
