@@ -967,4 +967,96 @@ router.get('/recipes/:id', async (req, res) => {
   }
 });
 
+// POST /api/recipes/:id/adjust — Clone a recipe with user modifications
+// Body: { name, ingredients, serving_size, description }
+// Auth: requires logged-in user (email + name from session)
+router.post('/:id/adjust', async (req, res) => {
+  const baseId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(baseId) || baseId <= 0) {
+    return res.status(400).json({ error: 'Invalid base recipe ID.' });
+  }
+
+  const createdByEmail = String(req.authUserEmail || '').trim().toLowerCase();
+  const createdByName = String((req.authUser && req.authUser.name) || createdByEmail || '').trim();
+  if (!createdByEmail) {
+    return res.status(401).json({ error: 'You must be logged in to adjust a recipe.' });
+  }
+
+  const name = String(req.body.name || '').trim();
+  if (!name) {
+    return res.status(400).json({ error: 'Recipe name is required.' });
+  }
+
+  const ingredientsText = String(req.body.ingredients || '').trim();
+  const servingRaw = req.body.serving_size;
+  const servingSize = servingRaw != null && servingRaw !== '' ? Number(servingRaw) : null;
+  const description = String(req.body.description || '').trim() || null;
+
+  try {
+    // Fetch base recipe so we can copy fields we are not changing
+    const baseResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [baseId]);
+    if (baseResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Base recipe not found.' });
+    }
+    const base = baseResult.rows[0];
+
+    const finalIngredients = ingredientsText || base.ingredients || null;
+    const ingredientsDisplay = finalIngredients ? multilineTextToHtmlList(finalIngredients, false) : (base.ingredients_display || null);
+    const finalServing = (servingSize != null && Number.isFinite(servingSize)) ? servingSize : base.serving_size;
+
+    const insertResult = await pool.query(
+      `INSERT INTO recipes (
+        name, description, url,
+        serving_size,
+        ingredients, instructions, extracted_ingredients, instructions_extracted,
+        ingredients_display, instructions_display, ingredients_inventories,
+        adjusted_from_id, created_by_email, created_by_name
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      RETURNING id`,
+      [
+        name,
+        description || `Adjusted from "${base.name}"`,
+        base.url || null,
+        finalServing,
+        finalIngredients,
+        base.instructions || null,
+        finalIngredients,
+        base.instructions_extracted || null,
+        ingredientsDisplay,
+        base.instructions_display || null,
+        base.ingredients_inventories || null,
+        baseId,
+        createdByEmail,
+        createdByName
+      ]
+    );
+
+    const newId = insertResult.rows[0].id;
+    res.json({ success: true, recipeId: newId, name });
+  } catch (err) {
+    console.error('[adjust recipe]', err);
+    res.status(500).json({ error: err.message || 'Failed to save adjusted recipe.' });
+  }
+});
+
+// GET /api/recipes/mine — Recipes created/adjusted by the logged-in user
+router.get('/mine', async (req, res) => {
+  const email = String(req.authUserEmail || '').trim().toLowerCase();
+  if (!email) return res.status(401).json({ error: 'Not authenticated.' });
+  try {
+    const result = await pool.query(
+      `SELECT r.id, r.name, r.description, r.url, r.serving_size, r.adjusted_from_id,
+              b.name AS base_recipe_name
+       FROM recipes r
+       LEFT JOIN recipes b ON b.id = r.adjusted_from_id
+       WHERE lower(coalesce(r.created_by_email,'')) = $1
+       ORDER BY r.id DESC`,
+      [email]
+    );
+    res.json({ recipes: result.rows });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

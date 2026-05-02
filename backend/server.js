@@ -558,6 +558,17 @@ async function ensureRecipeDisplayImageColumn() {
   recipeDisplayImageColumnEnsured = true;
 }
 
+// Ensure adjusted-recipe tracking columns exist on recipes table
+(async () => {
+  try {
+    await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS adjusted_from_id INTEGER');
+    await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_by_email TEXT');
+    await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_by_name TEXT');
+  } catch (e) {
+    console.warn('[startup] Could not ensure adjusted recipe columns:', e.message);
+  }
+})();
+
 function parseImageDataUrl(dataUrl) {
   const raw = String(dataUrl || '');
   const match = /^data:image\/(png|jpeg|jpg|webp|gif)(?:;charset=[^;,]+)?;base64,(.+)$/i.exec(raw);

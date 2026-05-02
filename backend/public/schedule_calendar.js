@@ -117,6 +117,7 @@ function choosePlannerRecipeVersion(booking, linkedRecipes) {
       ${choicesHtml || '<div style="color:#9ca3af;font-size:0.9rem;">No linked recipes found for this planner item.</div>'}
       <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.8rem;border-top:1px solid #e5e7eb;padding-top:0.75rem;">
         <button type="button" id="plannerVersionCancelBtn" style="padding:0.42rem 0.82rem;border:1px solid #cbd5e1;background:#f8fafc;border-radius:6px;cursor:pointer;">Cancel</button>
+        <button type="button" id="plannerVersionAdjustBtn" style="padding:0.42rem 0.82rem;border:1px solid #059669;background:#ecfdf5;color:#065f46;border-radius:6px;cursor:pointer;${list.length ? '' : 'display:none;'}">Adjust Recipe</button>
         <button type="button" id="plannerVersionUseBtn" style="padding:0.42rem 0.82rem;border:none;background:#1976d2;color:#fff;border-radius:6px;cursor:pointer;${list.length ? '' : 'display:none;'}">Use This Version</button>
       </div>
     `;
@@ -130,11 +131,23 @@ function choosePlannerRecipeVersion(booking, linkedRecipes) {
 
     const cancelBtn = modal.querySelector('#plannerVersionCancelBtn');
     const useBtn = modal.querySelector('#plannerVersionUseBtn');
+    const adjustBtn = modal.querySelector('#plannerVersionAdjustBtn');
 
     if (cancelBtn) {
       cancelBtn.onclick = () => {
         cleanup();
         resolve(null);
+      };
+    }
+
+    if (adjustBtn) {
+      adjustBtn.onclick = () => {
+        const selected = modal.querySelector('input[name="plannerRecipeChoice"]:checked');
+        if (!selected) { resolve(null); cleanup(); return; }
+        const selectedId = String(selected.value || '').trim();
+        const selectedRecipe = list.find((item) => String(item.recipe_id != null ? item.recipe_id : item.id) === selectedId) || null;
+        cleanup();
+        resolve({ action: 'adjust', recipe: selectedRecipe });
       };
     }
 
@@ -162,6 +175,171 @@ function choosePlannerRecipeVersion(booking, linkedRecipes) {
   });
 }
 
+// Parse a plain-text ingredients list into [{qty, unit, name}] rows
+function parseIngredientLines(text) {
+  if (!text) return [];
+  return String(text).split('\n').map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return null;
+    // Match: optional qty (number or fraction), optional unit word, rest as name
+    const m = trimmed.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.\-\s]+(?:\/\d+)?)\s*([a-zA-Z]+(?:\.))?\s+(.+)$/) ||
+              trimmed.match(/^([\d¼½¾⅓⅔⅛⅜⅝⅞\/\.]+)\s+(.+)$/);
+    if (m && m.length >= 4) return { qty: m[1].trim(), unit: m[2] ? m[2].trim() : '', name: m[3].trim() };
+    if (m && m.length === 3) return { qty: m[1].trim(), unit: '', name: m[2].trim() };
+    return { qty: '', unit: '', name: trimmed };
+  }).filter(Boolean);
+}
+
+// Show the Adjust Recipe modal — lets user rename + edit ingredients before saving as new recipe
+async function showAdjustRecipeModal(baseRecipeRef, plannerBooking) {
+  return new Promise(async (resolve) => {
+    // Fetch full recipe details from server
+    const baseId = baseRecipeRef && (baseRecipeRef.recipe_id != null ? baseRecipeRef.recipe_id : baseRecipeRef.id);
+    let fullRecipe = baseRecipeRef;
+    try {
+      const r = await fetch(`/api/recipes/${encodeURIComponent(String(baseId))}`);
+      if (r.ok) fullRecipe = await r.json();
+    } catch (_) { /* use what we have */ }
+
+    // Get current user name for default recipe name
+    let userName = '';
+    try {
+      const me = await fetch('/api/auth/me');
+      if (me.ok) {
+        const meData = await me.json();
+        if (meData.user && meData.user.name) userName = meData.user.name.split(' ').slice(-1)[0]; // last name
+      }
+    } catch (_) { /* ignore */ }
+
+    const baseName = String((fullRecipe && fullRecipe.name) || (plannerBooking && plannerBooking.recipe) || 'Recipe').trim();
+    const defaultName = userName ? `${baseName} - ${userName}` : baseName;
+    const ingredientLines = parseIngredientLines((fullRecipe && fullRecipe.ingredients) || '');
+    const servingSize = (fullRecipe && fullRecipe.serving_size) || '';
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.52);display:flex;align-items:center;justify-content:center;z-index:10002;';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,0.28);padding:1.1rem 1.2rem;max-width:680px;width:min(95vw,680px);max-height:90vh;overflow:auto;';
+
+    const ingredientRowsHtml = ingredientLines.length
+      ? ingredientLines.map((ing, i) => `
+        <tr data-row="${i}">
+          <td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-qty" value="${escHtml(ing.qty)}" style="width:60px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="qty" /></td>
+          <td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-unit" value="${escHtml(ing.unit)}" style="width:70px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="unit" /></td>
+          <td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-name" value="${escHtml(ing.name)}" style="width:100%;min-width:200px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="ingredient" /></td>
+          <td style="padding:0.2rem 0.3rem;"><button type="button" class="adj-remove-row" style="color:#dc2626;background:none;border:none;cursor:pointer;font-size:1rem;line-height:1;" title="Remove">✕</button></td>
+        </tr>`).join('')
+      : `<tr data-row="0"><td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-qty" style="width:60px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="qty" /></td><td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-unit" style="width:70px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="unit" /></td><td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-name" style="width:100%;min-width:200px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="ingredient" /></td><td><button type="button" class="adj-remove-row" style="color:#dc2626;background:none;border:none;cursor:pointer;font-size:1rem;" title="Remove">✕</button></td></tr>`;
+
+    modal.innerHTML = `
+      <div style="font-size:1.12rem;font-weight:700;color:#1f2937;margin-bottom:0.2rem;">Adjust Recipe</div>
+      <div style="font-size:0.85rem;color:#6b7280;margin-bottom:0.8rem;">Based on: <strong>${escHtml(baseName)}</strong> (ID ${escHtml(String(baseId || ''))}). Changes are saved as your own copy.</div>
+      <div style="margin-bottom:0.6rem;">
+        <label style="font-size:0.82rem;font-weight:600;color:#374151;display:block;margin-bottom:0.2rem;">Recipe Name</label>
+        <input id="adjRecipeName" type="text" value="${escHtml(defaultName)}" style="width:100%;padding:0.38rem 0.5rem;border:1px solid #d1d5db;border-radius:6px;font-size:0.95rem;box-sizing:border-box;" />
+      </div>
+      <div style="margin-bottom:0.6rem;">
+        <label style="font-size:0.82rem;font-weight:600;color:#374151;display:block;margin-bottom:0.2rem;">Serves (class size)</label>
+        <input id="adjServingSize" type="number" value="${escHtml(String(servingSize))}" min="1" style="width:90px;padding:0.38rem 0.5rem;border:1px solid #d1d5db;border-radius:6px;font-size:0.95rem;" />
+      </div>
+      <div style="margin-bottom:0.4rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
+          <label style="font-size:0.82rem;font-weight:600;color:#374151;">Ingredients</label>
+          <button type="button" id="adjAddRow" style="font-size:0.8rem;padding:0.2rem 0.55rem;border:1px solid #059669;background:#ecfdf5;color:#065f46;border-radius:5px;cursor:pointer;">+ Add Ingredient</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table id="adjIngredientsTable" style="width:100%;border-collapse:collapse;">
+            <thead><tr style="font-size:0.78rem;color:#6b7280;text-align:left;">
+              <th style="padding:0.2rem 0.3rem;font-weight:600;">Qty</th>
+              <th style="padding:0.2rem 0.3rem;font-weight:600;">Unit</th>
+              <th style="padding:0.2rem 0.3rem;font-weight:600;">Ingredient</th>
+              <th></th>
+            </tr></thead>
+            <tbody id="adjIngredientRows">${ingredientRowsHtml}</tbody>
+          </table>
+        </div>
+      </div>
+      <div id="adjError" style="color:#dc2626;font-size:0.82rem;margin-top:0.4rem;display:none;"></div>
+      <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.9rem;border-top:1px solid #e5e7eb;padding-top:0.75rem;">
+        <button type="button" id="adjCancelBtn" style="padding:0.42rem 0.82rem;border:1px solid #cbd5e1;background:#f8fafc;border-radius:6px;cursor:pointer;">Cancel</button>
+        <button type="button" id="adjSaveBtn" style="padding:0.42rem 0.9rem;border:none;background:#059669;color:#fff;border-radius:6px;cursor:pointer;font-weight:600;">Save My Version</button>
+      </div>
+    `;
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const cleanup = () => { overlay.remove(); };
+
+    // Remove row buttons
+    modal.querySelector('#adjIngredientRows').addEventListener('click', (e) => {
+      if (e.target && e.target.classList.contains('adj-remove-row')) {
+        const row = e.target.closest('tr');
+        if (row) row.remove();
+      }
+    });
+
+    // Add row button
+    modal.querySelector('#adjAddRow').addEventListener('click', () => {
+      const tbody = modal.querySelector('#adjIngredientRows');
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-qty" style="width:60px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="qty" /></td>
+        <td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-unit" style="width:70px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="unit" /></td>
+        <td style="padding:0.2rem 0.3rem;"><input type="text" class="adj-name" style="width:100%;min-width:200px;padding:0.2rem 0.35rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.88rem;" placeholder="ingredient" /></td>
+        <td style="padding:0.2rem 0.3rem;"><button type="button" class="adj-remove-row" style="color:#dc2626;background:none;border:none;cursor:pointer;font-size:1rem;line-height:1;" title="Remove">✕</button></td>
+      `;
+      tbody.appendChild(tr);
+      tr.querySelector('.adj-name').focus();
+    });
+
+    modal.querySelector('#adjCancelBtn').addEventListener('click', () => { cleanup(); resolve(null); });
+
+    modal.querySelector('#adjSaveBtn').addEventListener('click', async () => {
+      const name = modal.querySelector('#adjRecipeName').value.trim();
+      if (!name) {
+        const err = modal.querySelector('#adjError');
+        err.textContent = 'Recipe name is required.';
+        err.style.display = '';
+        return;
+      }
+      // Collect ingredient rows → plain text
+      const rows = Array.from(modal.querySelectorAll('#adjIngredientRows tr'));
+      const ingredientsText = rows.map((row) => {
+        const qty = (row.querySelector('.adj-qty') || {}).value || '';
+        const unit = (row.querySelector('.adj-unit') || {}).value || '';
+        const ingName = (row.querySelector('.adj-name') || {}).value || '';
+        return [qty, unit, ingName].filter(Boolean).join(' ').trim();
+      }).filter(Boolean).join('\n');
+
+      const servingSize = modal.querySelector('#adjServingSize').value;
+      const saveBtn = modal.querySelector('#adjSaveBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Saving…';
+
+      try {
+        const res = await fetch(`/api/recipes/${encodeURIComponent(String(baseId))}/adjust`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, ingredients: ingredientsText, serving_size: servingSize || null })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to save adjusted recipe.');
+        cleanup();
+        resolve({ recipeId: data.recipeId, name });
+      } catch (err) {
+        const errEl = modal.querySelector('#adjError');
+        errEl.textContent = err.message || 'Could not save recipe.';
+        errEl.style.display = '';
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Save My Version';
+      }
+    });
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); resolve(null); } });
+  });
+}
+
 async function handlePlannerChipClick(bookingId) {
   const normalizedId = Number(bookingId);
   if (!Number.isInteger(normalizedId) || normalizedId <= 0) return;
@@ -179,9 +357,24 @@ async function handlePlannerChipClick(bookingId) {
       return;
     }
 
-    const selectedRecipe = await choosePlannerRecipeVersion(plannerBooking, linkedRecipes);
-    if (!selectedRecipe) return;
+    const result = await choosePlannerRecipeVersion(plannerBooking, linkedRecipes);
+    if (!result) return;
 
+    // Handle "Adjust Recipe" action
+    if (result && result.action === 'adjust') {
+      const adjustedRecipe = await showAdjustRecipeModal(result.recipe, plannerBooking);
+      if (!adjustedRecipe) return;
+      const bookingForForm = {
+        ...plannerBooking,
+        recipe_id: adjustedRecipe.recipeId,
+        recipe: adjustedRecipe.name
+      };
+      publishBookingToBookClassForm(bookingForForm);
+      showInfoToast(`Adjusted recipe saved: ${adjustedRecipe.name}`);
+      return;
+    }
+
+    const selectedRecipe = result;
     const selectedRecipeId = selectedRecipe.recipe_id != null ? selectedRecipe.recipe_id : selectedRecipe.id;
     const selectedRecipeName = String(selectedRecipe.name || plannerBooking.recipe || '').trim();
     const bookingForForm = {
