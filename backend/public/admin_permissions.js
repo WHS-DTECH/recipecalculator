@@ -1,5 +1,16 @@
 let permissionsData = [];
-let ROUTES = ['inventory', 'add_recipes', 'recipes', 'shopping', 'booking', 'planning', 'admin'];
+let ROUTES = ['inventory', 'add_recipes', 'recipes', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
+const ROUTE_LABELS = {
+  inventory: 'Homepage',
+  add_recipes: 'Add Recipes',
+  recipes: 'View Recipes',
+  shopping: 'Book Shopping',
+  booking: 'Add Booking',
+  food_truck: 'Food Truck',
+  ft_teacher: 'FT Teacher',
+  planning: 'Planning',
+  admin: 'Admin'
+};
 
 function getCurrentStaffEmail() {
   try {
@@ -47,7 +58,11 @@ function fetchPermissions() {
 }
 
 function renderPermissionsTable(roles = []) {
+  const headRow = document.getElementById('permissionsHeadRow');
   const body = document.getElementById('permissionsBody');
+  if (headRow) {
+    headRow.innerHTML = `<th>Role</th>${ROUTES.map(route => `<th>${ROUTE_LABELS[route] || formatRoleName(route)}</th>`).join('')}`;
+  }
   if (!roles.length) {
     body.innerHTML = `<tr><td colspan="${ROUTES.length + 1}">No roles found.</td></tr>`;
     return;
