@@ -216,7 +216,7 @@
       margin-bottom: 2px;
     }
 
-    .info-item value {
+    .info-item .info-value {
       color: #1f2937;
       word-break: break-all;
     }
@@ -522,6 +522,10 @@
       background: var(--error);
     }
 
+    .toast.info {
+      background: #1565c0;
+    }
+
     @keyframes slideIn {
       from {
         transform: translateX(400px);
@@ -777,6 +781,7 @@
     <div class="header">
       <h1>Match Planner Recipes</h1>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <button class="btn btn-secondary" onclick="printNoUrlReview()">Print Review Sheet</button>
         <button class="btn btn-warning" id="resaveAuditBtn">Find Re-save Candidates</button>
         <button class="btn btn-primary" id="autoMatchBtn">Auto-Match All Unmatched</button>
         <button class="btn btn-primary" id="auditLoadMissingBtn">Audit All + Load Missing Ingredients</button>
@@ -1291,7 +1296,7 @@
               <input type="checkbox" class="suggestion-checkbox" id="chk_${booking.id}_${s.id}" value="${s.id}" title="Select to link this version">
               <div class="suggestion-main">
                 <label for="chk_${booking.id}_${s.id}" style="cursor:pointer;">
-                  <div class="suggestion-name" onclick="openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${s.name || 'Unknown'}</div>
+                  <div class="suggestion-name" onclick="event.stopPropagation(); openRecipePreviewModal(${s.id})" title="Click to preview this recipe">${escapeHtml(s.name || 'Unknown')}</div>
                 </label>
                 <div class="suggestion-source">${s.url ? `<a href="${s.url}" target="_blank" rel="noopener" title="${s.url}">${s.url}</a>` : '<em>No source URL</em>'}</div>
               </div>
@@ -1315,21 +1320,21 @@
         html += `
           <div class="recipe-card ${cardClass}">
             <div class="recipe-header">
-              <h3 class="recipe-name${suggestions.length > 1 && !isMatched ? ' recipe-name-clickable' : ''}" ${suggestions.length > 1 && !isMatched ? `onclick="openCompareModal(${booking.id})" title="Click to compare all versions"` : ''}>${booking.recipe || 'Unknown'}</h3>
+              <h3 class="recipe-name${suggestions.length > 1 && !isMatched ? ' recipe-name-clickable' : ''}" ${suggestions.length > 1 && !isMatched ? `onclick="openCompareModal(${booking.id})" title="Click to compare all versions"` : ''}>${escapeHtml(booking.recipe || 'Unknown')}</h3>
               <div style="display:flex;align-items:center;gap:6px;">${multiVersionBadge}${badge}</div>
             </div>
             <div class="recipe-info">
               <div class="info-item">
                 <label>Class</label>
-                <value>${booking.class_name || '-'}</value>
+                <span class="info-value">${escapeHtml(booking.class_name || '-')}</span>
               </div>
               <div class="info-item">
                 <label>Date</label>
-                <value>${booking.booking_date || '-'}</value>
+                <span class="info-value">${escapeHtml(booking.booking_date || '-')}</span>
               </div>
               <div class="info-item">
                 <label>URL</label>
-                <value>${booking.recipe_url ? `<a href="${booking.recipe_url}" target="_blank" style="color: #1976d2;">View</a>` : '-'}</value>
+                <span class="info-value">${booking.recipe_url ? `<a href="${escapeHtml(safeUrl(booking.recipe_url))}" target="_blank" rel="noopener" style="color: #1976d2;">View</a>` : '-'}</span>
               </div>
             </div>
             ${isMatched && Array.isArray(booking.linked_recipes) && booking.linked_recipes.length > 0 ? `
@@ -1339,7 +1344,7 @@
                   <div class="linked-recipe-row">
                     <button class="star-btn ${Number(r.recipe_id) === Number(booking.recipe_id) ? 'is-primary' : ''}" onclick="setAsPrimary(${booking.id}, ${r.recipe_id})" title="${Number(r.recipe_id) === Number(booking.recipe_id) ? 'Primary recipe (shown on index page)' : 'Click to make this the primary recipe'}">&#9733;</button>
                     <div class="linked-recipe-main">
-                      <div class="linked-recipe-name">${r.name || 'Unknown'}${Number(r.recipe_id) === Number(booking.recipe_id) && booking.linked_recipes.length > 1 ? '<span class="linked-recipe-primary-label"> primary</span>' : ''}</div>
+                      <div class="linked-recipe-name">${escapeHtml(r.name || 'Unknown')}${Number(r.recipe_id) === Number(booking.recipe_id) && booking.linked_recipes.length > 1 ? '<span class="linked-recipe-primary-label"> primary</span>' : ''}</div>
                       <div class="linked-recipe-source">${formatLinkedRecipeSource(r.url)}</div>
                     </div>
                   </div>
@@ -1423,6 +1428,18 @@
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+    }
+
+    function safeUrl(value) {
+      const s = String(value || '').trim();
+      if (!s) return '';
+      try {
+        const u = new URL(s);
+        if (u.protocol !== 'https:' && u.protocol !== 'http:') return '';
+      } catch (_) {
+        return '';
+      }
+      return s;
     }
 
     function formatLinkedRecipeSource(url) {
@@ -1895,6 +1912,78 @@
       toast.textContent = message;
       document.body.appendChild(toast);
       setTimeout(() => toast.remove(), 3000);
+    }
+
+    function printNoUrlReview() {
+      const noUrl = allBookings
+        .filter(b => !b.recipe_id && !b.recipe_url)
+        .sort((a, b) => {
+          const cls = (a.class_name || '').localeCompare(b.class_name || '');
+          if (cls !== 0) return cls;
+          return (a.booking_date || '').localeCompare(b.booking_date || '');
+        });
+
+      if (!noUrl.length) {
+        showToast('No unmatched recipes without a URL found.', 'info');
+        return;
+      }
+
+      const rows = noUrl.map((b, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${escapeHtml(b.recipe || 'Unknown')}</td>
+          <td>${escapeHtml(b.class_name || '-')}</td>
+          <td>${escapeHtml(b.booking_date || '-')}</td>
+          <td></td>
+        </tr>
+      `).join('');
+
+      const dateStr = new Date().toLocaleDateString('en-NZ', { day: '2-digit', month: 'long', year: 'numeric' });
+
+      const win = window.open('', '_blank');
+      win.document.write(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Recipes Needing Review &#8212; No Source URL</title>
+  <style>
+    @page { size: A4 portrait; margin: 18mm 14mm; }
+    * { box-sizing: border-box; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 11pt; color: #111; margin: 0; }
+    h1 { font-size: 16pt; margin: 0 0 4px 0; color: #1a237e; }
+    .subtitle { font-size: 9pt; color: #555; margin: 0 0 4px 0; }
+    .count { font-size: 10pt; color: #333; margin: 0 0 14px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    thead th { background: #1565c0; color: #fff; text-align: left; padding: 7px 8px; font-size: 10pt; }
+    tbody td { padding: 6px 8px; border-bottom: 1px solid #ddd; font-size: 10pt; vertical-align: top; }
+    tbody tr:nth-child(even) td { background: #f5f8ff; }
+    .col-num { width: 32px; }
+    .col-class { width: 80px; }
+    .col-date { width: 90px; }
+    .col-notes { width: 100px; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+  <h1>Recipes Needing Review &#8212; No Source URL</h1>
+  <p class="subtitle">Generated: ${escapeHtml(dateStr)}</p>
+  <p class="count">${noUrl.length} recipe${noUrl.length !== 1 ? 's' : ''} need review and have no source URL attached.</p>
+  <table>
+    <thead>
+      <tr>
+        <th class="col-num">#</th>
+        <th>Recipe Name</th>
+        <th class="col-class">Class</th>
+        <th class="col-date">Date</th>
+        <th class="col-notes">Notes</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+  <script>window.onload = () => window.print();<\/script>
+</body>
+</html>`);
+      win.document.close();
     }
   </script>
 </body>
