@@ -173,7 +173,7 @@ router.get('/by_teacher', async (req, res) => {
     bookingIds = bookingIds.split(',').map(id => id.trim()).filter(Boolean);
   }
   const placeholders = bookingIds.map((_, i) => `$${i + 1}`).join(',');
-  const sql = `
+  const dsiSql = `
     WITH selected_bookings AS (
       SELECT
         b.id AS booking_id,
@@ -182,60 +182,57 @@ router.get('/by_teacher', async (req, res) => {
         b.staff_name
       FROM bookings b
       WHERE b.id IN (${placeholders})
-    ),
-    dsi_rows AS (
-      SELECT
-        dsi.staff_id::text AS staff_id,
-        dsi.teacher::text AS teacher,
-        dsi.ingredient_name::text AS ingredient_name,
-        dsi.measure_qty::numeric AS measure_qty,
-        dsi.measure_unit::text AS measure_unit,
-        dsi.fooditem::text AS fooditem,
-        dsi.stripfooditem::text AS stripfooditem,
-        dsi.calculated_qty::numeric AS calculated_qty,
-        dsi.aisle_category_id::text AS aisle_category_id
-      FROM desired_servings_ingredients dsi
-      INNER JOIN selected_bookings sb ON sb.booking_id = dsi.booking_id
-    ),
-    fallback_rows AS (
-      SELECT
-        sb.staff_id::text AS staff_id,
-        sb.staff_name::text AS teacher,
-        inv.ingredient_name::text AS ingredient_name,
-        inv.measure_qty::numeric AS measure_qty,
-        inv.measure_unit::text AS measure_unit,
-        inv.fooditem::text AS fooditem,
-        inv.stripfooditem::text AS stripfooditem,
-        NULL::numeric AS calculated_qty,
-        inv.aisle_category_id::text AS aisle_category_id
-      FROM selected_bookings sb
-      INNER JOIN ingredients_inventory inv
-        ON btrim(COALESCE(inv.recipe_id::text, '')) = btrim(COALESCE(sb.recipe_id::text, ''))
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM desired_servings_ingredients d
-        WHERE d.booking_id = sb.booking_id
-      )
     )
     SELECT
-      src.staff_id,
-      src.teacher,
-      src.ingredient_name,
-      src.measure_qty,
-      src.measure_unit,
-      src.fooditem,
-      src.stripfooditem,
-      src.calculated_qty,
+      dsi.staff_id::text AS staff_id,
+      dsi.teacher::text AS teacher,
+      dsi.ingredient_name,
+      dsi.measure_qty,
+      dsi.measure_unit,
+      dsi.fooditem,
+      dsi.stripfooditem,
+      dsi.calculated_qty,
       COALESCE(ac.name, '') AS aisle_category_name
-    FROM (
-      SELECT * FROM dsi_rows
-      UNION ALL
-      SELECT * FROM fallback_rows
-    ) src
-    LEFT JOIN aisle_category ac ON ac.id::text = src.aisle_category_id
+    FROM desired_servings_ingredients dsi
+    INNER JOIN selected_bookings sb ON sb.booking_id = dsi.booking_id
+    LEFT JOIN aisle_category ac ON ac.id = dsi.aisle_category_id
+  `;
+  const fallbackSql = `
+    WITH selected_bookings AS (
+      SELECT
+        b.id AS booking_id,
+        b.recipe_id,
+        b.staff_id,
+        b.staff_name
+      FROM bookings b
+      WHERE b.id IN (${placeholders})
+    )
+    SELECT
+      sb.staff_id::text AS staff_id,
+      sb.staff_name::text AS teacher,
+      inv.ingredient_name,
+      inv.measure_qty,
+      inv.measure_unit,
+      inv.fooditem,
+      inv.stripfooditem,
+      NULL::numeric AS calculated_qty,
+      COALESCE(ac.name, '') AS aisle_category_name
+    FROM selected_bookings sb
+    INNER JOIN ingredients_inventory inv
+      ON btrim(COALESCE(inv.recipe_id::text, '')) = btrim(COALESCE(sb.recipe_id::text, ''))
+    LEFT JOIN aisle_category ac ON ac.id::text = inv.aisle_category_id::text
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM desired_servings_ingredients d
+      WHERE d.booking_id = sb.booking_id
+    )
   `;
   try {
-    const { rows } = await pool.query(sql, bookingIds);
+    const [dsiResult, fallbackResult] = await Promise.all([
+      pool.query(dsiSql, bookingIds),
+      pool.query(fallbackSql, bookingIds)
+    ]);
+    const rows = [...(dsiResult.rows || []), ...(fallbackResult.rows || [])];
     const grouped = {};
     rows.forEach(row => {
       if (String(row.aisle_category_name || '').trim().toLowerCase() === 'action') return;
