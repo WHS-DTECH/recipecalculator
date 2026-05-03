@@ -30,6 +30,9 @@ const scheduleCalendarSourceId = `schedule-${Date.now()}-${Math.random().toStrin
 const scheduleCalendarSharedChannel = ('BroadcastChannel' in window)
   ? new BroadcastChannel(bookClassSharedChannelName)
   : null;
+const scheduleCalendarFilters = (window && window.scheduleCalendarFilters && typeof window.scheduleCalendarFilters === 'object')
+  ? window.scheduleCalendarFilters
+  : {};
 let lastCalendarRefreshSignalAt = 0;
 let scheduleViewMode = (() => {
   const saved = String(localStorage.getItem(scheduleViewModeStorageKey) || '').trim().toLowerCase();
@@ -836,6 +839,17 @@ function getISODate(date) {
   return toLocalIsoDate(date);
 }
 
+function readCurrentSharedStaffId() {
+  try {
+    const raw = localStorage.getItem(bookClassSharedStateKey);
+    if (!raw) return '';
+    const parsed = JSON.parse(raw);
+    return String(parsed && parsed.staffId || '').trim();
+  } catch {
+    return '';
+  }
+}
+
 // Fetch bookings for the current week
 async function fetchBookingsForWeek(monday) {
   // Align filtering to the user's regional week start.
@@ -844,7 +858,22 @@ async function fetchBookingsForWeek(monday) {
   weekEndDate.setDate(weekStartDate.getDate() + WEEK_DAYS_COUNT - 1);
   const start = toLocalIsoDate(weekStartDate);
   const end = toLocalIsoDate(weekEndDate);
-  const res = await fetch(`/api/bookings/all?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`);
+  const params = new URLSearchParams({ start, end });
+
+  const plannerStream = String(scheduleCalendarFilters.plannerStream || '').trim();
+  if (plannerStream) {
+    params.set('planner_stream', plannerStream);
+  }
+
+  if (scheduleCalendarFilters.selectedStaffOnly === true) {
+    const selectedStaffId = readCurrentSharedStaffId();
+    if (!selectedStaffId) {
+      return [];
+    }
+    params.set('staff_id', selectedStaffId);
+  }
+
+  const res = await fetch(`/api/bookings/all?${params.toString()}`);
   const data = await res.json();
   return Array.isArray(data.bookings) ? data.bookings : [];
 }
@@ -1191,10 +1220,11 @@ document.addEventListener('DOMContentLoaded', () => {
   if (scheduleCalendarSharedChannel) {
     scheduleCalendarSharedChannel.addEventListener('message', (event) => {
       const state = event && event.data ? event.data : null;
-      if (!state || !state.refreshCalendarAt) return;
-      const refreshAt = Number(state.refreshCalendarAt);
-      if (!Number.isFinite(refreshAt) || refreshAt <= lastCalendarRefreshSignalAt) return;
-      lastCalendarRefreshSignalAt = refreshAt;
+      if (!state) return;
+      const refreshAt = Number(state.refreshCalendarAt || 0);
+      if (Number.isFinite(refreshAt) && refreshAt > lastCalendarRefreshSignalAt) {
+        lastCalendarRefreshSignalAt = refreshAt;
+      }
       renderScheduleCalendar();
     });
   }

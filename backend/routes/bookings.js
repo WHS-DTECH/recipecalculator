@@ -770,27 +770,51 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
   }
 });
 
-// Get all bookings — optional ?start=YYYY-MM-DD&end=YYYY-MM-DD to filter by date range
+// Get all bookings — optional filters:
+// ?start=YYYY-MM-DD&end=YYYY-MM-DD (date range)
+// ?staff_id=<id> (staff-scoped)
+// ?planner_stream=<stream label>
 router.get('/all', async (req, res) => {
   try {
     await ensureSchema();
-    const { start, end } = req.query;
+    const { start, end, staff_id, planner_stream } = req.query;
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     if ((start && !dateRe.test(start)) || (end && !dateRe.test(end))) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
+
+    const normalizedStaffId = String(staff_id || '').trim();
+    const normalizedPlannerStream = String(planner_stream || '').trim();
+
     let query = 'SELECT * FROM bookings';
     const params = [];
+    const where = [];
+
     if (start && end) {
-      query += ' WHERE booking_date >= $1 AND booking_date <= $2';
+      where.push(`booking_date >= $${params.length + 1} AND booking_date <= $${params.length + 2}`);
       params.push(start, end);
     } else if (start) {
-      query += ' WHERE booking_date >= $1';
+      where.push(`booking_date >= $${params.length + 1}`);
       params.push(start);
     } else if (end) {
-      query += ' WHERE booking_date <= $1';
+      where.push(`booking_date <= $${params.length + 1}`);
       params.push(end);
     }
+
+    if (normalizedStaffId) {
+      where.push(`cast(staff_id as text) = $${params.length + 1}`);
+      params.push(normalizedStaffId);
+    }
+
+    if (normalizedPlannerStream) {
+      where.push(`lower(coalesce(planner_stream, '')) = lower($${params.length + 1})`);
+      params.push(normalizedPlannerStream);
+    }
+
+    if (where.length) {
+      query += ` WHERE ${where.join(' AND ')}`;
+    }
+
     query += ' ORDER BY booking_date DESC, period';
     const result = await pool.query(query, params);
     res.json({ bookings: result.rows });

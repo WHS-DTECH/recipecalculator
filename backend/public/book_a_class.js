@@ -13,6 +13,7 @@ const isTeacherEmbedView = bookClassPageParams.get('view') === 'teacher_embed';
 const isFormOnlyView = bookClassPageParams.get('form_only') === '1';
 const isStudentListOnlyView = bookClassPageParams.get('student_list_only') === '1';
 const isTimetableOnlyView = bookClassPageParams.get('hide_booking_form') === '1' && bookClassPageParams.get('hide_student_panel') === '1';
+const forcedPlannerStream = String(bookClassPageParams.get('planner_stream') || '').trim();
 const canPublishSharedEmbedState = !isTeacherEmbedView || isFormOnlyView;
 const bookClassSharedStateKey = 'bookClassEmbedSharedState';
 const bookClassActionChannelName = 'bookClassActionChannel';
@@ -1148,7 +1149,8 @@ function saveBooking(options = {}) {
       recipe: recipeName,
       recipe_id: recipeId,
       class_size: classSize,
-      groups: groupsForBooking
+      groups: groupsForBooking,
+      planner_stream: forcedPlannerStream || undefined
     })
   })
     .then(res => res.json())
