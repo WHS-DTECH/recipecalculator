@@ -352,6 +352,7 @@
       let currentRecipeId = null;
       let currentDisplayRecipe = null;
       let currentUserEmail = '';
+      let ftImages = [null, null, null, null, null];
 
       function setStatus(message, type) {
         statusEl.textContent = message || '';
@@ -367,106 +368,80 @@
         if (type === 'error') imageStatus.classList.add('error');
       }
 
-      function setImageActionsEnabled(enabled) {
-        const on = !!enabled;
-        imageUploadBtn.disabled = !on;
-        imageSaveUrlBtn.disabled = !on;
-        imageClearBtn.disabled = !on;
+      // Build 5 photo upload slots dynamically.
+      const slots = [];
+      for (let _si = 1; _si <= 5; _si++) {
+        const slotEl = document.createElement('div');
+        slotEl.className = 'ft-image-slot';
+        slotEl.innerHTML =
+          '<div class="ft-slot-num">Photo ' + _si + '</div>' +
+          '<div class="ft-slot-preview"><img id="slotImg' + _si + '" alt="Photo ' + _si + '" src="' + FALLBACK_IMAGE + '"></div>' +
+          '<input id="slotFile' + _si + '" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ft-slot-file">' +
+          '<div class="ft-slot-btns">' +
+          '  <button type="button" class="ft-btn ft-slot-upload-btn" id="slotUpload' + _si + '" disabled>Upload</button>' +
+          '  <button type="button" class="ft-btn danger ft-slot-clear-btn" id="slotClear' + _si + '" disabled>Clear</button>' +
+          '</div>' +
+          '<div class="ft-slot-status" id="slotStatus' + _si + '"></div>';
+        slotsContainer.appendChild(slotEl);
+        slots.push({
+          img: document.getElementById('slotImg' + _si),
+          file: document.getElementById('slotFile' + _si),
+          uploadBtn: document.getElementById('slotUpload' + _si),
+          clearBtn: document.getElementById('slotClear' + _si),
+          statusEl: document.getElementById('slotStatus' + _si)
+        });
       }
 
-      function updateImageUI() {
-        const FALLBACK_IMAGE = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
-        let currentRecipeId = null;
-        let ftImages = [null, null, null, null, null];
+      function setSlotStatus(idx, msg, type) {
+        const s = slots[idx];
+        if (!s) return;
+        s.statusEl.textContent = msg || '';
+        s.statusEl.style.color = type === 'error' ? 'var(--ft-error)' : type === 'success' ? 'var(--ft-success)' : 'var(--ft-muted)';
+      }
 
-        // Build 5 photo upload slots dynamically
-        const slots = [];
-        for (let _si = 1; _si <= 5; _si++) {
-          const slotEl = document.createElement('div');
-          slotEl.className = 'ft-image-slot';
-          slotEl.innerHTML =
-            '<div class="ft-slot-num">Photo ' + _si + '</div>' +
-            '<div class="ft-slot-preview"><img id="slotImg' + _si + '" alt="Photo ' + _si + '" src="' + FALLBACK_IMAGE + '"></div>' +
-            '<input id="slotFile' + _si + '" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ft-slot-file">' +
-            '<div class="ft-slot-btns">' +
-            '  <button type="button" class="ft-btn ft-slot-upload-btn" id="slotUpload' + _si + '" disabled>Upload</button>' +
-            '  <button type="button" class="ft-btn danger ft-slot-clear-btn" id="slotClear' + _si + '" disabled>Clear</button>' +
-            '</div>' +
-            '<div class="ft-slot-status" id="slotStatus' + _si + '"></div>';
-          slotsContainer.appendChild(slotEl);
-          slots.push({
-            img: document.getElementById('slotImg' + _si),
-            file: document.getElementById('slotFile' + _si),
-            uploadBtn: document.getElementById('slotUpload' + _si),
-            clearBtn: document.getElementById('slotClear' + _si),
-            statusEl: document.getElementById('slotStatus' + _si)
-          });
+      function setSlotsEnabled(enabled) {
+        for (let i = 0; i < 5; i++) {
+          slots[i].uploadBtn.disabled = !enabled;
+          slots[i].clearBtn.disabled = !enabled;
         }
+      }
 
-        function setStatus(message, type) {
-          statusEl.textContent = message || '';
-          statusEl.classList.remove('success', 'error');
-          if (type === 'success') statusEl.classList.add('success');
-          if (type === 'error') statusEl.classList.add('error');
+      function updateSlotsUI() {
+        for (let i = 0; i < 5; i++) {
+          slots[i].img.src = ftImages[i] || FALLBACK_IMAGE;
         }
+      }
 
-        function setImageStatus(message, type) {
-          imageStatus.textContent = message || '';
-          imageStatus.classList.remove('success', 'error');
-          if (type === 'success') imageStatus.classList.add('success');
-          if (type === 'error') imageStatus.classList.add('error');
+      async function loadFtImages(recipeId) {
+        try {
+          const res = await fetch('/api/ft/recipe-images/' + recipeId);
+          const data = await res.json().catch(() => ({}));
+          if (res.ok && data.success && Array.isArray(data.images)) {
+            ftImages = data.images;
+            while (ftImages.length < 5) ftImages.push(null);
+          }
+          imageMetaText.textContent = 'RecipeID ' + recipeId + ' \u2014 upload up to 5 photos.';
+        } catch (_) {
+          setImageStatus('Photo upload ready.', '');
         }
+        updateSlotsUI();
+        setSlotsEnabled(true);
+      }
 
-        function setSlotStatus(idx, msg, type) {
+      function fileToDataUrl(file) {
+        return new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result);
+          reader.onerror = () => reject(new Error('Failed to read selected image file.'));
+          reader.readAsDataURL(file);
+        });
+      }
+
+      // Attach per-slot upload / clear handlers.
+      for (let _i = 0; _i < 5; _i++) {
+        (function(idx) {
+          const slot = idx + 1;
           const s = slots[idx];
-          if (!s) return;
-          s.statusEl.textContent = msg || '';
-          s.statusEl.style.color = type === 'error' ? 'var(--ft-error)' : type === 'success' ? 'var(--ft-success)' : 'var(--ft-muted)';
-        }
-
-        function setSlotsEnabled(enabled) {
-          for (let i = 0; i < 5; i++) {
-            slots[i].uploadBtn.disabled = !enabled;
-            slots[i].clearBtn.disabled = !enabled;
-          }
-        }
-
-        function updateSlotsUI() {
-          for (let i = 0; i < 5; i++) {
-            slots[i].img.src = ftImages[i] || FALLBACK_IMAGE;
-          }
-        }
-
-        async function loadFtImages(recipeId) {
-          try {
-            const res = await fetch('/api/ft/recipe-images/' + recipeId);
-            const data = await res.json().catch(() => ({}));
-            if (res.ok && data.success && Array.isArray(data.images)) {
-              ftImages = data.images;
-              while (ftImages.length < 5) ftImages.push(null);
-            }
-            imageMetaText.textContent = 'RecipeID ' + recipeId + ' \u2014 upload up to 5 photos.';
-          } catch (_) {
-            setImageStatus('Photo upload ready.', '');
-          }
-          updateSlotsUI();
-          setSlotsEnabled(true);
-        }
-
-        function fileToDataUrl(file) {
-          return new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = () => reject(new Error('Failed to read selected image file.'));
-            reader.readAsDataURL(file);
-          });
-        }
-
-        // Attach per-slot upload / clear handlers
-        for (let _i = 0; _i < 5; _i++) {
-          (function(idx) {
-            const slot = idx + 1;
-            const s = slots[idx];
 
             s.uploadBtn.addEventListener('click', async function() {
               if (!currentRecipeId) { setSlotStatus(idx, 'Save recipe first.', 'error'); return; }
