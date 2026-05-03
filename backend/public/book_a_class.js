@@ -288,11 +288,12 @@ async function readCurrentFoodTruckStudentIdentity() {
 
     return {
       id: studentId || email,
+      studentId: studentId || '',
       name: name || 'Student',
       email
     };
   } catch {
-    return { id: '', name: '', email: '' };
+    return { id: '', studentId: '', name: '', email: '' };
   }
 }
 
@@ -988,9 +989,45 @@ function fetchTeacherTimetableForSelectedDate() {
   const body = document.getElementById('teacherTimetableBody');
   if (!staffSelect || !dateInput || !meta || !body) return;
 
-  const staffCode = getStaffCodeById(staffSelect.value, _staffArrCache);
   const date = dateInput.value;
-  if (!staffCode || !date) {
+  if (!date) {
+    meta.textContent = isFoodTruckStudentMode
+      ? 'Select date to view student timetable.'
+      : 'Select teacher and date to view timetable.';
+    body.innerHTML = '';
+    return;
+  }
+
+  if (isFoodTruckStudentMode) {
+    const studentId = String(_foodTruckStudentIdentity.studentId || _foodTruckStudentIdentity.id || '').trim();
+    if (!studentId || studentId.includes('@')) {
+      meta.textContent = 'Student timetable unavailable: no student ID found for this account.';
+      body.innerHTML = '';
+      return;
+    }
+
+    meta.textContent = 'Loading timetable...';
+    body.innerHTML = '';
+    fetch(`/api/student_upload/student-day?idNumber=${encodeURIComponent(studentId)}&date=${encodeURIComponent(date)}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data || data.success === false) {
+          throw new Error(data && data.error ? data.error : 'Failed to load student timetable');
+        }
+        const displayLabel = String((data.student && data.student.student_name) || _foodTruckStudentIdentity.name || studentId).trim();
+        const weekdayName = (new Date(date)).toLocaleDateString('en-NZ', { weekday: 'long' });
+        renderTeacherTimetable(data.periods || [], displayLabel, data.date || date, weekdayName);
+      })
+      .catch(() => {
+        _currentTeacherTimetablePeriods = [];
+        meta.textContent = 'Failed to load timetable for selected date.';
+        body.innerHTML = '';
+      });
+    return;
+  }
+
+  const staffCode = getStaffCodeById(staffSelect.value, _staffArrCache);
+  if (!staffCode) {
     meta.textContent = 'Select teacher and date to view timetable.';
     body.innerHTML = '';
     return;
