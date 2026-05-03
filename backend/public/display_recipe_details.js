@@ -75,6 +75,24 @@ document.addEventListener('DOMContentLoaded', function() {
     return categoryImages[stableIndex(seed, categoryImages.length)];
   }
 
+  function getFtPrimaryImage(recipe) {
+    try {
+      const images = JSON.parse(String(recipe && recipe.ft_images || 'null')) || [];
+      const primarySlot = Number(recipe && recipe.ft_primary_slot);
+      if (Number.isInteger(primarySlot) && primarySlot >= 1 && primarySlot <= images.length) {
+        const starred = String(images[primarySlot - 1] || '').trim();
+        if (starred) return starred;
+      }
+      for (const image of images) {
+        const value = String(image || '').trim();
+        if (value) return value;
+      }
+    } catch (_) {
+      return '';
+    }
+    return '';
+  }
+
   function htmlToPlainText(value) {
     const div = document.createElement('div');
     div.innerHTML = String(value || '').replace(/<br\s*\/?>/gi, '\n');
@@ -344,7 +362,7 @@ document.addEventListener('DOMContentLoaded', function() {
           const title = recipe.name || '(No Name)';
           const recipeNumber = recipe.recipeid || recipe.recipe_id || recipe.id;
           const category = getDishCategory(title);
-          const imageUrl = String(recipe.image_url || '').trim() || getDishImage(title, recipe.id, category);
+          const imageUrl = getFtPrimaryImage(recipe) || String(recipe.image_url || '').trim() || getDishImage(title, recipe.id, category);
 
           const titleEl = document.getElementById('recipeTitle');
           const recipeIdEl = document.getElementById('recipeIdPill');

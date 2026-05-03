@@ -606,7 +606,23 @@ async function ensureRecipeDisplayImageColumn() {
   if (recipeDisplayImageColumnEnsured) return;
   await pool.query('ALTER TABLE recipe_display ADD COLUMN IF NOT EXISTS image_url TEXT');
   await pool.query('ALTER TABLE recipe_display ADD COLUMN IF NOT EXISTS ft_images TEXT');
+  await pool.query('ALTER TABLE recipe_display ADD COLUMN IF NOT EXISTS ft_primary_slot INTEGER');
   recipeDisplayImageColumnEnsured = true;
+}
+
+function parseFtImages(rawValue) {
+  const images = JSON.parse(rawValue || 'null') || [null, null, null, null, null];
+  while (images.length < 5) images.push(null);
+  return images.slice(0, 5);
+}
+
+function normalizeFtPrimarySlot(slot, images) {
+  const numericSlot = Number(slot);
+  if (Number.isInteger(numericSlot) && numericSlot >= 1 && numericSlot <= 5 && images[numericSlot - 1]) {
+    return numericSlot;
+  }
+  const firstFilledIndex = (images || []).findIndex(Boolean);
+  return firstFilledIndex >= 0 ? firstFilledIndex + 1 : null;
 }
 
 // Ensure adjusted-recipe tracking columns exist on recipes table
@@ -2001,7 +2017,7 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
     // --- Recipes ---
     // Return all recipes in recipe_display table for frontend
     app.get('/api/recipes/display-table', async (req, res) => {
-      const sql = `SELECT id, name, description, ingredients, serving_size, url, instructions, recipeid, image_url FROM recipe_display ORDER BY id DESC`;
+      const sql = `SELECT id, name, description, ingredients, serving_size, url, instructions, recipeid, image_url, ft_images, ft_primary_slot FROM recipe_display ORDER BY id DESC`;
       console.log('[DISPLAY_TABLE][HIT] /api/recipes/display-table endpoint called');
       console.log('[DISPLAY_TABLE][SQL]', sql);
       try {
@@ -2180,14 +2196,14 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       try {
         await ensureRecipeDisplayImageColumn();
         const result = await pool.query(
-          `SELECT id, recipeid, ft_images FROM recipe_display WHERE recipeid = $1 LIMIT 1`,
+          `SELECT id, recipeid, name, ft_images, ft_primary_slot FROM recipe_display WHERE recipeid = $1 LIMIT 1`,
           [recipeId]
         );
         const row = result.rows[0] || null;
         if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
-        const images = JSON.parse(row.ft_images || 'null') || [null, null, null, null, null];
-        while (images.length < 5) images.push(null);
-        res.json({ success: true, displayId: row.id, images });
+        const images = parseFtImages(row.ft_images);
+        const primarySlot = normalizeFtPrimarySlot(row.ft_primary_slot, images);
+        res.json({ success: true, displayId: row.id, recipeId: row.recipeid, recipeName: row.name, images, primarySlot });
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
       }
@@ -2204,14 +2220,14 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       }
       try {
         await ensureRecipeDisplayImageColumn();
-        const existing = await pool.query(`SELECT id, ft_images FROM recipe_display WHERE recipeid = $1 LIMIT 1`, [recipeId]);
+        const existing = await pool.query(`SELECT id, ft_images, ft_primary_slot FROM recipe_display WHERE recipeid = $1 LIMIT 1`, [recipeId]);
         const row = existing.rows[0];
         if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
-        const images = JSON.parse(row.ft_images || 'null') || [null, null, null, null, null];
-        while (images.length < 5) images.push(null);
+        const images = parseFtImages(row.ft_images);
         images[slot - 1] = imageUrl || null;
-        await pool.query(`UPDATE recipe_display SET ft_images = $1 WHERE id = $2`, [JSON.stringify(images), row.id]);
-        res.json({ success: true, images });
+        const primarySlot = normalizeFtPrimarySlot(row.ft_primary_slot, images);
+        await pool.query(`UPDATE recipe_display SET ft_images = $1, ft_primary_slot = $2 WHERE id = $3`, [JSON.stringify(images), primarySlot, row.id]);
+        res.json({ success: true, images, primarySlot });
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
       }
@@ -2232,14 +2248,35 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       }
       try {
         await ensureRecipeDisplayImageColumn();
+        const existing = await pool.query(`SELECT id, ft_images, ft_primary_slot FROM recipe_display WHERE recipeid = $1 LIMIT 1`, [recipeId]);
+        const row = existing.rows[0];
+        if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
+        const images = parseFtImages(row.ft_images);
+        images[slot - 1] = String(imageData).trim();
+        const primarySlot = normalizeFtPrimarySlot(row.ft_primary_slot, images);
+        await pool.query(`UPDATE recipe_display SET ft_images = $1, ft_primary_slot = $2 WHERE id = $3`, [JSON.stringify(images), primarySlot, row.id]);
+        res.json({ success: true, images, primarySlot });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.put('/api/ft/recipe-images/:recipeId/primary', async (req, res) => {
+      const recipeId = Number(req.params.recipeId);
+      const slot = Number(req.body && req.body.slot);
+      if (!Number.isFinite(recipeId)) return res.status(400).json({ success: false, error: 'Invalid recipeId.' });
+      if (!Number.isFinite(slot) || slot < 1 || slot > 5) return res.status(400).json({ success: false, error: 'Slot must be 1-5.' });
+      try {
+        await ensureRecipeDisplayImageColumn();
         const existing = await pool.query(`SELECT id, ft_images FROM recipe_display WHERE recipeid = $1 LIMIT 1`, [recipeId]);
         const row = existing.rows[0];
         if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
-        const images = JSON.parse(row.ft_images || 'null') || [null, null, null, null, null];
-        while (images.length < 5) images.push(null);
-        images[slot - 1] = String(imageData).trim();
-        await pool.query(`UPDATE recipe_display SET ft_images = $1 WHERE id = $2`, [JSON.stringify(images), row.id]);
-        res.json({ success: true, images });
+        const images = parseFtImages(row.ft_images);
+        if (!images[slot - 1]) {
+          return res.status(400).json({ success: false, error: 'Upload or save a photo into that slot before starring it.' });
+        }
+        await pool.query(`UPDATE recipe_display SET ft_primary_slot = $1 WHERE id = $2`, [slot, row.id]);
+        res.json({ success: true, images, primarySlot: slot });
       } catch (err) {
         res.status(500).json({ success: false, error: err.message });
       }
