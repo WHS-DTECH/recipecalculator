@@ -40,7 +40,7 @@
 }
 .add-booking-shell {
     display: grid;
-    grid-template-columns: minmax(320px, 0.95fr) minmax(0, 2.25fr) minmax(420px, 1.1fr);
+    grid-template-columns: minmax(320px, 0.95fr) minmax(0, 2.0fr) minmax(500px, 1.28fr);
     gap: 1rem;
     align-items: stretch;
 }
@@ -1558,7 +1558,7 @@
 
 @media (max-width: 1400px) {
     .add-booking-shell {
-        grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.6fr) minmax(360px, 0.95fr);
+        grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.45fr) minmax(430px, 1.05fr);
     }
 
     .add-booking-form-iframe {
