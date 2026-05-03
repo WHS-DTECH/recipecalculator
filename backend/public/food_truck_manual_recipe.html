@@ -339,6 +339,7 @@
       const form = document.getElementById('manualRecipeForm');
       const statusEl = document.getElementById('manualStatus');
       const nextIdEl = document.getElementById('nextRecipeId');
+      const idMetaTextEl = document.getElementById('idMetaText');
       const saveBtn = document.getElementById('saveManualBtn');
       const clearBtn = document.getElementById('clearManualBtn');
       const studentNameInput = document.getElementById('manualStudentName');
@@ -346,6 +347,13 @@
 
       let currentRecipeId = null;
       let currentUserEmail = '';
+
+      function getRecipeIdFromLocation() {
+        const params = new URLSearchParams(window.location.search);
+        const raw = String(params.get('recipeId') || '').trim();
+        const recipeId = Number(raw);
+        return Number.isInteger(recipeId) && recipeId > 0 ? recipeId : null;
+      }
 
       function setStatus(message, type) {
         statusEl.textContent = message || '';
@@ -431,6 +439,11 @@
         }
 
         async function refreshNextId() {
+          if (currentRecipeId) {
+            nextIdEl.textContent = String(currentRecipeId);
+            if (idMetaTextEl) idMetaTextEl.textContent = 'Editing existing Food Truck recipe.';
+            return;
+          }
           nextIdEl.textContent = '...';
           try {
             const res = await fetch('/api/recipes/next-id');
@@ -439,10 +452,30 @@
               throw new Error((data && data.error) || 'Failed to fetch next ID.');
             }
             nextIdEl.textContent = String(data.nextId || 'n/a');
+            if (idMetaTextEl) idMetaTextEl.textContent = 'This is a preview. Final ID is assigned on save.';
           } catch (err) {
             nextIdEl.textContent = 'n/a';
             setStatus(err && err.message ? err.message : 'Failed to fetch next recipe ID.', 'error');
           }
+        }
+
+        async function loadRecipeForEdit(recipeId) {
+          const res = await fetch('/api/recipes/recipes/' + recipeId, { credentials: 'include' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || !data || data.error) {
+            throw new Error((data && data.error) || 'Failed to load recipe.');
+          }
+
+          currentRecipeId = Number(data.id || recipeId);
+          document.getElementById('manualStudentName').value = String(data.student_name || '').trim();
+          document.getElementById('manualName').value = String(data.name || '').trim();
+          document.getElementById('manualServing').value = data.serving_size == null ? '' : String(data.serving_size);
+          document.getElementById('manualIngredients').value = String(data.ingredients || '').trim();
+          document.getElementById('manualInstructions').value = String(data.instructions || '').trim();
+          saveBtn.textContent = 'Update Recipe & Return To Review';
+          updatePhotoUploadLink(currentRecipeId);
+          await refreshNextId();
+          setStatus('Loaded RecipeID ' + currentRecipeId + ' for editing.', '');
         }
 
         function deriveNameFromEmail(email) {
@@ -516,12 +549,13 @@
           }
 
           saveBtn.disabled = true;
-          setStatus('Saving recipe\u2026', '');
+          setStatus(currentRecipeId ? 'Updating recipe…' : 'Saving recipe…', '');
 
           try {
-            const res = await fetch('/api/recipes/manual', {
-              method: 'POST',
+            const res = await fetch(currentRecipeId ? ('/api/recipes/manual/' + currentRecipeId) : '/api/recipes/manual', {
+              method: currentRecipeId ? 'PUT' : 'POST',
               headers: { 'Content-Type': 'application/json' },
+              credentials: 'include',
               body: JSON.stringify(payload)
             });
             const data = await res.json().catch(() => ({}));
@@ -529,15 +563,14 @@
               throw new Error((data && data.error) || 'Failed to save recipe.');
             }
 
-            const recipeId = data.recipeId;
+            const recipeId = Number(data.recipeId || currentRecipeId);
             currentRecipeId = Number(recipeId);
             sessionStorage.setItem('ftLastRecipeId', String(currentRecipeId));
             updatePhotoUploadLink(currentRecipeId);
 
             const studentLabel = payload.student_name ? ' for ' + payload.student_name : '';
-            setStatus('Saved and submitted' + studentLabel + ' for teacher review. RecipeID ' + recipeId + ' assigned. Open Recipe Photos to upload up to 5 images and choose the details photo.', 'success');
-            form.reset();
-            await prepopulateStudentName(true);
+            if (saveBtn) saveBtn.textContent = 'Update Recipe & Return To Review';
+            setStatus((currentRecipeId ? 'Updated' : 'Saved') + ' and submitted' + studentLabel + ' for teacher review. RecipeID ' + recipeId + '. Open Recipe Photos to upload up to 5 images and choose the details photo.', 'success');
             await refreshNextId();
           } catch (err) {
             setStatus(err && err.message ? err.message : 'Failed to save recipe.', 'error');
@@ -550,13 +583,28 @@
 
         clearBtn.addEventListener('click', function() {
           form.reset();
+          currentRecipeId = null;
+          if (saveBtn) saveBtn.textContent = 'Save & Submit For Teacher Review';
+          updatePhotoUploadLink(null);
           setStatus('', '');
           prepopulateStudentName(true);
+          refreshNextId();
         });
 
-        updatePhotoUploadLink(null);
-        prepopulateStudentName(true);
-        refreshNextId();
+        const preferredRecipeId = getRecipeIdFromLocation();
+        updatePhotoUploadLink(preferredRecipeId);
+        if (preferredRecipeId) {
+          loadRecipeForEdit(preferredRecipeId).catch((err) => {
+            currentRecipeId = null;
+            updatePhotoUploadLink(null);
+            setStatus(err && err.message ? err.message : 'Failed to load recipe.', 'error');
+            prepopulateStudentName(true);
+            refreshNextId();
+          });
+        } else {
+          prepopulateStudentName(true);
+          refreshNextId();
+        }
       })();
     </script>
   </body>

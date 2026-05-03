@@ -1067,6 +1067,87 @@ router.post('/manual', async (req, res) => {
   }
 });
 
+router.put('/manual/:id', requireFoodTruckTeacher, async (req, res) => {
+  const recipeId = Number(req.params.id);
+  const name = String(req.body && req.body.name || '').trim();
+  const studentName = String(req.body && req.body.student_name || '').trim();
+  const description = String(req.body && req.body.description || '').trim();
+  const url = String(req.body && req.body.url || '').trim();
+  const servingRaw = String(req.body && req.body.serving_size || '').trim();
+  const ingredientsText = normalizeMultilineText(req.body && req.body.ingredients_text);
+  const instructionsText = normalizeMultilineText(req.body && req.body.instructions_text);
+
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipe ID.' });
+  }
+
+  if (!name) {
+    return res.status(400).json({ success: false, error: 'Recipe name is required.' });
+  }
+
+  if (!ingredientsText && !instructionsText) {
+    return res.status(400).json({ success: false, error: 'Paste at least ingredients or instructions.' });
+  }
+
+  const servingSize = servingRaw === '' ? null : Number(servingRaw);
+  if (servingRaw !== '' && (!Number.isFinite(servingSize) || servingSize < 0)) {
+    return res.status(400).json({ success: false, error: 'Serving size must be a positive number.' });
+  }
+
+  const ingredientsDisplay = multilineTextToHtmlList(ingredientsText, false);
+  const instructionsDisplay = multilineTextToHtmlList(instructionsText, true);
+
+  try {
+    await ensureFoodTruckModerationColumns();
+
+    const existingResult = await pool.query('SELECT id FROM recipes WHERE id = $1 LIMIT 1', [recipeId]);
+    if (!existingResult.rows.length) {
+      return res.status(404).json({ success: false, error: 'Recipe not found.' });
+    }
+
+    await pool.query(
+      `UPDATE recipes
+          SET name = $1,
+              description = $2,
+              url = $3,
+              serving_size = $4,
+              ingredients = $5,
+              instructions = $6,
+              extracted_ingredients = $5,
+              instructions_extracted = $6,
+              ingredients_display = $7,
+              instructions_display = $8,
+              student_name = $9,
+              submitted_channel = 'food_truck',
+              moderation_status = 'pending',
+              moderation_comment = NULL,
+              moderation_updated_at = NOW(),
+              moderated_by_email = NULL,
+              moderated_by_name = NULL,
+              moderation_email_sent_at = NULL
+        WHERE id = $10`,
+      [
+        name,
+        description || null,
+        url || null,
+        servingSize,
+        ingredientsText || null,
+        instructionsText || null,
+        ingredientsDisplay || null,
+        instructionsDisplay || null,
+        studentName || null,
+        recipeId
+      ]
+    );
+
+    await pool.query('DELETE FROM recipe_display WHERE recipeid = $1', [recipeId]);
+
+    res.json({ success: true, recipeId, moderationStatus: 'pending' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to update manual recipe.' });
+  }
+});
+
 router.get('/food-truck/moderation-list', requireFoodTruckTeacher, async (req, res) => {
   try {
     await ensureFoodTruckModerationColumns();
