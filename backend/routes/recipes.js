@@ -803,6 +803,7 @@ router.get('/next-id', async (_req, res) => {
 // Create a recipe by manual copy/paste entry.
 router.post('/manual', async (req, res) => {
   const name = String(req.body && req.body.name || '').trim();
+  const studentName = String(req.body && req.body.student_name || '').trim();
   const description = String(req.body && req.body.description || '').trim();
   const url = String(req.body && req.body.url || '').trim();
   const servingRaw = String(req.body && req.body.serving_size || '').trim();
@@ -841,8 +842,9 @@ router.post('/manual', async (req, res) => {
         extracted_ingredients,
         instructions_extracted,
         ingredients_display,
-        instructions_display
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        instructions_display,
+        student_name
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
       RETURNING id`,
       [
         name,
@@ -854,7 +856,8 @@ router.post('/manual', async (req, res) => {
         ingredientsText || null,
         instructionsText || null,
         ingredientsDisplay || null,
-        instructionsDisplay || null
+        instructionsDisplay || null,
+        studentName || null
       ]
     );
 

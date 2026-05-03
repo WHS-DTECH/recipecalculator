@@ -209,6 +209,66 @@
       background: #a52a2a;
     }
 
+    .ft-image-slots {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 0.75rem;
+    }
+
+    .ft-image-slot {
+      display: flex;
+      flex-direction: column;
+      gap: 0.3rem;
+      flex: 1 1 160px;
+      min-width: 140px;
+      max-width: 220px;
+    }
+
+    .ft-slot-num {
+      font-weight: 700;
+      font-size: 0.85rem;
+      color: var(--ft-heading);
+    }
+
+    .ft-slot-preview {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid #c9dbee;
+      background: #f0f4f8;
+    }
+
+    .ft-slot-preview img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .ft-slot-file {
+      font-size: 0.78rem;
+    }
+
+    .ft-slot-btns {
+      display: flex;
+      gap: 0.3rem;
+    }
+
+    .ft-slot-btns .ft-btn {
+      padding: 0.3rem 0.5rem;
+      font-size: 0.8rem;
+      flex: 1;
+    }
+
+    .ft-slot-status {
+      font-size: 0.78rem;
+      min-height: 0.9rem;
+      font-weight: 600;
+      color: var(--ft-muted);
+    }
+
     @media (max-width: 900px) {
       .ft-grid {
         grid-template-columns: 1fr;
@@ -234,8 +294,8 @@
       <form id="manualRecipeForm" novalidate>
         <div class="ft-grid">
           <div class="ft-field">
-            <label for="manualName">Recipe Name</label>
-            <input id="manualName" name="name" type="text" placeholder="e.g. Sweet and Sour Pork" required>
+            <label for="manualStudentName">Student Name</label>
+            <input id="manualStudentName" name="student_name" type="text" placeholder="e.g. Jane Smith" required>
           </div>
 
           <div class="ft-field">
@@ -244,34 +304,23 @@
           </div>
 
           <div class="ft-field full">
-            <label for="manualUrl">Source URL (optional)</label>
-            <input id="manualUrl" name="url" type="url" placeholder="https://example.com/recipe/...">
+            <label for="manualName">Recipe Name</label>
+            <input id="manualName" name="name" type="text" placeholder="e.g. Sweet and Sour Pork" required>
           </div>
 
           <div class="ft-field full">
-            <label for="manualDescription">Description / Notes (optional)</label>
-            <textarea id="manualDescription" name="description" placeholder="Short context for this recipe (class, source notes, tweaks, etc.)" rows="3"></textarea>
+            <label for="manualIngredients">Ingredients (one ingredient per line)</label>
+            <textarea id="manualIngredients" name="ingredients_text" placeholder="1 kg chicken&#10;2 cups flour&#10;1 tsp salt" rows="8"></textarea>
           </div>
 
           <div class="ft-field full">
-            <label for="manualIngredients">Ingredients (copy/paste one ingredient per line)</label>
-            <textarea id="manualIngredients" name="ingredients_text" placeholder="1 kg chicken\n2 cups flour\n1 tsp salt" rows="8"></textarea>
-          </div>
-
-          <div class="ft-field full">
-            <label for="manualInstructions">Instructions (copy/paste one step per line)</label>
-            <textarea id="manualInstructions" name="instructions_text" placeholder="Heat oven to...\nMix ingredients...\nBake for..." rows="8"></textarea>
-          </div>
-
-          <div class="ft-field full">
-            <label for="manualRaw">Raw Recipe Text (optional)</label>
-            <textarea id="manualRaw" name="raw_text" placeholder="Paste the full raw recipe text here if available." rows="8"></textarea>
-            <p class="ft-hint">Tip: Include raw text so extractors can use it later for troubleshooting.</p>
+            <label for="manualInstructions">Instructions (one step per line)</label>
+            <textarea id="manualInstructions" name="instructions_text" placeholder="Heat oven to...&#10;Mix ingredients...&#10;Bake for..." rows="8"></textarea>
           </div>
         </div>
 
         <div class="ft-actions">
-          <button type="submit" id="saveManualBtn" class="ft-btn">Save Manual Recipe</button>
+          <button type="submit" id="saveManualBtn" class="ft-btn">Save &amp; Publish Recipe</button>
           <button type="button" id="clearManualBtn" class="ft-btn secondary">Clear Form</button>
         </div>
       </form>
@@ -279,31 +328,10 @@
       <div id="manualStatus" class="ft-status"></div>
 
       <section class="ft-image-panel">
-        <h2 style="margin:0 0 0.3rem;font-size:1.15rem;color:var(--ft-heading);">Recipe Image Uploader</h2>
-        <p class="ft-hint" id="imageMetaText">Save a recipe first, then upload or set its image.</p>
+        <h2 style="margin:0 0 0.3rem;font-size:1.15rem;color:var(--ft-heading);">Recipe Photos</h2>
+        <p class="ft-hint" id="imageMetaText">Save a recipe first, then upload photos (up to 5).</p>
         <div id="imageStatus" class="ft-status" style="margin-top:0.35rem;"></div>
-
-        <div class="ft-image-preview-wrap">
-          <img id="imagePreview" alt="Recipe image preview" src="images/whs%20logo%20circular%20reo%20.png">
-        </div>
-
-        <div class="ft-grid">
-          <div class="ft-field full">
-            <label for="imageFileInput">Choose Image File</label>
-            <input id="imageFileInput" type="file" accept="image/png,image/jpeg,image/webp,image/gif">
-          </div>
-
-          <div class="ft-field full">
-            <label for="imageUrlInput">Or Image URL</label>
-            <input id="imageUrlInput" type="text" placeholder="https://example.com/image.jpg or /images/...">
-          </div>
-        </div>
-
-        <div class="ft-image-actions">
-          <button id="imageUploadBtn" type="button" class="ft-btn">Upload File</button>
-          <button id="imageSaveUrlBtn" type="button" class="ft-btn">Save Image URL</button>
-          <button id="imageClearBtn" type="button" class="ft-btn danger">Clear Custom Image</button>
-        </div>
+        <div class="ft-image-slots" id="imageSlotsContainer"></div>
       </section>
     </section>
   </main>
@@ -317,12 +345,7 @@
       const clearBtn = document.getElementById('clearManualBtn');
       const imageMetaText = document.getElementById('imageMetaText');
       const imageStatus = document.getElementById('imageStatus');
-      const imagePreview = document.getElementById('imagePreview');
-      const imageFileInput = document.getElementById('imageFileInput');
-      const imageUrlInput = document.getElementById('imageUrlInput');
-      const imageUploadBtn = document.getElementById('imageUploadBtn');
-      const imageSaveUrlBtn = document.getElementById('imageSaveUrlBtn');
-      const imageClearBtn = document.getElementById('imageClearBtn');
+      const slotsContainer = document.getElementById('imageSlotsContainer');
 
       const FALLBACK_IMAGE = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
       let currentRecipeId = null;
@@ -351,322 +374,305 @@
       }
 
       function updateImageUI() {
-        if (!currentRecipeId) {
-          imageMetaText.textContent = 'Save a recipe first, then upload or set its image.';
-          imagePreview.src = FALLBACK_IMAGE;
-          imageUrlInput.value = '';
-          setImageActionsEnabled(false);
-          return;
+        const FALLBACK_IMAGE = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+        let currentRecipeId = null;
+        let ftImages = [null, null, null, null, null];
+
+        // Build 5 photo upload slots dynamically
+        const slots = [];
+        for (let _si = 1; _si <= 5; _si++) {
+          const slotEl = document.createElement('div');
+          slotEl.className = 'ft-image-slot';
+          slotEl.innerHTML =
+            '<div class="ft-slot-num">Photo ' + _si + '</div>' +
+            '<div class="ft-slot-preview"><img id="slotImg' + _si + '" alt="Photo ' + _si + '" src="' + FALLBACK_IMAGE + '"></div>' +
+            '<input id="slotFile' + _si + '" type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="ft-slot-file">' +
+            '<div class="ft-slot-btns">' +
+            '  <button type="button" class="ft-btn ft-slot-upload-btn" id="slotUpload' + _si + '" disabled>Upload</button>' +
+            '  <button type="button" class="ft-btn danger ft-slot-clear-btn" id="slotClear' + _si + '" disabled>Clear</button>' +
+            '</div>' +
+            '<div class="ft-slot-status" id="slotStatus' + _si + '"></div>';
+          slotsContainer.appendChild(slotEl);
+          slots.push({
+            img: document.getElementById('slotImg' + _si),
+            file: document.getElementById('slotFile' + _si),
+            uploadBtn: document.getElementById('slotUpload' + _si),
+            clearBtn: document.getElementById('slotClear' + _si),
+            statusEl: document.getElementById('slotStatus' + _si)
+          });
         }
 
-        if (!currentDisplayRecipe) {
-          imageMetaText.textContent = `RecipeID ${currentRecipeId} is not available for image editing yet.`;
-          imagePreview.src = FALLBACK_IMAGE;
-          imageUrlInput.value = '';
-          setImageActionsEnabled(false);
-          return;
+        function setStatus(message, type) {
+          statusEl.textContent = message || '';
+          statusEl.classList.remove('success', 'error');
+          if (type === 'success') statusEl.classList.add('success');
+          if (type === 'error') statusEl.classList.add('error');
         }
 
-        imageMetaText.textContent = `RecipeID ${currentDisplayRecipe.recipeid} | Display ID ${currentDisplayRecipe.id}`;
-        imagePreview.src = String(currentDisplayRecipe.image_url || '').trim() || FALLBACK_IMAGE;
-        imageUrlInput.value = currentDisplayRecipe.image_url || '';
-        setImageActionsEnabled(true);
-      }
-
-      async function ensureAuthUserEmail() {
-        if (currentUserEmail) return currentUserEmail;
-        const res = await fetch('/api/auth/me', { credentials: 'include' });
-        const data = await res.json().catch(() => ({}));
-        const email = String(data && data.user && data.user.email || '').trim().toLowerCase();
-        if (!email) throw new Error('Sign in required for image edits.');
-        currentUserEmail = email;
-        return currentUserEmail;
-      }
-
-      async function imageApi(path, options) {
-        const email = await ensureAuthUserEmail();
-        const response = await fetch(path, Object.assign({}, options || {}, {
-          credentials: 'include',
-          headers: Object.assign({}, options && options.headers ? options.headers : {}, {
-            'x-user-email': email
-          })
-        }));
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok || payload.success === false) {
-          throw new Error(payload.error || `Request failed (${response.status})`);
-        }
-        return payload;
-      }
-
-      async function publishRecipeToDisplay(recipeId) {
-        const res = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.success === false) {
-          throw new Error((data && (data.error || data.message)) || 'Failed to prepare recipe display row.');
-        }
-      }
-
-      async function postJsonChecked(url, payload, label) {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload || {})
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || data.success === false) {
-          throw new Error((data && (data.error || data.message)) || `${label} failed.`);
-        }
-        return data;
-      }
-
-      async function waitForCleanupCompletion(progressUrl, timeoutMs = 120000, pollMs = 750) {
-        const startedAt = Date.now();
-        while ((Date.now() - startedAt) < timeoutMs) {
-          const progressRes = await fetch(progressUrl, { cache: 'no-store' });
-          const progressData = await progressRes.json().catch(() => ({}));
-          if (!progressData || progressData.running === false) return;
-          await new Promise((resolve) => setTimeout(resolve, pollMs));
-        }
-        throw new Error('Timed out waiting for cleanup to complete.');
-      }
-
-      async function runManualPublishFlow(recipeId) {
-        const warnings = [];
-        setStatus('Running publish steps: Cleanup Instructions...', '');
-        try {
-          await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
-          await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress');
-        } catch (err) {
-          warnings.push(`Cleanup Instructions skipped: ${err && err.message ? err.message : err}`);
+        function setImageStatus(message, type) {
+          imageStatus.textContent = message || '';
+          imageStatus.classList.remove('success', 'error');
+          if (type === 'success') imageStatus.classList.add('success');
+          if (type === 'error') imageStatus.classList.add('error');
         }
 
-        setStatus('Running publish steps: Cleanup Ingredients...', '');
-        try {
-          await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
-          await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress');
-        } catch (err) {
-          warnings.push(`Cleanup Ingredients skipped: ${err && err.message ? err.message : err}`);
+        function setSlotStatus(idx, msg, type) {
+          const s = slots[idx];
+          if (!s) return;
+          s.statusEl.textContent = msg || '';
+          s.statusEl.style.color = type === 'error' ? 'var(--ft-error)' : type === 'success' ? 'var(--ft-success)' : 'var(--ft-muted)';
         }
 
-        setStatus('Running publish steps: Inventory Sync...', '');
-        try {
-          await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
-        } catch (err) {
-          warnings.push(`Inventory Sync skipped: ${err && err.message ? err.message : err}`);
-        }
-
-        setStatus('Running publish steps: Publish to Display...', '');
-        await publishRecipeToDisplay(recipeId);
-
-        // Fail-safe pass: run one final reseed sync after publish to mirror Add Recipe reliability.
-        setStatus('Running publish steps: Final Inventory Sync Verify...', '');
-        try {
-          await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Final Inventory Sync Verify');
-        } catch (err) {
-          warnings.push(`Final Inventory Sync Verify skipped: ${err && err.message ? err.message : err}`);
-        }
-        return warnings;
-      }
-
-      async function loadImageContextForRecipe(recipeId) {
-        currentDisplayRecipe = null;
-        updateImageUI();
-        try {
-          const payload = await imageApi('/api/admin/recipe-images', { method: 'GET' });
-          const rows = Array.isArray(payload.recipes) ? payload.recipes : [];
-          currentDisplayRecipe = rows.find((row) => String(row && row.recipeid) === String(recipeId)) || null;
-          updateImageUI();
-          if (!currentDisplayRecipe) {
-            setImageStatus('Image editor is ready after recipe display row is created.', '');
-          } else {
-            setImageStatus('', '');
+        function setSlotsEnabled(enabled) {
+          for (let i = 0; i < 5; i++) {
+            slots[i].uploadBtn.disabled = !enabled;
+            slots[i].clearBtn.disabled = !enabled;
           }
-        } catch (err) {
-          updateImageUI();
-          setImageStatus(err && err.message ? err.message : 'Failed to load image editor.', 'error');
         }
-      }
 
-      function fileToDataUrl(file) {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result);
-          reader.onerror = () => reject(new Error('Failed to read selected image file.'));
-          reader.readAsDataURL(file);
-        });
-      }
+        function updateSlotsUI() {
+          for (let i = 0; i < 5; i++) {
+            slots[i].img.src = ftImages[i] || FALLBACK_IMAGE;
+          }
+        }
 
-      async function refreshNextId() {
-        nextIdEl.textContent = '...';
-        try {
-          const res = await fetch('/api/recipes/next-id');
-          const data = await res.json();
+        async function loadFtImages(recipeId) {
+          try {
+            const res = await fetch('/api/ft/recipe-images/' + recipeId);
+            const data = await res.json().catch(() => ({}));
+            if (res.ok && data.success && Array.isArray(data.images)) {
+              ftImages = data.images;
+              while (ftImages.length < 5) ftImages.push(null);
+            }
+            imageMetaText.textContent = 'RecipeID ' + recipeId + ' \u2014 upload up to 5 photos.';
+          } catch (_) {
+            setImageStatus('Photo upload ready.', '');
+          }
+          updateSlotsUI();
+          setSlotsEnabled(true);
+        }
+
+        function fileToDataUrl(file) {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error('Failed to read selected image file.'));
+            reader.readAsDataURL(file);
+          });
+        }
+
+        // Attach per-slot upload / clear handlers
+        for (let _i = 0; _i < 5; _i++) {
+          (function(idx) {
+            const slot = idx + 1;
+            const s = slots[idx];
+
+            s.uploadBtn.addEventListener('click', async function() {
+              if (!currentRecipeId) { setSlotStatus(idx, 'Save recipe first.', 'error'); return; }
+              const file = s.file.files && s.file.files[0];
+              if (!file) { setSlotStatus(idx, 'Choose a photo first.', 'error'); return; }
+              s.uploadBtn.disabled = true;
+              setSlotStatus(idx, 'Uploading\u2026', '');
+              try {
+                const dataUrl = await fileToDataUrl(file);
+                const res = await fetch('/api/ft/recipe-images/' + currentRecipeId + '/upload', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ slot, image_data: dataUrl })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.success === false) throw new Error(data.error || 'Upload failed.');
+                ftImages = data.images;
+                updateSlotsUI();
+                s.file.value = '';
+                setSlotStatus(idx, 'Uploaded!', 'success');
+              } catch (err) {
+                setSlotStatus(idx, err.message || 'Upload failed.', 'error');
+              } finally {
+                s.uploadBtn.disabled = false;
+              }
+            });
+
+            s.clearBtn.addEventListener('click', async function() {
+              if (!currentRecipeId) { setSlotStatus(idx, 'Save recipe first.', 'error'); return; }
+              s.clearBtn.disabled = true;
+              setSlotStatus(idx, 'Clearing\u2026', '');
+              try {
+                const res = await fetch('/api/ft/recipe-images/' + currentRecipeId, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ slot, imageUrl: '' })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || data.success === false) throw new Error(data.error || 'Clear failed.');
+                ftImages = data.images;
+                updateSlotsUI();
+                setSlotStatus(idx, 'Cleared.', 'success');
+              } catch (err) {
+                setSlotStatus(idx, err.message || 'Clear failed.', 'error');
+              } finally {
+                s.clearBtn.disabled = false;
+              }
+            });
+          })(_i);
+        }
+
+        async function publishRecipeToDisplay(recipeId) {
+          const res = await fetch('/api/recipes/' + recipeId + '/display', { method: 'POST' });
+          const data = await res.json().catch(() => ({}));
           if (!res.ok || data.success === false) {
-            throw new Error((data && data.error) || 'Failed to fetch next ID.');
+            throw new Error((data && (data.error || data.message)) || 'Failed to prepare recipe display row.');
           }
-          nextIdEl.textContent = String(data.nextId || 'n/a');
-        } catch (err) {
-          nextIdEl.textContent = 'n/a';
-          setStatus(err && err.message ? err.message : 'Failed to fetch next recipe ID.', 'error');
-        }
-      }
-
-      function getPayload() {
-        return {
-          name: (document.getElementById('manualName').value || '').trim(),
-          serving_size: (document.getElementById('manualServing').value || '').trim(),
-          url: (document.getElementById('manualUrl').value || '').trim(),
-          description: (document.getElementById('manualDescription').value || '').trim(),
-          ingredients_text: (document.getElementById('manualIngredients').value || '').trim(),
-          instructions_text: (document.getElementById('manualInstructions').value || '').trim(),
-          raw_text: (document.getElementById('manualRaw').value || '').trim()
-        };
-      }
-
-      async function saveManualRecipe(event) {
-        event.preventDefault();
-        const payload = getPayload();
-
-        if (!payload.name) {
-          setStatus('Recipe name is required.', 'error');
-          return;
         }
 
-        if (!payload.ingredients_text && !payload.instructions_text && !payload.raw_text) {
-          setStatus('Paste at least ingredients, instructions, or raw recipe text.', 'error');
-          return;
-        }
-
-        saveBtn.disabled = true;
-        setStatus('Saving recipe...', '');
-
-        try {
-          const res = await fetch('/api/recipes/manual', {
+        async function postJsonChecked(url, payload, label) {
+          const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify(payload || {})
           });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || data.success === false) {
-            throw new Error((data && data.error) || 'Failed to save recipe.');
+            throw new Error((data && (data.error || data.message)) || label + ' failed.');
+          }
+          return data;
+        }
+
+        async function waitForCleanupCompletion(progressUrl, timeoutMs, pollMs) {
+          timeoutMs = timeoutMs || 120000;
+          pollMs = pollMs || 750;
+          const startedAt = Date.now();
+          while ((Date.now() - startedAt) < timeoutMs) {
+            const progressRes = await fetch(progressUrl, { cache: 'no-store' });
+            const progressData = await progressRes.json().catch(() => ({}));
+            if (!progressData || progressData.running === false) return;
+            await new Promise((resolve) => setTimeout(resolve, pollMs));
+          }
+          throw new Error('Timed out waiting for cleanup to complete.');
+        }
+
+        async function runManualPublishFlow(recipeId) {
+          const warnings = [];
+          setStatus('Running: Cleanup Instructions\u2026', '');
+          try {
+            await postJsonChecked('/api/recipes/cleanup-instructions-stepwise', { recipeId }, 'Cleanup Instructions');
+            await waitForCleanupCompletion('/api/recipes/cleanup-instructions-progress');
+          } catch (err) {
+            warnings.push('Cleanup Instructions skipped: ' + (err && err.message ? err.message : err));
           }
 
-          const recipeId = data.recipeId;
-          currentRecipeId = Number(recipeId);
+          setStatus('Running: Cleanup Ingredients\u2026', '');
+          try {
+            await postJsonChecked('/api/recipes/cleanup-ingredients-stepwise', { recipeId }, 'Cleanup Ingredients');
+            await waitForCleanupCompletion('/api/recipes/cleanup-ingredients-progress');
+          } catch (err) {
+            warnings.push('Cleanup Ingredients skipped: ' + (err && err.message ? err.message : err));
+          }
 
-          const warnings = await runManualPublishFlow(currentRecipeId);
+          setStatus('Running: Inventory Sync\u2026', '');
+          try {
+            await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
+          } catch (err) {
+            warnings.push('Inventory Sync skipped: ' + (err && err.message ? err.message : err));
+          }
+
+          setStatus('Running: Publish to Display\u2026', '');
+          await publishRecipeToDisplay(recipeId);
+
+          setStatus('Running: Final Sync Verify\u2026', '');
+          try {
+            await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Final Sync Verify');
+          } catch (err) {
+            warnings.push('Final Sync Verify skipped: ' + (err && err.message ? err.message : err));
+          }
+          return warnings;
+        }
+
+        async function refreshNextId() {
+          nextIdEl.textContent = '...';
+          try {
+            const res = await fetch('/api/recipes/next-id');
+            const data = await res.json();
+            if (!res.ok || data.success === false) {
+              throw new Error((data && data.error) || 'Failed to fetch next ID.');
+            }
+            nextIdEl.textContent = String(data.nextId || 'n/a');
+          } catch (err) {
+            nextIdEl.textContent = 'n/a';
+            setStatus(err && err.message ? err.message : 'Failed to fetch next recipe ID.', 'error');
+          }
+        }
+
+        function getPayload() {
+          return {
+            student_name: (document.getElementById('manualStudentName').value || '').trim(),
+            name: (document.getElementById('manualName').value || '').trim(),
+            serving_size: (document.getElementById('manualServing').value || '').trim(),
+            ingredients_text: (document.getElementById('manualIngredients').value || '').trim(),
+            instructions_text: (document.getElementById('manualInstructions').value || '').trim()
+          };
+        }
+
+        async function saveManualRecipe(event) {
+          event.preventDefault();
+          const payload = getPayload();
+
+          if (!payload.name) {
+            setStatus('Recipe name is required.', 'error');
+            return;
+          }
+
+          if (!payload.ingredients_text && !payload.instructions_text) {
+            setStatus('Paste at least ingredients or instructions.', 'error');
+            return;
+          }
+
+          saveBtn.disabled = true;
+          setStatus('Saving recipe\u2026', '');
 
           try {
-            await loadImageContextForRecipe(currentRecipeId);
-          } catch (displayErr) {
-            setImageStatus(displayErr && displayErr.message ? displayErr.message : 'Image editor setup failed.', 'error');
-          }
+            const res = await fetch('/api/recipes/manual', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.success === false) {
+              throw new Error((data && data.error) || 'Failed to save recipe.');
+            }
 
-          if (warnings.length) {
-            setStatus(`Recipe saved and published (RecipeID ${recipeId}) with warnings: ${warnings.join(' ')}`, 'success');
-          } else {
-            setStatus(`Recipe saved and published successfully. Assigned RecipeID ${recipeId}.`, 'success');
+            const recipeId = data.recipeId;
+            currentRecipeId = Number(recipeId);
+
+            const warnings = await runManualPublishFlow(currentRecipeId);
+            await loadFtImages(currentRecipeId);
+
+            if (warnings.length) {
+              setStatus('Recipe saved and published (RecipeID ' + recipeId + ') with warnings: ' + warnings.join(' '), 'success');
+            } else {
+              const studentLabel = payload.student_name ? ' for ' + payload.student_name : '';
+              setStatus('Saved and published' + studentLabel + '. RecipeID ' + recipeId + ' assigned.', 'success');
+            }
+            form.reset();
+            await refreshNextId();
+          } catch (err) {
+            setStatus(err && err.message ? err.message : 'Failed to save recipe.', 'error');
+          } finally {
+            saveBtn.disabled = false;
           }
+        }
+
+        form.addEventListener('submit', saveManualRecipe);
+
+        clearBtn.addEventListener('click', function() {
           form.reset();
-          await refreshNextId();
-        } catch (err) {
-          setStatus(err && err.message ? err.message : 'Failed to save recipe.', 'error');
-        } finally {
-          saveBtn.disabled = false;
-        }
-      }
+          setStatus('', '');
+        });
 
-      form.addEventListener('submit', saveManualRecipe);
-
-      clearBtn.addEventListener('click', function() {
-        form.reset();
-        setStatus('', '');
-      });
-
-      imageUploadBtn.addEventListener('click', async function() {
-        if (!currentDisplayRecipe) {
-          setImageStatus('Save a recipe first so an image target exists.', 'error');
-          return;
-        }
-
-        const file = imageFileInput.files && imageFileInput.files[0] ? imageFileInput.files[0] : null;
-        if (!file) {
-          setImageStatus('Choose an image file first.', 'error');
-          return;
-        }
-
-        try {
-          setImageStatus('Uploading image...', '');
-          const imageData = await fileToDataUrl(file);
-          const payload = await imageApi(`/api/admin/recipe-images/${currentDisplayRecipe.id}/upload`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_data: imageData, file_name: file.name })
-          });
-          currentDisplayRecipe = payload.recipe || currentDisplayRecipe;
-          imageFileInput.value = '';
-          updateImageUI();
-          setImageStatus('Image uploaded and saved.', 'success');
-        } catch (err) {
-          setImageStatus(err && err.message ? err.message : 'Failed to upload image.', 'error');
-        }
-      });
-
-      imageSaveUrlBtn.addEventListener('click', async function() {
-        if (!currentDisplayRecipe) {
-          setImageStatus('Save a recipe first so an image target exists.', 'error');
-          return;
-        }
-
-        const imageUrl = String(imageUrlInput.value || '').trim();
-        if (!imageUrl) {
-          setImageStatus('Enter an image URL, or click Clear Custom Image.', 'error');
-          return;
-        }
-        if (!/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl)) {
-          setImageStatus('Image URL must start with https:// or /images/.', 'error');
-          return;
-        }
-
-        try {
-          setImageStatus('Saving image URL...', '');
-          const payload = await imageApi(`/api/admin/recipe-images/${currentDisplayRecipe.id}`, {
+        refreshNextId();
+        setSlotsEnabled(false);
+      })();
+    </script>
+  </body>
+  </html>
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_url: imageUrl })
-          });
-          currentDisplayRecipe = payload.recipe || currentDisplayRecipe;
-          updateImageUI();
-          setImageStatus('Image URL saved.', 'success');
-        } catch (err) {
-          setImageStatus(err && err.message ? err.message : 'Failed to save image URL.', 'error');
-        }
-      });
-
-      imageClearBtn.addEventListener('click', async function() {
-        if (!currentDisplayRecipe) {
-          setImageStatus('Save a recipe first so an image target exists.', 'error');
-          return;
-        }
-
-        try {
-          setImageStatus('Clearing custom image...', '');
-          const payload = await imageApi(`/api/admin/recipe-images/${currentDisplayRecipe.id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ image_url: '' })
-          });
-          currentDisplayRecipe = payload.recipe || currentDisplayRecipe;
-          updateImageUI();
-          setImageStatus('Custom image cleared. Stock fallback will be used.', 'success');
-        } catch (err) {
-          setImageStatus(err && err.message ? err.message : 'Failed to clear image.', 'error');
-        }
-      });
-
-      refreshNextId();
-      updateImageUI();
-    })();
-  </script>
-</body>
-</html>

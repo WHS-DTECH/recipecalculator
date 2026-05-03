@@ -555,6 +555,7 @@ let recipeDisplayImageColumnEnsured = false;
 async function ensureRecipeDisplayImageColumn() {
   if (recipeDisplayImageColumnEnsured) return;
   await pool.query('ALTER TABLE recipe_display ADD COLUMN IF NOT EXISTS image_url TEXT');
+  await pool.query('ALTER TABLE recipe_display ADD COLUMN IF NOT EXISTS ft_images TEXT');
   recipeDisplayImageColumnEnsured = true;
 }
 
@@ -564,6 +565,7 @@ async function ensureRecipeDisplayImageColumn() {
     await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS adjusted_from_id INTEGER');
     await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_by_email TEXT');
     await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS created_by_name TEXT');
+    await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS student_name TEXT');
   } catch (e) {
     console.warn('[startup] Could not ensure adjusted recipe columns:', e.message);
   }
@@ -2028,6 +2030,79 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
         res.status(500).json({ success: false, error: err.message });
       }
     });
+    // Food Truck recipe image endpoints — no admin auth required (teacher-supervised student activity).
+    // Images 1-5 are stored as a JSON array in recipe_display.ft_images.
+    app.get('/api/ft/recipe-images/:recipeId', async (req, res) => {
+      const recipeId = Number(req.params.recipeId);
+      if (!Number.isFinite(recipeId)) return res.status(400).json({ success: false, error: 'Invalid recipeId.' });
+      try {
+        await ensureRecipeDisplayImageColumn();
+        const result = await pool.query(
+          `SELECT id, recipeid, ft_images FROM recipe_display WHERE recipeid = $1 LIMIT 1`,
+          [recipeId]
+        );
+        const row = result.rows[0] || null;
+        if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
+        const images = JSON.parse(row.ft_images || 'null') || [null, null, null, null, null];
+        while (images.length < 5) images.push(null);
+        res.json({ success: true, displayId: row.id, images });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.put('/api/ft/recipe-images/:recipeId', async (req, res) => {
+      const recipeId = Number(req.params.recipeId);
+      const slot = Number(req.body && req.body.slot);
+      const imageUrl = String((req.body && req.body.imageUrl) || '').trim();
+      if (!Number.isFinite(recipeId)) return res.status(400).json({ success: false, error: 'Invalid recipeId.' });
+      if (!Number.isFinite(slot) || slot < 1 || slot > 5) return res.status(400).json({ success: false, error: 'Slot must be 1-5.' });
+      if (imageUrl && !/^https?:\/\//i.test(imageUrl) && !/^\/images\//i.test(imageUrl) && !/^data:image\//i.test(imageUrl)) {
+        return res.status(400).json({ success: false, error: 'Image URL must start with http(s)://, /images/, or data:image/.' });
+      }
+      try {
+        await ensureRecipeDisplayImageColumn();
+        const existing = await pool.query(`SELECT id, ft_images FROM recipe_display WHERE recipeid = $1 LIMIT 1`, [recipeId]);
+        const row = existing.rows[0];
+        if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
+        const images = JSON.parse(row.ft_images || 'null') || [null, null, null, null, null];
+        while (images.length < 5) images.push(null);
+        images[slot - 1] = imageUrl || null;
+        await pool.query(`UPDATE recipe_display SET ft_images = $1 WHERE id = $2`, [JSON.stringify(images), row.id]);
+        res.json({ success: true, images });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
+    app.post('/api/ft/recipe-images/:recipeId/upload', async (req, res) => {
+      const recipeId = Number(req.params.recipeId);
+      const slot = Number(req.body && req.body.slot) || 1;
+      const imageData = req.body && req.body.image_data;
+      const parsed = parseImageDataUrl(imageData);
+      if (!Number.isFinite(recipeId)) return res.status(400).json({ success: false, error: 'Invalid recipeId.' });
+      if (slot < 1 || slot > 5) return res.status(400).json({ success: false, error: 'Slot must be 1-5.' });
+      if (!parsed || !parsed.buffer || !parsed.buffer.length) {
+        return res.status(400).json({ success: false, error: 'Invalid image payload. Expected PNG/JPG/WEBP/GIF data URL.' });
+      }
+      if (parsed.buffer.length > 8 * 1024 * 1024) {
+        return res.status(400).json({ success: false, error: 'Image is too large. Use an image under 8MB.' });
+      }
+      try {
+        await ensureRecipeDisplayImageColumn();
+        const existing = await pool.query(`SELECT id, ft_images FROM recipe_display WHERE recipeid = $1 LIMIT 1`, [recipeId]);
+        const row = existing.rows[0];
+        if (!row) return res.status(404).json({ success: false, error: 'Recipe display row not found.' });
+        const images = JSON.parse(row.ft_images || 'null') || [null, null, null, null, null];
+        while (images.length < 5) images.push(null);
+        images[slot - 1] = String(imageData).trim();
+        await pool.query(`UPDATE recipe_display SET ft_images = $1 WHERE id = $2`, [JSON.stringify(images), row.id]);
+        res.json({ success: true, images });
+      } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
     app.get('/api/recipes', async (req, res) => {
       // Return all main fields including uploaded_recipe_id for table display
       const sql = `
