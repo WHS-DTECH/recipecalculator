@@ -13,6 +13,23 @@
     <div class="calendar-app add-booking-page">
         <div class="add-booking-shell">
             <aside class="add-booking-left-panel">
+                <div class="add-booking-side-card add-booking-inline-form-card">
+                    <div class="add-booking-card-header">
+                        <div class="add-booking-side-title add-booking-side-title-inline">Book a Class</div>
+                        <div class="add-booking-form-actions" id="embeddedBookClassActions" role="group" aria-label="Food Truck booking actions">
+                            <button id="embeddedBookSaveBtn" type="button" class="add-booking-form-action-btn add-booking-form-action-btn-save">SAVE</button>
+                            <button id="embeddedBookDeleteBtn" type="button" class="add-booking-form-action-btn add-booking-form-action-btn-delete" style="display:none;">DELETE</button>
+                            <button id="embeddedBookResetBtn" type="button" class="add-booking-form-action-btn add-booking-form-action-btn-reset">RESET</button>
+                        </div>
+                    </div>
+                    <iframe
+                        src="book_a_class.html?view=teacher_embed&hide_save_booking=1&form_only=1&planner_stream=Food%20Truck"
+                        title="Food Truck Book a Class Controls"
+                        class="add-booking-form-iframe"
+                        loading="lazy">
+                    </iframe>
+                </div>
+
                 <div class="add-booking-side-card">
                     <div class="add-booking-side-title">Student Timetable</div>
                     <iframe
@@ -43,22 +60,6 @@
                     <table class="calendar-table" id="scheduleCalendarTable"></table>
                 </div>
 
-                <div class="add-booking-side-card add-booking-inline-form-card">
-                    <div class="add-booking-card-header">
-                        <div class="add-booking-side-title add-booking-side-title-inline">Book a Class</div>
-                        <div class="add-booking-form-actions" id="embeddedBookClassActions" role="group" aria-label="Food Truck booking actions">
-                            <button id="embeddedBookSaveBtn" type="button" class="add-booking-form-action-btn add-booking-form-action-btn-save">SAVE</button>
-                            <button id="embeddedBookDeleteBtn" type="button" class="add-booking-form-action-btn add-booking-form-action-btn-delete" style="display:none;">DELETE</button>
-                            <button id="embeddedBookResetBtn" type="button" class="add-booking-form-action-btn add-booking-form-action-btn-reset">RESET</button>
-                        </div>
-                    </div>
-                    <iframe
-                        src="book_a_class.html?view=teacher_embed&hide_save_booking=1&form_only=1&planner_stream=Food%20Truck"
-                        title="Food Truck Book a Class Controls"
-                        class="add-booking-form-iframe"
-                        loading="lazy">
-                    </iframe>
-                </div>
             </section>
         </div>
     </div>
