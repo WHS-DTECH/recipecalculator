@@ -68,6 +68,7 @@ router.get('/by_category', async function(req, res) {
       SELECT
         dsi.booking_id::text AS booking_id,
         dsi.ingredient_name::text AS ingredient_name,
+        dsi.fooditem::text AS fooditem,
         dsi.measure_qty::numeric AS measure_qty,
         dsi.measure_unit::text AS measure_unit,
         dsi.stripfooditem::text AS stripfooditem,
@@ -80,6 +81,7 @@ router.get('/by_category', async function(req, res) {
       SELECT
         sb.booking_id::text AS booking_id,
         inv.ingredient_name::text AS ingredient_name,
+        inv.fooditem::text AS fooditem,
         inv.measure_qty::numeric AS measure_qty,
         inv.measure_unit::text AS measure_unit,
         inv.stripfooditem::text AS stripfooditem,
@@ -96,6 +98,7 @@ router.get('/by_category', async function(req, res) {
     )
     SELECT
       src.ingredient_name,
+      src.fooditem,
       src.measure_qty,
       src.measure_unit,
       src.stripfooditem,
@@ -129,7 +132,16 @@ router.get('/by_category', async function(req, res) {
       'Other': []
     };
     function categorize(item) {
-      const name = (item.stripfooditem || '').toLowerCase();
+      const aisleName = String(item.aisle_category_name || '').trim();
+      if (aisleName) {
+        const normalizedAisle = aisleName.toLowerCase();
+        if (normalizedAisle === 'produce') return 'Produce';
+        if (normalizedAisle === 'dairy') return 'Dairy';
+        if (normalizedAisle === 'pantry') return 'Pantry';
+        if (normalizedAisle === 'other') return 'Other';
+      }
+
+      const name = String(item.stripfooditem || item.fooditem || item.ingredient_name || '').toLowerCase();
       for (const [cat, keywords] of Object.entries(categories)) {
         if (keywords.some(word => name.includes(word))) return cat;
       }
@@ -141,7 +153,7 @@ router.get('/by_category', async function(req, res) {
       if (String(row.aisle_category_name || '').trim().toLowerCase() === 'action') return;
       const cat = categorize(row);
       if (!combined[cat]) combined[cat] = {};
-      const key = stripFoodItemBackend(row.stripfooditem || '').trim();
+      const key = stripFoodItemBackend(row.stripfooditem || row.fooditem || row.ingredient_name || '').trim();
       if (!key) return;
       if (!combined[cat][key]) {
         combined[cat][key] = { qty: 0, unit: row.measure_unit || '', display: key };
