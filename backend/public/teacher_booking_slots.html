@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Teacher Calendar List</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .slot-page {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 0.75rem 0.9rem 1.25rem;
+    }
+    .slot-head {
+      background: #f8fbff;
+      border: 1px solid #cfe2ff;
+      border-radius: 10px;
+      padding: 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+    .slot-head h1 {
+      margin: 0 0 0.35rem;
+      color: #1858a8;
+      font-size: 1.6rem;
+    }
+    .slot-meta { font-size: 0.95rem; color: #1f2937; margin-bottom: 0.6rem; }
+    .slot-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+    }
+    .slot-actions a,
+    .slot-actions button {
+      text-decoration: none;
+      border: 1px solid #2563eb;
+      background: #2563eb;
+      color: #fff;
+      border-radius: 6px;
+      padding: 0.38rem 0.72rem;
+      font-size: 0.88rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .slot-actions button.secondary,
+    .slot-actions a.secondary {
+      background: #e5e7eb;
+      border-color: #cbd5e1;
+      color: #1f2937;
+    }
+
+    .slot-grid {
+      display: grid;
+      grid-template-columns: 1.3fr 1fr;
+      gap: 0.8rem;
+    }
+
+    .slot-card {
+      background: #fff;
+      border: 1px solid #dbe3ee;
+      border-radius: 10px;
+      padding: 0.7rem;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .slot-config {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: end;
+      gap: 0.55rem;
+      margin-bottom: 0.7rem;
+    }
+
+    .slot-config label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334155;
+    }
+
+    .slot-config input[type='number'] {
+      width: 88px;
+      padding: 0.28rem 0.35rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+    }
+
+    .slot-config .check-label {
+      flex-direction: row;
+      align-items: center;
+      gap: 0.35rem;
+      margin-top: 1.25rem;
+    }
+
+    .slot-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .slot-table th,
+    .slot-table td {
+      border: 1px solid #e2e8f0;
+      padding: 0.35rem;
+      vertical-align: top;
+      font-size: 0.86rem;
+    }
+
+    .slot-table th {
+      background: #f8fafc;
+      font-weight: 800;
+      text-align: center;
+      color: #334155;
+    }
+
+    .seat-box {
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 0.35rem;
+      background: #fff;
+      min-height: 64px;
+      cursor: pointer;
+    }
+
+    .seat-box.active {
+      box-shadow: 0 0 0 2px #1d4ed8 inset;
+      border-color: #1d4ed8;
+      background: #eff6ff;
+    }
+
+    .seat-line {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.25rem;
+      margin-bottom: 0.2rem;
+    }
+
+    .seat-name {
+      font-weight: 700;
+      color: #1e293b;
+      word-break: break-word;
+      font-size: 0.82rem;
+      line-height: 1.2;
+    }
+
+    .seat-id {
+      font-size: 0.75rem;
+      color: #64748b;
+    }
+
+    .seat-cta {
+      display: flex;
+      gap: 0.25rem;
+      margin-top: 0.25rem;
+    }
+
+    .seat-cta button {
+      border: 1px solid #93c5fd;
+      background: #dbeafe;
+      color: #1e3a8a;
+      border-radius: 5px;
+      padding: 0.16rem 0.4rem;
+      font-size: 0.73rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .seat-cta button.clear {
+      border-color: #fecaca;
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .right-tools {
+      display: grid;
+      grid-template-rows: auto auto 1fr;
+      gap: 0.65rem;
+      height: 100%;
+    }
+
+    .search-row {
+      display: flex;
+      gap: 0.35rem;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+
+    .search-row input {
+      flex: 1;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 0.35rem 0.45rem;
+    }
+
+    .students-table-wrap {
+      max-height: 270px;
+      overflow: auto;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+    }
+
+    .students-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.81rem;
+    }
+
+    .students-table th,
+    .students-table td {
+      border-bottom: 1px solid #edf2f7;
+      padding: 0.28rem;
+      text-align: left;
+    }
+
+    .students-table th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      z-index: 1;
+    }
+
+    .students-table button {
+      border: 1px solid #16a34a;
+      background: #22c55e;
+      color: #fff;
+      border-radius: 5px;
+      padding: 0.14rem 0.32rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .unbooked-wrap {
+      max-height: 145px;
+      overflow: auto;
+      border: 1px solid #f1f5f9;
+      border-radius: 8px;
+      padding: 0.45rem;
+      background: #fcfdff;
+      font-size: 0.82rem;
+    }
+
+    .student-day {
+      border: 1px solid #dbeafe;
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 0.45rem;
+      font-size: 0.82rem;
+      min-height: 165px;
+    }
+
+    .student-day table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.35rem;
+    }
+
+    .student-day th,
+    .student-day td {
+      border: 1px solid #dbeafe;
+      padding: 0.2rem 0.26rem;
+      text-align: left;
+      font-size: 0.78rem;
+    }
+
+    .slot-status {
+      margin-top: 0.5rem;
+      font-size: 0.84rem;
+      min-height: 1.1rem;
+      font-weight: 700;
+      color: #1e3a8a;
+    }
+
+    @media (max-width: 1080px) {
+      .slot-grid { grid-template-columns: 1fr; }
+    }
+
+    @media print {
+      #navbar-include,
+      .slot-actions,
+      .slot-config,
+      .search-row,
+      .students-table-wrap,
+      .student-day,
+      .slot-status {
+        display: none !important;
+      }
+      .slot-page { padding: 0; max-width: none; }
+      .slot-grid { display: block; }
+      .slot-card { box-shadow: none; border-color: #cbd5e1; }
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+
+  <main class="slot-page">
+    <section class="slot-head">
+      <h1>Teacher Calendar List</h1>
+      <div id="slotBookingMeta" class="slot-meta">Loading booking...</div>
+      <div class="slot-actions">
+        <a id="backCalendarLink" href="add_booking.html" class="secondary">Back to Calendar</a>
+        <a id="openBookClassLink" href="add_booking.html" class="secondary">Open Linked Book a Class</a>
+        <button id="printDayBtn" type="button">Print This Day</button>
+      </div>
+      <div id="slotStatus" class="slot-status"></div>
+    </section>
+
+    <section class="slot-grid">
+      <article class="slot-card">
+        <div class="slot-config">
+          <label>
+            Max slots
+            <input id="maxSlotsInput" type="number" min="1" max="60" value="24">
+          </label>
+          <label class="check-label">
+            <input id="allowPairsInput" type="checkbox" checked>
+            Allow pair slots
+          </label>
+          <button id="saveConfigBtn" type="button" class="secondary">Save Settings</button>
+          <div id="activeSeatMeta" style="font-size:0.82rem;color:#1e3a8a;font-weight:700;"></div>
+        </div>
+
+        <table class="slot-table" id="slotsTable">
+          <thead>
+            <tr>
+              <th style="width:72px;">Slot</th>
+              <th>Seat 1</th>
+              <th id="seat2Header">Seat 2</th>
+            </tr>
+          </thead>
+          <tbody id="slotsBody"></tbody>
+        </table>
+      </article>
+
+      <article class="right-tools">
+        <section class="slot-card">
+          <div style="font-weight:800;color:#0f172a;margin-bottom:0.3rem;">Class Students</div>
+          <div class="search-row">
+            <input id="studentSearchInput" type="search" placeholder="Search student by name or ID">
+          </div>
+          <div class="students-table-wrap">
+            <table class="students-table">
+              <thead>
+                <tr>
+                  <th style="width:28%;">ID</th>
+                  <th>Name</th>
+                  <th style="width:72px;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="studentsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="slot-card">
+          <div style="font-weight:800;color:#0f172a;margin-bottom:0.3rem;">Students Not Booked Yet</div>
+          <div id="unbookedSummary" style="font-size:0.82rem;color:#334155;margin-bottom:0.35rem;"></div>
+          <div id="unbookedList" class="unbooked-wrap"></div>
+        </section>
+
+        <section class="slot-card student-day" id="studentDayPanel">
+          <div style="font-weight:800;color:#0f172a;">Student Calendar Attached</div>
+          <div id="studentDayMeta" style="margin-top:0.24rem;color:#334155;">Click a slot, then choose a student to view their timetable for this booking day.</div>
+          <div id="studentDayTableWrap"></div>
+        </section>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    (function() {
+      const params = new URLSearchParams(window.location.search);
+      const bookingId = Number(params.get('booking_id') || 0);
+      const sourcePage = String(params.get('source') || '').trim() || 'add_booking.html';
+      const safeSourcePage = /\.html$/i.test(sourcePage) ? sourcePage : 'add_booking.html';
+
+      const slotBookingMeta = document.getElementById('slotBookingMeta');
+      const slotStatus = document.getElementById('slotStatus');
+      const maxSlotsInput = document.getElementById('maxSlotsInput');
+      const allowPairsInput = document.getElementById('allowPairsInput');
+      const saveConfigBtn = document.getElementById('saveConfigBtn');
+      const slotsBody = document.getElementById('slotsBody');
+      const seat2Header = document.getElementById('seat2Header');
+      const activeSeatMeta = document.getElementById('activeSeatMeta');
+      const studentsBody = document.getElementById('studentsBody');
+      const studentSearchInput = document.getElementById('studentSearchInput');
+      const unbookedSummary = document.getElementById('unbookedSummary');
+      const unbookedList = document.getElementById('unbookedList');
+      const studentDayMeta = document.getElementById('studentDayMeta');
+      const studentDayTableWrap = document.getElementById('studentDayTableWrap');
+      const backCalendarLink = document.getElementById('backCalendarLink');
+      const openBookClassLink = document.getElementById('openBookClassLink');
+      const printDayBtn = document.getElementById('printDayBtn');
+
+      let booking = null;
+      let slotList = { max_slots: 24, allow_pairs: true };
+      let slots = [];
+      let roster = [];
+      let activeSeat = { slot: 1, seat: 1 };
+
+      function setStatus(msg, isError) {
+        slotStatus.style.color = isError ? '#991b1b' : '#1e3a8a';
+        slotStatus.textContent = msg || '';
+      }
+
+      function escapeHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function getAssignedIdSet() {
+        const set = new Set();
+        slots.forEach((slot) => {
+          if (slot.seat_1 && slot.seat_1.student_id_number) set.add(String(slot.seat_1.student_id_number).toLowerCase());
+          if (slot.seat_2 && slot.seat_2.student_id_number) set.add(String(slot.seat_2.student_id_number).toLowerCase());
+        });
+        return set;
+      }
+
+      function renderBookingMeta() {
+        if (!booking) return;
+        const dateStr = String(booking.booking_date || '');
+        slotBookingMeta.textContent = `Booking #${booking.id} | ${booking.staff_name || '-'} | ${booking.class_name || '-'} | ${dateStr} | P${booking.period || '-'} | ${booking.recipe || '-'}`;
+
+        const linked = `${safeSourcePage}?booking_id=${encodeURIComponent(String(bookingId))}`;
+        backCalendarLink.href = linked;
+        openBookClassLink.href = linked;
+      }
+
+      function renderActiveSeatMeta() {
+        activeSeatMeta.textContent = `Active target: Slot ${activeSeat.slot}, Seat ${activeSeat.seat}`;
+      }
+
+      function makeSeatHtml(slotNumber, seatIndex, seatData) {
+        const hasData = !!(seatData && seatData.student_id_number);
+        const name = hasData ? escapeHtml(seatData.student_name || '') : 'Empty seat';
+        const idNum = hasData ? escapeHtml(seatData.student_id_number || '') : '';
+        const isActive = activeSeat.slot === slotNumber && activeSeat.seat === seatIndex;
+
+        return `
+          <div class="seat-box ${isActive ? 'active' : ''}" data-slot="${slotNumber}" data-seat="${seatIndex}">
+            <div class="seat-line">
+              <div class="seat-name">${name}</div>
+              <div style="font-size:0.72rem;color:#475569;font-weight:700;">S${seatIndex}</div>
+            </div>
+            <div class="seat-id">${idNum}</div>
+            <div class="seat-cta">
+              <button type="button" class="pick-seat-btn" data-slot="${slotNumber}" data-seat="${seatIndex}">Pick Student</button>
+              <button type="button" class="clear clear-seat-btn" data-slot="${slotNumber}" data-seat="${seatIndex}">Clear</button>
+            </div>
+          </div>
+        `;
+      }
+
+      function renderSlots() {
+        if (!Array.isArray(slots) || !slots.length) {
+          slotsBody.innerHTML = '<tr><td colspan="3">No slots available.</td></tr>';
+          return;
+        }
+
+        seat2Header.style.display = slotList.allow_pairs ? '' : 'none';
+
+        slotsBody.innerHTML = slots.map((slot) => {
+          const seat1 = makeSeatHtml(slot.slot_number, 1, slot.seat_1);
+          const seat2 = slotList.allow_pairs
+            ? makeSeatHtml(slot.slot_number, 2, slot.seat_2)
+            : '';
+          return `
+            <tr>
+              <td style="text-align:center;font-weight:800;">${slot.slot_number}</td>
+              <td>${seat1}</td>
+              <td style="display:${slotList.allow_pairs ? '' : 'none'};">${seat2}</td>
+            </tr>
+          `;
+        }).join('');
+
+        slotsBody.querySelectorAll('.pick-seat-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            activeSeat = {
+              slot: Number(btn.getAttribute('data-slot') || 1),
+              seat: Number(btn.getAttribute('data-seat') || 1)
+            };
+            renderActiveSeatMeta();
+            renderSlots();
+          });
+        });
+
+        slotsBody.querySelectorAll('.clear-seat-btn').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const slotNum = Number(btn.getAttribute('data-slot') || 0);
+            const seatIdx = Number(btn.getAttribute('data-seat') || 0);
+            if (!slotNum || !seatIdx) return;
+            try {
+              const res = await fetch(`/api/booking-slot-lists/${encodeURIComponent(String(bookingId))}/assign/${encodeURIComponent(String(slotNum))}/${encodeURIComponent(String(seatIdx))}`, {
+                method: 'DELETE'
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || data.success === false) throw new Error(data.error || 'Failed to clear seat.');
+              await refreshAll();
+              setStatus(`Cleared Slot ${slotNum}, Seat ${seatIdx}.`, false);
+            } catch (err) {
+              setStatus(err.message || 'Failed to clear seat.', true);
+            }
+          });
+        });
+      }
+
+      function getFilteredRoster() {
+        const q = String(studentSearchInput.value || '').trim().toLowerCase();
+        if (!q) return roster;
+        return roster.filter((s) => {
+          const name = String(s.student_name || '').toLowerCase();
+          const id = String(s.id_number || '').toLowerCase();
+          return name.includes(q) || id.includes(q);
+        });
+      }
+
+      async function loadStudentDay(student) {
+        if (!booking || !student || !student.id_number) return;
+        studentDayMeta.textContent = `Loading timetable for ${student.student_name || ''} (${student.id_number || ''})...`;
+        studentDayTableWrap.innerHTML = '';
+        try {
+          const url = `/api/student_upload/student-day?idNumber=${encodeURIComponent(String(student.id_number || ''))}&date=${encodeURIComponent(String(booking.booking_date || ''))}`;
+          const res = await fetch(url);
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.success === false) throw new Error(data.error || 'Failed to load student day timetable.');
+
+          const periods = Array.isArray(data.periods) ? data.periods : [];
+          studentDayMeta.textContent = `${student.student_name || ''} (${student.id_number || ''}) | ${booking.booking_date || ''}`;
+          studentDayTableWrap.innerHTML = `
+            <table>
+              <thead><tr><th>Period</th><th>Class(es)</th></tr></thead>
+              <tbody>
+                ${periods.map((p) => `<tr><td>${escapeHtml(p.period || '')}</td><td>${escapeHtml((p.classes || []).join(', ') || '-')}</td></tr>`).join('')}
+              </tbody>
+            </table>
+          `;
+        } catch (err) {
+          studentDayMeta.textContent = err.message || 'Failed to load student timetable.';
+          studentDayTableWrap.innerHTML = '';
+        }
+      }
+
+      function renderRoster() {
+        const filtered = getFilteredRoster();
+        if (!filtered.length) {
+          studentsBody.innerHTML = '<tr><td colspan="3">No students found.</td></tr>';
+          return;
+        }
+
+        studentsBody.innerHTML = filtered.map((s) => `
+          <tr>
+            <td>${escapeHtml(s.id_number || '')}</td>
+            <td>${escapeHtml(s.student_name || '')}</td>
+            <td><button type="button" class="assign-student-btn" data-id="${escapeHtml(s.id_number || '')}">Assign</button></td>
+          </tr>
+        `).join('');
+
+        studentsBody.querySelectorAll('.assign-student-btn').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const studentId = String(btn.getAttribute('data-id') || '').trim();
+            const student = roster.find((r) => String(r.id_number || '').trim() === studentId);
+            if (!student) return;
+            try {
+              const res = await fetch(`/api/booking-slot-lists/${encodeURIComponent(String(bookingId))}/assign`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  slot_number: activeSeat.slot,
+                  seat_index: activeSeat.seat,
+                  student_id_number: student.id_number,
+                  student_name: student.student_name,
+                  form_class: student.form_class,
+                  year_level: student.year_level
+                })
+              });
+              const data = await res.json().catch(() => ({}));
+              if (!res.ok || data.success === false) throw new Error(data.error || 'Failed to assign student.');
+
+              await refreshAll();
+              setStatus(`Assigned ${student.student_name || student.id_number} to Slot ${activeSeat.slot}, Seat ${activeSeat.seat}.`, false);
+              loadStudentDay(student).catch(() => {});
+            } catch (err) {
+              setStatus(err.message || 'Failed to assign student.', true);
+            }
+          });
+        });
+
+        studentsBody.querySelectorAll('tr').forEach((row) => {
+          row.addEventListener('click', () => {
+            const id = row.querySelector('button.assign-student-btn')?.getAttribute('data-id') || '';
+            const student = roster.find((r) => String(r.id_number || '').trim() === String(id));
+            if (student) {
+              loadStudentDay(student).catch(() => {});
+            }
+          });
+        });
+      }
+
+      function renderUnbooked() {
+        const assignedIds = getAssignedIdSet();
+        const unbooked = roster.filter((s) => !assignedIds.has(String(s.id_number || '').toLowerCase()));
+        unbookedSummary.textContent = `${unbooked.length} not booked out of ${roster.length} students.`;
+        unbookedList.innerHTML = unbooked.length
+          ? `<ul style="margin:0;padding-left:1.05rem;">${unbooked.map((s) => `<li>${escapeHtml(s.student_name || '')} (${escapeHtml(s.id_number || '')})</li>`).join('')}</ul>`
+          : '<div>All students are booked into a slot.</div>';
+      }
+
+      async function loadRosterForBooking() {
+        if (!booking || !booking.class_name) {
+          roster = [];
+          return;
+        }
+
+        let url = `/api/student_upload/by-class/${encodeURIComponent(String(booking.class_name || ''))}`;
+        const codeMatch = /\(([^)]+)\)/.exec(String(booking.staff_name || ''));
+        const staffCode = codeMatch ? String(codeMatch[1] || '').trim() : '';
+        if (staffCode) {
+          url += `?staffCode=${encodeURIComponent(staffCode)}`;
+        }
+
+        const res = await fetch(url);
+        const data = await res.json().catch(() => ({}));
+        roster = Array.isArray(data.students) ? data.students : [];
+      }
+
+      async function loadSlotList() {
+        const res = await fetch(`/api/booking-slot-lists/${encodeURIComponent(String(bookingId))}`);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error(data.error || 'Failed to load slot list.');
+        }
+        booking = data.booking || null;
+        slotList = data.slot_list || { max_slots: 24, allow_pairs: true };
+        slots = Array.isArray(data.slots) ? data.slots : [];
+      }
+
+      async function refreshAll() {
+        await loadSlotList();
+        await loadRosterForBooking();
+
+        maxSlotsInput.value = slotList.max_slots || 24;
+        allowPairsInput.checked = !!slotList.allow_pairs;
+
+        renderBookingMeta();
+        renderActiveSeatMeta();
+        renderSlots();
+        renderRoster();
+        renderUnbooked();
+      }
+
+      saveConfigBtn.addEventListener('click', async () => {
+        try {
+          const maxSlots = Number(maxSlotsInput.value || 24);
+          const allowPairs = !!allowPairsInput.checked;
+          const res = await fetch(`/api/booking-slot-lists/${encodeURIComponent(String(bookingId))}/config`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ max_slots: maxSlots, allow_pairs: allowPairs })
+          });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.success === false) throw new Error(data.error || 'Failed to save slot settings.');
+
+          if (!allowPairs && activeSeat.seat === 2) activeSeat.seat = 1;
+          await refreshAll();
+          setStatus('Slot settings saved.', false);
+        } catch (err) {
+          setStatus(err.message || 'Failed to save slot settings.', true);
+        }
+      });
+
+      studentSearchInput.addEventListener('input', () => {
+        renderRoster();
+      });
+
+      printDayBtn.addEventListener('click', () => {
+        window.print();
+      });
+
+      if (!bookingId) {
+        setStatus('Missing booking_id in URL.', true);
+        return;
+      }
+
+      refreshAll().catch((err) => {
+        setStatus(err.message || 'Failed to load teacher slot list.', true);
+      });
+    })();
+  </script>
+</body>
+</html>

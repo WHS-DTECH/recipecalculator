@@ -26,6 +26,8 @@ const bookingPageLabel = (window && window.bookingPageLabel) ? String(window.boo
 const bookClassSharedStateKey = 'bookClassEmbedSharedState';
 const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
 const scheduleViewModeStorageKey = 'scheduleViewMode';
+const schedulePageParams = new URLSearchParams(window.location.search);
+const schedulePresetBookingId = parseInt(String(schedulePageParams.get('booking_id') || ''), 10);
 const scheduleCalendarSourceId = `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const scheduleCalendarSharedChannel = ('BroadcastChannel' in window)
   ? new BroadcastChannel(bookClassSharedChannelName)
@@ -34,6 +36,7 @@ const scheduleCalendarFilters = (window && window.scheduleCalendarFilters && typ
   ? window.scheduleCalendarFilters
   : {};
 let lastCalendarRefreshSignalAt = 0;
+let schedulePresetApplied = false;
 let scheduleViewMode = (() => {
   const saved = String(localStorage.getItem(scheduleViewModeStorageKey) || '').trim().toLowerCase();
   return saved === 'recipe' ? 'recipe' : 'class';
@@ -945,11 +948,13 @@ async function renderScheduleCalendar() {
           // Add a unique id for each booking cell
           const bookingId = `booking-${cell.id}`;
           const cellLabel = `${escHtml(getCellPrimaryText(cell))}, Teacher: ${escHtml(cell.staff_name)}`;
+          const slotHref = `teacher_booking_slots.html?booking_id=${encodeURIComponent(String(cell.id || ''))}&source=${encodeURIComponent(window.location.pathname.split('/').pop() || 'add_booking.html')}`;
           // Add a class for selected state
           html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>
             <div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${cell.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
               <div style='font-weight:bold;font-size:0.98em;color:${cellStyle.text};'>${escHtml(getCellPrimaryText(cell))}</div>
               <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:0.95em;'>Teacher: ${escHtml(cell.staff_name)}</div>
+              <div style='margin-top:0.24rem;'><a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.75rem;text-decoration:none;font-weight:700;'>Slots</a></div>
             </div>
           </td>`;
       } else {
@@ -1014,7 +1019,8 @@ async function renderScheduleCalendar() {
     selectedIds.forEach(id => {
       const b = bookings.find(bk => bk.id === id);
       if (b) {
-        html += `<li><a href="#" onclick="scrollToDesiredServingsRow(${escHtml(String(id))});return false;">${escHtml(b.booking_date)} | ${escHtml(b.staff_name)} | ${escHtml(b.class_name)} | ${escHtml(b.recipe)}</a></li>`;
+        const slotHref = `teacher_booking_slots.html?booking_id=${encodeURIComponent(String(id))}&source=${encodeURIComponent(window.location.pathname.split('/').pop() || 'add_booking.html')}`;
+        html += `<li><a href="#" onclick="scrollToDesiredServingsRow(${escHtml(String(id))});return false;">${escHtml(b.booking_date)} | ${escHtml(b.staff_name)} | ${escHtml(b.class_name)} | ${escHtml(b.recipe)}</a> <a href="${slotHref}" style="margin-left:0.4rem;font-size:0.8rem;color:#1e40af;">[Slots]</a></li>`;
       }
     });
     html += '</ul>';
@@ -1111,6 +1117,15 @@ async function renderScheduleCalendar() {
         applySelectionStyles();
         renderSelectedBookings();
       };
+
+      if (!schedulePresetApplied && Number.isInteger(schedulePresetBookingId) && schedulePresetBookingId > 0) {
+        const preset = bookings.find(b => parseInt(b.id, 10) === schedulePresetBookingId);
+        if (preset) {
+          window.selectedBookingIds = [schedulePresetBookingId];
+          publishBookingToBookClassForm(preset);
+          schedulePresetApplied = true;
+        }
+      }
       bookingDiv.onclick = toggleBooking;
       bookingDiv.onkeydown = function(e) {
         if (e.key === 'Enter' || e.key === ' ') {

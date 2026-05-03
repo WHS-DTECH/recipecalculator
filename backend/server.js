@@ -663,6 +663,8 @@ app.use('/api/staff_upload', staffUploadRouter);
 
 const bookingsRouter = require('./routes/bookings');
 app.use('/api/bookings', bookingsRouter);
+const bookingSlotListsRouter = require('./routes/booking_slot_lists');
+app.use('/api/booking-slot-lists', bookingSlotListsRouter);
 
 const recipeMatchingRouter = require('./routes/recipe-matching');
 app.use('/api/recipe-matching', recipeMatchingRouter);

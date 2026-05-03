@@ -824,6 +824,24 @@ router.get('/all', async (req, res) => {
   }
 });
 
+// Get one booking by id
+router.get('/item/:id', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id)) {
+    return res.status(400).json({ success: false, error: 'Invalid booking id.' });
+  }
+  try {
+    await ensureSchema();
+    const result = await pool.query('SELECT * FROM bookings WHERE id = $1 LIMIT 1', [id]);
+    if (!result.rowCount) {
+      return res.status(404).json({ success: false, error: 'Booking not found.' });
+    }
+    res.json({ success: true, booking: result.rows[0] });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to fetch booking.' });
+  }
+});
+
 // iCal feed — only bookings with a teacher allocated
 // Subscribe URL: /api/bookings/ical
 router.get('/ical', async (req, res) => {

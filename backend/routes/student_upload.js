@@ -223,6 +223,88 @@ router.get('/by-class/:ttcode', async (req, res) => {
   }
 });
 
+router.get('/student-day', async (req, res) => {
+  const idNumber = String(req.query.idNumber || '').trim();
+  const date = String(req.query.date || '').trim();
+
+  if (!idNumber || !date) {
+    return res.status(400).json({ success: false, error: 'idNumber and date are required.' });
+  }
+
+  const parsed = new Date(date);
+  if (Number.isNaN(parsed.getTime())) {
+    return res.status(400).json({ success: false, error: 'Invalid date format.' });
+  }
+
+  const day = parsed.getDay();
+  const dayMap = {
+    1: 'mon',
+    2: 'tue',
+    3: 'wed',
+    4: 'thu',
+    5: 'fri'
+  };
+  const dayPrefix = dayMap[day];
+
+  if (!dayPrefix) {
+    return res.json({ success: true, periods: [] });
+  }
+
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      `SELECT student_name, id_number,
+              ${dayPrefix}_p1_1, ${dayPrefix}_p1_2,
+              ${dayPrefix}_p2, ${dayPrefix}_p3, ${dayPrefix}_p4, ${dayPrefix}_p5
+       FROM student_timetable
+       WHERE COALESCE(status, 'Current') = 'Current'
+         AND lower(trim(id_number)) = lower(trim($1))
+       LIMIT 1`,
+      [idNumber]
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({ success: false, error: 'Student not found.' });
+    }
+
+    const row = result.rows[0];
+    const splitVals = (values) => {
+      const seen = new Set();
+      const out = [];
+      for (const raw of values) {
+        const parts = String(raw || '').split(/[;|]/g).map(v => v.trim()).filter(Boolean);
+        for (const p of parts) {
+          const key = p.toUpperCase();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          out.push(p);
+        }
+      }
+      return out;
+    };
+
+    const periods = [
+      { period: 'P1', classes: splitVals([row[`${dayPrefix}_p1_1`], row[`${dayPrefix}_p1_2`]]) },
+      { period: 'P2', classes: splitVals([row[`${dayPrefix}_p2`]]) },
+      { period: 'P3', classes: splitVals([row[`${dayPrefix}_p3`]]) },
+      { period: 'P4', classes: splitVals([row[`${dayPrefix}_p4`]]) },
+      { period: 'P5', classes: splitVals([row[`${dayPrefix}_p5`]]) }
+    ];
+
+    return res.json({
+      success: true,
+      student: {
+        student_name: row.student_name || '',
+        id_number: row.id_number || ''
+      },
+      date,
+      periods
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Failed to fetch student day timetable.' });
+  }
+});
+
 router.post('/', async (req, res) => {
   const { students, headers = [] } = req.body;
   const uploadYearRaw = Number(req.body.uploadYear);
