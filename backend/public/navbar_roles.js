@@ -8,6 +8,55 @@
   // Store current user role in sessionStorage for use across pages
   const ROLE_STORAGE_KEY = 'navbar_user_role';
   const SUPPORTED_ROLES = ['admin', 'lead_teacher', 'teacher', 'technician', 'student', 'public_access'];
+  let permissionRows = [];
+  let permissionsLoaded = false;
+
+  function getRolePermission(roleName) {
+    if (!permissionsLoaded || !Array.isArray(permissionRows) || !roleName) return null;
+    return permissionRows.find((row) => String(row.role_name || '').trim().toLowerCase() === roleName) || null;
+  }
+
+  function setElementVisible(el, visible) {
+    if (!el) return;
+    if (visible) {
+      el.style.display = '';
+      el.removeAttribute('aria-hidden');
+      if (el.hasAttribute('hidden')) el.hidden = false;
+    } else {
+      el.style.display = 'none';
+      el.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  function applyRoutePermissions(roleName) {
+    const rolePermissions = getRolePermission(roleName);
+    if (!rolePermissions) return;
+
+    document.querySelectorAll('[data-route]').forEach((el) => {
+      const routeKey = String(el.getAttribute('data-route') || '').trim();
+      if (!routeKey) return;
+      const allowed = Boolean(rolePermissions[routeKey]);
+      setElementVisible(el, allowed);
+    });
+  }
+
+  function loadPermissions() {
+    return fetch('/api/permissions/all')
+      .then((res) => {
+        if (!res.ok) throw new Error('Failed to fetch permissions');
+        return res.json();
+      })
+      .then((data) => {
+        permissionRows = Array.isArray(data.roles) ? data.roles : [];
+        permissionsLoaded = true;
+        return true;
+      })
+      .catch(() => {
+        permissionsLoaded = false;
+        permissionRows = [];
+        return false;
+      });
+  }
 
   function normalizeRole(role) {
     const normalized = String(role || '').trim().toLowerCase();
@@ -20,14 +69,15 @@
   }
 
   function detectRoleFromPermissionsEndpoint() {
-    return fetch('/api/permissions/all')
+    return fetch('/api/auth/me', { credentials: 'include' })
       .then(res => {
         if (!res.ok) return '';
         return res.json();
       })
       .then(data => {
-        // This endpoint describes global role definitions, not the current user identity.
-        // Do not infer a user role from it.
+        if (data && data.authenticated && data.user && data.user.role) {
+          return normalizeRole(data.user.role);
+        }
         return '';
       })
       .catch(() => '');
@@ -149,6 +199,8 @@
         section.setAttribute('aria-hidden', 'true');
       }
     });
+
+    applyRoutePermissions(normalized);
   }
 
   function handleAuthSessionChanged(event) {
@@ -162,12 +214,14 @@
    */
   function initializeNavbarRoles() {
     const existingRole = getStoredUserRole();
-    if (existingRole) {
-      updateNavbarVisibility(existingRole);
-    }
+    loadPermissions().finally(() => {
+      if (existingRole) {
+        updateNavbarVisibility(existingRole);
+      }
 
-    // Re-check from backend hints, but do not auto-promote admin.
-    detectUserRole();
+      // Re-check from backend hints, but do not auto-promote admin.
+      detectUserRole();
+    });
   }
 
   // Wait for DOM to be ready
