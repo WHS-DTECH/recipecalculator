@@ -352,7 +352,16 @@
         const params = new URLSearchParams(window.location.search);
         const raw = String(params.get('recipeId') || '').trim();
         const recipeId = Number(raw);
-        return Number.isInteger(recipeId) && recipeId > 0 ? recipeId : null;
+        if (Number.isInteger(recipeId) && recipeId > 0) {
+          return recipeId;
+        }
+
+        try {
+          const stored = Number(String(sessionStorage.getItem('ftReviewRecipeId') || '').trim());
+          return Number.isInteger(stored) && stored > 0 ? stored : null;
+        } catch (_) {
+          return null;
+        }
       }
 
       function setStatus(message, type) {
@@ -460,7 +469,7 @@
         }
 
         async function loadRecipeForEdit(recipeId) {
-          const res = await fetch('/api/recipes/recipes/' + recipeId, { credentials: 'include' });
+          const res = await fetch('/api/recipes/' + recipeId, { credentials: 'include' });
           const data = await res.json().catch(() => ({}));
           if (!res.ok || !data || data.error) {
             throw new Error((data && data.error) || 'Failed to load recipe.');
@@ -592,6 +601,11 @@
         });
 
         const preferredRecipeId = getRecipeIdFromLocation();
+        try {
+          sessionStorage.removeItem('ftReviewRecipeId');
+        } catch (_) {
+          // Ignore storage restrictions.
+        }
         updatePhotoUploadLink(preferredRecipeId);
         if (preferredRecipeId) {
           loadRecipeForEdit(preferredRecipeId).catch((err) => {

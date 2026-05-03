@@ -286,7 +286,7 @@
               '<td>' + (moderationComment || '<span style="color:#7b8ea5;">-</span>') + '</td>' +
               '<td>' +
                 '<div class="ft-row-actions">' +
-                  '<a class="ft-view-btn" href="food_truck_manual_recipe.html?recipeId=' + recipeId + '">Open</a>' +
+                  '<a class="ft-view-btn" data-action="open-review" data-id="' + recipeId + '" href="food_truck_manual_recipe.html?recipeId=' + recipeId + '&from=ft_teacher">Open</a>' +
                   (showApprove ? '<button class="ft-approve-btn" type="button" data-action="approve" data-id="' + recipeId + '">Approve</button>' : '') +
                   (showDecline ? '<button class="ft-decline-btn" type="button" data-action="decline" data-id="' + recipeId + '">Decline</button>' : '') +
                 '</div>' +
@@ -328,6 +328,19 @@
       }
 
       bodyEl.addEventListener('click', async (event) => {
+        const openLink = event.target.closest('a[data-action="open-review"][data-id]');
+        if (openLink) {
+          const openRecipeId = Number(openLink.getAttribute('data-id'));
+          if (Number.isInteger(openRecipeId) && openRecipeId > 0) {
+            try {
+              sessionStorage.setItem('ftReviewRecipeId', String(openRecipeId));
+            } catch (_) {
+              // Ignore storage restrictions and allow navigation.
+            }
+          }
+          return;
+        }
+
         const btn = event.target.closest('button[data-action][data-id]');
         if (!btn) return;
 
