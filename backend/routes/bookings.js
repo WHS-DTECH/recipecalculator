@@ -398,14 +398,14 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
         b.recipe_id,
         COUNT(dsi.id)::int AS ingredient_rows,
         COUNT(*) FILTER (
-          WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
+          WHERE btrim(coalesce(dsi.recipe_id::text, '')) = btrim(coalesce(b.recipe_id::text, ''))
         )::int AS rows_for_current_recipe,
         COALESCE(inv.inventory_rows, 0)::int AS inventory_rows,
         CASE
           WHEN EXISTS (
             SELECT 1
             FROM browse br
-            WHERE br.id::text = coalesce(b.recipe_id::text, '')
+            WHERE btrim(br.id::text) = btrim(coalesce(b.recipe_id::text, ''))
           ) THEN 'id'
           WHEN EXISTS (
             SELECT 1
@@ -418,12 +418,12 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
       LEFT JOIN desired_servings_ingredients dsi
         ON dsi.booking_id = b.id
       LEFT JOIN inv
-        ON inv.recipe_id_text = coalesce(b.recipe_id::text, '')
+        ON btrim(inv.recipe_id_text) = btrim(coalesce(b.recipe_id::text, ''))
       WHERE ${where.join(' AND ')}
       GROUP BY b.id, b.booking_date, b.period, b.staff_name, b.class_name, b.recipe, b.recipe_id, inv.inventory_rows
       HAVING COUNT(dsi.id) = 0
          OR COUNT(*) FILTER (
-              WHERE coalesce(dsi.recipe_id::text, '') = coalesce(b.recipe_id::text, '')
+              WHERE btrim(coalesce(dsi.recipe_id::text, '')) = btrim(coalesce(b.recipe_id::text, ''))
             ) = 0
       ORDER BY b.booking_date ASC, b.period ASC, b.staff_name ASC, b.class_name ASC
       LIMIT $${params.length}`;
