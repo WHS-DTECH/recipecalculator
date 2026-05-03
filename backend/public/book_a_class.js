@@ -1183,7 +1183,8 @@ function populateClassDropdown(staffCode) {
 
 // --- Populate Recipe Dropdown ---
 function populateRecipeDropdown() {
-  fetch('/api/recipes/display-dropdown')
+  const dropdownUrl = '/api/recipes/display-dropdown' + (isFoodTruckStudentMode ? '?scope=food_truck' : '');
+  fetch(dropdownUrl)
     .then(res => res.json())
     .then(data => {
       const select = document.getElementById('recipeSelect');
