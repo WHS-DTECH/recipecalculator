@@ -5,7 +5,6 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-const { requireAdmin } = require('../middleware/requireAdmin');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -68,8 +67,17 @@ async function hasFoodTruckTeacherAccess(email) {
   });
 }
 
+function getFoodTruckTeacherRequestEmail(req) {
+  return normalizeEmail(
+    req && req.authUserEmail ||
+    req && req.headers && (req.headers['x-user-email'] || req.headers['x-staff-email']) ||
+    req && req.query && req.query.userEmail ||
+    req && req.body && req.body.userEmail
+  );
+}
+
 async function requireFoodTruckTeacher(req, res, next) {
-  const email = normalizeEmail(req && req.authUserEmail);
+  const email = getFoodTruckTeacherRequestEmail(req);
   if (!email) {
     return res.status(401).json({ success: false, error: 'Sign in required.' });
   }
@@ -79,6 +87,7 @@ async function requireFoodTruckTeacher(req, res, next) {
     if (!allowed) {
       return res.status(403).json({ success: false, error: 'Food Truck teacher access required.' });
     }
+    req.authUserEmail = email;
     return next();
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message || 'Unable to validate teacher access.' });
@@ -1053,7 +1062,7 @@ router.get('/food-truck/moderation-list', requireFoodTruckTeacher, async (req, r
   }
 });
 
-router.post('/food-truck/admin/reclassify-pending', requireAdmin, async (req, res) => {
+router.post('/food-truck/admin/reclassify-pending', requireFoodTruckTeacher, async (req, res) => {
   const recipeId = Number(req.body && req.body.recipeId);
   const recipeName = String(req.body && req.body.name || '').trim();
   const studentName = String(req.body && req.body.studentName || '').trim();
