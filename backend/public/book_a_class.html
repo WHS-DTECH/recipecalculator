@@ -59,6 +59,20 @@
         .hide-booking-form-mode #bookClassLayout {
             grid-template-columns: 1fr;
         }
+        .hide-booking-form-mode #teacherTimetableDaySelector {
+            display: grid !important;
+            grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+            gap: 0.3rem !important;
+            flex-wrap: nowrap !important;
+        }
+        .hide-booking-form-mode #teacherTimetableDaySelector .teacher-day-btn {
+            width: 100%;
+            min-width: 0;
+            padding: 0.22rem 0.2rem;
+            font-size: 0.74rem;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
         .hide-student-panel-mode #bookClassLayout {
             grid-template-columns: 1fr;
         }
