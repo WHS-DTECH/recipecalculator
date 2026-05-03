@@ -46,6 +46,16 @@
   <button
     type="button"
     class="navbar-admin-toggle"
+    data-role="authenticated"
+    data-route="ft_teacher"
+    aria-expanded="false"
+    aria-controls="ftTeacherDrawer">
+    FT Teacher
+  </button>
+
+  <button
+    type="button"
+    class="navbar-admin-toggle"
     data-role="admin"
     aria-expanded="false"
     aria-controls="adminManagementDrawer">
@@ -60,6 +70,7 @@
 
 <div id="adminDrawerBackdrop" class="navbar-drawer-backdrop" data-role="admin" hidden></div>
 <div id="planningDrawerBackdrop" class="navbar-drawer-backdrop" data-role="planning" hidden></div>
+<div id="ftTeacherDrawerBackdrop" class="navbar-drawer-backdrop" data-role="authenticated" hidden></div>
 
 <aside id="planningDrawer" class="navbar-admin-drawer" data-role="planning" hidden aria-label="Planning Menu">
   <div class="navbar-drawer-header">
@@ -107,15 +118,6 @@
   </details>
 
   <details class="navbar-drawer-group">
-    <summary>FT Teacher</summary>
-    <div class="navbar-drawer-links">
-      <a href="add_food_truck_booking.html" class="navbar-submenu-item">Add Food Truck Booking</a>
-      <a href="food_truck_teacher_recipes.html" class="navbar-submenu-item">Recipe Moderation List</a>
-      <a href="teacher_booking_slots.html" class="navbar-submenu-item">Teacher Calendar List</a>
-    </div>
-  </details>
-
-  <details class="navbar-drawer-group">
     <summary>Ingredients & Catering</summary>
     <div class="navbar-drawer-links">
       <a href="ingredients_directory.html" class="navbar-submenu-item">Ingredients Directory</a>
@@ -147,4 +149,17 @@
       <a href="admin_department.html" class="navbar-submenu-item">Department</a>
     </div>
   </details>
+</aside>
+
+<aside id="ftTeacherDrawer" class="navbar-admin-drawer" data-role="authenticated" hidden aria-label="FT Teacher Menu">
+  <div class="navbar-drawer-header">
+    <div class="navbar-drawer-title">FT Teacher</div>
+    <button type="button" class="navbar-drawer-close" aria-label="Close FT Teacher menu">×</button>
+  </div>
+
+  <div class="navbar-drawer-links" style="padding-top:0.6rem;">
+    <a href="add_food_truck_booking.html" class="navbar-submenu-item" data-route="ft_teacher">Add Food Truck Booking</a>
+    <a href="food_truck_teacher_recipes.html" class="navbar-submenu-item" data-route="ft_teacher">Recipe Moderation List</a>
+    <a href="teacher_booking_slots.html" class="navbar-submenu-item" data-route="ft_teacher">Teacher Calendar List</a>
+  </div>
 </aside>

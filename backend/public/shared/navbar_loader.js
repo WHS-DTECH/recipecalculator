@@ -57,6 +57,11 @@
         toggle: document.querySelector('.navbar-admin-toggle[aria-controls="planningDrawer"]'),
         drawer: document.getElementById('planningDrawer'),
         backdrop: document.getElementById('planningDrawerBackdrop')
+      },
+      {
+        toggle: document.querySelector('.navbar-admin-toggle[aria-controls="ftTeacherDrawer"]'),
+        drawer: document.getElementById('ftTeacherDrawer'),
+        backdrop: document.getElementById('ftTeacherDrawerBackdrop')
       }
     ].filter(function(cfg) {
       return cfg.toggle && cfg.drawer && cfg.backdrop;
