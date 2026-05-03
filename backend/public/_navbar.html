@@ -16,7 +16,12 @@
 
   <nav class="navbar-core" id="primaryNavbarLinks" aria-label="Primary" data-role="authenticated">
     <a href="quick_add.html" class="navbar-core-link" title="Add a new recipe">Add Recipe</a>
-    <a href="food_truck_manual_recipe.html" class="navbar-core-link" title="Food Truck manual recipe entry">Food Truck</a>
+    <details class="navbar-core-dropdown">
+      <summary class="navbar-core-link" title="Food Truck student pages">Food Truck</summary>
+      <div class="navbar-core-dropdown-menu">
+        <a href="food_truck_manual_recipe.html" class="navbar-core-dropdown-link" title="Student Food Truck recipe entry">Add Recipe Manually</a>
+      </div>
+    </details>
     <a href="add_booking.html" class="navbar-core-link" title="Add a class booking">Add Booking</a>
     <a href="book_the_shopping.html" class="navbar-core-link" title="Plan shopping for bookings">Book Shopping</a>
   </nav>
