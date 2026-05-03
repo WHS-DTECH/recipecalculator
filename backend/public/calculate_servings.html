@@ -612,7 +612,7 @@
             classSizeInput.addEventListener('input', recalcDesiredServings);
             groupsInput.addEventListener('input', recalcDesiredServings);
             if (autoCalcBtn) {
-              autoCalcBtn.addEventListener('click', function() {
+              autoCalcBtn.addEventListener('click', async function() {
                 const classSelect = document.getElementById('class-select');
                 const calcDesiredBtn = document.getElementById('calculate-desired-serving-btn');
                 if (!classSelect || !classSelect.value) {
@@ -641,6 +641,17 @@
 
                 groupsInput.value = String(groups);
                 recalcDesiredServings();
+
+                // Keep desired serving calculations current with the latest recipe edits.
+                try {
+                  await fetch('/api/ingredients/inventory/sync', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ recipeId: classSelect.value, reseed: true })
+                  });
+                } catch (_) {
+                  // Best-effort sync: calculation still proceeds with available data.
+                }
 
                 // Run the existing desired serving ingredient workflow in one step.
                 if (calcDesiredBtn && typeof calcDesiredBtn.click === 'function') {

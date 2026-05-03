@@ -1044,7 +1044,15 @@ function saveDesiredServingsInBackground(details = {}) {
 
   const desiredServings = Math.ceil(classSize / groups);
 
-  return fetch('/api/ingredients/inventory/all')
+  const syncPromise = fetch('/api/ingredients/inventory/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ recipeId, reseed: true })
+  })
+    .then(res => res.json().catch(() => ({})))
+    .catch(() => ({}));
+
+  return syncPromise.then(() => fetch('/api/ingredients/inventory/all'))
     .then(res => res.json())
     .then(data => {
       const ingredients = Array.isArray(data)
