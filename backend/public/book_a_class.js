@@ -14,6 +14,7 @@ const isFormOnlyView = bookClassPageParams.get('form_only') === '1';
 const isStudentListOnlyView = bookClassPageParams.get('student_list_only') === '1';
 const isTimetableOnlyView = bookClassPageParams.get('hide_booking_form') === '1' && bookClassPageParams.get('hide_student_panel') === '1';
 const forcedPlannerStream = String(bookClassPageParams.get('planner_stream') || '').trim();
+const isFoodTruckStudentMode = forcedPlannerStream.toLowerCase() === 'food truck';
 const canPublishSharedEmbedState = !isTeacherEmbedView || isFormOnlyView;
 const bookClassSharedStateKey = 'bookClassEmbedSharedState';
 const bookClassActionChannelName = 'bookClassActionChannel';
@@ -192,6 +193,9 @@ let _staffArrCache = [];
 let _currentTeacherTimetablePeriods = [];
 let _preferredStaffId = '';
 let _studentsFetchRequestSeq = 0;
+let _currentClassStudents = [];
+let _foodTruckStudentIdentity = { id: '', name: '', email: '' };
+let _pendingPartnerStudentId = '';
 
 function normalizeToken(value) {
   return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -253,6 +257,133 @@ async function readCurrentStaffUserWithAuthFallback() {
   } catch {
     return null;
   }
+}
+
+async function readCurrentFoodTruckStudentIdentity() {
+  try {
+    const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+    const authData = await authRes.json().catch(() => ({}));
+    if (!authRes.ok || !authData || !authData.authenticated || !authData.user) {
+      return { id: '', name: '', email: '' };
+    }
+
+    const authUser = authData.user || {};
+    const email = String(authUser.email || '').trim().toLowerCase();
+    const role = String(authUser.role || '').trim().toLowerCase();
+    let name = String(authUser.name || '').trim();
+    let studentId = '';
+
+    if (role === 'student' && email) {
+      const profileRes = await fetch('/api/user_roles/profile?userType=student&identifier=' + encodeURIComponent(email), { credentials: 'include' });
+      const profileData = await profileRes.json().catch(() => ({}));
+      if (profileRes.ok && profileData && profileData.success && profileData.isStudent && profileData.student) {
+        name = String(profileData.student.student_name || name).trim();
+        studentId = String(profileData.student.id_number || '').trim();
+      }
+    }
+
+    if (!name && email) {
+      name = email.split('@')[0].split(/[._-]+/).filter(Boolean).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+    }
+
+    return {
+      id: studentId || email,
+      name: name || 'Student',
+      email
+    };
+  } catch {
+    return { id: '', name: '', email: '' };
+  }
+}
+
+function normalizeStudentName(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function setPartnerFieldVisibility() {
+  if (!isFoodTruckStudentMode) return;
+  const cookModeSelect = document.getElementById('cookModeSelect');
+  const partnerField = document.getElementById('partnerStudentField');
+  if (!cookModeSelect || !partnerField) return;
+  partnerField.style.display = cookModeSelect.value === 'pair' ? '' : 'none';
+}
+
+function populatePartnerStudentOptions(students = _currentClassStudents) {
+  if (!isFoodTruckStudentMode) return;
+  const select = document.getElementById('partnerStudentSelect');
+  if (!select) return;
+
+  const currentStudentName = normalizeStudentName(_foodTruckStudentIdentity.name);
+  const currentStudentId = String(_foodTruckStudentIdentity.id || '').trim().toLowerCase();
+  const options = [];
+
+  for (const student of (Array.isArray(students) ? students : [])) {
+    const id = String(student && student.id_number || '').trim();
+    const name = String(student && student.student_name || '').trim();
+    if (!name) continue;
+    const normalizedName = normalizeStudentName(name);
+    const normalizedId = id.toLowerCase();
+    if ((currentStudentId && normalizedId && normalizedId === currentStudentId) || (currentStudentName && normalizedName === currentStudentName)) {
+      continue;
+    }
+    options.push({ id, name });
+  }
+
+  const previous = String(select.value || '');
+  select.innerHTML = '';
+
+  const defaultOption = document.createElement('option');
+  defaultOption.value = '';
+  defaultOption.textContent = options.length ? 'Select partner student' : 'No partner students available for this class';
+  defaultOption.disabled = options.length === 0;
+  defaultOption.selected = true;
+  select.appendChild(defaultOption);
+
+  options.forEach((student) => {
+    const opt = document.createElement('option');
+    opt.value = student.id || student.name;
+    opt.textContent = student.id ? `${student.name} (${student.id})` : student.name;
+    opt.setAttribute('data-student-name', student.name);
+    opt.setAttribute('data-student-id', student.id || '');
+    select.appendChild(opt);
+  });
+
+  const desired = _pendingPartnerStudentId || previous;
+  if (desired && Array.from(select.options).some((opt) => String(opt.value) === String(desired))) {
+    select.value = desired;
+  }
+  _pendingPartnerStudentId = '';
+  setPartnerFieldVisibility();
+}
+
+function applyFoodTruckStudentModeToForm() {
+  if (!isFoodTruckStudentMode) return;
+  const staffLabel = document.getElementById('staffSelectLabel');
+  const staffSelect = document.getElementById('staffSelect');
+  const cookModeField = document.getElementById('cookModeField');
+
+  if (staffLabel) {
+    staffLabel.textContent = 'Student';
+  }
+
+  if (staffSelect) {
+    const studentValue = String(_foodTruckStudentIdentity.id || _foodTruckStudentIdentity.email || 'student').trim();
+    const studentLabel = String(_foodTruckStudentIdentity.name || 'Student').trim();
+    staffSelect.innerHTML = '';
+    const option = document.createElement('option');
+    option.value = studentValue;
+    option.textContent = studentLabel;
+    staffSelect.appendChild(option);
+    staffSelect.value = studentValue;
+    staffSelect.disabled = true;
+  }
+
+  if (cookModeField) {
+    cookModeField.style.display = '';
+  }
+
+  setPartnerFieldVisibility();
+  populatePartnerStudentOptions(_currentClassStudents);
 }
 
 function resolveLoggedInStaffId(staffRows = [], currentUser = null) {
@@ -364,6 +495,7 @@ function setRecipeSelectionInfo(message) {
 
 function getCurrentEmbedState() {
   const saveBtn = document.getElementById('saveBookingBtn');
+  const partnerSelect = document.getElementById('partnerStudentSelect');
   return {
     staffId: document.getElementById('staffSelect')?.value || '',
     className: document.getElementById('classSelect')?.value || '',
@@ -373,6 +505,11 @@ function getCurrentEmbedState() {
     recipeSelectionInfo: document.getElementById('recipeSelectionInfo')?.textContent || '',
     classSize: document.getElementById('classSizeInput')?.value || '',
     groups: document.getElementById('groupsInput')?.value || '',
+    cookMode: document.getElementById('cookModeSelect')?.value || 'single',
+    partnerStudentId: partnerSelect?.value || '',
+    partnerStudentName: partnerSelect && partnerSelect.selectedIndex > 0
+      ? (partnerSelect.options[partnerSelect.selectedIndex].getAttribute('data-student-name') || '')
+      : '',
     editBookingId: saveBtn && saveBtn.dataset ? (saveBtn.dataset.editId || '') : ''
   };
 }
@@ -428,6 +565,8 @@ function applySharedEmbedState(state = {}) {
   const recipeSelect = document.getElementById('recipeSelect');
   const classSizeInput = document.getElementById('classSizeInput');
   const groupsInput = document.getElementById('groupsInput');
+  const cookModeSelect = document.getElementById('cookModeSelect');
+  const partnerStudentSelect = document.getElementById('partnerStudentSelect');
   const targetStaffId = state.staffId || '';
   const targetClassName = state.className || '';
   const targetDate = state.bookingDate || '';
@@ -437,6 +576,8 @@ function applySharedEmbedState(state = {}) {
   const targetRecipeSelectionInfo = state.recipeSelectionInfo || '';
   const targetClassSize = state.classSize || '';
   const targetGroups = state.groups || '';
+  const targetCookMode = state.cookMode || 'single';
+  const targetPartnerStudentId = state.partnerStudentId || '';
   const targetEditBookingId = state.editBookingId || '';
   lastSharedStateAppliedAt = state.updatedAt || Date.now();
 
@@ -464,6 +605,13 @@ function applySharedEmbedState(state = {}) {
   if (groupsInput && targetGroups) {
     groupsInput.value = targetGroups;
   }
+  if (cookModeSelect) {
+    cookModeSelect.value = targetCookMode;
+  }
+  if (partnerStudentSelect && targetPartnerStudentId) {
+    _pendingPartnerStudentId = String(targetPartnerStudentId);
+  }
+  setPartnerFieldVisibility();
 
   const finalize = () => {
     if (classSelect) {
@@ -871,6 +1019,9 @@ function renderClassStudents(students = []) {
   const classSizeInput = document.getElementById('classSizeInput');
   if (!tbody || !meta) return;
 
+  _currentClassStudents = Array.isArray(students) ? students.slice() : [];
+  populatePartnerStudentOptions(_currentClassStudents);
+
   if (!students.length) {
     tbody.innerHTML = '<tr><td colspan="4">No students found for this class.</td></tr>';
     meta.textContent = '0 students timetabled for selected class.';
@@ -898,6 +1049,8 @@ function fetchStudentsForClass(classCode) {
   const requestSeq = ++_studentsFetchRequestSeq;
 
   if (!classCode) {
+    _currentClassStudents = [];
+    populatePartnerStudentOptions([]);
     meta.textContent = 'Choose a class to view students.';
     tbody.innerHTML = '<tr><td colspan="4">No class selected.</td></tr>';
     const classSizeInput = document.getElementById('classSizeInput');
@@ -1108,8 +1261,12 @@ function saveBooking(options = {}) {
   const recipeSelect = document.getElementById('recipeSelect');
   const classSizeInput = document.getElementById('classSizeInput');
   const groupsInput = document.getElementById('groupsInput');
+  const cookModeSelect = document.getElementById('cookModeSelect');
+  const partnerStudentSelect = document.getElementById('partnerStudentSelect');
   const staffId = staffSelect.value;
-  const staffName = staffSelect.options[staffSelect.selectedIndex].textContent;
+  const staffName = isFoodTruckStudentMode
+    ? String(_foodTruckStudentIdentity.name || (staffSelect.options[staffSelect.selectedIndex] && staffSelect.options[staffSelect.selectedIndex].textContent) || 'Student').trim()
+    : String(staffSelect.options[staffSelect.selectedIndex] && staffSelect.options[staffSelect.selectedIndex].textContent || '').trim();
   const className = classSelect.value;
   const bookingDate = dateInput.value;
   const period = periodSelect.value;
@@ -1120,6 +1277,22 @@ function saveBooking(options = {}) {
     : '1';
   if (groupsInput) {
     groupsInput.value = groupsForBooking;
+  }
+
+  const cookMode = isFoodTruckStudentMode ? String(cookModeSelect && cookModeSelect.value || 'single').toLowerCase() : '';
+  const partnerStudentId = isFoodTruckStudentMode ? String(partnerStudentSelect && partnerStudentSelect.value || '').trim() : '';
+  const partnerStudentName = (isFoodTruckStudentMode && partnerStudentSelect && partnerStudentSelect.selectedIndex > 0)
+    ? String(partnerStudentSelect.options[partnerStudentSelect.selectedIndex].getAttribute('data-student-name') || '').trim()
+    : '';
+
+  if (isFoodTruckStudentMode && cookMode === 'pair' && !partnerStudentName) {
+    if (window.QC) window.QC.toast('Choose your partner student for pair cooking', 'warn');
+    else alert('Choose your partner student for pair cooking.');
+    return Promise.reject(new Error('Partner student is required for pair cooking.'));
+  }
+
+  if (isFoodTruckStudentMode && cookMode === 'single' && partnerStudentSelect) {
+    partnerStudentSelect.value = '';
   }
   // Get recipe_id from selected option (assume dropdown options have data-recipe-id)
   let recipeId = '';
@@ -1150,7 +1323,10 @@ function saveBooking(options = {}) {
       recipe_id: recipeId,
       class_size: classSize,
       groups: groupsForBooking,
-      planner_stream: forcedPlannerStream || undefined
+      planner_stream: forcedPlannerStream || undefined,
+      cook_mode: isFoodTruckStudentMode ? cookMode : undefined,
+      partner_student_name: isFoodTruckStudentMode && cookMode === 'pair' ? partnerStudentName : undefined,
+      partner_student_id: isFoodTruckStudentMode && cookMode === 'pair' ? partnerStudentId : undefined
     })
   })
     .then(res => res.json())
@@ -1281,6 +1457,7 @@ function renderBookings(bookings = []) {
     const recipeSelect = document.getElementById('recipeSelect');
     const classSizeInput = document.getElementById('classSizeInput');
     const groupsInput = document.getElementById('groupsInput');
+    const cookModeSelect = document.getElementById('cookModeSelect');
 
     const bookingStaffId = String(booking.staff_id || getStaffIdByName(booking.staff_name) || '');
     if (staffSelect && bookingStaffId) {
@@ -1316,6 +1493,23 @@ function renderBookings(bookings = []) {
     if (groupsInput) {
       groupsInput.value = booking.groups || groupsInput.value || '1';
     }
+    if (cookModeSelect) {
+      cookModeSelect.value = String(booking.cook_mode || 'single').toLowerCase() === 'pair' ? 'pair' : 'single';
+    }
+    _pendingPartnerStudentId = String(booking.partner_student_id || '');
+    setPartnerFieldVisibility();
+    populatePartnerStudentOptions(_currentClassStudents);
+    if (_pendingPartnerStudentId && document.getElementById('partnerStudentSelect')) {
+      const partnerSelect = document.getElementById('partnerStudentSelect');
+      const partnerByName = Array.from(partnerSelect.options || []).find((opt) => {
+        const candidateName = String(opt.getAttribute('data-student-name') || '').trim().toLowerCase();
+        const expectedName = String(booking.partner_student_name || '').trim().toLowerCase();
+        return expectedName && candidateName === expectedName;
+      });
+      if (partnerByName) {
+        partnerSelect.value = partnerByName.value;
+      }
+    }
     setFormEditMode(booking.id);
     writeSharedEmbedState({
       ...getCurrentEmbedState(),
@@ -1326,6 +1520,9 @@ function renderBookings(bookings = []) {
       recipeId: booking.recipe_id ? String(booking.recipe_id) : '',
       classSize: String(booking.class_size || ''),
       groups: String(booking.groups || (groupsInput && groupsInput.value) || '1'),
+      cookMode: String(booking.cook_mode || 'single').toLowerCase() === 'pair' ? 'pair' : 'single',
+      partnerStudentId: String(booking.partner_student_id || ''),
+      partnerStudentName: String(booking.partner_student_name || ''),
       editBookingId: String(booking.id || '')
     }, { force: true });
   }
@@ -1349,16 +1546,28 @@ window.addEventListener('DOMContentLoaded', () => {
     .then(res => res.json())
     .then(async (data) => {
       _staffArrCache = data.staff || [];
-      const currentUser = await readCurrentStaffUserWithAuthFallback();
-      _preferredStaffId = resolveLoggedInStaffId(_staffArrCache, currentUser);
+      const currentUser = isFoodTruckStudentMode
+        ? null
+        : await readCurrentStaffUserWithAuthFallback();
+      _preferredStaffId = isFoodTruckStudentMode
+        ? ''
+        : resolveLoggedInStaffId(_staffArrCache, currentUser);
       if (_preferredStaffId) {
         setTopSelection('topStaff', _preferredStaffId);
       }
+      if (isFoodTruckStudentMode) {
+        _foodTruckStudentIdentity = await readCurrentFoodTruckStudentIdentity();
+      }
       return populateStaffDropdown(_staffArrCache).then(() => {
+        if (isFoodTruckStudentMode) {
+          applyFoodTruckStudentModeToForm();
+        }
         const sharedState = readSharedEmbedState();
         const firstStaffId = sharedState && sharedState.staffId
           ? sharedState.staffId
-          : (_preferredStaffId || (_staffArrCache.length ? _staffArrCache[0].id : ''));
+          : (isFoodTruckStudentMode
+              ? String(_foodTruckStudentIdentity.id || _foodTruckStudentIdentity.email || '')
+              : (_preferredStaffId || (_staffArrCache.length ? _staffArrCache[0].id : '')));
         const staffSelect = document.getElementById('staffSelect');
         if (staffSelect && firstStaffId) {
           staffSelect.value = firstStaffId;
@@ -1426,6 +1635,11 @@ window.addEventListener('DOMContentLoaded', () => {
     clearFormEditMode();
     document.getElementById('classSizeInput').value = 1;
     document.getElementById('groupsInput').value = 1;
+    const cookModeSelect = document.getElementById('cookModeSelect');
+    const partnerStudentSelect = document.getElementById('partnerStudentSelect');
+    if (cookModeSelect) cookModeSelect.value = 'single';
+    if (partnerStudentSelect) partnerStudentSelect.value = '';
+    setPartnerFieldVisibility();
     document.getElementById('recipeSelect').selectedIndex = 0;
     setRecipeSelectionInfo('');
     document.getElementById('periodSelect').selectedIndex = 0;
@@ -1434,7 +1648,9 @@ window.addEventListener('DOMContentLoaded', () => {
     document.getElementById('classSelect').selectedIndex = 0;
     const staffSelect = document.getElementById('staffSelect');
     if (staffSelect) {
-      if (_preferredStaffId) {
+      if (isFoodTruckStudentMode) {
+        staffSelect.value = String(_foodTruckStudentIdentity.id || _foodTruckStudentIdentity.email || staffSelect.value || '');
+      } else if (_preferredStaffId) {
         staffSelect.value = _preferredStaffId;
       } else {
         staffSelect.selectedIndex = 0;
@@ -1448,6 +1664,9 @@ window.addEventListener('DOMContentLoaded', () => {
     writeSharedEmbedState(getCurrentEmbedState());
   });
   document.getElementById('staffSelect').addEventListener('change', function() {
+    if (isFoodTruckStudentMode) {
+      return;
+    }
     const staffId = this.value;
     setTopSelection('topStaff', staffId);
     incrementStaffUsageCount(staffId);
@@ -1483,6 +1702,19 @@ window.addEventListener('DOMContentLoaded', () => {
   const groupsInput = document.getElementById('groupsInput');
   if (groupsInput) {
     groupsInput.addEventListener('change', () => {
+      writeSharedEmbedState(getCurrentEmbedState());
+    });
+  }
+  const cookModeSelect = document.getElementById('cookModeSelect');
+  if (cookModeSelect) {
+    cookModeSelect.addEventListener('change', () => {
+      setPartnerFieldVisibility();
+      writeSharedEmbedState(getCurrentEmbedState());
+    });
+  }
+  const partnerStudentSelect = document.getElementById('partnerStudentSelect');
+  if (partnerStudentSelect) {
+    partnerStudentSelect.addEventListener('change', () => {
       writeSharedEmbedState(getCurrentEmbedState());
     });
   }

@@ -128,7 +128,7 @@
                     </div>
                     <div class="book-form-grid">
                         <div class="book-form-field">
-                            <label for="staffSelect">Staff</label>
+                            <label for="staffSelect" id="staffSelectLabel">Staff</label>
                             <select id="staffSelect">
                                 <option>Diplock, Maryke</option>
                                 <option>Holly McKee</option>
@@ -172,6 +172,20 @@
                         <div class="book-form-field book-form-field-small">
                             <label for="groupsInput">Groups</label>
                             <input type="number" id="groupsInput" value="1" min="1" step="1">
+                        </div>
+                        <div class="book-form-field book-form-field-small" id="cookModeField" style="display:none;">
+                            <label for="cookModeSelect">Cook Mode</label>
+                            <select id="cookModeSelect">
+                                <option value="single" selected>Single</option>
+                                <option value="pair">Pair</option>
+                            </select>
+                        </div>
+                        <div class="book-form-field book-form-field-wide" id="partnerStudentField" style="display:none;">
+                            <label for="partnerStudentSelect">Pair Partner</label>
+                            <select id="partnerStudentSelect">
+                                <option value="">Select partner student</option>
+                            </select>
+                            <div style="margin-top:0.35rem;font-size:0.82rem;color:#5a6f84;">Select a class first, then choose your partner.</div>
                         </div>
                     </div>
                 </div>
