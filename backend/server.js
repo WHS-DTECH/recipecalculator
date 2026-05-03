@@ -88,11 +88,14 @@ function getBootstrapAdminEmails() {
 
 async function resolveEffectiveRoleForEmail(email) {
   const normalizedEmail = normalizeEmail(email);
-  if (!normalizedEmail) return { role: 'public_access', staffLinked: false };
+  if (!normalizedEmail) return { role: 'public_access', staffLinked: false, studentLinked: false };
 
   if (getBootstrapAdminEmails().has(normalizedEmail)) {
-    return { role: 'admin', staffLinked: true };
+    return { role: 'admin', staffLinked: true, studentLinked: false };
   }
+
+  const emailLocalPart = normalizedEmail.split('@')[0] || '';
+  const normalizedLocalKey = emailLocalPart.replace(/[^a-z0-9]/g, '');
 
   const staffResult = await pool.query(
     `SELECT COALESCE(NULLIF(lower(trim(primary_role)), ''), 'staff') AS primary_role
@@ -106,16 +109,58 @@ async function resolveEffectiveRoleForEmail(email) {
   const staffLinked = staffResult.rowCount > 0;
   const primaryRole = staffLinked ? String(staffResult.rows[0].primary_role || 'staff') : 'public_access';
 
+  let studentLinked = false;
+  let matchedStudentId = '';
+
+  if (!staffLinked && normalizedLocalKey) {
+    const studentMatchResult = await pool.query(
+      `SELECT id_number
+       FROM student_timetable
+       WHERE COALESCE(status, 'Current') = 'Current'
+         AND (
+           lower(trim(COALESCE(id_number, ''))) = lower(trim($1))
+           OR regexp_replace(lower(COALESCE(student_name, '')), '[^a-z0-9]', '', 'g') = $2
+           OR regexp_replace(
+             lower(
+               CASE
+                 WHEN position(',' IN COALESCE(student_name, '')) > 0
+                   THEN split_part(COALESCE(student_name, ''), ',', 2) || split_part(COALESCE(student_name, ''), ',', 1)
+                 ELSE COALESCE(student_name, '')
+               END
+             ),
+             '[^a-z0-9]',
+             '',
+             'g'
+           ) = $2
+         )
+       LIMIT 1`,
+      [emailLocalPart, normalizedLocalKey]
+    );
+
+    if (studentMatchResult.rowCount > 0) {
+      studentLinked = true;
+      matchedStudentId = String(studentMatchResult.rows[0].id_number || '').trim();
+    }
+  }
+
   const additionalRolesResult = await pool.query(
     `SELECT lower(trim(role_name)) AS role_name
      FROM user_additional_roles
-     WHERE user_type = 'staff'
-       AND lower(trim(email)) = lower(trim($1))`,
-    [normalizedEmail]
+     WHERE (
+       user_type = 'staff'
+       AND lower(trim(email)) = lower(trim($1))
+     )
+     OR (
+       user_type = 'student'
+       AND trim(COALESCE($2, '')) <> ''
+       AND lower(trim(email)) = lower(trim($2))
+     )`,
+    [normalizedEmail, matchedStudentId]
   );
 
   const roleSet = new Set();
   roleSet.add(primaryRole);
+  if (studentLinked) roleSet.add('student');
   additionalRolesResult.rows.forEach((row) => {
     const role = String(row.role_name || '').trim().toLowerCase();
     if (role) roleSet.add(role);
@@ -132,9 +177,14 @@ async function resolveEffectiveRoleForEmail(email) {
 
   if (role === 'public_access' && staffLinked) {
     role = 'teacher';
+  } else if (role === 'public_access' && studentLinked) {
+    role = 'student';
+  } else if (role === 'public_access' && !staffLinked && isApprovedGoogleDomain(normalizedEmail)) {
+    // Non-staff school accounts should not be stranded as public_access.
+    role = 'student';
   }
 
-  return { role, staffLinked };
+  return { role, staffLinked, studentLinked };
 }
 
 function isApprovedGoogleDomain(email) {
