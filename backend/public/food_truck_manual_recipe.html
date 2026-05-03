@@ -343,6 +343,7 @@
       const nextIdEl = document.getElementById('nextRecipeId');
       const saveBtn = document.getElementById('saveManualBtn');
       const clearBtn = document.getElementById('clearManualBtn');
+      const studentNameInput = document.getElementById('manualStudentName');
       const imageMetaText = document.getElementById('imageMetaText');
       const imageStatus = document.getElementById('imageStatus');
       const slotsContainer = document.getElementById('imageSlotsContainer');
@@ -603,6 +604,52 @@
           }
         }
 
+        function deriveNameFromEmail(email) {
+          const local = String(email || '').split('@')[0] || '';
+          return local
+            .split(/[._-]+/)
+            .filter(Boolean)
+            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+            .join(' ')
+            .trim();
+        }
+
+        async function prepopulateStudentName(force) {
+          const shouldForce = !!force;
+          if (!studentNameInput) return;
+          if (!shouldForce && String(studentNameInput.value || '').trim()) return;
+
+          try {
+            const authRes = await fetch('/api/auth/me', { credentials: 'include' });
+            const authData = await authRes.json().catch(() => ({}));
+            if (!authRes.ok || !authData || !authData.authenticated || !authData.user) return;
+
+            const authUser = authData.user || {};
+            currentUserEmail = String(authUser.email || '').trim().toLowerCase();
+
+            let displayName = String(authUser.name || '').trim();
+            if (String(authUser.role || '').trim().toLowerCase() === 'student' && currentUserEmail) {
+              const profileRes = await fetch('/api/user_roles/profile?userType=student&identifier=' + encodeURIComponent(currentUserEmail), {
+                credentials: 'include'
+              });
+              const profileData = await profileRes.json().catch(() => ({}));
+              if (profileRes.ok && profileData && profileData.success && profileData.isStudent) {
+                displayName = String((profileData.student && profileData.student.student_name) || displayName).trim();
+              }
+            }
+
+            if (!displayName && currentUserEmail) {
+              displayName = deriveNameFromEmail(currentUserEmail);
+            }
+
+            if (displayName) {
+              studentNameInput.value = displayName;
+            }
+          } catch (_) {
+            // Leave the field manual if auth/profile lookup is unavailable.
+          }
+        }
+
         function getPayload() {
           return {
             student_name: (document.getElementById('manualStudentName').value || '').trim(),
@@ -654,6 +701,7 @@
               setStatus('Saved and published' + studentLabel + '. RecipeID ' + recipeId + ' assigned.', 'success');
             }
             form.reset();
+            await prepopulateStudentName(true);
             await refreshNextId();
           } catch (err) {
             setStatus(err && err.message ? err.message : 'Failed to save recipe.', 'error');
@@ -667,12 +715,13 @@
         clearBtn.addEventListener('click', function() {
           form.reset();
           setStatus('', '');
+          prepopulateStudentName(true);
         });
 
+        prepopulateStudentName(true);
         refreshNextId();
         setSlotsEnabled(false);
       })();
     </script>
   </body>
   </html>
-            method: 'PUT',
