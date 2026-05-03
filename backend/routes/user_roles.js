@@ -338,6 +338,12 @@ router.get('/profile', async (req, res) => {
     await schemaReady;
 
     if (userType === 'student') {
+      const emailLocalPart = identifier.includes('@') ? identifier.split('@')[0] : identifier;
+      const normalizedKey = String(emailLocalPart || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, '');
+
       const studentResult = await pool.query(
         `SELECT id_number, student_name, form_class, year_level, status,
                 mon_p1_1, mon_p1_2, mon_p2, mon_p3, mon_p4, mon_p5,
@@ -346,9 +352,34 @@ router.get('/profile', async (req, res) => {
                 thu_p1_1, thu_p1_2, thu_p2, thu_p3, thu_p4, thu_p5,
                 fri_p1_1, fri_p1_2, fri_p2, fri_p3, fri_p4, fri_p5
          FROM student_timetable
-         WHERE lower(trim(id_number)) = lower(trim($1))
+         WHERE lower(trim(COALESCE(id_number, ''))) = lower(trim($1))
+            OR regexp_replace(lower(COALESCE(student_name, '')), '[^a-z0-9]', '', 'g') = $2
+            OR regexp_replace(
+                 lower(
+                   CASE
+                     WHEN position(',' IN COALESCE(student_name, '')) > 0
+                       THEN split_part(COALESCE(student_name, ''), ',', 2) || split_part(COALESCE(student_name, ''), ',', 1)
+                     ELSE COALESCE(student_name, '')
+                   END
+                 ),
+                 '[^a-z0-9]',
+                 '',
+                 'g'
+               ) = $2
+            OR regexp_replace(
+                 lower(
+                   CASE
+                     WHEN position(',' IN COALESCE(student_name, '')) > 0
+                       THEN left(trim(split_part(COALESCE(student_name, ''), ',', 2)), 1) || trim(split_part(COALESCE(student_name, ''), ',', 1))
+                     ELSE left(trim(split_part(COALESCE(student_name, ''), ' ', 1)), 1) || regexp_replace(trim(COALESCE(student_name, '')), '^.*\s', '')
+                   END
+                 ),
+                 '[^a-z0-9]',
+                 '',
+                 'g'
+               ) = $2
          LIMIT 1`,
-        [identifier]
+        [emailLocalPart, normalizedKey]
       );
 
       if (!studentResult.rows.length) {

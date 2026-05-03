@@ -29,6 +29,19 @@ function setText(id, value) {
   el.textContent = value;
 }
 
+function setHidden(id, hidden) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.hidden = Boolean(hidden);
+}
+
+function isStudentProfile(authUser, profileData) {
+  return Boolean(
+    (profileData && profileData.userType === 'student')
+    || (authUser && String(authUser.role || '').trim().toLowerCase() === 'student')
+  );
+}
+
 function formatDisplayDate(value) {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -40,7 +53,7 @@ function formatDisplayDate(value) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
-function setHero(staff, authUser, department) {
+function setHero(staff, authUser, department, profileData) {
   const nameEl = document.getElementById('profileName');
   const subtitleEl = document.getElementById('profileSubtitle');
   const avatarEl = document.getElementById('profileAvatar');
@@ -57,18 +70,28 @@ function setHero(staff, authUser, department) {
     return;
   }
 
-  const fullName = staff
-    ? `${String(staff.first_name || '').trim()} ${String(staff.last_name || '').trim()}`.trim()
-    : String(authUser.name || authUser.email || 'User Profile');
+  const student = profileData && profileData.student ? profileData.student : null;
+  const isStudent = isStudentProfile(authUser, profileData);
+  const fullName = student
+    ? String(student.student_name || '').trim()
+    : staff
+      ? `${String(staff.first_name || '').trim()} ${String(staff.last_name || '').trim()}`.trim()
+      : String(authUser.name || authUser.email || 'User Profile');
 
   const subtitleParts = [];
-  if (department && department.primary) subtitleParts.push(department.primary);
-  if (staff && staff.title) subtitleParts.push(String(staff.title).trim());
+  if (isStudent && student && student.form_class) subtitleParts.push(`Form ${student.form_class}`);
+  if (isStudent && student && student.year_level) subtitleParts.push(`Year ${student.year_level}`);
+  if (!isStudent && department && department.primary) subtitleParts.push(department.primary);
+  if (!isStudent && staff && staff.title) subtitleParts.push(String(staff.title).trim());
   if (authUser && authUser.email) subtitleParts.push(String(authUser.email).trim());
 
   nameEl.textContent = fullName || 'User Profile';
   subtitleEl.textContent = subtitleParts.join(' • ') || 'Google account connected.';
-  modeChipEl.textContent = staff ? 'Linked to Staff CSV profile' : 'Google session only';
+  modeChipEl.textContent = student
+    ? 'Linked to Student CSV profile'
+    : staff
+      ? 'Linked to Staff CSV profile'
+      : 'Google session only';
 
   if (authUser && authUser.picture) {
     avatarEl.textContent = '';
@@ -92,17 +115,30 @@ function renderProfileFacts(staff, authUser, profileData) {
 
   const department = profileData && profileData.department ? profileData.department : null;
   const roles = profileData && profileData.roles ? profileData.roles : null;
+  const isStudent = isStudentProfile(authUser, profileData);
+  const student = profileData && profileData.student ? profileData.student : null;
 
-  const facts = [
-    ['Display Name', authUser.name || 'Not set'],
-    ['Google Email', authUser.email || 'Not set'],
-    ['Staff Code', (staff && staff.code) || 'Not linked'],
-    ['Department', (department && (department.primary || department.all)) || 'Not linked'],
-    ['Role in App', (roles && roles.effective_role) || authUser.role || 'public_access'],
-    ['Additional Roles', (roles && (roles.additional_roles || []).join(', ')) || 'None'],
-    ['Form Class', (profileData && profileData.timetable && profileData.timetable.form_class) || 'Not available'],
-    ['Staff Record', staff ? 'Linked from Staff CSV' : 'Not found in Staff CSV']
-  ];
+  const facts = isStudent
+    ? [
+        ['Display Name', (student && student.student_name) || authUser.name || 'Not set'],
+        ['Google Email', authUser.email || 'Not set'],
+        ['Student ID', (student && student.id_number) || 'Not linked'],
+        ['Form Class', (student && student.form_class) || 'Not available'],
+        ['Role in App', authUser.role || 'student'],
+        ['Additional Roles', 'None'],
+        ['Year Level', (student && student.year_level) || 'Not available'],
+        ['Student Record', student ? 'Linked from Student CSV' : 'Not found in Student CSV']
+      ]
+    : [
+        ['Display Name', authUser.name || 'Not set'],
+        ['Google Email', authUser.email || 'Not set'],
+        ['Staff Code', (staff && staff.code) || 'Not linked'],
+        ['Department', (department && (department.primary || department.all)) || 'Not linked'],
+        ['Role in App', (roles && roles.effective_role) || authUser.role || 'public_access'],
+        ['Additional Roles', (roles && (roles.additional_roles || []).join(', ')) || 'None'],
+        ['Form Class', (profileData && profileData.timetable && profileData.timetable.form_class) || 'Not available'],
+        ['Staff Record', staff ? 'Linked from Staff CSV' : 'Not found in Staff CSV']
+      ];
 
   container.innerHTML = `
     <div class="profile-facts">
@@ -126,6 +162,8 @@ function renderGoogleSection(authUser, profileData) {
   const isConnected = Boolean(authUser && authUser.email);
   const isDomainApproved = Boolean(authUser && authUser.domainApproved);
   const isStaffLinked = Boolean(authUser && authUser.staffLinked);
+  const isStudent = isStudentProfile(authUser, profileData);
+  const student = profileData && profileData.student ? profileData.student : null;
 
   if (dot) {
     dot.style.background = isConnected ? '#2e7d32' : '#c17d11';
@@ -142,16 +180,22 @@ function renderGoogleSection(authUser, profileData) {
 
   if (copy) {
     copy.textContent = isConnected
-      ? 'Session is active and profile data is being resolved from staff, timetable, and department tables.'
-      : 'Sign in to load your linked staff profile and timetable information.';
+      ? (isStudent
+          ? 'Session is active and profile data is being resolved from student timetable data.'
+          : 'Session is active and profile data is being resolved from staff, timetable, and department tables.')
+      : 'Sign in to load your linked profile information.';
   }
 
   if (checklist) {
     const role = (profileData && profileData.roles && profileData.roles.effective_role) || (authUser && authUser.role) || 'public_access';
+    const studentCsvLine = isStudent
+      ? `Student CSV link: ${student ? 'Matched' : 'No matching student record'}`
+      : `Staff CSV link: ${isStaffLinked ? 'Matched' : 'No matching staff record'}`;
+
     checklist.innerHTML = [
       `Session: ${isConnected ? 'Active' : 'Not active'}`,
       `Domain approval: ${isDomainApproved ? 'Approved' : 'Not approved'}`,
-      `Staff CSV link: ${isStaffLinked ? 'Matched' : 'No matching staff record'}`,
+      studentCsvLine,
       `Effective role: ${role}`
     ].map((line) => `<li>${escapeHtml(line)}</li>`).join('');
   }
@@ -302,14 +346,22 @@ function renderClassesAndStudents(profileData) {
 
 function renderTimetable(profileData) {
   const container = document.getElementById('profileTimetable');
+  const timetableNote = document.getElementById('profileTimetableNote');
   if (!container) return;
+
+  const isStudent = Boolean(profileData && profileData.userType === 'student');
+  if (timetableNote) {
+    timetableNote.textContent = isStudent
+      ? 'Pulled from current student timetable CSV data.'
+      : 'Pulled from timetable CSV upload for your teacher code/profile.';
+  }
 
   const week = profileData && profileData.timetable && Array.isArray(profileData.timetable.week)
     ? profileData.timetable.week
     : [];
 
   if (!week.length) {
-    container.innerHTML = '<div class="profile-empty">No timetable rows found for this profile yet.</div>';
+    container.innerHTML = `<div class="profile-empty">${isStudent ? 'No student timetable rows found for this profile yet.' : 'No timetable rows found for this profile yet.'}</div>`;
     return;
   }
 
@@ -350,6 +402,21 @@ function renderTimetable(profileData) {
   `;
 }
 
+function updateLayoutForProfile(authUser, profileData) {
+  const isStudent = isStudentProfile(authUser, profileData);
+  const overviewNote = document.getElementById('profileOverviewNote');
+
+  if (overviewNote) {
+    overviewNote.textContent = isStudent
+      ? 'Profile details are linked from Google session identity and your uploaded student CSV data.'
+      : 'Profile details are linked from Google session identity and your uploaded Staff/Department CSV data.';
+  }
+
+  setHidden('profileDataLinksSection', isStudent);
+  setHidden('profileUploadHistorySection', isStudent);
+  setHidden('profileClassesStudentsSection', isStudent);
+}
+
 async function resolveProfileFromUserId(userId) {
   const staffRes = await fetchJson('/api/staff_upload/all');
   if (!staffRes.ok || !Array.isArray(staffRes.data.staff)) return null;
@@ -372,7 +439,14 @@ async function fetchAndRenderUserProfile() {
     }
 
     let profileData = null;
-    if (profileEmail) {
+    if (profileEmail && authUser && String(authUser.role || '').trim().toLowerCase() === 'student') {
+      const studentProfileRes = await fetchJson(`/api/user_roles/profile?userType=student&identifier=${encodeURIComponent(profileEmail)}`);
+      if (studentProfileRes.ok && studentProfileRes.data && studentProfileRes.data.success && studentProfileRes.data.isStudent) {
+        profileData = studentProfileRes.data;
+      }
+    }
+
+    if (!profileData && profileEmail) {
       const profileRes = await fetchJson(`/api/user_roles/profile?userType=staff&identifier=${encodeURIComponent(profileEmail)}`);
       if (profileRes.ok && profileRes.data && profileRes.data.success && profileRes.data.isStaff) {
         profileData = profileRes.data;
@@ -388,7 +462,8 @@ async function fetchAndRenderUserProfile() {
       } catch (_) {}
     }
 
-    setHero(staff, authUser, department);
+    updateLayoutForProfile(authUser, profileData);
+    setHero(staff, authUser, department, profileData);
     renderGoogleSection(authUser, profileData);
     renderProfileFacts(staff, authUser, profileData);
     renderTimetable(profileData);

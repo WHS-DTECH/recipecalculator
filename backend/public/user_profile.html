@@ -286,13 +286,13 @@
 
         <section class="profile-grid">
             <div class="profile-stack">
-                <section class="profile-card">
+                <section class="profile-card" id="profileOverviewSection">
                     <h2>Account Overview</h2>
-                    <p class="profile-card-note">Profile details are linked from Google session identity and your uploaded Staff/Department CSV data.</p>
+                    <p class="profile-card-note" id="profileOverviewNote">Profile details are linked from Google session identity and your uploaded Staff/Department CSV data.</p>
                     <div id="profileContainer"></div>
                 </section>
 
-                <section class="profile-card integration-card">
+                <section class="profile-card integration-card" id="profileGoogleSection">
                     <h2>Google Sign-In Connection</h2>
                     <div class="integration-state">
                         <span id="googleStateDot" class="integration-dot" aria-hidden="true"></span>
@@ -304,15 +304,15 @@
                     <ul id="googleChecklist" class="placeholder-list"></ul>
                 </section>
 
-                <section class="profile-card">
+                <section class="profile-card" id="profileTimetableSection">
                     <h2>Weekly Timetable</h2>
-                    <p class="profile-card-note">Pulled from timetable CSV upload for your teacher code/profile.</p>
+                    <p class="profile-card-note" id="profileTimetableNote">Pulled from timetable CSV upload for your teacher code/profile.</p>
                     <div id="profileTimetable"></div>
                 </section>
             </div>
 
             <div class="profile-stack">
-                <section class="profile-card">
+                <section class="profile-card" id="profileSignInSection">
                     <h2>Sign-In Settings</h2>
                     <p class="profile-card-note">Live authentication and role details for this account.</p>
                     <div class="profile-facts">
@@ -335,18 +335,18 @@
                     </div>
                 </section>
 
-                <section class="profile-card">
+                <section class="profile-card" id="profileDataLinksSection">
                     <h2>CSV Data Links</h2>
                     <div id="profileDataLinks"></div>
                 </section>
 
-                <section class="profile-card">
+                <section class="profile-card" id="profileUploadHistorySection">
                     <h2>Staff Upload History</h2>
                     <p class="profile-card-note">Shows which upload terms/years this staff profile appears in.</p>
                     <div id="profileUploadHistory"></div>
                 </section>
 
-                <section class="profile-card">
+                <section class="profile-card" id="profileClassesStudentsSection">
                     <h2>Classes and Students</h2>
                     <p class="profile-card-note">Current classes linked to this staff code and students currently in those class codes.</p>
                     <div id="profileClassesStudents"></div>
