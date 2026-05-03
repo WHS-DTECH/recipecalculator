@@ -398,7 +398,7 @@
         return payload;
       }
 
-      async function ensureDisplayRow(recipeId) {
+      async function publishRecipeToDisplay(recipeId) {
         const res = await fetch(`/api/recipes/${recipeId}/display`, { method: 'POST' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.success === false) {
@@ -456,7 +456,15 @@
         }
 
         setStatus('Running publish steps: Publish to Display...', '');
-        await ensureDisplayRow(recipeId);
+        await publishRecipeToDisplay(recipeId);
+
+        // Fail-safe pass: run one final reseed sync after publish to mirror Add Recipe reliability.
+        setStatus('Running publish steps: Final Inventory Sync Verify...', '');
+        try {
+          await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Final Inventory Sync Verify');
+        } catch (err) {
+          warnings.push(`Final Inventory Sync Verify skipped: ${err && err.message ? err.message : err}`);
+        }
         return warnings;
       }
 
