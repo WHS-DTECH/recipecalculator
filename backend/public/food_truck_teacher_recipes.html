@@ -179,11 +179,120 @@
     .ft-view-btn:hover {
       background: #0f466d;
     }
+
+    /* Decline modal */
+    .ft-modal-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10,30,50,0.52);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+    }
+    .ft-modal-backdrop.open { display: flex; }
+    .ft-modal {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(10,30,50,0.22);
+      padding: 1.6rem 1.8rem 1.4rem;
+      width: min(560px, calc(100vw - 2rem));
+      max-height: calc(100vh - 2rem);
+      overflow-y: auto;
+      position: relative;
+    }
+    .ft-modal h2 {
+      margin: 0 0 0.3rem;
+      font-size: 1.2rem;
+      color: #163955;
+    }
+    .ft-modal .ft-modal-sub {
+      margin: 0 0 0.9rem;
+      font-size: 0.87rem;
+      color: #587089;
+    }
+    .ft-modal label {
+      display: block;
+      font-weight: 700;
+      font-size: 0.88rem;
+      margin-bottom: 0.25rem;
+      color: #224662;
+    }
+    .ft-modal textarea {
+      width: 100%;
+      min-height: 100px;
+      border: 1px solid #bdd0e7;
+      border-radius: 8px;
+      padding: 0.5rem 0.6rem;
+      font-family: inherit;
+      font-size: 0.9rem;
+      resize: vertical;
+      box-sizing: border-box;
+    }
+    .ft-modal-cc-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 0.75rem 0 0.25rem;
+      font-size: 0.88rem;
+      color: #224662;
+      font-weight: 700;
+    }
+    .ft-modal-actions {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-top: 1rem;
+    }
+    .ft-modal-actions button {
+      border: none;
+      border-radius: 8px;
+      padding: 0.5rem 1rem;
+      font-weight: 800;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    .ft-modal-preview-btn { background: #1565c0; color: #fff; }
+    .ft-modal-preview-btn:hover { background: #0d47a1; }
+    .ft-modal-preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .ft-modal-send-btn { background: #b3261e; color: #fff; }
+    .ft-modal-send-btn:hover { background: #8d1e17; }
+    .ft-modal-send-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .ft-modal-cancel-btn { background: #e8eef5; color: #1f3550; }
+    .ft-modal-cancel-btn:hover { background: #cdd9e8; }
+    .ft-modal-msg {
+      margin-top: 0.6rem;
+      font-size: 0.85rem;
+      min-height: 1.1rem;
+      font-weight: 700;
+    }
+    .ft-modal-msg.success { color: #206635; }
+    .ft-modal-msg.error { color: #8f1f1f; }
   </style>
 </head>
 <body>
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
+
+  <!-- Decline modal -->
+  <div class="ft-modal-backdrop" id="declineModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="declineModalTitle">
+    <div class="ft-modal">
+      <h2 id="declineModalTitle">Decline Recipe</h2>
+      <p class="ft-modal-sub" id="declineModalSub">Write the decline reason. Use <strong>Send Test Email</strong> to preview what the student will receive before committing.</p>
+      <label for="declineReasonInput">Reason (will be emailed to student)</label>
+      <textarea id="declineReasonInput" placeholder="e.g. Please add more detail to your method steps."></textarea>
+      <div class="ft-modal-cc-row">
+        <input type="checkbox" id="declineCcSelf" checked>
+        <label for="declineCcSelf" style="margin:0;font-weight:700;">CC myself (<span id="declineCcEmailLabel">—</span>)</label>
+      </div>
+      <div class="ft-modal-actions">
+        <button type="button" class="ft-modal-preview-btn" id="declinePreviewBtn">Send Test Email to Me</button>
+        <button type="button" class="ft-modal-send-btn" id="declineSendBtn">Decline &amp; Send to Student</button>
+        <button type="button" class="ft-modal-cancel-btn" id="declineCancelBtn">Cancel</button>
+      </div>
+      <div class="ft-modal-msg" id="declineModalMsg"></div>
+    </div>
+  </div>
 
   <main class="ft-review-wrap">
     <section class="ft-review-card">
@@ -288,7 +397,7 @@
                 '<div class="ft-row-actions">' +
                   '<a class="ft-view-btn" data-action="open-review" data-id="' + recipeId + '" href="food_truck_manual_recipe.html?recipeId=' + recipeId + '&from=ft_teacher">Open</a>' +
                   (showApprove ? '<button class="ft-approve-btn" type="button" data-action="approve" data-id="' + recipeId + '">Approve</button>' : '') +
-                  (showDecline ? '<button class="ft-decline-btn" type="button" data-action="decline" data-id="' + recipeId + '">Decline</button>' : '') +
+                  (showDecline ? '<button class="ft-decline-btn" type="button" data-action="decline" data-id="' + recipeId + '" data-name="' + escapeHtml(row.name || '') + '">Decline</button>' : '') +
                 '</div>' +
               '</td>' +
             '</tr>';
@@ -313,12 +422,14 @@
         return data;
       }
 
-      async function declineRecipe(recipeId, reason) {
+      async function declineRecipe(recipeId, reason, ccEmail) {
+        const body = { reason };
+        if (ccEmail) body.ccEmail = ccEmail;
         const res = await fetch('/api/recipes/' + recipeId + '/food-truck/decline', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ reason: reason })
+          body: JSON.stringify(body)
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok || data.success === false) {
@@ -326,6 +437,115 @@
         }
         return data;
       }
+
+      async function sendDeclinePreview(recipeId, reason, previewTo) {
+        const res = await fetch('/api/recipes/' + recipeId + '/food-truck/decline-preview', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason, previewTo })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error((data && (data.error || data.message)) || 'Failed to send preview email.');
+        }
+        return data;
+      }
+
+      // Decline modal state
+      let declineTargetId = null;
+      let declineTargetName = '';
+      let teacherEmail = '';
+
+      const declineBackdrop = document.getElementById('declineModalBackdrop');
+      const declineReasonInput = document.getElementById('declineReasonInput');
+      const declineCcSelf = document.getElementById('declineCcSelf');
+      const declineCcEmailLabel = document.getElementById('declineCcEmailLabel');
+      const declinePreviewBtn = document.getElementById('declinePreviewBtn');
+      const declineSendBtn = document.getElementById('declineSendBtn');
+      const declineCancelBtn = document.getElementById('declineCancelBtn');
+      const declineModalSub = document.getElementById('declineModalSub');
+      const declineModalMsg = document.getElementById('declineModalMsg');
+
+      function openDeclineModal(recipeId, recipeName) {
+        declineTargetId = recipeId;
+        declineTargetName = recipeName || ('Recipe ' + recipeId);
+        declineReasonInput.value = '';
+        declineModalMsg.textContent = '';
+        declineModalMsg.className = 'ft-modal-msg';
+        declineModalSub.innerHTML = 'Write the decline reason for <strong>' + escapeHtml(declineTargetName) + '</strong>. Use <strong>Send Test Email</strong> to preview what the student will receive before committing.';
+        declineBackdrop.classList.add('open');
+        declineReasonInput.focus();
+      }
+
+      function closeDeclineModal() {
+        declineBackdrop.classList.remove('open');
+        declineTargetId = null;
+      }
+
+      function setModalMsg(msg, type) {
+        declineModalMsg.textContent = msg || '';
+        declineModalMsg.className = 'ft-modal-msg' + (type ? ' ' + type : '');
+      }
+
+      declineCancelBtn.addEventListener('click', closeDeclineModal);
+      declineBackdrop.addEventListener('click', function(e) {
+        if (e.target === declineBackdrop) closeDeclineModal();
+      });
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && declineBackdrop.classList.contains('open')) closeDeclineModal();
+      });
+
+      declinePreviewBtn.addEventListener('click', async function() {
+        const reason = declineReasonInput.value.trim();
+        if (!reason) { setModalMsg('Please enter a decline reason first.', 'error'); return; }
+        if (!teacherEmail) { setModalMsg('Could not determine your email address. Please reload.', 'error'); return; }
+        declinePreviewBtn.disabled = true;
+        setModalMsg('Sending test email to ' + teacherEmail + '…', '');
+        try {
+          await sendDeclinePreview(declineTargetId, reason, teacherEmail);
+          setModalMsg('Test email sent to ' + teacherEmail + '. Check your inbox then use Decline & Send when ready.', 'success');
+        } catch (err) {
+          setModalMsg(err && err.message ? err.message : 'Failed to send preview email.', 'error');
+        } finally {
+          declinePreviewBtn.disabled = false;
+        }
+      });
+
+      declineSendBtn.addEventListener('click', async function() {
+        const reason = declineReasonInput.value.trim();
+        if (!reason) { setModalMsg('Please enter a decline reason.', 'error'); return; }
+        declineSendBtn.disabled = true;
+        declineCancelBtn.disabled = true;
+        setModalMsg('Declining and sending email…', '');
+        try {
+          const ccEmail = (declineCcSelf.checked && teacherEmail) ? teacherEmail : null;
+          const result = await declineRecipe(declineTargetId, reason, ccEmail);
+          closeDeclineModal();
+          if (result.mailSent) {
+            setStatus('Recipe ' + declineTargetId + ' declined. Email sent to student.' + (ccEmail ? ' (CC: ' + ccEmail + ')' : ''), false);
+          } else {
+            setStatus('Recipe ' + declineTargetId + ' declined. Email not sent: ' + (result.mailError || 'Unknown reason.'), true);
+          }
+          await loadRows();
+        } catch (err) {
+          setModalMsg(err && err.message ? err.message : 'Action failed.', 'error');
+        } finally {
+          declineSendBtn.disabled = false;
+          declineCancelBtn.disabled = false;
+        }
+      });
+
+      // Load teacher email for CC/preview defaults
+      fetch('/api/auth/me', { credentials: 'include' })
+        .then(function(r) { return r.ok ? r.json() : null; })
+        .then(function(me) {
+          if (me && me.email) {
+            teacherEmail = String(me.email).trim();
+            declineCcEmailLabel.textContent = teacherEmail;
+          }
+        })
+        .catch(function() {});
 
       bodyEl.addEventListener('click', async (event) => {
         const openLink = event.target.closest('a[data-action="open-review"][data-id]');
@@ -353,20 +573,13 @@
           if (action === 'approve') {
             await approveRecipe(recipeId);
             setStatus('Recipe ' + recipeId + ' approved and published.', false);
+            await loadRows();
           } else if (action === 'decline') {
-            const reason = window.prompt('Enter decline reason to email the student:');
-            if (!reason || !String(reason).trim()) {
-              btn.disabled = false;
-              return;
-            }
-            const result = await declineRecipe(recipeId, String(reason).trim());
-            if (result.mailSent) {
-              setStatus('Recipe ' + recipeId + ' declined. Email sent to student.', false);
-            } else {
-              setStatus('Recipe ' + recipeId + ' declined. Email not sent: ' + (result.mailError || 'Unknown reason.'), true);
-            }
+            btn.disabled = false;
+            const recipeName = btn.getAttribute('data-name') || ('Recipe ' + recipeId);
+            openDeclineModal(recipeId, recipeName);
+            return;
           }
-          await loadRows();
         } catch (err) {
           setStatus(err && err.message ? err.message : 'Action failed.', true);
         } finally {

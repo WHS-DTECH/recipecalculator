@@ -1328,9 +1328,54 @@ router.post('/:id/food-truck/approve', requireFoodTruckTeacher, async (req, res)
   }
 });
 
+// Preview-only endpoint: sends decline email to the teacher only, no DB changes.
+router.post('/:id/food-truck/decline-preview', requireFoodTruckTeacher, async (req, res) => {
+  const recipeId = Number(req.params.id);
+  const reason = String(req.body && req.body.reason || '').trim();
+  const previewTo = normalizeEmail(req.body && req.body.previewTo);
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipe ID.' });
+  }
+  if (!reason) {
+    return res.status(400).json({ success: false, error: 'Decline reason is required.' });
+  }
+  if (!previewTo) {
+    return res.status(400).json({ success: false, error: 'previewTo email is required.' });
+  }
+
+  try {
+    const recipeResult = await pool.query(
+      `SELECT id, name, student_name FROM recipes WHERE id = $1 LIMIT 1`,
+      [recipeId]
+    );
+    const row = recipeResult.rows[0];
+    if (!row) return res.status(404).json({ success: false, error: 'Recipe not found.' });
+
+    const mailConfig = getDeclineMailTransport();
+    if (!mailConfig) {
+      return res.status(503).json({ success: false, error: 'SMTP is not configured for decline emails.' });
+    }
+
+    const studentFirstName = String(row.student_name || '').trim() || 'student';
+    const recipeName = row.name || `Recipe ${recipeId}`;
+    await mailConfig.transport.sendMail({
+      from: mailConfig.from,
+      to: previewTo,
+      subject: `[PREVIEW] Food Truck recipe update: ${recipeName}`,
+      text: `[TEST PREVIEW — this is what the student would receive]\n\nHi ${studentFirstName},\n\nYour Food Truck recipe submission "${recipeName}" was declined by a teacher.\n\nReason:\n${reason}\n\nPlease update your recipe and submit it again.\n`,
+      html: `<p style="background:#fff3cd;padding:0.5em;border:1px solid #ffe082;border-radius:4px;"><strong>TEST PREVIEW</strong> — this is what the student would receive.</p><p>Hi ${escapeHtml(studentFirstName)},</p><p>Your Food Truck recipe submission <strong>${escapeHtml(recipeName)}</strong> was declined by a teacher.</p><p><strong>Reason:</strong><br>${escapeHtml(reason).replace(/\n/g, '<br>')}</p><p>Please update your recipe and submit it again.</p>`
+    });
+
+    res.json({ success: true, message: 'Preview email sent to ' + previewTo });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to send preview email.' });
+  }
+});
+
 router.post('/:id/food-truck/decline', requireFoodTruckTeacher, async (req, res) => {
   const recipeId = Number(req.params.id);
   const reason = String(req.body && req.body.reason || '').trim();
+  const ccEmail = normalizeEmail(req.body && req.body.ccEmail);
   if (!Number.isInteger(recipeId) || recipeId <= 0) {
     return res.status(400).json({ success: false, error: 'Invalid recipe ID.' });
   }
@@ -1375,13 +1420,15 @@ router.post('/:id/food-truck/decline', requireFoodTruckTeacher, async (req, res)
 
     if (studentEmail && mailConfig) {
       try {
-        await mailConfig.transport.sendMail({
+        const mailOptions = {
           from: mailConfig.from,
           to: studentEmail,
           subject: `Food Truck recipe update: ${row.name || `Recipe ${recipeId}`}`,
           text: `Hi ${String(row.student_name || '').trim() || 'student'},\n\nYour Food Truck recipe submission \"${row.name || `Recipe ${recipeId}`}\" was declined by a teacher.\n\nReason:\n${reason}\n\nPlease update your recipe and submit it again.\n`,
           html: `<p>Hi ${escapeHtml(String(row.student_name || '').trim() || 'student')},</p><p>Your Food Truck recipe submission <strong>${escapeHtml(row.name || `Recipe ${recipeId}`)}</strong> was declined by a teacher.</p><p><strong>Reason:</strong><br>${escapeHtml(reason).replace(/\n/g, '<br>')}</p><p>Please update your recipe and submit it again.</p>`
-        });
+        };
+        if (ccEmail && ccEmail !== studentEmail) mailOptions.cc = ccEmail;
+        await mailConfig.transport.sendMail(mailOptions);
         mailSent = true;
         await pool.query('UPDATE recipes SET moderation_email_sent_at = NOW() WHERE id = $1', [recipeId]);
       } catch (err) {
