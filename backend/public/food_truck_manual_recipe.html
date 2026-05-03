@@ -283,7 +283,7 @@
   <main class="ft-wrap">
     <section class="ft-card">
       <h1 class="ft-title">Food Truck: Add Recipe Manually</h1>
-      <p class="ft-sub">Copy and paste recipe information from your source into the fields below. A RecipeID is assigned automatically when you save.</p>
+      <p class="ft-sub">Copy and paste recipe information from your source into the fields below. A RecipeID is assigned automatically and your recipe is submitted to the Food Truck teacher review list for moderation.</p>
 
       <div class="ft-id-row">
         <span>Next available RecipeID:</span>
@@ -320,7 +320,7 @@
         </div>
 
         <div class="ft-actions">
-          <button type="submit" id="saveManualBtn" class="ft-btn">Save &amp; Publish Recipe</button>
+          <button type="submit" id="saveManualBtn" class="ft-btn">Save &amp; Submit For Teacher Review</button>
           <button type="button" id="clearManualBtn" class="ft-btn secondary">Clear Form</button>
         </div>
       </form>
@@ -534,14 +534,8 @@
             sessionStorage.setItem('ftLastRecipeId', String(currentRecipeId));
             updatePhotoUploadLink(currentRecipeId);
 
-            const warnings = await runManualPublishFlow(currentRecipeId);
-
-            if (warnings.length) {
-              setStatus('Recipe saved and published (RecipeID ' + recipeId + ') with warnings: ' + warnings.join(' '), 'success');
-            } else {
-              const studentLabel = payload.student_name ? ' for ' + payload.student_name : '';
-              setStatus('Saved and published' + studentLabel + '. RecipeID ' + recipeId + ' assigned. Open Recipe Photos to upload up to 5 images and choose the details photo.', 'success');
-            }
+            const studentLabel = payload.student_name ? ' for ' + payload.student_name : '';
+            setStatus('Saved and submitted' + studentLabel + ' for teacher review. RecipeID ' + recipeId + ' assigned. Open Recipe Photos to upload up to 5 images and choose the details photo.', 'success');
             form.reset();
             await prepopulateStudentName(true);
             await refreshNextId();

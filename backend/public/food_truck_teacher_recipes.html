@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Food Truck Teacher Review</title>
+  <link rel="stylesheet" href="shared/design_tokens.css">
+  <link rel="stylesheet" href="shared/base.css">
+  <link rel="stylesheet" href="shared/components.css">
+  <link rel="stylesheet" href="admin_styles.css">
+  <style>
+    body {
+      margin: 0;
+      font-family: "Nunito", sans-serif;
+      background: linear-gradient(180deg, #eef4f9 0%, #f8fbff 100%);
+      color: #1f3550;
+    }
+
+    .ft-review-wrap {
+      width: min(1320px, calc(100vw - 1.2rem));
+      margin: 1rem auto 2rem;
+    }
+
+    .ft-review-card {
+      background: #fff;
+      border: 1px solid #d7e3f1;
+      border-left: 5px solid #165f94;
+      border-radius: 14px;
+      box-shadow: 0 10px 24px rgba(18, 56, 86, 0.08);
+      padding: 1rem;
+    }
+
+    .ft-review-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.8rem;
+    }
+
+    .ft-review-title {
+      margin: 0;
+      font-size: 1.6rem;
+      color: #163955;
+    }
+
+    .ft-review-sub {
+      margin: 0.35rem 0 0;
+      color: #587089;
+      font-size: 0.95rem;
+    }
+
+    .ft-controls {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .ft-controls select,
+    .ft-controls button {
+      border: 1px solid #bdd0e7;
+      border-radius: 8px;
+      min-height: 36px;
+      padding: 0.45rem 0.7rem;
+      font-weight: 700;
+    }
+
+    .ft-controls button {
+      background: #165f94;
+      color: #fff;
+      border-color: #0f466d;
+      cursor: pointer;
+    }
+
+    .ft-controls button:hover {
+      background: #0f466d;
+    }
+
+    #ftModerationStatus {
+      min-height: 1.1rem;
+      margin: 0.2rem 0 0.75rem;
+      font-weight: 700;
+      color: #245c88;
+    }
+
+    .ft-table-wrap {
+      overflow: auto;
+      border: 1px solid #d7e3f1;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 920px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid #e3ecf6;
+      padding: 0.55rem 0.6rem;
+      vertical-align: top;
+      font-size: 0.9rem;
+      text-align: left;
+    }
+
+    th {
+      background: #f2f7fd;
+      color: #224662;
+      font-weight: 800;
+      position: sticky;
+      top: 0;
+      z-index: 1;
+    }
+
+    .ft-tag {
+      display: inline-flex;
+      border-radius: 999px;
+      padding: 0.2rem 0.55rem;
+      font-size: 0.75rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      text-transform: uppercase;
+    }
+
+    .ft-tag.pending {
+      background: #fff4da;
+      color: #8a5c00;
+      border-color: #f0c66a;
+    }
+
+    .ft-tag.approved {
+      background: #eaf8ee;
+      color: #206635;
+      border-color: #9ed7ac;
+    }
+
+    .ft-tag.declined {
+      background: #fdeaea;
+      color: #8f1f1f;
+      border-color: #efb4b4;
+    }
+
+    .ft-row-actions {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+
+    .ft-row-actions button,
+    .ft-row-actions a {
+      border: none;
+      border-radius: 7px;
+      padding: 0.38rem 0.55rem;
+      font-size: 0.8rem;
+      font-weight: 800;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .ft-approve-btn { background: #2e7d32; color: #fff; }
+    .ft-approve-btn:hover { background: #1f5a24; }
+
+    .ft-decline-btn { background: #b3261e; color: #fff; }
+    .ft-decline-btn:hover { background: #8d1e17; }
+
+    .ft-view-btn {
+      background: #165f94;
+      color: #fff;
+    }
+
+    .ft-view-btn:hover {
+      background: #0f466d;
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+
+  <main class="ft-review-wrap">
+    <section class="ft-review-card">
+      <div class="ft-review-head">
+        <div>
+          <h1 class="ft-review-title">Food Truck Teacher Review List</h1>
+          <p class="ft-review-sub">Approve recipes to publish on Food Truck Browse Recipes, or decline with a reason emailed to the student.</p>
+        </div>
+        <div class="ft-controls">
+          <label for="moderationStatusFilter" style="font-weight:700;">Status</label>
+          <select id="moderationStatusFilter">
+            <option value="pending" selected>Pending</option>
+            <option value="approved">Approved</option>
+            <option value="declined">Declined</option>
+            <option value="all">All</option>
+          </select>
+          <button id="refreshModerationBtn" type="button">Refresh</button>
+        </div>
+      </div>
+
+      <div id="ftModerationStatus" role="status" aria-live="polite"></div>
+
+      <div class="ft-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>RecipeID</th>
+              <th>Name</th>
+              <th>Student</th>
+              <th>Status</th>
+              <th>Reason</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ftModerationBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function() {
+      const bodyEl = document.getElementById('ftModerationBody');
+      const statusEl = document.getElementById('ftModerationStatus');
+      const filterEl = document.getElementById('moderationStatusFilter');
+      const refreshBtn = document.getElementById('refreshModerationBtn');
+
+      function setStatus(message, isError) {
+        statusEl.textContent = message || '';
+        statusEl.style.color = isError ? '#8f1f1f' : '#245c88';
+      }
+
+      function statusTag(status) {
+        const normalized = String(status || 'pending').toLowerCase();
+        const safe = ['pending', 'approved', 'declined'].includes(normalized) ? normalized : 'pending';
+        return '<span class="ft-tag ' + safe + '">' + safe + '</span>';
+      }
+
+      function escapeHtml(value) {
+        return String(value || '')
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      async function loadRows() {
+        const status = String(filterEl.value || 'pending');
+        setStatus('Loading recipes...', false);
+        bodyEl.innerHTML = '<tr><td colspan="6">Loading...</td></tr>';
+
+        try {
+          const res = await fetch('/api/recipes/food-truck/moderation-list?status=' + encodeURIComponent(status), { credentials: 'include' });
+          const data = await res.json().catch(() => ({}));
+          if (!res.ok || data.success === false) {
+            throw new Error((data && (data.error || data.message)) || 'Failed to load moderation list.');
+          }
+
+          const rows = Array.isArray(data.recipes) ? data.recipes : [];
+          if (!rows.length) {
+            bodyEl.innerHTML = '<tr><td colspan="6">No recipes found for this status.</td></tr>';
+            setStatus('No recipes found.', false);
+            return;
+          }
+
+          bodyEl.innerHTML = rows.map((row) => {
+            const recipeId = Number(row.id || 0);
+            const recipeName = escapeHtml(row.name || '(Unnamed)');
+            const studentName = escapeHtml(row.student_name || row.created_by_name || 'Unknown student');
+            const moderationComment = escapeHtml(row.moderation_comment || '');
+            const showApprove = String(row.moderation_status || '').toLowerCase() !== 'approved';
+            const showDecline = String(row.moderation_status || '').toLowerCase() !== 'declined';
+
+            return '<tr>' +
+              '<td>' + recipeId + '</td>' +
+              '<td>' + recipeName + '</td>' +
+              '<td>' + studentName + '</td>' +
+              '<td>' + statusTag(row.moderation_status) + '</td>' +
+              '<td>' + (moderationComment || '<span style="color:#7b8ea5;">-</span>') + '</td>' +
+              '<td>' +
+                '<div class="ft-row-actions">' +
+                  '<a class="ft-view-btn" href="add_recipe.html?recipeId=' + recipeId + '">Open</a>' +
+                  (showApprove ? '<button class="ft-approve-btn" type="button" data-action="approve" data-id="' + recipeId + '">Approve</button>' : '') +
+                  (showDecline ? '<button class="ft-decline-btn" type="button" data-action="decline" data-id="' + recipeId + '">Decline</button>' : '') +
+                '</div>' +
+              '</td>' +
+            '</tr>';
+          }).join('');
+
+          setStatus('Loaded ' + rows.length + ' recipe(s).', false);
+        } catch (err) {
+          bodyEl.innerHTML = '<tr><td colspan="6">Failed to load moderation list.</td></tr>';
+          setStatus(err && err.message ? err.message : 'Failed to load moderation list.', true);
+        }
+      }
+
+      async function approveRecipe(recipeId) {
+        const res = await fetch('/api/recipes/' + recipeId + '/food-truck/approve', {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error((data && (data.error || data.message)) || 'Failed to approve recipe.');
+        }
+        return data;
+      }
+
+      async function declineRecipe(recipeId, reason) {
+        const res = await fetch('/api/recipes/' + recipeId + '/food-truck/decline', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: reason })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false) {
+          throw new Error((data && (data.error || data.message)) || 'Failed to decline recipe.');
+        }
+        return data;
+      }
+
+      bodyEl.addEventListener('click', async (event) => {
+        const btn = event.target.closest('button[data-action][data-id]');
+        if (!btn) return;
+
+        const action = btn.getAttribute('data-action');
+        const recipeId = Number(btn.getAttribute('data-id'));
+        if (!Number.isInteger(recipeId) || recipeId <= 0) return;
+
+        btn.disabled = true;
+        try {
+          if (action === 'approve') {
+            await approveRecipe(recipeId);
+            setStatus('Recipe ' + recipeId + ' approved and published.', false);
+          } else if (action === 'decline') {
+            const reason = window.prompt('Enter decline reason to email the student:');
+            if (!reason || !String(reason).trim()) {
+              btn.disabled = false;
+              return;
+            }
+            const result = await declineRecipe(recipeId, String(reason).trim());
+            if (result.mailSent) {
+              setStatus('Recipe ' + recipeId + ' declined. Email sent to student.', false);
+            } else {
+              setStatus('Recipe ' + recipeId + ' declined. Email not sent: ' + (result.mailError || 'Unknown reason.'), true);
+            }
+          }
+          await loadRows();
+        } catch (err) {
+          setStatus(err && err.message ? err.message : 'Action failed.', true);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      filterEl.addEventListener('change', loadRows);
+      refreshBtn.addEventListener('click', loadRows);
+      loadRows();
+    })();
+  </script>
+</body>
+</html>

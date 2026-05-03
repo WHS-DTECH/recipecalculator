@@ -4,9 +4,107 @@ const router = express.Router();
 const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
+const nodemailer = require('nodemailer');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
+let foodTruckModerationColumnsEnsured = false;
+
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function fallbackNameFromEmail(email) {
+  const local = String(email || '').split('@')[0] || '';
+  return local
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+    .trim();
+}
+
+function authUserName(req) {
+  const explicit = String(req && req.authUser && req.authUser.name || '').trim();
+  if (explicit) return explicit;
+  const email = normalizeEmail(req && req.authUserEmail);
+  return fallbackNameFromEmail(email) || 'Teacher';
+}
+
+async function ensureFoodTruckModerationColumns() {
+  if (foodTruckModerationColumnsEnsured) return;
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS submitted_channel TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderation_status TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderation_comment TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderation_updated_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderated_by_email TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderated_by_name TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderation_email_sent_at TIMESTAMPTZ');
+
+  await pool.query("UPDATE recipes SET submitted_channel = 'general' WHERE submitted_channel IS NULL OR trim(submitted_channel) = ''");
+  await pool.query("UPDATE recipes SET moderation_status = 'approved' WHERE submitted_channel <> 'food_truck' AND (moderation_status IS NULL OR trim(moderation_status) = '')");
+  await pool.query("UPDATE recipes SET moderation_status = 'pending' WHERE submitted_channel = 'food_truck' AND (moderation_status IS NULL OR trim(moderation_status) = '')");
+
+  foodTruckModerationColumnsEnsured = true;
+}
+
+async function hasFoodTruckTeacherAccess(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+
+  const result = await pool.query(
+    `SELECT lower(trim(ur.role_name)) AS role_name
+       FROM user_roles_assignments uar
+       JOIN user_roles ur ON ur.id = uar.role_id
+      WHERE lower(trim(uar.email)) = lower(trim($1))`,
+    [normalized]
+  );
+
+  return result.rows.some((row) => {
+    const role = String(row && row.role_name || '').trim().toLowerCase();
+    return role === 'admin' || role === 'lead_teacher' || role === 'teacher';
+  });
+}
+
+async function requireFoodTruckTeacher(req, res, next) {
+  const email = normalizeEmail(req && req.authUserEmail);
+  if (!email) {
+    return res.status(401).json({ success: false, error: 'Sign in required.' });
+  }
+
+  try {
+    const allowed = await hasFoodTruckTeacherAccess(email);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: 'Food Truck teacher access required.' });
+    }
+    return next();
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to validate teacher access.' });
+  }
+}
+
+function getDeclineMailTransport() {
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const port = Number(process.env.SMTP_PORT || 0);
+  const secure = String(process.env.SMTP_SECURE || '').trim().toLowerCase() === 'true';
+  const user = String(process.env.SMTP_USER || '').trim();
+  const pass = String(process.env.SMTP_PASS || '').trim();
+  const from = String(process.env.SMTP_FROM || '').trim();
+
+  if (!host || !port || !from) {
+    return null;
+  }
+
+  const transport = nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: user && pass ? { user, pass } : undefined
+  });
+
+  return { transport, from };
+}
 
 function normalizeInstructionLine(line) {
   return (line || '')
@@ -369,7 +467,20 @@ router.put('/:id/raw', async (req, res) => {
 // Updated: Return both id (primary key), recipeID, and name
 router.get('/display-dropdown', async (req, res) => {
   try {
-    const result = await pool.query('SELECT id, recipeid, name, serving_size FROM recipe_display ORDER BY name');
+    await ensureFoodTruckModerationColumns();
+    const scope = String(req.query && req.query.scope || '').trim().toLowerCase();
+    const result = await pool.query(
+      `SELECT rd.id, rd.recipeid, rd.name, rd.serving_size
+         FROM recipe_display rd
+         LEFT JOIN recipes r ON r.id = rd.recipeid
+        WHERE ($1 <> 'food_truck')
+           OR (
+             coalesce(r.submitted_channel, 'general') = 'food_truck'
+             AND coalesce(r.moderation_status, 'pending') = 'approved'
+           )
+        ORDER BY rd.name`,
+      [scope]
+    );
     res.json({ recipes: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -379,7 +490,22 @@ router.get('/display-dropdown', async (req, res) => {
 // GET /api/recipes/display-table - Get all rows from recipe_display
 router.get('/display-table', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM recipe_display');
+    await ensureFoodTruckModerationColumns();
+    const scope = String(req.query && req.query.scope || '').trim().toLowerCase();
+
+    const sql = `
+      SELECT rd.*
+        FROM recipe_display rd
+        LEFT JOIN recipes r ON r.id = rd.recipeid
+       WHERE (
+          $1 <> 'food_truck'
+          OR (
+            coalesce(r.submitted_channel, 'general') = 'food_truck'
+            AND coalesce(r.moderation_status, 'pending') = 'approved'
+          )
+       )
+       ORDER BY rd.id DESC`;
+    const result = await pool.query(sql, [scope]);
     res.json(result.rows);
   } catch (err) {
     console.error('[ERROR][GET /api/recipes/display-table]', err);
@@ -829,8 +955,11 @@ router.post('/manual', async (req, res) => {
 
   const ingredientsDisplay = multilineTextToHtmlList(ingredientsText, false);
   const instructionsDisplay = multilineTextToHtmlList(instructionsText, true);
+  const createdByEmail = normalizeEmail(req && req.authUserEmail);
+  const createdByName = authUserName(req);
 
   try {
+    await ensureFoodTruckModerationColumns();
     const insertResult = await pool.query(
       `INSERT INTO recipes (
         name,
@@ -843,8 +972,16 @@ router.post('/manual', async (req, res) => {
         instructions_extracted,
         ingredients_display,
         instructions_display,
-        student_name
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        student_name,
+        created_by_email,
+        created_by_name,
+        submitted_channel,
+        moderation_status,
+        moderation_comment,
+        moderation_updated_at,
+        moderated_by_email,
+        moderated_by_name
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,NOW(),NULL,NULL)
       RETURNING id`,
       [
         name,
@@ -857,7 +994,12 @@ router.post('/manual', async (req, res) => {
         instructionsText || null,
         ingredientsDisplay || null,
         instructionsDisplay || null,
-        studentName || null
+        studentName || null,
+        createdByEmail || null,
+        createdByName || null,
+        'food_truck',
+        'pending',
+        null
       ]
     );
 
@@ -872,9 +1014,181 @@ router.post('/manual', async (req, res) => {
       fs.writeFileSync(filePath, rawText, 'utf8');
     }
 
-    res.json({ success: true, recipeId });
+    res.json({ success: true, recipeId, moderationStatus: 'pending' });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to save manual recipe.' });
+  }
+});
+
+router.get('/food-truck/moderation-list', requireFoodTruckTeacher, async (req, res) => {
+  try {
+    await ensureFoodTruckModerationColumns();
+    const status = String(req.query && req.query.status || 'pending').trim().toLowerCase();
+    const normalizedStatus = ['pending', 'approved', 'declined', 'all'].includes(status) ? status : 'pending';
+
+    const result = await pool.query(
+      `SELECT r.id,
+              r.name,
+              r.student_name,
+              r.created_by_name,
+              r.created_by_email,
+              r.submitted_channel,
+              r.moderation_status,
+              r.moderation_comment,
+              r.moderation_updated_at,
+              r.moderated_by_name,
+              r.moderated_by_email,
+              EXISTS (SELECT 1 FROM recipe_display rd WHERE rd.recipeid = r.id) AS is_published
+         FROM recipes r
+        WHERE coalesce(r.submitted_channel, '') = 'food_truck'
+          AND ($1 = 'all' OR coalesce(r.moderation_status, 'pending') = $1)
+        ORDER BY r.id DESC`,
+      [normalizedStatus]
+    );
+
+    res.json({ success: true, recipes: result.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to load moderation list.' });
+  }
+});
+
+router.post('/:id/food-truck/approve', requireFoodTruckTeacher, async (req, res) => {
+  const recipeId = Number(req.params.id);
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipe ID.' });
+  }
+
+  try {
+    await ensureFoodTruckModerationColumns();
+
+    const recipeResult = await pool.query(
+      `SELECT *
+         FROM recipes
+        WHERE id = $1
+          AND coalesce(submitted_channel, '') = 'food_truck'
+        LIMIT 1`,
+      [recipeId]
+    );
+
+    if (!recipeResult.rows.length) {
+      return res.status(404).json({ success: false, error: 'Food Truck recipe not found.' });
+    }
+
+    const row = recipeResult.rows[0];
+    const ingredients = row.ingredients_display || row.ingredients;
+    const instructions = row.instructions_display || row.instructions;
+
+    await pool.query(
+      `INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       ON CONFLICT (recipeid) DO UPDATE SET
+         name = EXCLUDED.name,
+         description = EXCLUDED.description,
+         ingredients = EXCLUDED.ingredients,
+         serving_size = EXCLUDED.serving_size,
+         url = EXCLUDED.url,
+         instructions = EXCLUDED.instructions`,
+      [
+        row.name,
+        row.description,
+        ingredients,
+        row.serving_size,
+        row.url,
+        instructions,
+        row.id
+      ]
+    );
+
+    await pool.query(
+      `UPDATE recipes
+          SET moderation_status = 'approved',
+              moderation_comment = NULL,
+              moderation_updated_at = NOW(),
+              moderated_by_email = $1,
+              moderated_by_name = $2
+        WHERE id = $3`,
+      [normalizeEmail(req.authUserEmail), authUserName(req), recipeId]
+    );
+
+    res.json({ success: true, message: 'Recipe approved and published.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to approve recipe.' });
+  }
+});
+
+router.post('/:id/food-truck/decline', requireFoodTruckTeacher, async (req, res) => {
+  const recipeId = Number(req.params.id);
+  const reason = String(req.body && req.body.reason || '').trim();
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipe ID.' });
+  }
+  if (!reason) {
+    return res.status(400).json({ success: false, error: 'Decline reason is required.' });
+  }
+
+  try {
+    await ensureFoodTruckModerationColumns();
+
+    const recipeResult = await pool.query(
+      `SELECT id, name, created_by_email, student_name
+         FROM recipes
+        WHERE id = $1
+          AND coalesce(submitted_channel, '') = 'food_truck'
+        LIMIT 1`,
+      [recipeId]
+    );
+
+    if (!recipeResult.rows.length) {
+      return res.status(404).json({ success: false, error: 'Food Truck recipe not found.' });
+    }
+
+    const row = recipeResult.rows[0];
+    await pool.query(
+      `UPDATE recipes
+          SET moderation_status = 'declined',
+              moderation_comment = $1,
+              moderation_updated_at = NOW(),
+              moderated_by_email = $2,
+              moderated_by_name = $3
+        WHERE id = $4`,
+      [reason, normalizeEmail(req.authUserEmail), authUserName(req), recipeId]
+    );
+
+    await pool.query('DELETE FROM recipe_display WHERE recipeid = $1', [recipeId]);
+
+    let mailSent = false;
+    let mailError = '';
+    const studentEmail = normalizeEmail(row.created_by_email);
+    const mailConfig = getDeclineMailTransport();
+
+    if (studentEmail && mailConfig) {
+      try {
+        await mailConfig.transport.sendMail({
+          from: mailConfig.from,
+          to: studentEmail,
+          subject: `Food Truck recipe update: ${row.name || `Recipe ${recipeId}`}`,
+          text: `Hi ${String(row.student_name || '').trim() || 'student'},\n\nYour Food Truck recipe submission \"${row.name || `Recipe ${recipeId}`}\" was declined by a teacher.\n\nReason:\n${reason}\n\nPlease update your recipe and submit it again.\n`,
+          html: `<p>Hi ${escapeHtml(String(row.student_name || '').trim() || 'student')},</p><p>Your Food Truck recipe submission <strong>${escapeHtml(row.name || `Recipe ${recipeId}`)}</strong> was declined by a teacher.</p><p><strong>Reason:</strong><br>${escapeHtml(reason).replace(/\n/g, '<br>')}</p><p>Please update your recipe and submit it again.</p>`
+        });
+        mailSent = true;
+        await pool.query('UPDATE recipes SET moderation_email_sent_at = NOW() WHERE id = $1', [recipeId]);
+      } catch (err) {
+        mailError = err && err.message ? err.message : 'Failed to send decline email.';
+      }
+    } else if (!studentEmail) {
+      mailError = 'Student email not available for this recipe.';
+    } else {
+      mailError = 'SMTP is not configured for decline emails.';
+    }
+
+    res.json({
+      success: true,
+      message: 'Recipe declined.',
+      mailSent,
+      mailError
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message || 'Failed to decline recipe.' });
   }
 });
 

@@ -173,11 +173,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
   const params = new URLSearchParams(window.location.search);
   let id = params.get('id');
+  const scope = String(params.get('scope') || '').trim().toLowerCase();
+  const isFoodTruckScope = scope === 'food_truck';
 
   let allRecipes = [];
 
+  function buildRecipeUrl(recipeId) {
+    const next = new URL('recipe_display.html', window.location.href);
+    next.searchParams.set('id', recipeId);
+    if (isFoodTruckScope) {
+      next.searchParams.set('scope', 'food_truck');
+    }
+    return next.toString();
+  }
+
   function navigateToRecipe(recipeId) {
-    window.location.href = `recipe_display.html?id=${recipeId}`;
+    window.location.href = buildRecipeUrl(recipeId);
   }
 
   function updateRecipeList(recipes, currentId) {
@@ -327,7 +338,7 @@ document.addEventListener('DOMContentLoaded', function() {
     .then(auth => {
       const isAuthenticated = Boolean(auth && auth.authenticated && auth.user && auth.user.email);
       if (!isAuthenticated) {
-        const nextUrl = id ? `recipe_display.html?id=${id}` : 'recipe_display.html';
+        const nextUrl = id ? buildRecipeUrl(id) : (isFoodTruckScope ? 'recipe_display.html?scope=food_truck' : 'recipe_display.html');
         window.location.href = `google_login.html?next=${encodeURIComponent(nextUrl)}`;
         return;
       }
@@ -335,7 +346,11 @@ document.addEventListener('DOMContentLoaded', function() {
       const isAdmin = String(auth && auth.user && auth.user.role || '').toLowerCase() === 'admin';
       const currentUserEmail = String(auth && auth.user && auth.user.email || '').trim().toLowerCase();
 
-      return fetch('/api/recipes/display-table')
+      const displayUrl = isFoodTruckScope
+        ? '/api/recipes/display-table?scope=food_truck'
+        : '/api/recipes/display-table';
+
+      return fetch(displayUrl)
         .then(res => res.json())
         .then(rows => {
           allRecipes = rows.slice().sort((a, b) =>
@@ -347,9 +362,19 @@ document.addEventListener('DOMContentLoaded', function() {
             id = String(recipe.id);
             const next = new URL(window.location.href);
             next.searchParams.set('id', id);
+            if (isFoodTruckScope) {
+              next.searchParams.set('scope', 'food_truck');
+            }
             window.history.replaceState({}, '', next.toString());
           }
           if (!recipe) return;
+
+          if (isFoodTruckScope) {
+            const sidebarHeader = document.querySelector('.nav-sidebar-header');
+            if (sidebarHeader) {
+              sidebarHeader.textContent = 'Food Truck Browse Recipes';
+            }
+          }
 
           updateRecipeList(allRecipes, id);
           updateNavButtons(allRecipes, id);
@@ -491,7 +516,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     })
     .catch(() => {
-      const nextUrl = id ? `recipe_display.html?id=${id}` : 'recipe_display.html';
+      const nextUrl = id ? buildRecipeUrl(id) : (isFoodTruckScope ? 'recipe_display.html?scope=food_truck' : 'recipe_display.html');
       window.location.href = `google_login.html?next=${encodeURIComponent(nextUrl)}`;
     });
 });
