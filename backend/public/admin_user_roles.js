@@ -31,6 +31,7 @@ window.addEventListener('DOMContentLoaded', () => {
   const userSelect = document.getElementById('userEmailSelect');
   const emailInput = document.getElementById('userEmailInput');
   const addRoleBtn = document.getElementById('addRoleBtn');
+  const runAuditBtn = document.getElementById('runPublicAccessAuditBtn');
 
   function syncUserTypeUi() {
     const userType = getSelectedUserType();
@@ -64,6 +65,9 @@ window.addEventListener('DOMContentLoaded', () => {
   });
 
   addRoleBtn.addEventListener('click', addRoleToUser);
+  if (runAuditBtn) {
+    runAuditBtn.addEventListener('click', runPublicAccessAudit);
+  }
 
   syncUserTypeUi();
   fetchOptions();
@@ -73,6 +77,70 @@ window.addEventListener('DOMContentLoaded', () => {
 function getSelectedUserType() {
   const el = document.getElementById('userTypeSelect');
   return el && el.value === 'student' ? 'student' : 'staff';
+}
+
+function runPublicAccessAudit() {
+  const button = document.getElementById('runPublicAccessAuditBtn');
+  const output = document.getElementById('publicAccessAuditResults');
+  if (!button || !output) return;
+
+  button.disabled = true;
+  button.textContent = 'Running...';
+  output.textContent = 'Running audit...';
+
+  fetch('/api/auth/public-access-audit', {
+    method: 'GET',
+    headers: withAdminIdentityHeaders()
+  })
+    .then(res => res.json())
+    .then(data => {
+      if (!data.success) {
+        throw new Error(data.error || 'Audit failed.');
+      }
+
+      const summary = `<div><b>Checked:</b> ${escapeHtml(String(data.totalChecked || 0))} &nbsp; <b>Flagged:</b> ${escapeHtml(String(data.flaggedCount || 0))} &nbsp; <b>Domain:</b> ${escapeHtml(data.allowedDomain || '')}</div>`;
+
+      if (!Array.isArray(data.flagged) || data.flagged.length === 0) {
+        output.innerHTML = `${summary}<div style="margin-top:0.35rem;color:#1f6a2f;">No school-domain identities are resolving to Public Access.</div>`;
+        return;
+      }
+
+      const rows = data.flagged.map((entry) => {
+        const sources = (entry.sources || []).join(', ');
+        const details = (entry.details || []).filter(Boolean).slice(0, 3).join(' | ');
+        return `
+          <tr>
+            <td style="padding:6px;border:1px solid #d7e0ea;">${escapeHtml(entry.email || '')}</td>
+            <td style="padding:6px;border:1px solid #d7e0ea;">${escapeHtml(sources)}</td>
+            <td style="padding:6px;border:1px solid #d7e0ea;">${escapeHtml(details || '-')}</td>
+          </tr>
+        `;
+      }).join('');
+
+      output.innerHTML = `
+        ${summary}
+        <div style="margin-top:0.45rem;color:#8b1f1f;"><b>Action needed:</b> these identities currently resolve to Public Access.</div>
+        <div style="overflow:auto;margin-top:0.45rem;">
+          <table style="width:100%;border-collapse:collapse;font-size:0.9rem;">
+            <thead>
+              <tr style="background:#f4f7fb;">
+                <th style="text-align:left;padding:6px;border:1px solid #d7e0ea;">Identity</th>
+                <th style="text-align:left;padding:6px;border:1px solid #d7e0ea;">Source</th>
+                <th style="text-align:left;padding:6px;border:1px solid #d7e0ea;">CSV Detail</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    })
+    .catch(err => {
+      output.innerHTML = `<span style="color:#b00020;">Audit failed: ${escapeHtml(err.message)}</span>`;
+    })
+    .finally(() => {
+      button.disabled = false;
+      button.textContent = 'Run Public Access Audit';
+    });
 }
 
 function showStatus(message, isError = false) {

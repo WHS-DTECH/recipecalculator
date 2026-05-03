@@ -836,6 +836,96 @@ app.get('/api/auth/me', (req, res) => {
     });
 });
 
+app.get('/api/auth/public-access-audit', requireAdmin, async (req, res) => {
+  try {
+    const allowedDomain = String(process.env.GOOGLE_ALLOWED_DOMAIN || 'westlandhigh.school.nz').trim().toLowerCase();
+    if (!allowedDomain) {
+      return res.status(400).json({ success: false, error: 'GOOGLE_ALLOWED_DOMAIN is not configured.' });
+    }
+
+    const candidates = new Map();
+    const addCandidate = (email, source, details) => {
+      const normalized = normalizeEmail(email);
+      if (!normalized || !normalized.endsWith(`@${allowedDomain}`)) return;
+      if (!candidates.has(normalized)) {
+        candidates.set(normalized, { email: normalized, sources: new Set(), details: [] });
+      }
+      const item = candidates.get(normalized);
+      item.sources.add(source);
+      if (details) item.details.push(details);
+    };
+
+    const staffResult = await pool.query(
+      `SELECT DISTINCT lower(trim(email_school)) AS email
+       FROM staff_upload
+       WHERE COALESCE(status, 'Current') = 'Current'
+         AND trim(COALESCE(email_school, '')) <> ''`
+    );
+    staffResult.rows.forEach((row) => addCandidate(row.email, 'staff_csv'));
+
+    const studentResult = await pool.query(
+      `SELECT DISTINCT id_number, student_name
+       FROM student_timetable
+       WHERE COALESCE(status, 'Current') = 'Current'
+         AND (trim(COALESCE(id_number, '')) <> '' OR trim(COALESCE(student_name, '')) <> '')`
+    );
+
+    studentResult.rows.forEach((row) => {
+      const idNumber = String(row.id_number || '').trim();
+      const studentName = String(row.student_name || '').trim();
+
+      if (idNumber) {
+        addCandidate(`${idNumber}@${allowedDomain}`, 'student_csv_id', idNumber);
+      }
+
+      if (studentName) {
+        const normalizedName = studentName
+          .toLowerCase()
+          .replace(/\s*,\s*/g, ' ')
+          .replace(/[^a-z0-9\s-]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (normalizedName) {
+          const parts = normalizedName.split(' ').filter(Boolean);
+          if (parts.length >= 2) {
+            const first = parts[0];
+            const last = parts[parts.length - 1];
+            addCandidate(`${first}.${last}@${allowedDomain}`, 'student_csv_name', studentName);
+          }
+        }
+      }
+    });
+
+    const evaluations = await Promise.all(
+      Array.from(candidates.values()).map(async (candidate) => {
+        const roleInfo = await resolveEffectiveRoleForEmail(candidate.email);
+        return {
+          email: candidate.email,
+          role: roleInfo.role,
+          staffLinked: Boolean(roleInfo.staffLinked),
+          studentLinked: Boolean(roleInfo.studentLinked),
+          sources: Array.from(candidate.sources),
+          details: candidate.details
+        };
+      })
+    );
+
+    const flagged = evaluations.filter((entry) => entry.role === 'public_access');
+
+    return res.json({
+      success: true,
+      allowedDomain,
+      totalChecked: evaluations.length,
+      flaggedCount: flagged.length,
+      flagged
+    });
+  } catch (err) {
+    console.error('[AUTH] public-access-audit failed:', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to run public access audit.' });
+  }
+});
+
 app.post('/api/auth/logout', (req, res) => {
   clearSessionCookie(res);
   return res.json({ success: true });
