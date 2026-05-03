@@ -5,6 +5,7 @@ const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const { requireAdmin } = require('../middleware/requireAdmin');
 require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
@@ -1049,6 +1050,90 @@ router.get('/food-truck/moderation-list', requireFoodTruckTeacher, async (req, r
     res.json({ success: true, recipes: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message || 'Failed to load moderation list.' });
+  }
+});
+
+router.post('/food-truck/admin/reclassify-pending', requireAdmin, async (req, res) => {
+  const recipeId = Number(req.body && req.body.recipeId);
+  const recipeName = String(req.body && req.body.name || '').trim();
+  const studentName = String(req.body && req.body.studentName || '').trim();
+  const createdByEmail = normalizeEmail(req.body && req.body.createdByEmail);
+
+  if ((!Number.isInteger(recipeId) || recipeId <= 0) && !recipeName) {
+    return res.status(400).json({
+      success: false,
+      error: 'Provide recipeId or name to reclassify a Food Truck recipe.'
+    });
+  }
+
+  try {
+    await ensureFoodTruckModerationColumns();
+
+    let recipeResult;
+    if (Number.isInteger(recipeId) && recipeId > 0) {
+      recipeResult = await pool.query(
+        `SELECT id, name, student_name, created_by_email, moderation_status
+           FROM recipes
+          WHERE id = $1
+          LIMIT 1`,
+        [recipeId]
+      );
+    } else {
+      recipeResult = await pool.query(
+        `SELECT id, name, student_name, created_by_email, moderation_status
+           FROM recipes
+          WHERE lower(trim(name)) = lower(trim($1))
+            AND ($2 = '' OR lower(trim(coalesce(student_name, ''))) = lower(trim($2)))
+            AND ($3 = '' OR lower(trim(coalesce(created_by_email, ''))) = lower(trim($3)))
+          ORDER BY id DESC`,
+        [recipeName, studentName, createdByEmail]
+      );
+    }
+
+    if (!recipeResult.rows.length) {
+      return res.status(404).json({ success: false, error: 'Recipe not found.' });
+    }
+
+    if (recipeResult.rows.length > 1) {
+      return res.status(409).json({
+        success: false,
+        error: 'Multiple recipes matched. Retry with recipeId or more filters.',
+        matches: recipeResult.rows
+      });
+    }
+
+    const row = recipeResult.rows[0];
+    await pool.query(
+      `UPDATE recipes
+          SET submitted_channel = 'food_truck',
+              moderation_status = 'pending',
+              moderation_comment = NULL,
+              moderation_updated_at = NOW(),
+              moderated_by_email = $1,
+              moderated_by_name = $2,
+              moderation_email_sent_at = NULL
+        WHERE id = $3`,
+      [normalizeEmail(req.authUserEmail), authUserName(req), row.id]
+    );
+
+    const unpublished = await pool.query('DELETE FROM recipe_display WHERE recipeid = $1', [row.id]);
+
+    return res.json({
+      success: true,
+      recipe: {
+        id: row.id,
+        name: row.name,
+        student_name: row.student_name,
+        created_by_email: row.created_by_email,
+        moderation_status: 'pending'
+      },
+      unpublished: unpublished.rowCount > 0
+    });
+  } catch (err) {
+    return res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to reclassify recipe.'
+    });
   }
 });
 
