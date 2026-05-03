@@ -371,6 +371,7 @@ function getCurrentEmbedState() {
     recipeId: document.getElementById('recipeSelect')?.value || '',
     recipeSelectionInfo: document.getElementById('recipeSelectionInfo')?.textContent || '',
     classSize: document.getElementById('classSizeInput')?.value || '',
+    groups: document.getElementById('groupsInput')?.value || '',
     editBookingId: saveBtn && saveBtn.dataset ? (saveBtn.dataset.editId || '') : ''
   };
 }
@@ -425,6 +426,7 @@ function applySharedEmbedState(state = {}) {
   const periodSelect = document.getElementById('periodSelect');
   const recipeSelect = document.getElementById('recipeSelect');
   const classSizeInput = document.getElementById('classSizeInput');
+  const groupsInput = document.getElementById('groupsInput');
   const targetStaffId = state.staffId || '';
   const targetClassName = state.className || '';
   const targetDate = state.bookingDate || '';
@@ -433,6 +435,7 @@ function applySharedEmbedState(state = {}) {
   const targetRecipeName = state.recipeName || '';
   const targetRecipeSelectionInfo = state.recipeSelectionInfo || '';
   const targetClassSize = state.classSize || '';
+  const targetGroups = state.groups || '';
   const targetEditBookingId = state.editBookingId || '';
   lastSharedStateAppliedAt = state.updatedAt || Date.now();
 
@@ -456,6 +459,9 @@ function applySharedEmbedState(state = {}) {
   setRecipeSelectionInfo(targetRecipeSelectionInfo);
   if (classSizeInput && targetClassSize) {
     classSizeInput.value = targetClassSize;
+  }
+  if (groupsInput && targetGroups) {
+    groupsInput.value = targetGroups;
   }
 
   const finalize = () => {
@@ -1101,12 +1107,17 @@ function saveBooking(options = {}) {
   const periodSelect = document.getElementById('periodSelect');
   const recipeSelect = document.getElementById('recipeSelect');
   const classSizeInput = document.getElementById('classSizeInput');
+  const groupsInput = document.getElementById('groupsInput');
   const staffId = staffSelect.value;
   const staffName = staffSelect.options[staffSelect.selectedIndex].textContent;
   const className = classSelect.value;
   const bookingDate = dateInput.value;
   const period = periodSelect.value;
   const classSize = classSizeInput.value;
+  const parsedGroupsFromInput = parseInt(String((groupsInput && groupsInput.value) || '').trim(), 10);
+  let groupsForBooking = !isNaN(parsedGroupsFromInput) && parsedGroupsFromInput > 0
+    ? String(parsedGroupsFromInput)
+    : '1';
   // Get recipe_id from selected option (assume dropdown options have data-recipe-id)
   let recipeId = '';
   let recipeName = '';
@@ -1117,7 +1128,10 @@ function saveBooking(options = {}) {
   }
 
   if (shouldAutoCalculate) {
-    const suggestedGroups = Math.max(1, parseInt(String(options.groups || '').trim(), 10) || 1);
+    const suggestedGroups = Math.max(
+      1,
+      parseInt(String((groupsInput && groupsInput.value) || options.groups || '').trim(), 10) || 1
+    );
     const groupAnswer = prompt('How many groups do you want?', String(suggestedGroups));
     if (groupAnswer === null) {
       return Promise.resolve({ cancelled: true });
@@ -1131,6 +1145,10 @@ function saveBooking(options = {}) {
     }
 
     groupsForAutoCalculate = String(parsedGroups);
+    groupsForBooking = groupsForAutoCalculate;
+    if (groupsInput) {
+      groupsInput.value = groupsForAutoCalculate;
+    }
   }
 
   // Track most selected
@@ -1151,7 +1169,8 @@ function saveBooking(options = {}) {
       period,
       recipe: recipeName,
       recipe_id: recipeId,
-      class_size: classSize
+      class_size: classSize,
+      groups: groupsForBooking
     })
   })
     .then(res => res.json())
@@ -1168,7 +1187,7 @@ function saveBooking(options = {}) {
             className,
             bookingDate,
             classSize,
-            groups: groupsForAutoCalculate || '1',
+            groups: groupsForAutoCalculate || groupsForBooking,
             recipeId
           }).then(() => {
             if (window.QC) window.QC.toast('Desired serving ingredients saved', 'success');
@@ -1281,6 +1300,7 @@ function renderBookings(bookings = []) {
     const periodSelect = document.getElementById('periodSelect');
     const recipeSelect = document.getElementById('recipeSelect');
     const classSizeInput = document.getElementById('classSizeInput');
+    const groupsInput = document.getElementById('groupsInput');
 
     const bookingStaffId = String(booking.staff_id || getStaffIdByName(booking.staff_name) || '');
     if (staffSelect && bookingStaffId) {
@@ -1313,6 +1333,9 @@ function renderBookings(bookings = []) {
     if (classSizeInput) {
       classSizeInput.value = booking.class_size || '';
     }
+    if (groupsInput) {
+      groupsInput.value = booking.groups || groupsInput.value || '1';
+    }
     setFormEditMode(booking.id);
     writeSharedEmbedState({
       ...getCurrentEmbedState(),
@@ -1322,6 +1345,7 @@ function renderBookings(bookings = []) {
       period: String(booking.period || ''),
       recipeId: booking.recipe_id ? String(booking.recipe_id) : '',
       classSize: String(booking.class_size || ''),
+      groups: String(booking.groups || (groupsInput && groupsInput.value) || '1'),
       editBookingId: String(booking.id || '')
     }, { force: true });
   }
@@ -1421,6 +1445,7 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('resetBtn').addEventListener('click', () => {
     clearFormEditMode();
     document.getElementById('classSizeInput').value = 1;
+    document.getElementById('groupsInput').value = 1;
     document.getElementById('recipeSelect').selectedIndex = 0;
     setRecipeSelectionInfo('');
     document.getElementById('periodSelect').selectedIndex = 0;
@@ -1475,6 +1500,12 @@ window.addEventListener('DOMContentLoaded', () => {
     fetchStudentsForClass(this.value);
     writeSharedEmbedState(getCurrentEmbedState());
   });
+  const groupsInput = document.getElementById('groupsInput');
+  if (groupsInput) {
+    groupsInput.addEventListener('change', () => {
+      writeSharedEmbedState(getCurrentEmbedState());
+    });
+  }
   fetchStudentsForClass('');
   fetchTeacherTimetableForSelectedDate();
 
