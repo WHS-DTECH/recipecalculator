@@ -53,6 +53,8 @@ async function hasFoodTruckTeacherAccess(email) {
   const normalized = normalizeEmail(email);
   if (!normalized) return false;
 
+  // Keep Food Truck teacher access resilient across older databases.
+
   try {
     const additionalRoleResult = await pool.query(
       `SELECT lower(trim(uar.role_name)) AS role_name
