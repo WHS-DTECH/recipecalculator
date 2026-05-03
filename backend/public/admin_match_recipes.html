@@ -1778,34 +1778,6 @@
     }
 
     async function saveRecipeLink() {
-      const recipeId = parseInt(document.getElementById('linkRecipeSelect').value);
-      if (!recipeId) {
-        showToast('Please select a recipe', 'error');
-        return;
-      }
-
-      try {
-        const response = await fetch('/api/recipe-matching/link-recipe', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            bookingId: currentBookingId,
-            recipeId
-          })
-        });
-
-        const data = await response.json();
-        if (!response.ok) throw new Error(data.error);
-
-        showToast('Recipe linked successfully');
-        closeLinkModal();
-        loadUnmatchedRecipes();
-      } catch (err) {
-        showToast(`Error: ${err.message}`, 'error');
-      }
-    }
-
-    async function saveRecipeLink() {
       const dropdownId = parseInt(document.getElementById('linkRecipeSelect').value) || 0;
       if (dropdownId) linkModalSelectedIds.add(dropdownId);
       const recipeIds = Array.from(linkModalSelectedIds);
@@ -1834,6 +1806,34 @@
         updateStats();
         closeLinkModal();
         renderRecipes();
+      } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    async function saveNewRecipe() {
+      const name = document.getElementById('createRecipeName').value.trim();
+      const url = document.getElementById('createRecipeUrl').value.trim();
+      const desc = document.getElementById('createRecipeDesc').value.trim();
+
+      if (!name) {
+        showToast('Recipe name is required', 'error');
+        return;
+      }
+
+      try {
+        // Create recipe via existing API
+        const response = await fetch('/api/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            url,
+            description: desc,
+            ingredients: '[]',
+            instructions: ''
+          })
+        });
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to create recipe');
