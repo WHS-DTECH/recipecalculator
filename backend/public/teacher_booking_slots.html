@@ -29,6 +29,33 @@
       flex-wrap: wrap;
       gap: 0.45rem;
     }
+
+    .slot-booking-picker {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.45rem;
+      align-items: end;
+      margin-bottom: 0.6rem;
+    }
+
+    .slot-booking-picker label {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2rem;
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: #334155;
+      min-width: 360px;
+      flex: 1;
+    }
+
+    .slot-booking-picker select {
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      padding: 0.32rem 0.4rem;
+      max-width: 100%;
+      background: #fff;
+    }
     .slot-actions a,
     .slot-actions button {
       text-decoration: none;
@@ -298,6 +325,15 @@
   <main class="slot-page">
     <section class="slot-head">
       <h1>Teacher Calendar List</h1>
+      <div class="slot-booking-picker">
+        <label>
+          Food Truck bookings
+          <select id="foodTruckBookingSelect">
+            <option value="">Loading Food Truck bookings...</option>
+          </select>
+        </label>
+        <button id="loadFoodTruckBookingBtn" type="button" class="secondary">Load Booking</button>
+      </div>
       <div id="slotBookingMeta" class="slot-meta">Loading booking...</div>
       <div class="slot-actions">
         <a id="backCalendarLink" href="add_booking.html" class="secondary">Back to Calendar</a>
@@ -371,13 +407,15 @@
 
   <script>
     (function() {
+      const FOOD_TRUCK_STREAM = 'Food Truck';
       const params = new URLSearchParams(window.location.search);
-      const bookingId = Number(params.get('booking_id') || 0);
-      const sourcePage = String(params.get('source') || '').trim() || 'add_booking.html';
-      const safeSourcePage = /\.html$/i.test(sourcePage) ? sourcePage : 'add_booking.html';
+      let bookingId = Number(params.get('booking_id') || 0);
+      const safeSourcePage = 'add_food_truck_booking.html';
 
       const slotBookingMeta = document.getElementById('slotBookingMeta');
       const slotStatus = document.getElementById('slotStatus');
+      const foodTruckBookingSelect = document.getElementById('foodTruckBookingSelect');
+      const loadFoodTruckBookingBtn = document.getElementById('loadFoodTruckBookingBtn');
       const maxSlotsInput = document.getElementById('maxSlotsInput');
       const allowPairsInput = document.getElementById('allowPairsInput');
       const saveConfigBtn = document.getElementById('saveConfigBtn');
@@ -399,6 +437,22 @@
       let slots = [];
       let roster = [];
       let activeSeat = { slot: 1, seat: 1 };
+      let foodTruckBookings = [];
+
+      function isFoodTruckBooking(row) {
+        return String(row && row.planner_stream || '').trim().toLowerCase() === FOOD_TRUCK_STREAM.toLowerCase();
+      }
+
+      function updateUrlWithBooking(selectedBookingId) {
+        const url = new URL(window.location.href);
+        if (selectedBookingId) {
+          url.searchParams.set('booking_id', String(selectedBookingId));
+        } else {
+          url.searchParams.delete('booking_id');
+        }
+        url.searchParams.set('source', safeSourcePage);
+        window.history.replaceState({}, '', url.toString());
+      }
 
       function setStatus(msg, isError) {
         slotStatus.style.color = isError ? '#991b1b' : '#1e3a8a';
@@ -431,6 +485,57 @@
         const linked = `${safeSourcePage}?booking_id=${encodeURIComponent(String(bookingId))}`;
         backCalendarLink.href = linked;
         openBookClassLink.href = linked;
+      }
+
+      function formatFoodTruckBookingOption(row) {
+        const bookingDate = String(row && row.booking_date || '').trim();
+        const period = String(row && row.period || '-').trim() || '-';
+        const recipe = String(row && row.recipe || '-').trim() || '-';
+        const className = String(row && row.class_name || '-').trim() || '-';
+        const staffName = String(row && row.staff_name || '-').trim() || '-';
+        return `${bookingDate} | P${period} | ${recipe} | ${className} | ${staffName}`;
+      }
+
+      function renderFoodTruckBookingOptions() {
+        if (!foodTruckBookingSelect) return;
+        if (!foodTruckBookings.length) {
+          foodTruckBookingSelect.innerHTML = '<option value="">No Food Truck bookings found</option>';
+          foodTruckBookingSelect.value = '';
+          return;
+        }
+
+        foodTruckBookingSelect.innerHTML = foodTruckBookings.map((row) => {
+          const value = String(row.id || '');
+          const label = escapeHtml(formatFoodTruckBookingOption(row));
+          return `<option value="${escapeHtml(value)}">${label}</option>`;
+        }).join('');
+
+        const preferredId = bookingId && foodTruckBookings.some((b) => Number(b.id) === bookingId)
+          ? bookingId
+          : Number(foodTruckBookings[0].id || 0);
+
+        if (preferredId) {
+          bookingId = preferredId;
+          foodTruckBookingSelect.value = String(preferredId);
+          updateUrlWithBooking(preferredId);
+        }
+      }
+
+      async function loadFoodTruckBookingList() {
+        const params = new URLSearchParams({ planner_stream: FOOD_TRUCK_STREAM });
+        const res = await fetch(`/api/bookings/all?${params.toString()}`);
+        const data = await res.json().catch(() => ({}));
+        const rows = Array.isArray(data && data.bookings) ? data.bookings : [];
+        foodTruckBookings = rows
+          .filter(isFoodTruckBooking)
+          .sort((a, b) => {
+            const dateA = String(a && a.booking_date || '');
+            const dateB = String(b && b.booking_date || '');
+            if (dateA !== dateB) return dateB.localeCompare(dateA);
+            return Number(a && a.id || 0) - Number(b && b.id || 0);
+          });
+
+        renderFoodTruckBookingOptions();
       }
 
       function renderActiveSeatMeta() {
@@ -636,12 +741,24 @@
         if (!res.ok || data.success === false) {
           throw new Error(data.error || 'Failed to load slot list.');
         }
+        if (!isFoodTruckBooking(data.booking || {})) {
+          throw new Error('This page only supports Food Truck bookings.');
+        }
         booking = data.booking || null;
         slotList = data.slot_list || { max_slots: 24, allow_pairs: true };
         slots = Array.isArray(data.slots) ? data.slots : [];
       }
 
       async function refreshAll() {
+        if (!bookingId) {
+          slotBookingMeta.textContent = 'Select a Food Truck booking to begin.';
+          slotsBody.innerHTML = '<tr><td colspan="3">No booking selected.</td></tr>';
+          studentsBody.innerHTML = '<tr><td colspan="3">No students found.</td></tr>';
+          unbookedSummary.textContent = '';
+          unbookedList.innerHTML = '';
+          return;
+        }
+
         await loadSlotList();
         await loadRosterForBooking();
 
@@ -683,14 +800,33 @@
         window.print();
       });
 
-      if (!bookingId) {
-        setStatus('Missing booking_id in URL.', true);
-        return;
-      }
-
-      refreshAll().catch((err) => {
-        setStatus(err.message || 'Failed to load teacher slot list.', true);
+      loadFoodTruckBookingBtn.addEventListener('click', () => {
+        const selectedId = Number(foodTruckBookingSelect.value || 0);
+        if (!selectedId) {
+          setStatus('Please select a Food Truck booking.', true);
+          return;
+        }
+        bookingId = selectedId;
+        updateUrlWithBooking(selectedId);
+        refreshAll()
+          .then(() => setStatus('Loaded Food Truck booking.', false))
+          .catch((err) => {
+            setStatus(err.message || 'Failed to load teacher slot list.', true);
+          });
       });
+
+      foodTruckBookingSelect.addEventListener('change', () => {
+        const selectedId = Number(foodTruckBookingSelect.value || 0);
+        if (!selectedId) return;
+        bookingId = selectedId;
+        updateUrlWithBooking(selectedId);
+      });
+
+      loadFoodTruckBookingList()
+        .then(() => refreshAll())
+        .catch((err) => {
+          setStatus(err.message || 'Failed to load Food Truck booking list.', true);
+        });
     })();
   </script>
 </body>
