@@ -441,6 +441,22 @@
       font-weight: 600;
     }
 
+    .recipe-index-item.selected {
+      background: #e8f5e9;
+      font-weight: 600;
+      color: #2e7d32;
+    }
+
+    .recipe-index-item.selected::before {
+      content: '✓ ';
+    }
+
+    #linkModalSelectionCount {
+      font-size: 12px;
+      color: #555;
+      margin-top: 4px;
+    }
+
     .preview-layout {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -822,14 +838,15 @@
         </select>
       </div>
       <div class="form-group">
-        <label>Recipe Index:</label>
+        <label>Recipe Index: <small style="color:#555;font-weight:normal;">Click items to select/deselect multiple</small></label>
         <input type="text" id="linkRecipeSearch" placeholder="Search recipe index...">
         <div id="recipeIndexList" class="recipe-index-list"></div>
+        <div id="linkModalSelectionCount"></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-primary" onclick="previewSelectedRecipe()">Preview Selected</button>
+        <button class="btn btn-primary" onclick="previewSelectedRecipe()">Preview Dropdown</button>
         <button class="btn btn-secondary" onclick="closeLinkModal()">Cancel</button>
-        <button class="btn btn-success" onclick="saveRecipeLink()">Link Recipe</button>
+        <button class="btn btn-success" id="linkRecipeBtn" onclick="saveRecipeLink()">Link Selected</button>
       </div>
     </div>
   </div>
@@ -911,6 +928,7 @@
     let currentBookingId = null;
     let availableRecipesCache = null;
     const recipeDetailsCache = new Map();
+    const linkModalSelectedIds = new Set();
 
     function getCurrentStaffEmail() {
       try {
@@ -1476,11 +1494,31 @@
       }
 
       const selectedId = Number(document.getElementById('linkRecipeSelect').value || 0);
-      listEl.innerHTML = filtered.map((recipe) => `
-        <button class="recipe-index-item ${selectedId === Number(recipe.id) ? 'active' : ''}" onclick="previewRecipeFromIndex(${Number(recipe.id)})">
-          ${escapeHtml(recipe.name || 'Unknown')} <span style="color:#6b7280;">(ID ${Number(recipe.id)})</span>
-        </button>
-      `).join('');
+      listEl.innerHTML = filtered.map((recipe) => {
+        const id = Number(recipe.id);
+        const isActive = selectedId === id;
+        const isSelected = linkModalSelectedIds.has(id);
+        return `<button class="recipe-index-item${isActive ? ' active' : ''}${isSelected ? ' selected' : ''}" onclick="toggleLinkIndexItem(${id})">${escapeHtml(recipe.name || 'Unknown')} <span style="color:#6b7280;">(ID ${id})</span></button>`;
+      }).join('');
+      updateLinkSelectionCount();
+    }
+
+    function toggleLinkIndexItem(recipeId) {
+      if (linkModalSelectedIds.has(recipeId)) {
+        linkModalSelectedIds.delete(recipeId);
+      } else {
+        linkModalSelectedIds.add(recipeId);
+      }
+      renderRecipeIndex(document.getElementById('linkRecipeSearch').value);
+    }
+
+    function updateLinkSelectionCount() {
+      const countEl = document.getElementById('linkModalSelectionCount');
+      if (!countEl) return;
+      const n = linkModalSelectedIds.size;
+      countEl.textContent = n === 0 ? 'No recipes selected.' : `${n} recipe${n > 1 ? 's' : ''} selected.`;
+      const btn = document.getElementById('linkRecipeBtn');
+      if (btn) btn.textContent = n === 0 ? 'Link Selected' : `Link Selected (${n})`;
     }
 
     function previewRecipeFromIndex(recipeId) {
@@ -1685,6 +1723,8 @@
 
     async function openLinkModal(bookingId, recipeId, recipeName) {
       currentBookingId = bookingId;
+      linkModalSelectedIds.clear();
+      if (recipeId) linkModalSelectedIds.add(Number(recipeId));
       document.getElementById('linkRecipeName').value = recipeName;
 
       const selectEl = document.getElementById('linkRecipeSelect');
@@ -1765,29 +1805,35 @@
       }
     }
 
-    async function saveNewRecipe() {
-      const name = document.getElementById('createRecipeName').value.trim();
-      const url = document.getElementById('createRecipeUrl').value.trim();
-      const desc = document.getElementById('createRecipeDesc').value.trim();
-
-      if (!name) {
-        showToast('Recipe name is required', 'error');
+    async function saveRecipeLink() {
+      const dropdownId = parseInt(document.getElementById('linkRecipeSelect').value) || 0;
+      if (dropdownId) linkModalSelectedIds.add(dropdownId);
+      const recipeIds = Array.from(linkModalSelectedIds);
+      if (recipeIds.length === 0) {
+        showToast('Please select at least one recipe', 'error');
         return;
       }
 
       try {
-        // Create recipe via existing API
-        const response = await fetch('/api/recipes', {
+        const response = await fetch('/api/recipe-matching/link-multi', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name,
-            url,
-            description: desc,
-            ingredients: '[]',
-            instructions: ''
-          })
+          body: JSON.stringify({ bookingId: currentBookingId, recipeIds })
         });
+
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error);
+
+        const names = data.linked.map(r => r.name).join(', ');
+        showToast(`Linked ${data.linked.length} recipe${data.linked.length > 1 ? 's' : ''}: ${names}`);
+        const b = allBookings.find(x => x.id === currentBookingId);
+        if (b) {
+          b.recipe_id = recipeIds[0];
+          b.linked_recipes = data.linked.map(r => ({ recipe_id: r.recipe_id, name: r.name, url: r.url }));
+        }
+        updateStats();
+        closeLinkModal();
+        renderRecipes();
 
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Failed to create recipe');
