@@ -1100,7 +1100,6 @@ function saveDesiredServingsInBackground(details = {}) {
 
 function saveBooking(options = {}) {
   const shouldAutoCalculate = !!options.autoCalculate;
-  let groupsForAutoCalculate = '';
   const staffSelect = document.getElementById('staffSelect');
   const classSelect = document.getElementById('classSelect');
   const dateInput = document.getElementById('dateInput');
@@ -1118,6 +1117,9 @@ function saveBooking(options = {}) {
   let groupsForBooking = !isNaN(parsedGroupsFromInput) && parsedGroupsFromInput > 0
     ? String(parsedGroupsFromInput)
     : '1';
+  if (groupsInput) {
+    groupsInput.value = groupsForBooking;
+  }
   // Get recipe_id from selected option (assume dropdown options have data-recipe-id)
   let recipeId = '';
   let recipeName = '';
@@ -1125,30 +1127,6 @@ function saveBooking(options = {}) {
     const selectedRecipeOption = recipeSelect.options[recipeSelect.selectedIndex];
     recipeId = selectedRecipeOption.getAttribute('data-recipe-id') || selectedRecipeOption.value || '';
     recipeName = selectedRecipeOption.getAttribute('data-recipe-name') || '';
-  }
-
-  if (shouldAutoCalculate) {
-    const suggestedGroups = Math.max(
-      1,
-      parseInt(String((groupsInput && groupsInput.value) || options.groups || '').trim(), 10) || 1
-    );
-    const groupAnswer = prompt('How many groups do you want?', String(suggestedGroups));
-    if (groupAnswer === null) {
-      return Promise.resolve({ cancelled: true });
-    }
-
-    const parsedGroups = parseInt(String(groupAnswer).trim(), 10);
-    if (isNaN(parsedGroups) || parsedGroups <= 0) {
-      if (window.QC) window.QC.toast('Please enter a valid number of groups', 'warn');
-      else alert('Please enter a valid number of groups.');
-      return Promise.resolve({ cancelled: true, invalidGroups: true });
-    }
-
-    groupsForAutoCalculate = String(parsedGroups);
-    groupsForBooking = groupsForAutoCalculate;
-    if (groupsInput) {
-      groupsInput.value = groupsForAutoCalculate;
-    }
   }
 
   // Track most selected
@@ -1187,7 +1165,7 @@ function saveBooking(options = {}) {
             className,
             bookingDate,
             classSize,
-            groups: groupsForAutoCalculate || groupsForBooking,
+            groups: groupsForBooking,
             recipeId
           }).then(() => {
             if (window.QC) window.QC.toast('Desired serving ingredients saved', 'success');

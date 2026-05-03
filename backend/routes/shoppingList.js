@@ -185,7 +185,7 @@ router.get('/by_teacher', async (req, res) => {
     ),
     dsi_rows AS (
       SELECT
-        dsi.staff_id,
+        dsi.staff_id::text AS staff_id,
         dsi.teacher,
         dsi.ingredient_name,
         dsi.measure_qty,
@@ -199,7 +199,7 @@ router.get('/by_teacher', async (req, res) => {
     ),
     fallback_rows AS (
       SELECT
-        sb.staff_id,
+        sb.staff_id::text AS staff_id,
         sb.staff_name AS teacher,
         inv.ingredient_name,
         inv.measure_qty,
