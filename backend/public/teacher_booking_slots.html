@@ -45,7 +45,7 @@
       font-size: 0.85rem;
       font-weight: 700;
       color: #334155;
-      min-width: 360px;
+      min-width: 260px;
       flex: 1;
     }
 
@@ -304,6 +304,7 @@
 
     @media print {
       #navbar-include,
+      .slot-booking-picker,
       .slot-actions,
       .slot-config,
       .search-row,
@@ -326,6 +327,12 @@
     <section class="slot-head">
       <h1>Teacher Calendar List</h1>
       <div class="slot-booking-picker">
+        <label>
+          Teacher
+          <select id="teacherFilterSelect">
+            <option value="">All teachers</option>
+          </select>
+        </label>
         <label>
           Food Truck bookings
           <select id="foodTruckBookingSelect">
@@ -410,10 +417,12 @@
       const FOOD_TRUCK_STREAM = 'Food Truck';
       const params = new URLSearchParams(window.location.search);
       let bookingId = Number(params.get('booking_id') || 0);
+      let selectedTeacherFilter = String(params.get('teacher') || '').trim();
       const safeSourcePage = 'add_food_truck_booking.html';
 
       const slotBookingMeta = document.getElementById('slotBookingMeta');
       const slotStatus = document.getElementById('slotStatus');
+      const teacherFilterSelect = document.getElementById('teacherFilterSelect');
       const foodTruckBookingSelect = document.getElementById('foodTruckBookingSelect');
       const loadFoodTruckBookingBtn = document.getElementById('loadFoodTruckBookingBtn');
       const maxSlotsInput = document.getElementById('maxSlotsInput');
@@ -443,12 +452,33 @@
         return String(row && row.planner_stream || '').trim().toLowerCase() === FOOD_TRUCK_STREAM.toLowerCase();
       }
 
+      function getTeacherFilterKey(row) {
+        const staffId = String(row && row.staff_id || '').trim();
+        if (staffId) return `id:${staffId}`;
+        const name = String(row && row.staff_name || '').trim().toLowerCase();
+        return `name:${name}`;
+      }
+
+      function getTeacherLabel(row) {
+        return String(row && row.staff_name || '').trim() || 'Unassigned teacher';
+      }
+
+      function getTeacherFilteredBookings() {
+        if (!selectedTeacherFilter) return foodTruckBookings;
+        return foodTruckBookings.filter((row) => getTeacherFilterKey(row) === selectedTeacherFilter);
+      }
+
       function updateUrlWithBooking(selectedBookingId) {
         const url = new URL(window.location.href);
         if (selectedBookingId) {
           url.searchParams.set('booking_id', String(selectedBookingId));
         } else {
           url.searchParams.delete('booking_id');
+        }
+        if (selectedTeacherFilter) {
+          url.searchParams.set('teacher', selectedTeacherFilter);
+        } else {
+          url.searchParams.delete('teacher');
         }
         url.searchParams.set('source', safeSourcePage);
         window.history.replaceState({}, '', url.toString());
@@ -496,23 +526,51 @@
         return `${bookingDate} | P${period} | ${recipe} | ${className} | ${staffName}`;
       }
 
+      function renderTeacherFilterOptions() {
+        if (!teacherFilterSelect) return;
+
+        const teacherMap = new Map();
+        foodTruckBookings.forEach((row) => {
+          const key = getTeacherFilterKey(row);
+          if (!teacherMap.has(key)) {
+            teacherMap.set(key, getTeacherLabel(row));
+          }
+        });
+
+        const options = Array.from(teacherMap.entries())
+          .sort((a, b) => String(a[1]).localeCompare(String(b[1]), undefined, { sensitivity: 'base' }));
+
+        teacherFilterSelect.innerHTML = [
+          '<option value="">All teachers</option>',
+          ...options.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
+        ].join('');
+
+        if (selectedTeacherFilter && !teacherMap.has(selectedTeacherFilter)) {
+          selectedTeacherFilter = '';
+        }
+        teacherFilterSelect.value = selectedTeacherFilter;
+      }
+
       function renderFoodTruckBookingOptions() {
         if (!foodTruckBookingSelect) return;
-        if (!foodTruckBookings.length) {
-          foodTruckBookingSelect.innerHTML = '<option value="">No Food Truck bookings found</option>';
+        const visibleBookings = getTeacherFilteredBookings();
+        if (!visibleBookings.length) {
+          foodTruckBookingSelect.innerHTML = '<option value="">No Food Truck bookings found for this teacher</option>';
           foodTruckBookingSelect.value = '';
+          bookingId = 0;
+          updateUrlWithBooking(0);
           return;
         }
 
-        foodTruckBookingSelect.innerHTML = foodTruckBookings.map((row) => {
+        foodTruckBookingSelect.innerHTML = visibleBookings.map((row) => {
           const value = String(row.id || '');
           const label = escapeHtml(formatFoodTruckBookingOption(row));
           return `<option value="${escapeHtml(value)}">${label}</option>`;
         }).join('');
 
-        const preferredId = bookingId && foodTruckBookings.some((b) => Number(b.id) === bookingId)
+        const preferredId = bookingId && visibleBookings.some((b) => Number(b.id) === bookingId)
           ? bookingId
-          : Number(foodTruckBookings[0].id || 0);
+          : Number(visibleBookings[0].id || 0);
 
         if (preferredId) {
           bookingId = preferredId;
@@ -535,6 +593,7 @@
             return Number(a && a.id || 0) - Number(b && b.id || 0);
           });
 
+        renderTeacherFilterOptions();
         renderFoodTruckBookingOptions();
       }
 
@@ -810,6 +869,16 @@
         updateUrlWithBooking(selectedId);
         refreshAll()
           .then(() => setStatus('Loaded Food Truck booking.', false))
+          .catch((err) => {
+            setStatus(err.message || 'Failed to load teacher slot list.', true);
+          });
+      });
+
+      teacherFilterSelect.addEventListener('change', () => {
+        selectedTeacherFilter = String(teacherFilterSelect.value || '').trim();
+        renderFoodTruckBookingOptions();
+        refreshAll()
+          .then(() => setStatus('Teacher filter applied.', false))
           .catch((err) => {
             setStatus(err.message || 'Failed to load teacher slot list.', true);
           });
