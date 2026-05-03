@@ -66,25 +66,25 @@ router.get('/by_category', async function(req, res) {
     ),
     dsi_rows AS (
       SELECT
-        dsi.booking_id,
-        dsi.ingredient_name,
-        dsi.measure_qty,
-        dsi.measure_unit,
-        dsi.stripfooditem,
-        dsi.calculated_qty,
-        dsi.aisle_category_id
+        dsi.booking_id::text AS booking_id,
+        dsi.ingredient_name::text AS ingredient_name,
+        dsi.measure_qty::numeric AS measure_qty,
+        dsi.measure_unit::text AS measure_unit,
+        dsi.stripfooditem::text AS stripfooditem,
+        dsi.calculated_qty::numeric AS calculated_qty,
+        dsi.aisle_category_id::text AS aisle_category_id
       FROM desired_servings_ingredients dsi
       INNER JOIN selected_bookings sb ON sb.booking_id = dsi.booking_id
     ),
     fallback_rows AS (
       SELECT
-        sb.booking_id,
-        inv.ingredient_name,
-        inv.measure_qty,
-        inv.measure_unit,
-        inv.stripfooditem,
+        sb.booking_id::text AS booking_id,
+        inv.ingredient_name::text AS ingredient_name,
+        inv.measure_qty::numeric AS measure_qty,
+        inv.measure_unit::text AS measure_unit,
+        inv.stripfooditem::text AS stripfooditem,
         NULL::numeric AS calculated_qty,
-        inv.aisle_category_id
+        inv.aisle_category_id::text AS aisle_category_id
       FROM selected_bookings sb
       INNER JOIN ingredients_inventory inv
         ON btrim(COALESCE(inv.recipe_id::text, '')) = btrim(COALESCE(sb.recipe_id::text, ''))
@@ -106,7 +106,7 @@ router.get('/by_category', async function(req, res) {
       UNION ALL
       SELECT * FROM fallback_rows
     ) src
-    LEFT JOIN aisle_category ac ON ac.id = src.aisle_category_id
+    LEFT JOIN aisle_category ac ON ac.id::text = src.aisle_category_id
   `;
   try {
     const { rows } = await pool.query(sql, bookingIds);
@@ -186,28 +186,28 @@ router.get('/by_teacher', async (req, res) => {
     dsi_rows AS (
       SELECT
         dsi.staff_id::text AS staff_id,
-        dsi.teacher,
-        dsi.ingredient_name,
-        dsi.measure_qty,
-        dsi.measure_unit,
-        dsi.fooditem,
-        dsi.stripfooditem,
-        dsi.calculated_qty,
-        dsi.aisle_category_id
+        dsi.teacher::text AS teacher,
+        dsi.ingredient_name::text AS ingredient_name,
+        dsi.measure_qty::numeric AS measure_qty,
+        dsi.measure_unit::text AS measure_unit,
+        dsi.fooditem::text AS fooditem,
+        dsi.stripfooditem::text AS stripfooditem,
+        dsi.calculated_qty::numeric AS calculated_qty,
+        dsi.aisle_category_id::text AS aisle_category_id
       FROM desired_servings_ingredients dsi
       INNER JOIN selected_bookings sb ON sb.booking_id = dsi.booking_id
     ),
     fallback_rows AS (
       SELECT
         sb.staff_id::text AS staff_id,
-        sb.staff_name AS teacher,
-        inv.ingredient_name,
-        inv.measure_qty,
-        inv.measure_unit,
-        inv.fooditem,
-        inv.stripfooditem,
+        sb.staff_name::text AS teacher,
+        inv.ingredient_name::text AS ingredient_name,
+        inv.measure_qty::numeric AS measure_qty,
+        inv.measure_unit::text AS measure_unit,
+        inv.fooditem::text AS fooditem,
+        inv.stripfooditem::text AS stripfooditem,
         NULL::numeric AS calculated_qty,
-        inv.aisle_category_id
+        inv.aisle_category_id::text AS aisle_category_id
       FROM selected_bookings sb
       INNER JOIN ingredients_inventory inv
         ON btrim(COALESCE(inv.recipe_id::text, '')) = btrim(COALESCE(sb.recipe_id::text, ''))
@@ -232,7 +232,7 @@ router.get('/by_teacher', async (req, res) => {
       UNION ALL
       SELECT * FROM fallback_rows
     ) src
-    LEFT JOIN aisle_category ac ON ac.id = src.aisle_category_id
+    LEFT JOIN aisle_category ac ON ac.id::text = src.aisle_category_id
   `;
   try {
     const { rows } = await pool.query(sql, bookingIds);
