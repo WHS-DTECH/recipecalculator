@@ -1376,7 +1376,7 @@ function saveBooking(options = {}) {
       recipe_id: recipeId,
       class_size: classSize,
       groups: groupsForBooking,
-      planner_stream: forcedPlannerStream || undefined,
+      planner_stream: isFoodTruckStudentMode ? 'Food Truck' : (forcedPlannerStream || undefined),
       cook_mode: isFoodTruckStudentMode ? cookMode : undefined,
       partner_student_name: isFoodTruckStudentMode && cookMode === 'pair' ? partnerStudentName : undefined,
       partner_student_id: isFoodTruckStudentMode && cookMode === 'pair' ? partnerStudentId : undefined
