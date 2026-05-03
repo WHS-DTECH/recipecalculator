@@ -362,6 +362,9 @@ function applyFoodTruckStudentModeToForm() {
   const staffLabel = document.getElementById('staffSelectLabel');
   const staffSelect = document.getElementById('staffSelect');
   const cookModeField = document.getElementById('cookModeField');
+  const classSizeField = document.getElementById('classSizeField');
+  const groupsField = document.getElementById('groupsField');
+  const groupsInput = document.getElementById('groupsInput');
 
   if (staffLabel) {
     staffLabel.textContent = 'Student';
@@ -381,6 +384,18 @@ function applyFoodTruckStudentModeToForm() {
 
   if (cookModeField) {
     cookModeField.style.display = '';
+  }
+
+  if (classSizeField) {
+    classSizeField.style.display = 'none';
+  }
+
+  if (groupsField) {
+    groupsField.style.display = 'none';
+  }
+
+  if (groupsInput) {
+    groupsInput.value = '1';
   }
 
   setPartnerFieldVisibility();
