@@ -486,8 +486,8 @@
       const QUICK_IMAGE_FALLBACK = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
       const RAW_DATA_EXTRACTOR_URL = 'extractor_raw.html';
 
-      function rawDataExtractorLinkHtml() {
-        return `<a href="${RAW_DATA_EXTRACTOR_URL}" target="_blank" rel="noopener">Raw Data Extractor</a>`;
+      function addRecipeManuallyLinkHtml() {
+        return `<a href="add_recipe.html" target="_blank" rel="noopener">Add recipe manually</a>`;
       }
 
       function setQuickImageStatus(message, type) {
@@ -1324,7 +1324,7 @@
 
         if (!hasRaw) {
           setAutoPublishStatus(
-            `Publish disabled for RecipeID ${recipeId}: raw data not found. Use ${rawDataExtractorLinkHtml()} to extract manually.`,
+            `Publish disabled for RecipeID ${recipeId}: raw data not found. ${addRecipeManuallyLinkHtml()}.`,
             'error',
             { allowHtml: true }
           );
@@ -1572,7 +1572,7 @@
           if (!hasRaw) {
             autoPublishBtn.disabled = true;
             setAutoPublishStatus(
-              `Publish disabled for RecipeID ${recipeId}: raw data not found. Use ${rawDataExtractorLinkHtml()} to extract manually.`,
+              `Publish disabled for RecipeID ${recipeId}: raw data not found. ${addRecipeManuallyLinkHtml()}.`,
               'error',
               { allowHtml: true }
             );
