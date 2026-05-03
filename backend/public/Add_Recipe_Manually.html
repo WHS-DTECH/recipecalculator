@@ -163,6 +163,17 @@
       background: #6d7f92;
     }
 
+    .ft-btn.publish-copy {
+      width: 100%;
+      background: #7f9ab2;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .ft-btn.publish-copy:hover {
+      background: #6f8aa3;
+    }
+
     .ft-status {
       margin-top: 0.75rem;
       min-height: 1.25rem;
@@ -283,7 +294,7 @@
   <main class="ft-wrap">
     <section class="ft-card">
       <h1 class="ft-title">Food Truck: Add Recipe Manually</h1>
-      <p class="ft-sub">Copy and paste recipe information from your source into the fields below. A RecipeID is assigned automatically and your recipe is submitted to the Food Truck teacher review list for moderation.</p>
+      <p class="ft-sub">Copy and paste recipe information from your source into the fields below. Save prepares and publishes the recipe, then runs async inventory sync from this RecipeID onward.</p>
 
       <div class="ft-id-row">
         <span>Next available RecipeID:</span>
@@ -320,7 +331,7 @@
         </div>
 
         <div class="ft-actions">
-          <button type="submit" id="saveManualBtn" class="ft-btn">Save &amp; Submit For Teacher Review</button>
+          <button type="submit" id="saveManualBtn" class="ft-btn publish-copy">Publish</button>
           <button type="button" id="clearManualBtn" class="ft-btn secondary">Clear Form</button>
         </div>
       </form>
@@ -428,23 +439,68 @@
             warnings.push('Cleanup Ingredients skipped: ' + (err && err.message ? err.message : err));
           }
 
-          setStatus('Running: Inventory Sync\u2026', '');
-          try {
-            await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Inventory Sync');
-          } catch (err) {
-            warnings.push('Inventory Sync skipped: ' + (err && err.message ? err.message : err));
-          }
-
           setStatus('Running: Publish to Display\u2026', '');
           await publishRecipeToDisplay(recipeId);
 
-          setStatus('Running: Final Sync Verify\u2026', '');
+          setStatus('Running: Async Inventory Sync\u2026', '');
           try {
-            await postJsonChecked('/api/ingredients/inventory/sync', { recipeId, reseed: true }, 'Final Sync Verify');
+            const syncSummary = await runAsyncSyncFromRecipeId(recipeId, function(message) {
+              setStatus(message, '');
+            });
+            if (syncSummary.failCount > 0) {
+              warnings.push('Async sync had ' + syncSummary.failCount + ' failed recipe(s).');
+            }
           } catch (err) {
-            warnings.push('Final Sync Verify skipped: ' + (err && err.message ? err.message : err));
+            warnings.push('Async sync skipped: ' + (err && err.message ? err.message : err));
           }
+
           return warnings;
+        }
+
+        async function runAsyncSyncFromRecipeId(startRecipeId, statusCallback) {
+          const dropdownResp = await fetch('/api/recipes/display-dropdown');
+          if (!dropdownResp.ok) {
+            throw new Error('Failed to load recipe list for async sync.');
+          }
+          const dropdownData = await dropdownResp.json().catch(() => ({}));
+          const recipes = Array.isArray(dropdownData && dropdownData.recipes) ? dropdownData.recipes : [];
+          const recipeIds = recipes
+            .map((r) => Number(r && r.recipeid))
+            .filter((id) => Number.isInteger(id) && id >= startRecipeId)
+            .sort((a, b) => a - b);
+
+          if (!recipeIds.length) {
+            if (typeof statusCallback === 'function') statusCallback('No recipes found to sync.');
+            return { successCount: 0, failCount: 0, total: 0 };
+          }
+
+          let successCount = 0;
+          let failCount = 0;
+
+          for (let i = 0; i < recipeIds.length; i++) {
+            const recipeId = recipeIds[i];
+            if (typeof statusCallback === 'function') {
+              statusCallback('Async syncing ' + (i + 1) + '/' + recipeIds.length + ' (RecipeID ' + recipeId + ')...');
+            }
+
+            try {
+              const resp = await fetch('/api/ingredients/inventory/sync', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ recipeId, reseed: true })
+              });
+              const data = await resp.json().catch(() => ({}));
+              if (resp.ok && data && data.success) {
+                successCount++;
+              } else {
+                failCount++;
+              }
+            } catch (_) {
+              failCount++;
+            }
+          }
+
+          return { successCount, failCount, total: recipeIds.length };
         }
 
         async function refreshNextId() {
@@ -481,7 +537,7 @@
           document.getElementById('manualServing').value = data.serving_size == null ? '' : String(data.serving_size);
           document.getElementById('manualIngredients').value = String(data.ingredients || '').trim();
           document.getElementById('manualInstructions').value = String(data.instructions || '').trim();
-          saveBtn.textContent = 'Update Recipe & Return To Review';
+          saveBtn.textContent = 'Publish';
           updatePhotoUploadLink(currentRecipeId);
           await refreshNextId();
           setStatus('Loaded RecipeID ' + currentRecipeId + ' for editing.', '');
@@ -577,9 +633,13 @@
             sessionStorage.setItem('ftLastRecipeId', String(currentRecipeId));
             updatePhotoUploadLink(currentRecipeId);
 
-            const studentLabel = payload.student_name ? ' for ' + payload.student_name : '';
-            if (saveBtn) saveBtn.textContent = 'Update Recipe & Return To Review';
-            setStatus((currentRecipeId ? 'Updated' : 'Saved') + ' and submitted' + studentLabel + ' for teacher review. RecipeID ' + recipeId + '. Open Recipe Photos to upload up to 5 images and choose the details photo.', 'success');
+            const warnings = await runManualPublishFlow(recipeId);
+            if (saveBtn) saveBtn.textContent = 'Publish';
+            if (warnings.length) {
+              setStatus('RecipeID ' + recipeId + ' published with warnings: ' + warnings.join(' '), 'error');
+            } else {
+              setStatus('RecipeID ' + recipeId + ' published. Display fields cleaned and async inventory sync completed from this RecipeID onward.', 'success');
+            }
             await refreshNextId();
           } catch (err) {
             setStatus(err && err.message ? err.message : 'Failed to save recipe.', 'error');
@@ -593,7 +653,7 @@
         clearBtn.addEventListener('click', function() {
           form.reset();
           currentRecipeId = null;
-          if (saveBtn) saveBtn.textContent = 'Save & Submit For Teacher Review';
+          if (saveBtn) saveBtn.textContent = 'Publish';
           updatePhotoUploadLink(null);
           setStatus('', '');
           prepopulateStudentName(true);
