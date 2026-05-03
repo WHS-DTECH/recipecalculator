@@ -118,7 +118,7 @@
     <div class="book-class-app">
         <div class="book-class-layout" id="bookClassLayout">
             <div class="book-class-left">
-                <h1 id="bookClassHeading">Book a Class</h1>
+                <h1 id="bookClassHeading">Book a Slot</h1>
                 <div class="book-form-row" id="bookingFormSection">
                     <div class="book-form-actions book-form-actions-top">
                         <button id="saveBookingBtn" class="btn btn-primary">Save booking</button>
@@ -137,6 +137,15 @@
                                 <option>Vanessa Pringle</option>
                             </select>
                         </div>
+                        <div class="book-form-field">
+                            <label for="classSelect">Class</label>
+                            <select id="classSelect">
+                                <option>300HOSP</option>
+                                <option>200HOSP</option>
+                                <option>100HOSP</option>
+                                <option>100DTECH</option>
+                            </select>
+                        </div>
                         <div class="book-form-field book-form-field-small" id="cookModeField" style="display:none;">
                             <label for="cookModeSelect">Cook Mode</label>
                             <select id="cookModeSelect">
@@ -150,15 +159,6 @@
                                 <option value="">Select partner student</option>
                             </select>
                             <div style="margin-top:0.35rem;font-size:0.82rem;color:#5a6f84;">Select a class first, then choose your partner.</div>
-                        </div>
-                        <div class="book-form-field">
-                            <label for="classSelect">Class</label>
-                            <select id="classSelect">
-                                <option>300HOSP</option>
-                                <option>200HOSP</option>
-                                <option>100HOSP</option>
-                                <option>100DTECH</option>
-                            </select>
                         </div>
                         <div class="book-form-field">
                             <label for="dateInput">Booking Date <span id="dateDayOfWeek" style="font-weight:normal;color:#666;"></span></label>
