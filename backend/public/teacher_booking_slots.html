@@ -334,6 +334,12 @@
           </select>
         </label>
         <label>
+          Class
+          <select id="classFilterSelect">
+            <option value="">All classes</option>
+          </select>
+        </label>
+        <label>
           Food Truck bookings
           <select id="foodTruckBookingSelect">
             <option value="">Loading Food Truck bookings...</option>
@@ -418,11 +424,13 @@
       const params = new URLSearchParams(window.location.search);
       let bookingId = Number(params.get('booking_id') || 0);
       let selectedTeacherFilter = String(params.get('teacher') || '').trim();
+      let selectedClassFilter = String(params.get('class') || '').trim().toUpperCase();
       const safeSourcePage = 'add_food_truck_booking.html';
 
       const slotBookingMeta = document.getElementById('slotBookingMeta');
       const slotStatus = document.getElementById('slotStatus');
       const teacherFilterSelect = document.getElementById('teacherFilterSelect');
+      const classFilterSelect = document.getElementById('classFilterSelect');
       const foodTruckBookingSelect = document.getElementById('foodTruckBookingSelect');
       const loadFoodTruckBookingBtn = document.getElementById('loadFoodTruckBookingBtn');
       const maxSlotsInput = document.getElementById('maxSlotsInput');
@@ -463,9 +471,19 @@
         return String(row && row.staff_name || '').trim() || 'Unassigned teacher';
       }
 
+      function getClassFilterKey(row) {
+        return String(row && row.class_name || '').trim().toUpperCase();
+      }
+
       function getTeacherFilteredBookings() {
         if (!selectedTeacherFilter) return foodTruckBookings;
         return foodTruckBookings.filter((row) => getTeacherFilterKey(row) === selectedTeacherFilter);
+      }
+
+      function getVisibleFilteredBookings() {
+        const teacherFiltered = getTeacherFilteredBookings();
+        if (!selectedClassFilter) return teacherFiltered;
+        return teacherFiltered.filter((row) => getClassFilterKey(row) === selectedClassFilter);
       }
 
       function updateUrlWithBooking(selectedBookingId) {
@@ -479,6 +497,11 @@
           url.searchParams.set('teacher', selectedTeacherFilter);
         } else {
           url.searchParams.delete('teacher');
+        }
+        if (selectedClassFilter) {
+          url.searchParams.set('class', selectedClassFilter);
+        } else {
+          url.searchParams.delete('class');
         }
         url.searchParams.set('source', safeSourcePage);
         window.history.replaceState({}, '', url.toString());
@@ -551,11 +574,38 @@
         teacherFilterSelect.value = selectedTeacherFilter;
       }
 
+      function renderClassFilterOptions() {
+        if (!classFilterSelect) return;
+
+        const teacherFiltered = getTeacherFilteredBookings();
+        const classMap = new Map();
+        teacherFiltered.forEach((row) => {
+          const key = getClassFilterKey(row);
+          if (!key) return;
+          if (!classMap.has(key)) {
+            classMap.set(key, String(row.class_name || '').trim() || key);
+          }
+        });
+
+        const options = Array.from(classMap.entries())
+          .sort((a, b) => String(a[1]).localeCompare(String(b[1]), undefined, { sensitivity: 'base' }));
+
+        classFilterSelect.innerHTML = [
+          '<option value="">All classes</option>',
+          ...options.map(([key, label]) => `<option value="${escapeHtml(key)}">${escapeHtml(label)}</option>`)
+        ].join('');
+
+        if (selectedClassFilter && !classMap.has(selectedClassFilter)) {
+          selectedClassFilter = '';
+        }
+        classFilterSelect.value = selectedClassFilter;
+      }
+
       function renderFoodTruckBookingOptions() {
         if (!foodTruckBookingSelect) return;
-        const visibleBookings = getTeacherFilteredBookings();
+        const visibleBookings = getVisibleFilteredBookings();
         if (!visibleBookings.length) {
-          foodTruckBookingSelect.innerHTML = '<option value="">No Food Truck bookings found for this teacher</option>';
+          foodTruckBookingSelect.innerHTML = '<option value="">No Food Truck bookings found for this filter</option>';
           foodTruckBookingSelect.value = '';
           bookingId = 0;
           updateUrlWithBooking(0);
@@ -594,6 +644,7 @@
           });
 
         renderTeacherFilterOptions();
+        renderClassFilterOptions();
         renderFoodTruckBookingOptions();
       }
 
@@ -876,9 +927,21 @@
 
       teacherFilterSelect.addEventListener('change', () => {
         selectedTeacherFilter = String(teacherFilterSelect.value || '').trim();
+        selectedClassFilter = '';
+        renderClassFilterOptions();
         renderFoodTruckBookingOptions();
         refreshAll()
           .then(() => setStatus('Teacher filter applied.', false))
+          .catch((err) => {
+            setStatus(err.message || 'Failed to load teacher slot list.', true);
+          });
+      });
+
+      classFilterSelect.addEventListener('change', () => {
+        selectedClassFilter = String(classFilterSelect.value || '').trim().toUpperCase();
+        renderFoodTruckBookingOptions();
+        refreshAll()
+          .then(() => setStatus('Class filter applied.', false))
           .catch((err) => {
             setStatus(err.message || 'Failed to load teacher slot list.', true);
           });
