@@ -919,13 +919,13 @@ function askWeekToPrint(defaultMonday) {
 }
 
 function buildPrintGrid(bookings, weekDates) {
-  const grid = Array.from({ length: periods.length }, () => Array(weekDates.length).fill(null));
+  const grid = Array.from({ length: periods.length }, () => Array(weekDates.length).fill(null).map(() => []));
   bookings.forEach(b => {
     if (isPlannerLikeBooking(b)) return;
     const dayIdx = weekDates.findIndex(wd => wd.iso === b.booking_date);
     const periodIdx = periods.indexOf(Number(b.period));
     if (dayIdx !== -1 && periodIdx !== -1) {
-      grid[periodIdx][dayIdx] = b;
+      grid[periodIdx][dayIdx].push(b);
     }
   });
   return grid;
@@ -966,8 +966,12 @@ async function printScheduleForWeek(printMonday, includeWeekends = showWeekends,
     for (let d = 0; d < visibleDayIndices.length; ++d) {
       const dayIdx = visibleDayIndices[d];
       const cell = grid[p][dayIdx];
-      if (cell) {
-        tableHtml += `<td><div class="booking-box"><div class="booking-title">${getPrintBookingTitle(cell, displayMode)}</div><div class="booking-teacher">Teacher: ${cell.staff_name || ''}</div></div></td>`;
+      if (cell && cell.length > 0) {
+        tableHtml += `<td>`;
+        cell.forEach((booking) => {
+          tableHtml += `<div class="booking-box"><div class="booking-title">${getPrintBookingTitle(booking, displayMode)}</div><div class="booking-teacher">Teacher: ${booking.staff_name || ''}</div></div>`;
+        });
+        tableHtml += `</td>`;
       } else {
         tableHtml += '<td></td>';
       }
@@ -1004,6 +1008,7 @@ async function printScheduleForWeek(printMonday, includeWeekends = showWeekends,
           .print-calendar-table th.date-head { background: #eaf1ff; color: #222; font-weight: 600; }
           .period-col { width: 46px; background: #f1f1f1 !important; color: #222 !important; font-weight: 700; }
           .booking-box { background: #e8f5e9; border-radius: 6px; padding: 4px; min-height: 52px; }
+          .booking-box:not(:last-child) { margin-bottom: 3px; }
           .booking-title { font-weight: 700; margin-bottom: 2px; }
           .booking-teacher { color: #2e7d32; font-weight: 600; }
         </style>
@@ -1142,20 +1147,20 @@ async function renderScheduleCalendar() {
       for (let d = 0; d < visibleDayIndices.length; ++d) {
       const dayIdx = visibleDayIndices[d];
       const cell = grid[p][dayIdx];
-        if (cell) {
-          const cellStyle = getCalendarCellBaseStyle(cell);
-          // Add a unique id for each booking cell
-          const bookingId = `booking-${cell.id}`;
-          const cellLabel = `${escHtml(getCellPrimaryText(cell))}, Teacher: ${escHtml(cell.staff_name)}`;
-          const slotHref = `teacher_booking_slots.html?booking_id=${encodeURIComponent(String(cell.id || ''))}&source=${encodeURIComponent(window.location.pathname.split('/').pop() || 'add_booking.html')}`;
-          // Add a class for selected state
-          html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>
-            <div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${cell.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
-              <div style='font-weight:bold;font-size:0.98em;color:${cellStyle.text};'>${escHtml(getCellPrimaryText(cell))}</div>
-              <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:0.95em;'>Teacher: ${escHtml(cell.staff_name)}</div>
-              <div style='margin-top:0.24rem;display:flex;gap:0.22rem;justify-content:center;flex-wrap:wrap;'><a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.75rem;text-decoration:none;font-weight:700;'>Slots</a>${cell.recipe_id ? `<button onclick='event.stopPropagation();handleBookedCellRecipeClick(${Number(cell.id)})' style='padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.75rem;cursor:pointer;font-weight:700;'>Recipes</button>` : ''}</div>
-            </div>
-          </td>`;
+        if (cell && cell.length > 0) {
+          html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>`;
+          cell.forEach((booking, idx) => {
+            const cellStyle = getCalendarCellBaseStyle(booking);
+            const bookingId = `booking-${booking.id}`;
+            const cellLabel = `${escHtml(getCellPrimaryText(booking))}, Teacher: ${escHtml(booking.staff_name)}`;
+            const slotHref = `teacher_booking_slots.html?booking_id=${encodeURIComponent(String(booking.id || ''))}&source=${encodeURIComponent(window.location.pathname.split('/').pop() || 'add_booking.html')}`;
+            html += `<div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${booking.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;${idx > 0 ? 'margin-top:0.3rem;' : ''}'>
+              <div style='font-weight:bold;font-size:0.98em;color:${cellStyle.text};'>${escHtml(getCellPrimaryText(booking))}</div>
+              <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:0.95em;'>Teacher: ${escHtml(booking.staff_name)}</div>
+              <div style='margin-top:0.24rem;display:flex;gap:0.22rem;justify-content:center;flex-wrap:wrap;'><a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.75rem;text-decoration:none;font-weight:700;'>Slots</a>${booking.recipe_id ? `<button onclick='event.stopPropagation();handleBookedCellRecipeClick(${Number(booking.id)})' style='padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.75rem;cursor:pointer;font-weight:700;'>Recipes</button>` : ''}</div>
+            </div>`;
+          });
+          html += `</td>`;
       } else {
         html += '<td></td>';
       }
