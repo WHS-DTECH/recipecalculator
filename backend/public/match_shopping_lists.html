@@ -225,7 +225,7 @@
         <div>
           <div class="ms-row">
             <div class="ms-field">
-              <label class="ms-label" for="weekStartInput">Book Shopping week start (Monday)</label>
+              <label class="ms-label" for="weekStartInput">Add Booking week start (Monday)</label>
               <input id="weekStartInput" class="ms-input" type="date">
             </div>
             <div style="padding-top:1.3rem;">
@@ -523,7 +523,7 @@
 
       function renderBookings() {
         if (!weekBookings.length) {
-          bookingsWrap.innerHTML = '<div class="ms-muted">No Food Truck bookings found for that week.</div>';
+          bookingsWrap.innerHTML = '<div class="ms-muted">No Add Booking calendar bookings found for that week.</div>';
           return;
         }
 
@@ -562,9 +562,9 @@
         }
 
         loadWeekBookingsBtn.disabled = true;
-        setStatus(bookingsStatus, 'Loading bookings for selected week...', '');
+        setStatus(bookingsStatus, 'Loading Add Booking calendar bookings for selected week...', '');
         try {
-          const res = await requestJson('/api/bookings/all?planner_stream=Food%20Truck');
+          const res = await requestJson('/api/bookings/all');
           const rows = Array.isArray(res.bookings) ? res.bookings : [];
           const start = new Date(weekStart + 'T00:00:00');
           const end = new Date(start);
