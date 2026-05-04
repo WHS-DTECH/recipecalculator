@@ -1,0 +1,832 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Match Shopping Lists</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .ms-page {
+      max-width: 1320px;
+      margin: 24px auto 60px;
+      padding: 0 1rem;
+    }
+    .ms-card {
+      background: #fff;
+      border: 1px solid #d8dee6;
+      border-radius: 12px;
+      box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+      padding: 1rem 1.1rem;
+      margin-bottom: 1rem;
+    }
+    .ms-title {
+      margin: 0 0 0.2rem;
+      color: #1f2937;
+      font-size: 1.55rem;
+    }
+    .ms-sub {
+      margin: 0;
+      color: #4b5563;
+      font-size: 0.93rem;
+    }
+    .ms-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 1000px) {
+      .ms-grid { grid-template-columns: 1fr; }
+    }
+    .ms-row {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-bottom: 0.55rem;
+    }
+    .ms-label {
+      display: block;
+      font-size: 0.82rem;
+      color: #334155;
+      font-weight: 700;
+      margin-bottom: 0.2rem;
+    }
+    .ms-select,
+    .ms-input {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 0.46rem 0.62rem;
+      font-size: 0.92rem;
+      background: #fff;
+    }
+    .ms-field {
+      flex: 1 1 180px;
+      min-width: 180px;
+    }
+    .ms-btn {
+      border: none;
+      border-radius: 7px;
+      padding: 0.46rem 0.9rem;
+      font-size: 0.88rem;
+      cursor: pointer;
+      color: #fff;
+      background: #1d4ed8;
+      white-space: nowrap;
+    }
+    .ms-btn.secondary { background: #475569; }
+    .ms-btn.success { background: #15803d; }
+    .ms-btn:disabled { background: #94a3b8; cursor: default; }
+
+    .ms-status {
+      min-height: 1.2rem;
+      color: #0f172a;
+      font-size: 0.86rem;
+      font-weight: 600;
+      margin-top: 0.35rem;
+    }
+    .ms-status.error { color: #991b1b; }
+    .ms-status.ok { color: #166534; }
+
+    .ms-booking-list {
+      max-height: 300px;
+      overflow: auto;
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      padding: 0.35rem;
+      background: #f8fafc;
+    }
+    .ms-booking-item {
+      display: flex;
+      gap: 0.45rem;
+      align-items: flex-start;
+      font-size: 0.84rem;
+      padding: 0.35rem;
+      border-radius: 6px;
+    }
+    .ms-booking-item:nth-child(even) { background: #f1f5f9; }
+
+    .ms-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(120px, 1fr));
+      gap: 0.6rem;
+      margin-bottom: 0.8rem;
+    }
+    @media (max-width: 760px) {
+      .ms-summary { grid-template-columns: repeat(2, minmax(120px, 1fr)); }
+    }
+    .ms-pill {
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+      padding: 0.5rem;
+      background: #eff6ff;
+    }
+    .ms-pill .k { display:block; font-size:0.75rem; color:#1e3a8a; }
+    .ms-pill .v { display:block; font-size:1.05rem; font-weight:800; color:#0f172a; }
+
+    .ms-compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 1120px) {
+      .ms-compare-grid { grid-template-columns: 1fr; }
+    }
+    .ms-col h3 {
+      margin: 0 0 0.4rem;
+      color: #1e3a8a;
+      font-size: 1rem;
+    }
+    .ms-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }
+    .ms-table th {
+      text-align: left;
+      background: #1d4ed8;
+      color: #fff;
+      padding: 0.4rem 0.5rem;
+    }
+    .ms-table td {
+      border: 1px solid #dbe3ef;
+      padding: 0.35rem 0.45rem;
+      vertical-align: top;
+    }
+    .ms-table tr:nth-child(even) td { background: #f8fafc; }
+    .ms-muted { color: #64748b; font-style: italic; }
+
+    .ms-match-list {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid #dbe3ef;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+
+  <main class="ms-page">
+    <section class="ms-card">
+      <h1 class="ms-title">Match Shopping Lists</h1>
+      <p class="ms-sub">Compare Book Shopping calculations against teacher uploaded shopping lists to see what matches and what differs.</p>
+    </section>
+
+    <section class="ms-card">
+      <div class="ms-grid">
+        <div>
+          <div class="ms-row">
+            <div class="ms-field" style="flex:2 1 340px;">
+              <label class="ms-label" for="savedListSelect">Teacher uploaded shopping list</label>
+              <select id="savedListSelect" class="ms-select">
+                <option value="">Loading saved shopping lists...</option>
+              </select>
+            </div>
+            <div style="padding-top:1.3rem;">
+              <button id="refreshListsBtn" type="button" class="ms-btn secondary">Refresh</button>
+            </div>
+          </div>
+
+          <div class="ms-row">
+            <div class="ms-field">
+              <label class="ms-label" for="termFilterSelect">Term</label>
+              <select id="termFilterSelect" class="ms-select">
+                <option value="">All terms</option>
+                <option value="1">Term 1</option>
+                <option value="2">Term 2</option>
+                <option value="3">Term 3</option>
+                <option value="4">Term 4</option>
+              </select>
+            </div>
+            <div class="ms-field">
+              <label class="ms-label" for="weekFilterSelect">Week</label>
+              <select id="weekFilterSelect" class="ms-select">
+                <option value="">All weeks</option>
+                <option value="1">Week 1</option><option value="2">Week 2</option><option value="3">Week 3</option>
+                <option value="4">Week 4</option><option value="5">Week 5</option><option value="6">Week 6</option>
+                <option value="7">Week 7</option><option value="8">Week 8</option><option value="9">Week 9</option>
+                <option value="10">Week 10</option><option value="11">Week 11</option><option value="12">Week 12</option>
+                <option value="13">Week 13</option>
+              </select>
+            </div>
+            <div class="ms-field">
+              <label class="ms-label" for="dateEndingFilterInput">Date ending (optional)</label>
+              <input id="dateEndingFilterInput" class="ms-input" type="text" placeholder="1 May">
+            </div>
+            <div style="padding-top:1.3rem;">
+              <button id="clearFiltersBtn" type="button" class="ms-btn secondary">Clear</button>
+            </div>
+          </div>
+
+          <div id="listsStatus" class="ms-status"></div>
+        </div>
+
+        <div>
+          <div class="ms-row">
+            <div class="ms-field">
+              <label class="ms-label" for="weekStartInput">Book Shopping week start (Monday)</label>
+              <input id="weekStartInput" class="ms-input" type="date">
+            </div>
+            <div style="padding-top:1.3rem;">
+              <button id="loadWeekBookingsBtn" type="button" class="ms-btn">Load Week Bookings</button>
+            </div>
+            <div style="padding-top:1.3rem;">
+              <button id="runCompareBtn" type="button" class="ms-btn success">Run Comparison</button>
+            </div>
+          </div>
+
+          <div class="ms-row" style="margin-bottom:0.35rem;">
+            <button id="selectAllBookingsBtn" type="button" class="ms-btn secondary">Select All</button>
+            <button id="clearBookingsBtn" type="button" class="ms-btn secondary">Clear Selection</button>
+          </div>
+
+          <div id="bookingsWrap" class="ms-booking-list"></div>
+          <div id="bookingsStatus" class="ms-status"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="ms-card" id="comparisonCard" hidden>
+      <div class="ms-summary">
+        <div class="ms-pill"><span class="k">Book Items</span><span class="v" id="countBook">0</span></div>
+        <div class="ms-pill"><span class="k">Teacher Items</span><span class="v" id="countTeacher">0</span></div>
+        <div class="ms-pill"><span class="k">Matched</span><span class="v" id="countMatched">0</span></div>
+        <div class="ms-pill"><span class="k">Different</span><span class="v" id="countDifferent">0</span></div>
+      </div>
+
+      <div class="ms-compare-grid">
+        <div class="ms-col">
+          <h3>Book Shopping (Calculated)</h3>
+          <div id="bookColumn"></div>
+        </div>
+        <div class="ms-col">
+          <h3>Teacher Uploaded List</h3>
+          <div id="teacherColumn"></div>
+        </div>
+      </div>
+
+      <div style="margin-top:1rem;">
+        <h3 style="margin:0 0 0.4rem;color:#1e3a8a;font-size:1rem;">Matched vs Different</h3>
+        <div class="ms-match-list">
+          <table class="ms-table">
+            <thead>
+              <tr>
+                <th style="width:120px;">Result</th>
+                <th>Book Shopping</th>
+                <th>Teacher List</th>
+              </tr>
+            </thead>
+            <tbody id="matchTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="shared/navbar_loader.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const savedListSelect = document.getElementById('savedListSelect');
+      const refreshListsBtn = document.getElementById('refreshListsBtn');
+      const termFilterSelect = document.getElementById('termFilterSelect');
+      const weekFilterSelect = document.getElementById('weekFilterSelect');
+      const dateEndingFilterInput = document.getElementById('dateEndingFilterInput');
+      const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+      const weekStartInput = document.getElementById('weekStartInput');
+      const loadWeekBookingsBtn = document.getElementById('loadWeekBookingsBtn');
+      const runCompareBtn = document.getElementById('runCompareBtn');
+      const selectAllBookingsBtn = document.getElementById('selectAllBookingsBtn');
+      const clearBookingsBtn = document.getElementById('clearBookingsBtn');
+      const listsStatus = document.getElementById('listsStatus');
+      const bookingsWrap = document.getElementById('bookingsWrap');
+      const bookingsStatus = document.getElementById('bookingsStatus');
+      const comparisonCard = document.getElementById('comparisonCard');
+      const countBook = document.getElementById('countBook');
+      const countTeacher = document.getElementById('countTeacher');
+      const countMatched = document.getElementById('countMatched');
+      const countDifferent = document.getElementById('countDifferent');
+      const bookColumn = document.getElementById('bookColumn');
+      const teacherColumn = document.getElementById('teacherColumn');
+      const matchTableBody = document.getElementById('matchTableBody');
+
+      let savedLists = [];
+      let selectedSavedList = null;
+      let weekBookings = [];
+      const selectedBookingIds = new Set();
+
+      function escHtml(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function setStatus(el, message, type) {
+        el.className = 'ms-status' + (type ? ' ' + type : '');
+        el.textContent = message || '';
+      }
+
+      function requestJson(url, options) {
+        const settings = options || {};
+        const headers = Object.assign({ 'Content-Type': 'application/json' }, settings.headers || {});
+        return fetch(url, Object.assign({}, settings, { credentials: 'include', headers }))
+          .then(async (response) => {
+            let payload = null;
+            try { payload = await response.json(); } catch (err) { payload = null; }
+            if (!response.ok || (payload && payload.success === false)) {
+              throw new Error(payload && payload.error ? payload.error : ('Request failed (' + response.status + ')'));
+            }
+            return payload || {};
+          });
+      }
+
+      function toIsoDate(dateObj) {
+        const d = new Date(dateObj);
+        return [
+          d.getFullYear(),
+          String(d.getMonth() + 1).padStart(2, '0'),
+          String(d.getDate()).padStart(2, '0')
+        ].join('-');
+      }
+
+      function mondayOf(dateObj) {
+        const d = new Date(dateObj.getFullYear(), dateObj.getMonth(), dateObj.getDate());
+        const weekday = d.getDay();
+        const sinceMonday = (weekday + 6) % 7;
+        d.setDate(d.getDate() - sinceMonday);
+        d.setHours(0, 0, 0, 0);
+        return d;
+      }
+
+      function parseWeekMetaFromText(inputText) {
+        const text = String(inputText || '').trim();
+        const out = { term: '', week: '', weekDate: '' };
+        if (!text) return out;
+
+        const termMatch = text.match(/\bterm\s*(\d{1,2})\b/i) || text.match(/\bt\s*(\d{1,2})\b/i);
+        if (termMatch) out.term = String(termMatch[1]);
+
+        const weekMatch = text.match(/\bweek\s*(\d{1,2})\b/i) || text.match(/\bw\s*(\d{1,2})\b/i);
+        if (weekMatch) out.week = String(weekMatch[1]);
+
+        const dateEndingMatch = text.match(/(?:date\s*)?ending\s*[:\-]?\s*([^|,;]+)/i);
+        if (dateEndingMatch) out.weekDate = String(dateEndingMatch[1] || '').trim();
+
+        return out;
+      }
+
+      function parseDateEndingText(text) {
+        const clean = String(text || '').trim();
+        if (!clean) return null;
+
+        const iso = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (iso) {
+          const date = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+          return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        const monthMap = {
+          jan: 0, january: 0,
+          feb: 1, february: 1,
+          mar: 2, march: 2,
+          apr: 3, april: 3,
+          may: 4,
+          jun: 5, june: 5,
+          jul: 6, july: 6,
+          aug: 7, august: 7,
+          sep: 8, sept: 8, september: 8,
+          oct: 9, october: 9,
+          nov: 10, november: 10,
+          dec: 11, december: 11
+        };
+
+        const short = clean.match(/(\d{1,2})\s*([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
+        if (!short) return null;
+        const day = Number(short[1]);
+        const monthName = String(short[2] || '').toLowerCase();
+        const month = monthMap[monthName];
+        const year = short[3] ? Number(short[3]) : (new Date()).getFullYear();
+        if (!Number.isFinite(day) || month === undefined || !Number.isFinite(year)) return null;
+        const date = new Date(year, month, day);
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      function normalizeIngredientText(text) {
+        let value = String(text || '').toLowerCase();
+        value = value.replace(/\([^)]*\)/g, ' ');
+        value = value.replace(/[,+;:]/g, ' ');
+        value = value.replace(/^\s*[\d¼½¾⅓⅔⅛⅜⅝⅞\.\/\-x\s]+/, ' ');
+        value = value.replace(/^\s*(pieces?|piece|packets?|packet|bottles?|bottle|cans?|can|tubs?|tub|loaves?|loaf|bags?|bag|jars?|jar|x|of)\b\s*/i, ' ');
+        value = value.replace(/^\s*(kg|g|grams?|ml|l|litres?|liters?|cups?|tbsp|tsp)\b\s*/i, ' ');
+        value = value.replace(/\s+/g, ' ').trim();
+        return value;
+      }
+
+      function setDefaultWeekStartFromSaved(list) {
+        if (!list) return;
+        const state = list.state || {};
+        const stateDate = String(state.weekDate || '').trim();
+        const parsedFromState = parseDateEndingText(stateDate);
+        if (parsedFromState) {
+          weekStartInput.value = toIsoDate(mondayOf(parsedFromState));
+          return;
+        }
+
+        const meta = parseWeekMetaFromText(String(list.weekInfo || ''));
+        const parsedFromMeta = parseDateEndingText(meta.weekDate);
+        if (parsedFromMeta) {
+          weekStartInput.value = toIsoDate(mondayOf(parsedFromMeta));
+        }
+      }
+
+      function formatSavedLabel(list) {
+        const meta = list.state || {};
+        const parts = [list.title || 'Shopping List'];
+        const term = String(meta.term || list.term || '').trim();
+        const week = String(meta.week || list.week || '').trim();
+        const weekDate = String(meta.weekDate || list.week_date || '').trim();
+        if (term) parts.push('Term ' + term);
+        if (week) parts.push('Week ' + week);
+        if (weekDate) parts.push('Date ending: ' + weekDate);
+        return parts.join(' | ');
+      }
+
+      function renderSavedOptions() {
+        const termFilter = String(termFilterSelect.value || '').trim();
+        const weekFilter = String(weekFilterSelect.value || '').trim();
+        const dateFilter = String(dateEndingFilterInput.value || '').trim().toLowerCase();
+
+        const filtered = savedLists.filter((list) => {
+          const state = list.state || {};
+          let term = String(state.term || list.term || '').trim();
+          let week = String(state.week || list.week || '').trim();
+          let dateEnding = String(state.weekDate || list.week_date || '').trim();
+
+          if ((!term || !week || !dateEnding) && list.weekInfo) {
+            const parsed = parseWeekMetaFromText(list.weekInfo);
+            if (!term) term = parsed.term;
+            if (!week) week = parsed.week;
+            if (!dateEnding) dateEnding = parsed.weekDate;
+          }
+
+          if (termFilter && term !== termFilter) return false;
+          if (weekFilter && week !== weekFilter) return false;
+          if (dateFilter && String(dateEnding || '').toLowerCase() !== dateFilter) return false;
+          return true;
+        });
+
+        savedListSelect.innerHTML = '<option value="">Select teacher shopping list...</option>'
+          + filtered.map((list) => `<option value="${escHtml(String(list.id))}">${escHtml(formatSavedLabel(list))}</option>`).join('');
+
+        if (!filtered.length) {
+          setStatus(listsStatus, 'No saved lists match the selected Term/Week/Date filters.', '');
+        } else {
+          setStatus(listsStatus, 'Loaded ' + filtered.length + ' saved list option(s).', 'ok');
+        }
+      }
+
+      async function loadSavedLists() {
+        refreshListsBtn.disabled = true;
+        try {
+          const data = await requestJson('/api/saved-shopping-lists');
+          const baseLists = Array.isArray(data.lists) ? data.lists : [];
+          // Pull each state so comparison can run without extra click hops.
+          savedLists = [];
+          for (const row of baseLists) {
+            try {
+              const detail = await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(String(row.id)));
+              savedLists.push({
+                id: row.id,
+                title: row.title,
+                weekInfo: row.week_info || '',
+                term: row.term || '',
+                week: row.week || '',
+                week_date: row.week_date || '',
+                state: detail.list && detail.list.state ? detail.list.state : {}
+              });
+            } catch (err) {
+              // Skip broken row but continue loading others.
+            }
+          }
+          renderSavedOptions();
+        } catch (err) {
+          savedListSelect.innerHTML = '<option value="">Unable to load saved shopping lists</option>';
+          setStatus(listsStatus, 'Error: ' + (err.message || String(err)), 'error');
+        }
+        refreshListsBtn.disabled = false;
+      }
+
+      function renderBookings() {
+        if (!weekBookings.length) {
+          bookingsWrap.innerHTML = '<div class="ms-muted">No Food Truck bookings found for that week.</div>';
+          return;
+        }
+
+        bookingsWrap.innerHTML = weekBookings.map((row) => {
+          const id = Number(row.id || 0);
+          const checked = selectedBookingIds.has(id) ? ' checked' : '';
+          const label = [
+            String(row.booking_date || ''),
+            'P' + String(row.period || '-'),
+            String(row.class_name || '-'),
+            String(row.recipe || '-')
+          ].join(' | ');
+
+          return '<label class="ms-booking-item">'
+            + `<input type="checkbox" class="booking-check" data-id="${escHtml(String(id))}"${checked}>`
+            + `<span>${escHtml(label)}</span>`
+            + '</label>';
+        }).join('');
+
+        bookingsWrap.querySelectorAll('.booking-check').forEach((input) => {
+          input.addEventListener('change', () => {
+            const id = Number(input.getAttribute('data-id') || 0);
+            if (!id) return;
+            if (input.checked) selectedBookingIds.add(id);
+            else selectedBookingIds.delete(id);
+            setStatus(bookingsStatus, selectedBookingIds.size + ' booking(s) selected.', 'ok');
+          });
+        });
+      }
+
+      async function loadWeekBookings() {
+        const weekStart = String(weekStartInput.value || '').trim();
+        if (!weekStart) {
+          setStatus(bookingsStatus, 'Choose a week start date first.', 'error');
+          return;
+        }
+
+        loadWeekBookingsBtn.disabled = true;
+        setStatus(bookingsStatus, 'Loading bookings for selected week...', '');
+        try {
+          const res = await requestJson('/api/bookings/all?planner_stream=Food%20Truck');
+          const rows = Array.isArray(res.bookings) ? res.bookings : [];
+          const start = new Date(weekStart + 'T00:00:00');
+          const end = new Date(start);
+          end.setDate(start.getDate() + 6);
+
+          weekBookings = rows.filter((row) => {
+            const rawDate = String(row.booking_date || '').slice(0, 10);
+            if (!rawDate) return false;
+            const d = new Date(rawDate + 'T00:00:00');
+            if (Number.isNaN(d.getTime())) return false;
+            return d >= start && d <= end;
+          });
+
+          selectedBookingIds.clear();
+          weekBookings.forEach((row) => selectedBookingIds.add(Number(row.id || 0)));
+
+          renderBookings();
+          setStatus(bookingsStatus, weekBookings.length + ' booking(s) found for that week.', weekBookings.length ? 'ok' : '');
+        } catch (err) {
+          weekBookings = [];
+          selectedBookingIds.clear();
+          renderBookings();
+          setStatus(bookingsStatus, 'Error: ' + (err.message || String(err)), 'error');
+        }
+        loadWeekBookingsBtn.disabled = false;
+      }
+
+      function flattenTeacherItems(saved) {
+        const out = [];
+        const state = saved && saved.state ? saved.state : {};
+        const cols = Array.isArray(state.columns) ? state.columns : [];
+
+        cols.forEach((col) => {
+          (Array.isArray(col) ? col : []).forEach((cat) => {
+            const category = String(cat && cat.name || 'Teacher').trim();
+            const sections = Array.isArray(cat && cat.sections) ? cat.sections : [];
+            sections.forEach((sec) => {
+              const items = Array.isArray(sec && sec.items) ? sec.items : [];
+              items.forEach((rawItem) => {
+                const raw = String(rawItem || '').trim();
+                if (!raw) return;
+                out.push({
+                  category,
+                  raw,
+                  key: normalizeIngredientText(raw)
+                });
+              });
+            });
+          });
+        });
+
+        return out.filter((item) => item.key);
+      }
+
+      function flattenBookItems(bookData) {
+        const out = [];
+        const data = bookData && bookData.data ? bookData.data : {};
+        Object.keys(data).forEach((category) => {
+          const items = Array.isArray(data[category]) ? data[category] : [];
+          items.forEach((item) => {
+            const display = String(item && item.display || '').trim();
+            if (!display) return;
+            const qty = item && item.qty != null ? String(item.qty) : '';
+            const unit = String(item && item.unit || '').trim();
+            out.push({
+              category,
+              display,
+              qty,
+              unit,
+              key: normalizeIngredientText(display)
+            });
+          });
+        });
+        return out.filter((item) => item.key);
+      }
+
+      function buildComparison(bookItems, teacherItems) {
+        const bookUnused = bookItems.slice();
+        const teacherUnused = teacherItems.slice();
+        const matched = [];
+
+        // Exact matches first.
+        for (let ti = teacherUnused.length - 1; ti >= 0; ti -= 1) {
+          const t = teacherUnused[ti];
+          const bi = bookUnused.findIndex((b) => b.key === t.key);
+          if (bi >= 0) {
+            matched.push({ book: bookUnused[bi], teacher: t, type: 'same' });
+            bookUnused.splice(bi, 1);
+            teacherUnused.splice(ti, 1);
+          }
+        }
+
+        // Loose containment matches next.
+        for (let ti = teacherUnused.length - 1; ti >= 0; ti -= 1) {
+          const t = teacherUnused[ti];
+          const bi = bookUnused.findIndex((b) => b.key.includes(t.key) || t.key.includes(b.key));
+          if (bi >= 0) {
+            matched.push({ book: bookUnused[bi], teacher: t, type: 'close' });
+            bookUnused.splice(bi, 1);
+            teacherUnused.splice(ti, 1);
+          }
+        }
+
+        return {
+          matched,
+          bookOnly: bookUnused,
+          teacherOnly: teacherUnused
+        };
+      }
+
+      function renderBookColumn(bookItems) {
+        if (!bookItems.length) return '<div class="ms-muted">No calculated items found.</div>';
+        const byCat = new Map();
+        bookItems.forEach((item) => {
+          if (!byCat.has(item.category)) byCat.set(item.category, []);
+          byCat.get(item.category).push(item);
+        });
+
+        let html = '';
+        byCat.forEach((items, category) => {
+          html += `<h4 style="margin:0.45rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
+          html += '<table class="ms-table"><thead><tr><th style="width:70px;">Qty</th><th style="width:70px;">Unit</th><th>Item</th></tr></thead><tbody>';
+          items.forEach((item) => {
+            html += `<tr><td>${escHtml(item.qty)}</td><td>${escHtml(item.unit)}</td><td>${escHtml(item.display)}</td></tr>`;
+          });
+          html += '</tbody></table>';
+        });
+        return html;
+      }
+
+      function renderTeacherColumn(teacherItems) {
+        if (!teacherItems.length) return '<div class="ms-muted">No teacher uploaded items found.</div>';
+        const byCat = new Map();
+        teacherItems.forEach((item) => {
+          if (!byCat.has(item.category)) byCat.set(item.category, []);
+          byCat.get(item.category).push(item);
+        });
+
+        let html = '';
+        byCat.forEach((items, category) => {
+          html += `<h4 style="margin:0.45rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
+          html += '<table class="ms-table"><thead><tr><th>Teacher Item</th></tr></thead><tbody>';
+          items.forEach((item) => {
+            html += `<tr><td>${escHtml(item.raw)}</td></tr>`;
+          });
+          html += '</tbody></table>';
+        });
+        return html;
+      }
+
+      function renderMatches(result) {
+        const rows = [];
+
+        result.matched.forEach((m) => {
+          const label = m.type === 'same' ? 'Same' : 'Close';
+          rows.push('<tr>'
+            + `<td>${escHtml(label)}</td>`
+            + `<td>${escHtml((m.book.qty ? m.book.qty + ' ' : '') + (m.book.unit ? m.book.unit + ' ' : '') + m.book.display)}</td>`
+            + `<td>${escHtml(m.teacher.raw)}</td>`
+            + '</tr>');
+        });
+
+        result.bookOnly.forEach((b) => {
+          rows.push('<tr>'
+            + '<td>Book Only</td>'
+            + `<td>${escHtml((b.qty ? b.qty + ' ' : '') + (b.unit ? b.unit + ' ' : '') + b.display)}</td>`
+            + '<td></td>'
+            + '</tr>');
+        });
+
+        result.teacherOnly.forEach((t) => {
+          rows.push('<tr>'
+            + '<td>Teacher Only</td>'
+            + '<td></td>'
+            + `<td>${escHtml(t.raw)}</td>`
+            + '</tr>');
+        });
+
+        matchTableBody.innerHTML = rows.length
+          ? rows.join('')
+          : '<tr><td colspan="3" class="ms-muted">No comparison rows.</td></tr>';
+      }
+
+      async function runComparison() {
+        if (!selectedSavedList) {
+          setStatus(listsStatus, 'Choose a teacher uploaded shopping list first.', 'error');
+          return;
+        }
+
+        const bookingIds = Array.from(selectedBookingIds).filter((id) => Number.isInteger(id) && id > 0);
+        if (!bookingIds.length) {
+          setStatus(bookingsStatus, 'Select at least one booking before running comparison.', 'error');
+          return;
+        }
+
+        runCompareBtn.disabled = true;
+        setStatus(bookingsStatus, 'Running comparison...', '');
+        try {
+          const qs = new URLSearchParams({ booking_ids: bookingIds.join(',') });
+          const bookData = await requestJson('/api/ingredients/shopping_list/by_category?' + qs.toString());
+
+          const bookItems = flattenBookItems(bookData);
+          const teacherItems = flattenTeacherItems(selectedSavedList);
+          const comparison = buildComparison(bookItems, teacherItems);
+
+          countBook.textContent = String(bookItems.length);
+          countTeacher.textContent = String(teacherItems.length);
+          countMatched.textContent = String(comparison.matched.length);
+          countDifferent.textContent = String(comparison.bookOnly.length + comparison.teacherOnly.length);
+
+          bookColumn.innerHTML = renderBookColumn(bookItems);
+          teacherColumn.innerHTML = renderTeacherColumn(teacherItems);
+          renderMatches(comparison);
+          comparisonCard.hidden = false;
+
+          setStatus(bookingsStatus, 'Comparison complete.', 'ok');
+        } catch (err) {
+          setStatus(bookingsStatus, 'Error: ' + (err.message || String(err)), 'error');
+        }
+        runCompareBtn.disabled = false;
+      }
+
+      savedListSelect.addEventListener('change', () => {
+        const id = Number(savedListSelect.value || 0);
+        selectedSavedList = savedLists.find((s) => Number(s.id) === id) || null;
+        if (selectedSavedList) {
+          setDefaultWeekStartFromSaved(selectedSavedList);
+          setStatus(listsStatus, 'Selected list: ' + (selectedSavedList.title || 'Shopping List'), 'ok');
+        }
+      });
+
+      refreshListsBtn.addEventListener('click', loadSavedLists);
+      termFilterSelect.addEventListener('change', renderSavedOptions);
+      weekFilterSelect.addEventListener('change', renderSavedOptions);
+      dateEndingFilterInput.addEventListener('input', renderSavedOptions);
+      clearFiltersBtn.addEventListener('click', () => {
+        termFilterSelect.value = '';
+        weekFilterSelect.value = '';
+        dateEndingFilterInput.value = '';
+        renderSavedOptions();
+      });
+
+      loadWeekBookingsBtn.addEventListener('click', loadWeekBookings);
+      runCompareBtn.addEventListener('click', runComparison);
+
+      selectAllBookingsBtn.addEventListener('click', () => {
+        weekBookings.forEach((row) => selectedBookingIds.add(Number(row.id || 0)));
+        renderBookings();
+        setStatus(bookingsStatus, selectedBookingIds.size + ' booking(s) selected.', 'ok');
+      });
+
+      clearBookingsBtn.addEventListener('click', () => {
+        selectedBookingIds.clear();
+        renderBookings();
+        setStatus(bookingsStatus, 'Booking selection cleared.', '');
+      });
+
+      // Default week start = current week's Monday.
+      weekStartInput.value = toIsoDate(mondayOf(new Date()));
+      renderBookings();
+      loadSavedLists();
+    })();
+  </script>
+</body>
+</html>
