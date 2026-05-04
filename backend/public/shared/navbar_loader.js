@@ -1,6 +1,6 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260505b';
+  var ASSET_VERSION = '20260505c';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
     '/navbar.css'
