@@ -306,10 +306,37 @@
       #navbar-include,
       .slot-booking-picker,
       .slot-actions,
-      .slot-config,
+        grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
       .search-row,
       .students-table-wrap,
       .student-day,
+
+      .teacher-day-tabs {
+        display: inline-flex;
+        gap: 0.24rem;
+        flex-wrap: nowrap;
+        align-items: center;
+        padding-bottom: 1px;
+      }
+
+      .teacher-day-btn {
+        border: 1px solid #cbd5e1;
+        background: #e2e8f0;
+        color: #1e293b;
+        border-radius: 6px;
+        padding: 0.28rem 0.52rem;
+        font-size: 0.74rem;
+        font-weight: 700;
+        cursor: pointer;
+        min-width: 42px;
+        line-height: 1.1;
+      }
+
+      .teacher-day-btn.active {
+        background: #1d4ed8;
+        border-color: #1d4ed8;
+        color: #fff;
+      }
       .slot-status {
         display: none !important;
       }
@@ -334,18 +361,22 @@
           </select>
         </label>
         <label>
+          Day
+          <div id="dayFilterTabs" class="teacher-day-tabs">
+            <button type="button" class="teacher-day-btn active" data-weekday="">All</button>
+            <button type="button" class="teacher-day-btn" data-weekday="1">Mon</button>
+            <button type="button" class="teacher-day-btn" data-weekday="2">Tue</button>
+            <button type="button" class="teacher-day-btn" data-weekday="3">Wed</button>
+            <button type="button" class="teacher-day-btn" data-weekday="4">Thu</button>
+            <button type="button" class="teacher-day-btn" data-weekday="5">Fri</button>
+          </div>
+        </label>
+        <label>
           Class
           <select id="classFilterSelect">
             <option value="">All classes</option>
           </select>
         </label>
-        <label>
-          Food Truck bookings
-          <select id="foodTruckBookingSelect">
-            <option value="">Loading Food Truck bookings...</option>
-          </select>
-        </label>
-        <button id="loadFoodTruckBookingBtn" type="button" class="secondary">Load Booking</button>
       </div>
       <div id="slotBookingMeta" class="slot-meta">Loading booking...</div>
       <div class="slot-actions">
@@ -427,15 +458,15 @@
       const params = new URLSearchParams(window.location.search);
       let bookingId = Number(params.get('booking_id') || 0);
       let selectedTeacherFilter = String(params.get('teacher') || '').trim();
+      let selectedWeekdayFilter = String(params.get('day') || '').trim();
       let selectedClassFilter = String(params.get('class') || '').trim().toUpperCase();
       const safeSourcePage = 'add_food_truck_booking.html';
 
       const slotBookingMeta = document.getElementById('slotBookingMeta');
       const slotStatus = document.getElementById('slotStatus');
       const teacherFilterSelect = document.getElementById('teacherFilterSelect');
+      const dayFilterTabs = document.getElementById('dayFilterTabs');
       const classFilterSelect = document.getElementById('classFilterSelect');
-      const foodTruckBookingSelect = document.getElementById('foodTruckBookingSelect');
-      const loadFoodTruckBookingBtn = document.getElementById('loadFoodTruckBookingBtn');
       const maxSlotsInput = document.getElementById('maxSlotsInput');
       const allowPairsInput = document.getElementById('allowPairsInput');
       const saveConfigBtn = document.getElementById('saveConfigBtn');
@@ -461,6 +492,12 @@
       let foodTruckBookings = [];
       let classTeacherCodeMap = new Map();
       let staffCodeNameMap = new Map();
+      let teacherClassCodeMap = new Map();
+      let allClassCodeMap = new Map();
+
+      if (!['', '1', '2', '3', '4', '5'].includes(selectedWeekdayFilter)) {
+        selectedWeekdayFilter = '';
+      }
 
       function isFoodTruckBooking(row) {
         return String(row && row.planner_stream || '').trim().toLowerCase() === FOOD_TRUCK_STREAM.toLowerCase();
@@ -519,6 +556,16 @@
         return String(row && row.class_name || '').trim().toUpperCase();
       }
 
+      function getBookingWeekdayMonToFri(row) {
+        const raw = String(row && row.booking_date || '').trim();
+        if (!raw) return 0;
+        const date = new Date(raw + 'T00:00:00');
+        if (Number.isNaN(date.getTime())) return 0;
+        const day = date.getDay();
+        if (day >= 1 && day <= 5) return day;
+        return 0;
+      }
+
       function getTeacherFilteredBookings() {
         if (!selectedTeacherFilter) return foodTruckBookings;
         return foodTruckBookings.filter((row) => {
@@ -527,10 +574,43 @@
         });
       }
 
-      function getVisibleFilteredBookings() {
+      function getDayFilteredBookings() {
         const teacherFiltered = getTeacherFilteredBookings();
-        if (!selectedClassFilter) return teacherFiltered;
-        return teacherFiltered.filter((row) => getClassFilterKey(row) === selectedClassFilter);
+        if (!selectedWeekdayFilter) return teacherFiltered;
+        const selected = Number(selectedWeekdayFilter || 0);
+        if (!selected) return teacherFiltered;
+        return teacherFiltered.filter((row) => getBookingWeekdayMonToFri(row) === selected);
+      }
+
+      function getVisibleFilteredBookings() {
+        const dayFiltered = getDayFilteredBookings();
+        if (!selectedClassFilter) return dayFiltered;
+        return dayFiltered.filter((row) => getClassFilterKey(row) === selectedClassFilter);
+      }
+
+      function updateDayTabs() {
+        if (!dayFilterTabs) return;
+        dayFilterTabs.querySelectorAll('.teacher-day-btn').forEach((btn) => {
+          const value = String(btn.getAttribute('data-weekday') || '');
+          btn.classList.toggle('active', value === selectedWeekdayFilter);
+        });
+      }
+
+      function syncBookingToFilters() {
+        const visibleBookings = getVisibleFilteredBookings();
+        if (!visibleBookings.length) {
+          bookingId = 0;
+          booking = null;
+          updateUrlWithBooking(0);
+          return;
+        }
+
+        const preferredId = bookingId && visibleBookings.some((b) => Number(b.id) === bookingId)
+          ? bookingId
+          : Number(visibleBookings[0].id || 0);
+
+        bookingId = preferredId || 0;
+        updateUrlWithBooking(bookingId);
       }
 
       function updateUrlWithBooking(selectedBookingId) {
@@ -544,6 +624,11 @@
           url.searchParams.set('teacher', selectedTeacherFilter);
         } else {
           url.searchParams.delete('teacher');
+        }
+        if (selectedWeekdayFilter) {
+          url.searchParams.set('day', selectedWeekdayFilter);
+        } else {
+          url.searchParams.delete('day');
         }
         if (selectedClassFilter) {
           url.searchParams.set('class', selectedClassFilter);
@@ -600,6 +685,8 @@
       async function loadReferenceData() {
         classTeacherCodeMap = new Map();
         staffCodeNameMap = new Map();
+        teacherClassCodeMap = new Map();
+        allClassCodeMap = new Map();
 
         const [classesRes, staffRes] = await Promise.all([
           fetch('/api/classes/class_upload/all').then((r) => r.json().catch(() => ({}))),
@@ -610,7 +697,14 @@
         classes.forEach((row) => {
           const classCode = normalizeClassCode(row && row.ttcode);
           const teacherCode = String(row && row.teacher_in_charge || '').trim().toUpperCase();
-          if (classCode && teacherCode) classTeacherCodeMap.set(classCode, teacherCode);
+          if (!classCode) return;
+
+          allClassCodeMap.set(classCode, classCode);
+          if (classCode && teacherCode) {
+            classTeacherCodeMap.set(classCode, teacherCode);
+            if (!teacherClassCodeMap.has(teacherCode)) teacherClassCodeMap.set(teacherCode, new Map());
+            teacherClassCodeMap.get(teacherCode).set(classCode, classCode);
+          }
         });
 
         const staff = Array.isArray(staffRes && staffRes.staff) ? staffRes.staff : [];
@@ -666,9 +760,18 @@
       function renderClassFilterOptions() {
         if (!classFilterSelect) return;
 
-        const teacherFiltered = getTeacherFilteredBookings();
         const classMap = new Map();
-        teacherFiltered.forEach((row) => {
+
+        const teacherCode = String(selectedTeacherFilter || '').replace(/^code:/i, '').trim().toUpperCase();
+        if (teacherCode && teacherClassCodeMap.has(teacherCode)) {
+          const mappedClasses = teacherClassCodeMap.get(teacherCode);
+          mappedClasses.forEach((label, key) => classMap.set(key, label));
+        } else if (!teacherCode) {
+          allClassCodeMap.forEach((label, key) => classMap.set(key, label));
+        }
+
+        // Keep visible-booking classes as fallback, even if class_upload mapping is incomplete.
+        getDayFilteredBookings().forEach((row) => {
           const key = getClassFilterKey(row);
           if (!key) return;
           if (!classMap.has(key)) {
@@ -691,31 +794,7 @@
       }
 
       function renderFoodTruckBookingOptions() {
-        if (!foodTruckBookingSelect) return;
-        const visibleBookings = getVisibleFilteredBookings();
-        if (!visibleBookings.length) {
-          foodTruckBookingSelect.innerHTML = '<option value="">No Food Truck bookings found for this filter</option>';
-          foodTruckBookingSelect.value = '';
-          bookingId = 0;
-          updateUrlWithBooking(0);
-          return;
-        }
-
-        foodTruckBookingSelect.innerHTML = visibleBookings.map((row) => {
-          const value = String(row.id || '');
-          const label = escapeHtml(formatFoodTruckBookingOption(row));
-          return `<option value="${escapeHtml(value)}">${label}</option>`;
-        }).join('');
-
-        const preferredId = bookingId && visibleBookings.some((b) => Number(b.id) === bookingId)
-          ? bookingId
-          : Number(visibleBookings[0].id || 0);
-
-        if (preferredId) {
-          bookingId = preferredId;
-          foodTruckBookingSelect.value = String(preferredId);
-          updateUrlWithBooking(preferredId);
-        }
+        syncBookingToFilters();
       }
 
       async function loadFoodTruckBookingList() {
@@ -963,11 +1042,12 @@
 
       async function refreshAll() {
         if (!bookingId) {
-          slotBookingMeta.textContent = 'Select a Food Truck booking to begin.';
+          slotBookingMeta.textContent = 'No Food Truck booking found for the selected Teacher/Day/Class filter.';
           slotsBody.innerHTML = '<tr><td colspan="3">No booking selected.</td></tr>';
           studentsBody.innerHTML = '<tr><td colspan="3">No students found.</td></tr>';
           unbookedSummary.textContent = '';
           unbookedList.innerHTML = '';
+          renderClassStudentsMeta();
           return;
         }
 
@@ -1013,32 +1093,34 @@
         window.print();
       });
 
-      loadFoodTruckBookingBtn.addEventListener('click', () => {
-        const selectedId = Number(foodTruckBookingSelect.value || 0);
-        if (!selectedId) {
-          setStatus('Please select a Food Truck booking.', true);
-          return;
-        }
-        bookingId = selectedId;
-        updateUrlWithBooking(selectedId);
-        refreshAll()
-          .then(() => setStatus('Loaded Food Truck booking.', false))
-          .catch((err) => {
-            setStatus(err.message || 'Failed to load teacher slot list.', true);
-          });
-      });
-
       teacherFilterSelect.addEventListener('change', () => {
         selectedTeacherFilter = String(teacherFilterSelect.value || '').trim();
         selectedClassFilter = '';
         renderClassFilterOptions();
         renderFoodTruckBookingOptions();
+        updateDayTabs();
         refreshAll()
           .then(() => setStatus('Teacher filter applied.', false))
           .catch((err) => {
             setStatus(err.message || 'Failed to load teacher slot list.', true);
           });
       });
+
+      if (dayFilterTabs) {
+        dayFilterTabs.querySelectorAll('.teacher-day-btn').forEach((btn) => {
+          btn.addEventListener('click', () => {
+            selectedWeekdayFilter = String(btn.getAttribute('data-weekday') || '').trim();
+            updateDayTabs();
+            renderClassFilterOptions();
+            renderFoodTruckBookingOptions();
+            refreshAll()
+              .then(() => setStatus('Day filter applied.', false))
+              .catch((err) => {
+                setStatus(err.message || 'Failed to load teacher slot list.', true);
+              });
+          });
+        });
+      }
 
       classFilterSelect.addEventListener('change', () => {
         selectedClassFilter = String(classFilterSelect.value || '').trim().toUpperCase();
@@ -1050,16 +1132,12 @@
           });
       });
 
-      foodTruckBookingSelect.addEventListener('change', () => {
-        const selectedId = Number(foodTruckBookingSelect.value || 0);
-        if (!selectedId) return;
-        bookingId = selectedId;
-        updateUrlWithBooking(selectedId);
-      });
-
       loadReferenceData()
         .then(() => loadFoodTruckBookingList())
-        .then(() => refreshAll())
+        .then(() => {
+          updateDayTabs();
+          return refreshAll();
+        })
         .catch((err) => {
           setStatus(err.message || 'Failed to load Food Truck booking list.', true);
         });
