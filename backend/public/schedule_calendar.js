@@ -723,7 +723,7 @@ function normalizePlannerStream(booking) {
   if (explicit === 'middle') return 'Middle';
 
   const className = String(booking && booking.class_name ? booking.class_name : '').toLowerCase();
-  if (/(^|\b)jfood(\b|$)|junior/.test(className)) return 'Junior';
+  if (/(^|\b)jfood(\b|$)|vefood|junior/.test(className)) return 'Junior';
   if (/(^|\b)hosp(\b|$)|senior|hp100/.test(className)) return 'Senior';
   return 'Middle';
 }
@@ -743,7 +743,7 @@ function isPlannerLikeBooking(booking) {
   if (hasTeacher) return false;
 
   const className = String(booking && booking.class_name ? booking.class_name : '').trim().toUpperCase();
-  return className === 'MFOOD' || className === 'JFOOD' || className === 'HOSP';
+  return className === 'MFOOD' || className === 'JFOOD' || className === 'VEFOOD' || className === 'HOSP';
 }
 
   // Snap a Saturday (+2) or Sunday (+1) date string to the following Monday

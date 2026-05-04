@@ -41,7 +41,7 @@ async function ensurePlannerUploadSchema() {
 function getLegacyClassNamesForStream(stream) {
   const normalized = String(stream || '').trim().toLowerCase();
   if (normalized === 'middle') return ['MFOOD'];
-  if (normalized === 'junior') return ['JFOOD'];
+  if (normalized === 'junior') return ['JFOOD', 'VEFOOD'];
   if (normalized === 'senior') return ['HOSP', '11HOSP', '12HOSP', '13HOSP', '100HOSP', '200HOSP', '300HOSP'];
   return [];
 }
@@ -49,7 +49,7 @@ function getLegacyClassNamesForStream(stream) {
 function inferPlannerStreamFromCode(code) {
   const value = String(code || '').trim().toUpperCase();
   if (!value) return 'Other';
-  if (value.includes('JFOOD')) return 'Junior';
+  if (value.includes('JFOOD') || value.includes('VEFOOD')) return 'Junior';
   if (value.includes('HOSP')) return 'Senior';
   if (value.includes('MFOOD')) return 'Middle';
   return 'Other';
@@ -87,7 +87,7 @@ function inferStreamFromClassToken(classToken) {
   const value = normalizeClassToken(classToken);
   if (!value) return '';
   if (value.includes('HOSP')) return 'Senior';
-  if (value.includes('JFOOD')) return 'Junior';
+  if (value.includes('JFOOD') || value.includes('VEFOOD')) return 'Junior';
   if (value.includes('MFOOD') || value.includes('FOOD')) return 'Middle';
   return '';
 }
