@@ -33,6 +33,15 @@ async function ensureMasterKeywordSchema() {
     'CREATE UNIQUE INDEX IF NOT EXISTS aisle_master_keyword_members_unique_idx ON aisle_master_keyword_members(master_keyword_id, lower(keyword))'
   );
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS aisle_master_keyword_categories (
+      master_keyword_id INTEGER NOT NULL REFERENCES aisle_master_keywords(id) ON DELETE CASCADE,
+      aisle_category_id INTEGER NOT NULL REFERENCES aisle_category(id) ON DELETE CASCADE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (master_keyword_id, aisle_category_id)
+    )
+  `);
+
   masterKeywordSchemaReady = true;
 }
 
@@ -65,6 +74,15 @@ async function ensureMasterKeyword(masterName, aisleCategoryId, memberKeywords) 
     [cleanMaster, aisleCategoryId]
   );
   const masterId = upsertMaster.rows[0].id;
+
+  // Keep a list of linked aisle categories; include primary by default.
+  await pool.query(
+    `INSERT INTO aisle_master_keyword_categories (master_keyword_id, aisle_category_id)
+     VALUES ($1, $2)
+     ON CONFLICT (master_keyword_id, aisle_category_id)
+     DO NOTHING`,
+    [masterId, aisleCategoryId]
+  );
 
   for (const keyword of memberKeywords) {
     const cleanKeyword = String(keyword || '').trim();
@@ -208,16 +226,24 @@ router.get('/masters', async (req, res) => {
     const result = await pool.query(
       `SELECT mk.id, mk.name, mk.aisle_category_id, ac.name AS aisle_category,
               COALESCE(
-                json_agg(
-                  json_build_object('id', mkm.id, 'keyword', mkm.keyword)
-                  ORDER BY mkm.keyword
-                ) FILTER (WHERE mkm.keyword IS NOT NULL),
+                (
+                  SELECT json_agg(json_build_object('id', mkm.id, 'keyword', mkm.keyword) ORDER BY mkm.keyword)
+                    FROM aisle_master_keyword_members mkm
+                   WHERE mkm.master_keyword_id = mk.id
+                ),
                 '[]'::json
-              ) AS members
+              ) AS members,
+              COALESCE(
+                (
+                  SELECT json_agg(json_build_object('id', ac2.id, 'name', ac2.name) ORDER BY ac2.name)
+                    FROM aisle_master_keyword_categories mkc
+                    JOIN aisle_category ac2 ON ac2.id = mkc.aisle_category_id
+                   WHERE mkc.master_keyword_id = mk.id
+                ),
+                '[]'::json
+              ) AS linked_categories
          FROM aisle_master_keywords mk
          LEFT JOIN aisle_category ac ON ac.id = mk.aisle_category_id
-         LEFT JOIN aisle_master_keyword_members mkm ON mkm.master_keyword_id = mk.id
-        GROUP BY mk.id, mk.name, mk.aisle_category_id, ac.name
         ORDER BY mk.name`
     );
     return res.json({ success: true, masters: result.rows });
@@ -245,6 +271,14 @@ router.post('/masters/add', async (req, res) => {
        VALUES ($1, $2)
        RETURNING id, name, aisle_category_id`,
       [name, aisleCategoryId]
+    );
+
+    await pool.query(
+      `INSERT INTO aisle_master_keyword_categories (master_keyword_id, aisle_category_id)
+       VALUES ($1, $2)
+       ON CONFLICT (master_keyword_id, aisle_category_id)
+       DO NOTHING`,
+      [inserted.rows[0].id, aisleCategoryId]
     );
 
     return res.json({ success: true, master: inserted.rows[0] });
@@ -285,6 +319,14 @@ router.post('/masters/edit', async (req, res) => {
     if (!updated.rows.length) {
       return res.json({ success: false, error: 'Master keyword not found.' });
     }
+
+    await pool.query(
+      `INSERT INTO aisle_master_keyword_categories (master_keyword_id, aisle_category_id)
+       VALUES ($1, $2)
+       ON CONFLICT (master_keyword_id, aisle_category_id)
+       DO NOTHING`,
+      [id, aisleCategoryId]
+    );
 
     const members = await pool.query(
       'SELECT keyword FROM aisle_master_keyword_members WHERE master_keyword_id = $1',
@@ -360,6 +402,69 @@ router.post('/masters/members/delete', async (req, res) => {
       return res.json({ success: false, error: 'Member keyword not found.' });
     }
     // We intentionally do not delete from aisle_keywords to avoid breaking existing matching behavior.
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+router.post('/masters/categories/add', async (req, res) => {
+  const masterId = Number(req.body && req.body.master_keyword_id || 0);
+  const aisleCategoryId = Number(req.body && req.body.aisle_category_id || 0);
+  if (!masterId || !aisleCategoryId) {
+    return res.json({ success: false, error: 'master_keyword_id and aisle_category_id are required.' });
+  }
+
+  try {
+    await ensureMasterKeywordSeedData();
+
+    const master = await pool.query('SELECT id FROM aisle_master_keywords WHERE id = $1 LIMIT 1', [masterId]);
+    if (!master.rows.length) {
+      return res.json({ success: false, error: 'Master keyword not found.' });
+    }
+
+    await pool.query(
+      `INSERT INTO aisle_master_keyword_categories (master_keyword_id, aisle_category_id)
+       VALUES ($1, $2)
+       ON CONFLICT (master_keyword_id, aisle_category_id)
+       DO NOTHING`,
+      [masterId, aisleCategoryId]
+    );
+
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+router.post('/masters/categories/delete', async (req, res) => {
+  const masterId = Number(req.body && req.body.master_keyword_id || 0);
+  const aisleCategoryId = Number(req.body && req.body.aisle_category_id || 0);
+  if (!masterId || !aisleCategoryId) {
+    return res.json({ success: false, error: 'master_keyword_id and aisle_category_id are required.' });
+  }
+
+  try {
+    await ensureMasterKeywordSeedData();
+
+    const masterResult = await pool.query(
+      'SELECT aisle_category_id FROM aisle_master_keywords WHERE id = $1 LIMIT 1',
+      [masterId]
+    );
+    if (!masterResult.rows.length) {
+      return res.json({ success: false, error: 'Master keyword not found.' });
+    }
+
+    const primaryAisleCategoryId = Number(masterResult.rows[0].aisle_category_id || 0);
+    if (primaryAisleCategoryId && primaryAisleCategoryId === aisleCategoryId) {
+      return res.json({ success: false, error: 'Cannot remove primary aisle category from master.' });
+    }
+
+    await pool.query(
+      'DELETE FROM aisle_master_keyword_categories WHERE master_keyword_id = $1 AND aisle_category_id = $2',
+      [masterId, aisleCategoryId]
+    );
+
     return res.json({ success: true });
   } catch (err) {
     return res.json({ success: false, error: err.message });

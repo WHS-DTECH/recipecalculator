@@ -134,6 +134,15 @@
           <button id="addMemberBtn" class="mk-btn" type="button">Add Member</button>
         </div>
       </article>
+
+      <article class="mk-card">
+        <h2 class="mk-title">Link Aisle Category To Master</h2>
+        <div class="mk-row">
+          <select id="linkMasterSelect" class="mk-select"></select>
+          <select id="linkCategorySelect" class="mk-select"></select>
+          <button id="addLinkedCategoryBtn" class="mk-btn" type="button">Link Category</button>
+        </div>
+      </article>
     </section>
 
     <div id="masterStatus" class="mk-status"></div>
@@ -143,13 +152,14 @@
         <thead>
           <tr>
             <th style="width:170px;">Master</th>
-            <th style="width:150px;">Aisle Category</th>
+            <th style="width:150px;">Primary Aisle</th>
+            <th style="width:220px;">Linked Aisle Categories</th>
             <th>Member Keywords</th>
             <th style="width:250px;">Actions</th>
           </tr>
         </thead>
         <tbody id="mastersBody">
-          <tr><td colspan="4" class="mk-empty">Loading master keywords...</td></tr>
+          <tr><td colspan="5" class="mk-empty">Loading master keywords...</td></tr>
         </tbody>
       </table>
     </section>

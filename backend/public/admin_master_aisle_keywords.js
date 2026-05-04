@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', function () {
   const memberMasterSelect = document.getElementById('memberMasterSelect');
   const memberKeywordInput = document.getElementById('memberKeywordInput');
   const addMemberBtn = document.getElementById('addMemberBtn');
+  const linkMasterSelect = document.getElementById('linkMasterSelect');
+  const linkCategorySelect = document.getElementById('linkCategorySelect');
+  const addLinkedCategoryBtn = document.getElementById('addLinkedCategoryBtn');
   const masterStatus = document.getElementById('masterStatus');
   const mastersBody = document.getElementById('mastersBody');
 
@@ -39,12 +42,15 @@ document.addEventListener('DOMContentLoaded', function () {
   function renderCategorySelects() {
     const options = categories.map((cat) => `<option value="${escHtml(String(cat.id))}">${escHtml(cat.name || '')}</option>`).join('');
     masterCategorySelect.innerHTML = options || '<option value="">No categories</option>';
+    linkCategorySelect.innerHTML = options || '<option value="">No categories</option>';
   }
 
   function renderMasterPicker() {
-    memberMasterSelect.innerHTML = masters.length
+    const options = masters.length
       ? masters.map((m) => `<option value="${escHtml(String(m.id))}">${escHtml(m.name || '')}</option>`).join('')
       : '<option value="">No masters</option>';
+    memberMasterSelect.innerHTML = options;
+    linkMasterSelect.innerHTML = options;
   }
 
   function renderMastersTable() {
@@ -55,6 +61,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     mastersBody.innerHTML = masters.map((master) => {
       const memberList = Array.isArray(master.members) ? master.members : [];
+      const linkedCategories = Array.isArray(master.linked_categories) ? master.linked_categories : [];
       const membersHtml = memberList.length
         ? memberList.map((member) => {
             const memberId = member && member.id != null ? String(member.id) : '';
@@ -66,9 +73,31 @@ document.addEventListener('DOMContentLoaded', function () {
           }).join('')
         : '<span class="mk-empty">No members</span>';
 
+      const linkedHtml = linkedCategories.length
+        ? linkedCategories.map((linked) => {
+            const categoryId = linked && linked.id != null ? String(linked.id) : '';
+            const categoryName = linked && linked.name != null ? String(linked.name) : '';
+            const isPrimary = String(master.aisle_category_id) === String(categoryId);
+            if (isPrimary) {
+              return '<span class="mk-tag" style="border-color:#16a34a;background:#ecfdf3;color:#166534;">'
+                + escHtml(categoryName)
+                + ' (Primary)</span>';
+            }
+            return '<span class="mk-tag">'
+              + escHtml(categoryName)
+              + ' <button class="mk-btn danger delete-linked-category-btn" style="padding:0.08rem 0.28rem;font-size:0.7rem;margin-left:0.2rem;" data-master-id="'
+              + escHtml(String(master.id))
+              + '" data-category-id="'
+              + escHtml(categoryId)
+              + '">x</button>'
+              + '</span>';
+          }).join('')
+        : '<span class="mk-empty">No linked categories</span>';
+
       return '<tr>'
         + '<td><strong>' + escHtml(master.name || '') + '</strong></td>'
         + '<td>' + escHtml(master.aisle_category || '') + '</td>'
+        + '<td>' + linkedHtml + '</td>'
         + '<td>' + membersHtml + '</td>'
         + '<td>'
         + '<button class="mk-btn warn edit-master-btn" data-master-id="' + escHtml(String(master.id)) + '">Edit Master</button> '
@@ -137,6 +166,28 @@ document.addEventListener('DOMContentLoaded', function () {
     addMemberBtn.disabled = false;
   });
 
+  addLinkedCategoryBtn.addEventListener('click', async function () {
+    const masterId = Number(linkMasterSelect.value || 0);
+    const aisleCategoryId = Number(linkCategorySelect.value || 0);
+    if (!masterId || !aisleCategoryId) {
+      setStatus('Choose a master and aisle category to link.', 'error');
+      return;
+    }
+
+    addLinkedCategoryBtn.disabled = true;
+    try {
+      await requestJson('/api/aisle_keywords/masters/categories/add', {
+        method: 'POST',
+        body: JSON.stringify({ master_keyword_id: masterId, aisle_category_id: aisleCategoryId })
+      });
+      await loadMasters();
+      setStatus('Aisle category linked to master.', 'ok');
+    } catch (err) {
+      setStatus('Error: ' + (err.message || String(err)), 'error');
+    }
+    addLinkedCategoryBtn.disabled = false;
+  });
+
   mastersBody.addEventListener('click', async function (event) {
     const target = event.target;
     if (!target) return;
@@ -153,6 +204,25 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         await loadMasters();
         setStatus('Member keyword deleted from master group.', 'ok');
+      } catch (err) {
+        setStatus('Error: ' + (err.message || String(err)), 'error');
+      }
+      return;
+    }
+
+    if (target.classList.contains('delete-linked-category-btn')) {
+      const masterId = Number(target.getAttribute('data-master-id') || 0);
+      const categoryId = Number(target.getAttribute('data-category-id') || 0);
+      if (!masterId || !categoryId) return;
+      if (!window.confirm('Remove this linked aisle category from master?')) return;
+
+      try {
+        await requestJson('/api/aisle_keywords/masters/categories/delete', {
+          method: 'POST',
+          body: JSON.stringify({ master_keyword_id: masterId, aisle_category_id: categoryId })
+        });
+        await loadMasters();
+        setStatus('Linked aisle category removed from master.', 'ok');
       } catch (err) {
         setStatus('Error: ' + (err.message || String(err)), 'error');
       }
