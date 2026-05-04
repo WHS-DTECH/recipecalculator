@@ -1010,10 +1010,8 @@
         setStatus(bookingsStatus, 'Booking selection cleared.', '');
       });
 
-      // Default Date End = this week's Friday.
-      const defaultFriday = mondayOf(new Date());
-      defaultFriday.setDate(defaultFriday.getDate() + 4);
-      dateEndInput.value = toIsoDate(defaultFriday);
+      // Keep Date End empty initially so saved-list selector is not pre-filtered.
+      dateEndInput.value = '';
       renderBookings();
       loadSavedLists();
     })();
