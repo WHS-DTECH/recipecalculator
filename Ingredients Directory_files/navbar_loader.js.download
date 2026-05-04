@@ -1,6 +1,6 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260504b';
+  var ASSET_VERSION = '20260502f';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
     '/navbar.css'
@@ -57,11 +57,6 @@
         toggle: document.querySelector('.navbar-admin-toggle[aria-controls="planningDrawer"]'),
         drawer: document.getElementById('planningDrawer'),
         backdrop: document.getElementById('planningDrawerBackdrop')
-      },
-      {
-        toggle: document.querySelector('.navbar-admin-toggle[aria-controls="ftTeacherDrawer"]'),
-        drawer: document.getElementById('ftTeacherDrawer'),
-        backdrop: document.getElementById('ftTeacherDrawerBackdrop')
       }
     ].filter(function(cfg) {
       return cfg.toggle && cfg.drawer && cfg.backdrop;

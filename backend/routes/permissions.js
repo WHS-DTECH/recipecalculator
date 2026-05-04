@@ -60,6 +60,17 @@ const DEFAULT_ROLES = {
     planning: false,
     admin: false
   },
+  staff: {
+    inventory: true,
+    recipes: true,
+    add_recipes: false,
+    shopping: false,
+    booking: false,
+    food_truck: false,
+    ft_teacher: false,
+    planning: false,
+    admin: false
+  },
   public_access: {
     inventory: true,
     recipes: false,
@@ -185,8 +196,9 @@ router.get('/all', async (req, res) => {
         WHEN role_name = 'lead_teacher' THEN 2
         WHEN role_name = 'teacher' THEN 3
         WHEN role_name = 'technician' THEN 4
-        WHEN role_name = 'student' THEN 5
-        WHEN role_name = 'public_access' THEN 6
+        WHEN role_name = 'staff' THEN 5
+        WHEN role_name = 'student' THEN 6
+        WHEN role_name = 'public_access' THEN 7
         ELSE 99
       END
     `);
