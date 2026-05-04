@@ -629,12 +629,11 @@
 
         const teacherMap = new Map();
         foodTruckBookings.forEach((row) => {
-          const classCode = normalizeClassCode(row && row.class_name);
-          const teacherCode = classCode ? classTeacherCodeMap.get(classCode) : null;
+          const teacherCode = getTeacherCodeForBooking(row);
           if (!teacherCode) return; // skip bookings with no valid class→teacher mapping
           const key = `code:${teacherCode}`;
           if (!teacherMap.has(key)) {
-            const name = staffCodeNameMap.get(teacherCode) || teacherCode;
+            const name = getTeacherNameForCode(teacherCode) || teacherCode;
             teacherMap.set(key, name);
           }
         });
