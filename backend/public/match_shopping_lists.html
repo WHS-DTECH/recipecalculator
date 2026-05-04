@@ -74,9 +74,18 @@
       background: #1d4ed8;
       white-space: nowrap;
     }
-    .ms-btn.secondary { background: #475569; }
+    .ms-btn.secondary {
+      background: #334155;
+      color: #ffffff;
+      border: 1px solid #1f2937;
+    }
     .ms-btn.success { background: #15803d; }
-    .ms-btn:disabled { background: #94a3b8; cursor: default; }
+    .ms-btn:disabled {
+      background: #94a3b8;
+      color: #f8fafc;
+      cursor: default;
+      opacity: 1;
+    }
 
     .ms-status {
       min-height: 1.2rem;
@@ -224,8 +233,8 @@
               </select>
             </div>
             <div class="ms-field">
-              <label class="ms-label" for="dateEndingFilterInput">Date ending (optional)</label>
-              <input id="dateEndingFilterInput" class="ms-input" type="text" placeholder="1 May">
+              <label class="ms-label" for="dateEndInput">Date End</label>
+              <input id="dateEndInput" class="ms-input" type="text" placeholder="8 May">
             </div>
             <div style="padding-top:1.3rem;">
               <button id="clearFiltersBtn" type="button" class="ms-btn secondary">Clear</button>
@@ -237,10 +246,6 @@
 
         <div>
           <div class="ms-row">
-            <div class="ms-field">
-              <label class="ms-label" for="weekStartInput">Add Booking week start (Monday)</label>
-              <input id="weekStartInput" class="ms-input" type="date">
-            </div>
             <div style="padding-top:1.3rem;">
               <button id="loadWeekBookingsBtn" type="button" class="ms-btn">Load Week Bookings</button>
             </div>
@@ -323,9 +328,8 @@
       const refreshListsBtn = document.getElementById('refreshListsBtn');
       const termFilterSelect = document.getElementById('termFilterSelect');
       const weekFilterSelect = document.getElementById('weekFilterSelect');
-      const dateEndingFilterInput = document.getElementById('dateEndingFilterInput');
+      const dateEndInput = document.getElementById('dateEndInput');
       const clearFiltersBtn = document.getElementById('clearFiltersBtn');
-      const weekStartInput = document.getElementById('weekStartInput');
       const loadWeekBookingsBtn = document.getElementById('loadWeekBookingsBtn');
       const runCompareBtn = document.getElementById('runCompareBtn');
       const selectAllBookingsBtn = document.getElementById('selectAllBookingsBtn');
@@ -424,6 +428,12 @@
         const clean = String(text || '').trim();
         if (!clean) return null;
 
+        const slash = clean.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (slash) {
+          const date = new Date(Number(slash[3]), Number(slash[2]) - 1, Number(slash[1]));
+          return Number.isNaN(date.getTime()) ? null : date;
+        }
+
         const iso = clean.match(/^(\d{4})-(\d{2})-(\d{2})$/);
         if (iso) {
           const date = new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
@@ -476,27 +486,24 @@
           .trim();
       }
 
-      function setDefaultWeekStartFromSaved(list) {
+      function setDefaultDateEndFromSaved(list) {
         if (!list) return;
         const state = list.state || {};
         const stateDate = String(state.weekDate || '').trim();
-        const parsedFromState = parseDateEndingText(stateDate);
-        if (parsedFromState) {
-          weekStartInput.value = toIsoDate(mondayOf(parsedFromState));
+        if (stateDate) {
+          dateEndInput.value = stateDate;
           return;
         }
 
         const meta = parseWeekMetaFromText(String(list.weekInfo || ''));
-        const parsedFromMeta = parseDateEndingText(meta.weekDate);
-        if (parsedFromMeta) {
-          weekStartInput.value = toIsoDate(mondayOf(parsedFromMeta));
+        if (meta.weekDate) {
+          dateEndInput.value = meta.weekDate;
           return;
         }
 
         const filenameMeta = parseWeekMetaFromFilename(String(list.source_filename || ''));
-        const parsedFromFilename = parseDateEndingText(filenameMeta.weekDate);
-        if (parsedFromFilename) {
-          weekStartInput.value = toIsoDate(mondayOf(parsedFromFilename));
+        if (filenameMeta.weekDate) {
+          dateEndInput.value = filenameMeta.weekDate;
         }
       }
 
@@ -530,7 +537,7 @@
       function renderSavedOptions() {
         const termFilter = String(termFilterSelect.value || '').trim();
         const weekFilter = String(weekFilterSelect.value || '').trim();
-        const dateFilter = String(dateEndingFilterInput.value || '').trim().toLowerCase();
+        const dateFilter = String(dateEndInput.value || '').trim().toLowerCase();
 
         const filtered = savedLists.filter((list) => {
           const state = list.state || {};
@@ -634,20 +641,21 @@
       }
 
       async function loadWeekBookings() {
-        const weekStart = String(weekStartInput.value || '').trim();
-        if (!weekStart) {
-          setStatus(bookingsStatus, 'Choose a week start date first.', 'error');
+        const dateEndText = String(dateEndInput.value || '').trim();
+        const parsedDateEnd = parseDateEndingText(dateEndText);
+        if (!parsedDateEnd) {
+          setStatus(bookingsStatus, 'Enter Date End (for example: 8 May).', 'error');
           return;
         }
 
         loadWeekBookingsBtn.disabled = true;
-        setStatus(bookingsStatus, 'Loading Add Booking calendar bookings for selected week...', '');
+        setStatus(bookingsStatus, 'Loading Add Booking calendar bookings for Date End week...', '');
         try {
           const res = await requestJson('/api/bookings/all');
           const rows = Array.isArray(res.bookings) ? res.bookings : [];
-          const start = new Date(weekStart + 'T00:00:00');
-          const end = new Date(start);
-          end.setDate(start.getDate() + 6);
+          const end = new Date(parsedDateEnd.getFullYear(), parsedDateEnd.getMonth(), parsedDateEnd.getDate());
+          const start = new Date(end);
+          start.setDate(end.getDate() - 4);
 
           weekBookings = rows.filter((row) => {
             const rawDate = String(row.booking_date || '').slice(0, 10);
@@ -661,7 +669,7 @@
           weekBookings.forEach((row) => selectedBookingIds.add(Number(row.id || 0)));
 
           renderBookings();
-          setStatus(bookingsStatus, weekBookings.length + ' booking(s) found for that week.', weekBookings.length ? 'ok' : '');
+          setStatus(bookingsStatus, weekBookings.length + ' booking(s) found for Date End ' + dateEndText + '.', weekBookings.length ? 'ok' : '');
         } catch (err) {
           weekBookings = [];
           selectedBookingIds.clear();
@@ -971,7 +979,7 @@
         const id = Number(savedListSelect.value || 0);
         selectedSavedList = savedLists.find((s) => Number(s.id) === id) || null;
         if (selectedSavedList) {
-          setDefaultWeekStartFromSaved(selectedSavedList);
+          setDefaultDateEndFromSaved(selectedSavedList);
           setStatus(listsStatus, 'Selected list: ' + (selectedSavedList.title || 'Shopping List'), 'ok');
         }
       });
@@ -979,11 +987,11 @@
       refreshListsBtn.addEventListener('click', loadSavedLists);
       termFilterSelect.addEventListener('change', renderSavedOptions);
       weekFilterSelect.addEventListener('change', renderSavedOptions);
-      dateEndingFilterInput.addEventListener('input', renderSavedOptions);
+      dateEndInput.addEventListener('input', renderSavedOptions);
       clearFiltersBtn.addEventListener('click', () => {
         termFilterSelect.value = '';
         weekFilterSelect.value = '';
-        dateEndingFilterInput.value = '';
+        dateEndInput.value = '';
         renderSavedOptions();
       });
 
@@ -1002,8 +1010,10 @@
         setStatus(bookingsStatus, 'Booking selection cleared.', '');
       });
 
-      // Default week start = current week's Monday.
-      weekStartInput.value = toIsoDate(mondayOf(new Date()));
+      // Default Date End = this week's Friday.
+      const defaultFriday = mondayOf(new Date());
+      defaultFriday.setDate(defaultFriday.getDate() + 4);
+      dateEndInput.value = toIsoDate(defaultFriday);
       renderBookings();
       loadSavedLists();
     })();
