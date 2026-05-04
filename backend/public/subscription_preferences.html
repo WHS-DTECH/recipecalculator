@@ -34,6 +34,7 @@
             align-items: center;
             gap: 1rem;
             margin-bottom: 1.5rem;
+            cursor: pointer;
         }
         .toggle-switch {
             position: relative;
@@ -172,11 +173,11 @@
                 <div class="email-value" id="userEmailDisplay">Loading...</div>
             </div>
 
-            <div class="subscription-toggle">
-                <div class="toggle-switch" id="subscriptionToggle">
+            <div class="subscription-toggle" id="subscriptionToggleRow">
+                <div class="toggle-switch" id="subscriptionToggle" role="switch" aria-checked="false" tabindex="0" aria-label="Recipe email subscription toggle">
                     <div class="toggle-switch-inner"></div>
                 </div>
-                <div class="toggle-label" id="subscriptionLabel">Subscribed</div>
+                <div class="toggle-label" id="subscriptionLabel">Unsubscribed</div>
             </div>
 
             <div class="button-group">
@@ -206,6 +207,7 @@
             const statusEl = document.getElementById('statusMessage');
             const emailDisplay = document.getElementById('userEmailDisplay');
             const toggleSwitch = document.getElementById('subscriptionToggle');
+            const toggleRow = document.getElementById('subscriptionToggleRow');
             const toggleLabel = document.getElementById('subscriptionLabel');
             const saveBtn = document.getElementById('saveBtn');
             const logoutBtn = document.getElementById('logoutBtn');
@@ -240,9 +242,11 @@
             function updateToggleVisuals() {
                 if (currentSubscriptionStatus === true) {
                     toggleSwitch.classList.add('active');
+                    toggleSwitch.setAttribute('aria-checked', 'true');
                     toggleLabel.textContent = 'Subscribed';
                 } else {
                     toggleSwitch.classList.remove('active');
+                    toggleSwitch.setAttribute('aria-checked', 'false');
                     toggleLabel.textContent = 'Unsubscribed';
                 }
             }
@@ -277,7 +281,7 @@
                     .then(res => res.json())
                     .then(data => {
                         if (data.success) {
-                            currentSubscriptionStatus = data.isSubscribed;
+                            currentSubscriptionStatus = data.isSubscribed === true;
                             updateToggleVisuals();
                             saveBtn.disabled = false;
                         } else {
@@ -298,6 +302,13 @@
                 currentSubscriptionStatus = !currentSubscriptionStatus;
                 updateToggleVisuals();
                 saveBtn.disabled = false;
+            }
+
+            function handleToggleKeydown(event) {
+                if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault();
+                    toggleSubscription();
+                }
             }
 
             function savePreferences() {
@@ -354,7 +365,12 @@
             }
 
             // Event listeners
-            toggleSwitch.addEventListener('click', toggleSubscription);
+            toggleSwitch.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleSubscription();
+            });
+            toggleRow.addEventListener('click', toggleSubscription);
+            toggleSwitch.addEventListener('keydown', handleToggleKeydown);
             saveBtn.addEventListener('click', savePreferences);
             logoutBtn.addEventListener('click', logout);
 

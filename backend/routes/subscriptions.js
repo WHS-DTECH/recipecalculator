@@ -14,7 +14,7 @@ async function ensureSubscriptionSchema() {
       user_email VARCHAR(255) NOT NULL,
       user_name VARCHAR(255),
       user_type VARCHAR(50),
-      is_subscribed BOOLEAN DEFAULT true,
+      is_subscribed BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_email)
@@ -56,7 +56,7 @@ router.get('/status', async (req, res) => {
     const subscription = result.rows[0];
     res.json({
       success: true,
-      isSubscribed: subscription ? subscription.is_subscribed : null,
+      isSubscribed: subscription ? subscription.is_subscribed : false,
       userEmail: userEmail,
       userName: subscription ? subscription.user_name : null,
       userType: subscription ? subscription.user_type : null
