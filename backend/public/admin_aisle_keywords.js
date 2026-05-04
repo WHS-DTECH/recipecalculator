@@ -29,6 +29,9 @@ document.addEventListener('DOMContentLoaded', function() {
         } else {
           tbody.innerHTML = '<tr><td colspan="4">No aisle keywords found.</td></tr>';
         }
+
+        // Refresh categories after keywords load so newly-seeded categories (e.g. Meat) appear immediately.
+        loadCategories(addCategorySelect);
       });
   }
 
@@ -118,7 +121,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   };
 
-  // Initial load
-  loadCategories(addCategorySelect);
+  // Initial load: load keywords first so category seeds are in place before dropdown render.
   loadKeywords();
 });
