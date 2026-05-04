@@ -11,19 +11,26 @@ let transporter = null;
 function getEmailTransporter() {
   if (transporter) return transporter;
 
-  const gmailUser = String(process.env.GMAIL_USER || '').trim();
-  const gmailPass = String(process.env.GMAIL_APP_PASSWORD || '').trim();
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const user = String(process.env.SMTP_USER || '').trim();
+  const pass = String(process.env.SMTP_PASS || '').trim();
 
-  if (!gmailUser || !gmailPass) {
-    console.warn('[EMAIL] Gmail credentials not configured. Subscription emails disabled.');
+  if (!host || !user || !pass) {
+    console.warn('[EMAIL] SMTP credentials not configured. Subscription emails disabled.');
+    console.warn('[EMAIL] Please set SMTP_HOST, SMTP_USER, SMTP_PASS environment variables');
     return null;
   }
 
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
+
   transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host,
+    port,
+    secure,
     auth: {
-      user: gmailUser,
-      pass: gmailPass
+      user,
+      pass
     }
   });
 
@@ -75,7 +82,7 @@ async function notifySubscribersOfNewRecipe(recipe, recipeUrl) {
         );
 
         await emailer.sendMail({
-          from: process.env.GMAIL_USER,
+          from: String(process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim(),
           to: subscriber.user_email,
           subject: `🍳 New Recipe Available: ${recipeName}`,
           html: emailContent,

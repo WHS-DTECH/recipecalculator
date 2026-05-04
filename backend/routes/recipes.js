@@ -32,8 +32,19 @@ function authUserName(req) {
   return fallbackNameFromEmail(email) || 'Teacher';
 }
 
+async function ensureRecipeMetadataColumns() {
+  // Add recipe metadata columns for tracking upload info and planner usage
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS uploaded_by_email TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS uploaded_by_name TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS used_in_terms TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS used_in_years INTEGER[]');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS used_in_year_levels TEXT[]');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS uploaded_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP');
+}
+
 async function ensureFoodTruckModerationColumns() {
   if (foodTruckModerationColumnsEnsured) return;
+  await ensureRecipeMetadataColumns();
   await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS submitted_channel TEXT');
   await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderation_status TEXT');
   await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS moderation_comment TEXT');
@@ -1699,6 +1710,75 @@ router.get('/mine', async (req, res) => {
     res.json({ recipes: result.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/recipes/:id/teacher-details - Get recipe details with metadata (teachers only)
+router.get('/:id/teacher-details', async (req, res) => {
+  try {
+    const recipeId = Number(req.params.id);
+    if (!recipeId || recipeId < 1) {
+      return res.status(400).json({ success: false, error: 'Invalid recipe ID' });
+    }
+
+    // Check if user is authenticated teacher/lead_teacher
+    const userEmail = normalizeEmail(req.authUserEmail);
+    if (!userEmail) {
+      return res.status(401).json({ success: false, error: 'Not authenticated' });
+    }
+
+    const hasAccess = await hasFoodTruckTeacherAccess(userEmail);
+    if (!hasAccess) {
+      return res.status(403).json({ success: false, error: 'Not authorized. This page is for teachers only.' });
+    }
+
+    // Get recipe with metadata
+    const result = await pool.query(
+      `SELECT 
+         id, name, description, ingredients, ingredients_display, 
+         instructions, instructions_display, serving_size, url,
+         uploaded_by_email, uploaded_by_name, 
+         used_in_terms, used_in_years, used_in_year_levels,
+         uploaded_at,
+         submitted_channel, moderation_status
+       FROM recipes
+       WHERE id = $1`,
+      [recipeId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Recipe not found' });
+    }
+
+    const recipe = result.rows[0];
+    res.json({
+      success: true,
+      recipe: {
+        id: recipe.id,
+        name: recipe.name,
+        description: recipe.description,
+        ingredients: recipe.ingredients_display || recipe.ingredients,
+        instructions: recipe.instructions_display || recipe.instructions,
+        servingSize: recipe.serving_size,
+        url: recipe.url,
+        // Teacher-only metadata
+        uploadedBy: {
+          email: recipe.uploaded_by_email,
+          name: recipe.uploaded_by_name
+        },
+        usageHistory: {
+          terms: recipe.used_in_terms ? recipe.used_in_terms.split(',').map(t => t.trim()).filter(Boolean) : [],
+          years: recipe.used_in_years || [],
+          yearLevels: recipe.used_in_year_levels || []
+        },
+        uploadedAt: recipe.uploaded_at,
+        moderationStatus: recipe.moderation_status,
+        submittedChannel: recipe.submitted_channel
+      }
+    });
+  } catch (err) {
+    console.error('[RECIPES] Error fetching teacher recipe details:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
