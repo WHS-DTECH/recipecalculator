@@ -162,6 +162,31 @@
       border: 1px solid #dbe3ef;
       border-radius: 8px;
     }
+
+    .ms-results-highlight {
+      border: 2px solid #f59e0b;
+      background: linear-gradient(180deg, #fffbeb 0%, #fff7d6 100%);
+    }
+
+    .ms-subsection-title {
+      margin: 0 0 0.45rem;
+      color: #92400e;
+      font-size: 0.96rem;
+      font-weight: 800;
+    }
+
+    .ms-dual-table {
+      margin-top: 0.7rem;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.85rem;
+    }
+
+    @media (max-width: 980px) {
+      .ms-dual-table {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -247,7 +272,7 @@
       </div>
     </section>
 
-    <section class="ms-card" id="comparisonCard" hidden>
+    <section class="ms-card ms-results-highlight" id="comparisonCard" hidden>
       <div class="ms-summary">
         <div class="ms-pill"><span class="k">Book Items</span><span class="v" id="countBook">0</span></div>
         <div class="ms-pill"><span class="k">Teacher Items</span><span class="v" id="countTeacher">0</span></div>
@@ -255,19 +280,49 @@
         <div class="ms-pill"><span class="k">Different</span><span class="v" id="countDifferent">0</span></div>
       </div>
 
-      <div class="ms-compare-grid">
-        <div class="ms-col">
-          <h3>Book Shopping (Calculated)</h3>
-          <div id="bookColumn"></div>
+      <div>
+        <h3 class="ms-subsection-title">Recipe List Comparison</h3>
+        <div class="ms-dual-table">
+          <div class="ms-match-list">
+            <table class="ms-table">
+              <thead>
+                <tr>
+                  <th>Add Booking Recipes (Selected Week)</th>
+                </tr>
+              </thead>
+              <tbody id="bookRecipeBody"></tbody>
+            </table>
+          </div>
+          <div class="ms-match-list">
+            <table class="ms-table">
+              <thead>
+                <tr>
+                  <th>Teacher Uploaded Recipes</th>
+                </tr>
+              </thead>
+              <tbody id="teacherRecipeBody"></tbody>
+            </table>
+          </div>
         </div>
-        <div class="ms-col">
-          <h3>Teacher Uploaded List</h3>
-          <div id="teacherColumn"></div>
+
+        <div style="margin-top:0.7rem;">
+          <div class="ms-match-list">
+            <table class="ms-table">
+              <thead>
+                <tr>
+                  <th style="width:120px;">Result</th>
+                  <th>Add Booking Recipe</th>
+                  <th>Teacher Recipe</th>
+                </tr>
+              </thead>
+              <tbody id="recipeMatchBody"></tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      <div style="margin-top:1rem;">
-        <h3 style="margin:0 0 0.4rem;color:#1e3a8a;font-size:1rem;">Matched vs Different</h3>
+      <div style="margin-top:0.95rem;">
+        <h3 class="ms-subsection-title">Like-for-like Ingredient Comparison</h3>
         <div class="ms-match-list">
           <table class="ms-table">
             <thead>
@@ -281,6 +336,18 @@
           </table>
         </div>
       </div>
+
+      <div class="ms-compare-grid">
+        <div class="ms-col">
+          <h3>Book Shopping (Calculated)</h3>
+          <div id="bookColumn"></div>
+        </div>
+        <div class="ms-col">
+          <h3>Teacher Uploaded List</h3>
+          <div id="teacherColumn"></div>
+        </div>
+      </div>
+
     </section>
   </main>
 
@@ -311,6 +378,9 @@
       const bookColumn = document.getElementById('bookColumn');
       const teacherColumn = document.getElementById('teacherColumn');
       const matchTableBody = document.getElementById('matchTableBody');
+      const bookRecipeBody = document.getElementById('bookRecipeBody');
+      const teacherRecipeBody = document.getElementById('teacherRecipeBody');
+      const recipeMatchBody = document.getElementById('recipeMatchBody');
 
       let savedLists = [];
       let selectedSavedList = null;
@@ -425,6 +495,15 @@
         value = value.replace(/^\s*(kg|g|grams?|ml|l|litres?|liters?|cups?|tbsp|tsp)\b\s*/i, ' ');
         value = value.replace(/\s+/g, ' ').trim();
         return value;
+      }
+
+      function normalizeRecipeText(text) {
+        return String(text || '')
+          .toLowerCase()
+          .replace(/\.pdf$/i, '')
+          .replace(/[^a-z0-9\s]/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
       }
 
       function setDefaultWeekStartFromSaved(list) {
@@ -675,6 +754,97 @@
         };
       }
 
+      function buildRecipeComparison(bookingRecipeRows, teacherRecipeRows) {
+        const booking = (Array.isArray(bookingRecipeRows) ? bookingRecipeRows : []).map((item) => ({
+          raw: String(item || '').trim(),
+          key: normalizeRecipeText(item)
+        })).filter((item) => item.key);
+
+        const teacher = (Array.isArray(teacherRecipeRows) ? teacherRecipeRows : []).map((item) => ({
+          raw: String(item || '').trim(),
+          key: normalizeRecipeText(item)
+        })).filter((item) => item.key);
+
+        const teacherUnused = teacher.slice();
+        const bookingUnused = booking.slice();
+        const pairs = [];
+
+        for (let bi = bookingUnused.length - 1; bi >= 0; bi -= 1) {
+          const b = bookingUnused[bi];
+          const ti = teacherUnused.findIndex((t) => t.key === b.key);
+          if (ti >= 0) {
+            pairs.push({ booking: b.raw, teacher: teacherUnused[ti].raw, type: 'Same' });
+            bookingUnused.splice(bi, 1);
+            teacherUnused.splice(ti, 1);
+          }
+        }
+
+        for (let bi = bookingUnused.length - 1; bi >= 0; bi -= 1) {
+          const b = bookingUnused[bi];
+          const ti = teacherUnused.findIndex((t) => t.key.includes(b.key) || b.key.includes(t.key));
+          if (ti >= 0) {
+            pairs.push({ booking: b.raw, teacher: teacherUnused[ti].raw, type: 'Close' });
+            bookingUnused.splice(bi, 1);
+            teacherUnused.splice(ti, 1);
+          }
+        }
+
+        return {
+          pairs,
+          bookingOnly: bookingUnused,
+          teacherOnly: teacherUnused
+        };
+      }
+
+      function renderRecipeRows(tbody, rows) {
+        const unique = [];
+        const seen = new Set();
+        (Array.isArray(rows) ? rows : []).forEach((value) => {
+          const raw = String(value || '').trim();
+          if (!raw) return;
+          const key = raw.toLowerCase();
+          if (seen.has(key)) return;
+          seen.add(key);
+          unique.push(raw);
+        });
+
+        tbody.innerHTML = unique.length
+          ? unique.map((value) => `<tr><td>${escHtml(value)}</td></tr>`).join('')
+          : '<tr><td class="ms-muted">No recipe rows found.</td></tr>';
+      }
+
+      function renderRecipeMatches(result) {
+        const rows = [];
+
+        (result.pairs || []).forEach((pair) => {
+          rows.push('<tr>'
+            + `<td>${escHtml(pair.type)}</td>`
+            + `<td>${escHtml(pair.booking || '')}</td>`
+            + `<td>${escHtml(pair.teacher || '')}</td>`
+            + '</tr>');
+        });
+
+        (result.bookingOnly || []).forEach((item) => {
+          rows.push('<tr>'
+            + '<td>Add Booking Only</td>'
+            + `<td>${escHtml(item.raw || '')}</td>`
+            + '<td></td>'
+            + '</tr>');
+        });
+
+        (result.teacherOnly || []).forEach((item) => {
+          rows.push('<tr>'
+            + '<td>Teacher Only</td>'
+            + '<td></td>'
+            + `<td>${escHtml(item.raw || '')}</td>`
+            + '</tr>');
+        });
+
+        recipeMatchBody.innerHTML = rows.length
+          ? rows.join('')
+          : '<tr><td colspan="3" class="ms-muted">No recipe comparison rows.</td></tr>';
+      }
+
       function renderBookColumn(bookItems) {
         if (!bookItems.length) return '<div class="ms-muted">No calculated items found.</div>';
         const byCat = new Map();
@@ -770,17 +940,33 @@
           const teacherItems = flattenTeacherItems(selectedSavedList);
           const comparison = buildComparison(bookItems, teacherItems);
 
+          const selectedBookingRows = weekBookings.filter((row) => selectedBookingIds.has(Number(row.id || 0)));
+          const bookingRecipes = selectedBookingRows.map((row) => String(row && row.recipe || '').trim()).filter(Boolean);
+          const teacherRecipes = (selectedSavedList && selectedSavedList.state && Array.isArray(selectedSavedList.state.classRecipeRows))
+            ? selectedSavedList.state.classRecipeRows.map((row) => String(row && row.recipe || '').trim()).filter(Boolean)
+            : [];
+          const recipeComparison = buildRecipeComparison(bookingRecipes, teacherRecipes);
+
           countBook.textContent = String(bookItems.length);
           countTeacher.textContent = String(teacherItems.length);
           countMatched.textContent = String(comparison.matched.length);
           countDifferent.textContent = String(comparison.bookOnly.length + comparison.teacherOnly.length);
+
+          renderRecipeRows(bookRecipeBody, bookingRecipes);
+          renderRecipeRows(teacherRecipeBody, teacherRecipes);
+          renderRecipeMatches(recipeComparison);
 
           bookColumn.innerHTML = renderBookColumn(bookItems);
           teacherColumn.innerHTML = renderTeacherColumn(teacherItems);
           renderMatches(comparison);
           comparisonCard.hidden = false;
 
-          setStatus(bookingsStatus, 'Comparison complete.', 'ok');
+          if (recipeComparison.bookingOnly.length || recipeComparison.teacherOnly.length) {
+            setStatus(bookingsStatus, 'Comparison complete. Recipe list has differences between Add Booking and uploaded list.', 'ok');
+          } else {
+            setStatus(bookingsStatus, 'Comparison complete.', 'ok');
+          }
+
         } catch (err) {
           setStatus(bookingsStatus, 'Error: ' + (err.message || String(err)), 'error');
         }
