@@ -23,16 +23,17 @@
                 </div>
             </aside>
 
-            <section class="add-booking-main-panel">
+            <section class="add-booking-main-panel" aria-label="Booking calendar and form">
                 <h1>Add Booking</h1>
                 <div class="add-booking-toolbar">
-                    <div id="calendarWeekLabel" class="add-booking-week-label">Week of 02/02/26 to 06/02/26</div>
-                    <div class="add-booking-toolbar-actions">
-                        <button id="prevWeekBtn">&larr; Previous</button>
-                        <button id="todayBtn">Today</button>
-                        <button id="nextWeekBtn">Next &rarr;</button>
-                        <button id="printScheduleBtn" class="add-booking-print-btn">Print Schedule (A4)</button>
-                        <select id="scheduleViewModeSelect" title="Calendar cell display mode" style="padding:0.4rem 0.6rem;border:1px solid #90a4ae;border-radius:5px;font-size:0.92rem;background:#fff;cursor:pointer;">
+                    <div id="calendarWeekLabel" class="add-booking-week-label" aria-live="polite" aria-atomic="true">Week of 02/02/26 to 06/02/26</div>
+                    <div class="add-booking-toolbar-actions" role="toolbar" aria-label="Calendar navigation">
+                        <button id="prevWeekBtn" type="button" aria-label="Previous week">&larr; Previous</button>
+                        <button id="todayBtn" type="button">Today</button>
+                        <button id="nextWeekBtn" type="button" aria-label="Next week">Next &rarr;</button>
+                        <button id="printScheduleBtn" type="button" class="add-booking-print-btn">Print Schedule (A4)</button>
+                        <label for="scheduleViewModeSelect" class="sr-only">Calendar view mode</label>
+                        <select id="scheduleViewModeSelect" class="add-booking-view-mode-select" title="Calendar cell display mode">
                             <option value="class">Show: Class</option>
                             <option value="recipe">Show: Recipe</option>
                         </select>
