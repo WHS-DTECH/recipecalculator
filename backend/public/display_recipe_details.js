@@ -187,6 +187,34 @@ document.addEventListener('DOMContentLoaded', function() {
     return next.toString();
   }
 
+  function buildTeacherDetailsUrl(recipeId) {
+    const next = new URL('teacher_recipe_details.html', window.location.href);
+    next.searchParams.set('id', recipeId);
+    return next.toString();
+  }
+
+  async function toggleTeacherDetailsLink(recipeId) {
+    const teacherDetailsLink = document.getElementById('teacherDetailsLink');
+    if (!teacherDetailsLink) return;
+
+    teacherDetailsLink.style.display = 'none';
+    teacherDetailsLink.removeAttribute('href');
+
+    const normalizedRecipeId = String(recipeId || '').trim();
+    if (!normalizedRecipeId) return;
+
+    try {
+      const response = await fetch(`/api/recipes/${encodeURIComponent(normalizedRecipeId)}/teacher-details`, {
+        credentials: 'include'
+      });
+      if (!response.ok) return;
+      teacherDetailsLink.href = buildTeacherDetailsUrl(normalizedRecipeId);
+      teacherDetailsLink.style.display = 'inline-flex';
+    } catch (_) {
+      // Hide the link when the current user does not have teacher/admin access.
+    }
+  }
+
   function navigateToRecipe(recipeId) {
     window.location.href = buildRecipeUrl(recipeId);
   }
@@ -415,6 +443,7 @@ document.addEventListener('DOMContentLoaded', function() {
           }
 
           document.title = `${title} | Recipe Details`;
+          toggleTeacherDetailsLink(recipeNumber);
 
           loadRecipeVersions(recipeNumber);
 
