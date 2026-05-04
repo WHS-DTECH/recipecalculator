@@ -1,4 +1,13 @@
 
+function escHtml(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // --- Populate Staff Dropdown ---
 
 const userLocale = (navigator.languages && navigator.languages[0]) || navigator.language || undefined;
@@ -72,7 +81,15 @@ function parseLocalIsoDate(value) {
 }
 
 function parseBookingDate(value) {
-  return parseLocalIsoDate(value) || new Date(value);
+  const local = parseLocalIsoDate(value);
+  if (local) return local;
+  // Avoid UTC-offset date shift: try to extract YYYY-MM-DD before falling back to Date()
+  const datePart = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  if (datePart) {
+    const fromPart = parseLocalIsoDate(datePart[1]);
+    if (fromPart) return fromPart;
+  }
+  return new Date(value);
 }
 
 function getTopSelections(key) {
@@ -951,9 +968,9 @@ function renderTeacherTimetable(periods, teacherCode, date, weekday) {
   const rows = displayPeriods.map(p => {
     const classTokens = Array.isArray(p.classes) ? p.classes : expandTimetableClassTokens(p.classes);
     const classText = classTokens.length
-      ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${p.period}" data-class-token="${String(cls || '').replace(/"/g, '&quot;')}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;font-size:1rem;">${cls}</button>`).join('')
+      ? classTokens.map(cls => `<button type="button" class="timetable-class-chip" data-period="${escHtml(p.period)}" data-class-token="${escHtml(String(cls || ''))}" style="margin:0 0.25rem 0.25rem 0;padding:0.2rem 0.45rem;border:1px solid #90caf9;border-radius:12px;background:#e3f2fd;color:#0d47a1;cursor:pointer;font-size:1rem;">${escHtml(cls)}</button>`).join('')
       : '<span style="color:#999;">No class</span>';
-    return `<tr><td style="font-weight:bold;width:60px;">${p.displayPeriod || p.period}</td><td>${classText}</td></tr>`;
+    return `<tr><td style="font-weight:bold;width:60px;">${escHtml(p.displayPeriod || p.period)}</td><td>${classText}</td></tr>`;
   }).join('');
   body.innerHTML = `
     <table class="bookings-table" style="margin-top:0.5rem;">
@@ -1085,10 +1102,10 @@ function renderClassStudents(students = []) {
   if (classSizeInput) classSizeInput.value = students.length;
   tbody.innerHTML = students.map(s => `
     <tr>
-      <td>${s.id_number || ''}</td>
-      <td>${s.student_name || ''}</td>
-      <td>${s.form_class || ''}</td>
-      <td>${s.year_level || ''}</td>
+      <td>${escHtml(s.id_number)}</td>
+      <td>${escHtml(s.student_name)}</td>
+      <td>${escHtml(s.form_class)}</td>
+      <td>${escHtml(s.year_level)}</td>
     </tr>
   `).join('');
 }
@@ -1466,14 +1483,14 @@ function renderBookings(bookings = []) {
         formattedDate = b.booking_date;
       }
     }
-    return `<tr data-booking-id="${b.id}">
-      <td>${b.id || ''}</td>
-      <td>${formattedDate}</td>
-      <td>${b.period || ''}</td>
-      <td>${b.staff_name || ''}</td>
-      <td>${b.class_name || ''}</td>
-      <td>${b.class_size || ''}</td>
-      <td>${b.recipe_id ? `[ID: ${b.recipe_id}] ` : ''}${b.recipe || ''}</td>
+    return `<tr data-booking-id="${escHtml(String(b.id || ''))}">
+      <td>${escHtml(String(b.id || ''))}</td>
+      <td>${escHtml(formattedDate)}</td>
+      <td>${escHtml(String(b.period || ''))}</td>
+      <td>${escHtml(b.staff_name)}</td>
+      <td>${escHtml(b.class_name)}</td>
+      <td>${escHtml(String(b.class_size || ''))}</td>
+      <td>${b.recipe_id ? `[ID: ${escHtml(String(b.recipe_id))}] ` : ''}${escHtml(b.recipe)}</td>
       <td><button class='edit-btn'>Edit</button> <button class='delete-btn'>Delete</button></td>
     </tr>`;
   }).join('');

@@ -1073,7 +1073,7 @@ async function renderScheduleCalendar() {
     )].sort((a, b) => a.localeCompare(b));
 
     teacherSelect.innerHTML = '<option value="">-- Select teacher --</option>' +
-      teacherNames.map(name => `<option value="${name.replace(/"/g, '&quot;')}">${name}</option>`).join('');
+      teacherNames.map(name => `<option value="${escHtml(name)}">${escHtml(name)}</option>`).join('');
 
     if (selectBtn) {
       selectBtn.onclick = function() {
