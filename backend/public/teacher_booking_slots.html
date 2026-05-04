@@ -611,9 +611,13 @@
 
         const teacherMap = new Map();
         foodTruckBookings.forEach((row) => {
-          const key = getTeacherFilterKey(row);
+          const classCode = normalizeClassCode(row && row.class_name);
+          const teacherCode = classCode ? classTeacherCodeMap.get(classCode) : null;
+          if (!teacherCode) return; // skip bookings with no valid class→teacher mapping
+          const key = `code:${teacherCode}`;
           if (!teacherMap.has(key)) {
-            teacherMap.set(key, getTeacherLabel(row));
+            const name = staffCodeNameMap.get(teacherCode) || teacherCode;
+            teacherMap.set(key, name);
           }
         });
 
@@ -1025,7 +1029,8 @@
         updateUrlWithBooking(selectedId);
       });
 
-      Promise.all([loadReferenceData(), loadFoodTruckBookingList()])
+      loadReferenceData()
+        .then(() => loadFoodTruckBookingList())
         .then(() => refreshAll())
         .catch((err) => {
           setStatus(err.message || 'Failed to load Food Truck booking list.', true);
