@@ -65,6 +65,7 @@ function setNavbarAccountDisplay(user) {
   if (!link) return;
 
   if (user && user.email) {
+    link.classList.remove('is-google-login');
     const displayName = String(user.name || '').trim() || deriveNameFromEmail(user.email);
     setLinkNameWithRole(link, displayName, user.role);
     link.href = 'user_profile.html';
@@ -89,6 +90,7 @@ function setNavbarAccountDisplay(user) {
     return;
   }
 
+  link.classList.add('is-google-login');
   link.textContent = 'Login';
   link.href = 'google_login.html';
   try {

@@ -223,6 +223,22 @@
   transition: background-color 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
 }
 
+.navbar-user-link.is-google-login {
+  gap: 0.45rem;
+}
+
+.navbar-user-link.is-google-login::before {
+  content: '';
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  flex-shrink: 0;
+  background-image: url('https://www.gstatic.com/images/branding/product/1x/googleg_32dp.png');
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+
 .navbar-user-name {
   display: inline-flex;
   align-items: center;
@@ -453,12 +469,52 @@
 }
 
 @media (max-width: 600px) {
-  .navbar-account {
-    margin-left: auto;
+  .navbar-shell {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      'logo brand menu'
+      'account account account';
+    align-items: center;
+    gap: 0.25rem 0.35rem;
+    padding: 0.35rem 0.45rem 0.45rem;
+  }
+
+  .navbar-school-logo-link {
+    grid-area: logo;
   }
 
   .navbar-brand {
-    font-size: 0.9rem;
+    grid-area: brand;
+    font-size: 0.86rem;
+    padding: 0.24rem 0.22rem;
+  }
+
+  .navbar-mobile-toggle {
+    grid-area: menu;
+    justify-self: end;
+  }
+
+  .navbar-account {
+    grid-area: account;
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.38rem;
+    padding-top: 0.1rem;
+  }
+
+  .navbar-user-link,
+  .navbar-logout-btn {
+    min-height: 32px;
+    padding: 0.3rem 0.62rem;
+    font-size: 0.78rem;
+  }
+
+  .navbar-user-link.is-google-login::before {
+    width: 15px;
+    height: 15px;
   }
 
   .navbar-school-logo-link {
