@@ -120,6 +120,18 @@ function splitClasses(rawValues) {
   return out;
 }
 
+function classGroupKeyForPrefill(classToken) {
+  const normalized = normalizeClassToken(classToken);
+  if (!normalized) return '';
+  // Some timetable entries include room suffixes per period (for example
+  // 82B-MFOOD-22 in P1 and 82B-MFOOD-F in P2). Group them as one class.
+  const hyphenCount = (normalized.match(/-/g) || []).length;
+  if (hyphenCount >= 2) {
+    return normalized.replace(/-[^-]+$/, '');
+  }
+  return normalized;
+}
+
 // Update a booking by ID
 router.put('/:id', async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id } = req.body;
@@ -692,23 +704,26 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
           const classPeriodMap = new Map();
           for (const [period, classes] of Object.entries(periodClasses)) {
             for (const cls of classes) {
-              const key = normalizeClassToken(cls);
-              if (!key) continue;
-              const arr = classPeriodMap.get(key) || [];
-              arr.push(Number(period));
-              classPeriodMap.set(key, arr);
+              const token = normalizeClassToken(cls);
+              if (!token) continue;
+              const groupKey = classGroupKeyForPrefill(token);
+              if (!groupKey) continue;
+              const arr = classPeriodMap.get(groupKey) || [];
+              arr.push({ period: Number(period), classToken: token });
+              classPeriodMap.set(groupKey, arr);
             }
           }
 
-          for (const [classTokenKey, periods] of classPeriodMap.entries()) {
-            if (periods.length < 2) {
-              stats.skippedNotDouble += periods.length;
+          for (const [classGroupKey, periodEntries] of classPeriodMap.entries()) {
+            const uniquePeriods = Array.from(new Set(periodEntries.map((entry) => Number(entry.period))));
+            if (uniquePeriods.length < 2) {
+              stats.skippedNotDouble += uniquePeriods.length;
               continue;
             }
 
-            const stream = inferStreamFromClassToken(classTokenKey);
+            const stream = inferStreamFromClassToken(classGroupKey);
             if (!stream) {
-              stats.skippedNonFood += periods.length;
+              stats.skippedNonFood += uniquePeriods.length;
               continue;
             }
 
@@ -716,7 +731,7 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
             const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
             const planner = plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
             if (!planner) {
-              stats.skippedNoPlanner += periods.length;
+              stats.skippedNoPlanner += uniquePeriods.length;
               continue;
             }
 
@@ -724,9 +739,11 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
             const staffId = staffRow ? String(staffRow.id || '') : '';
             const staffName = buildTeacherName(staffRow, teacherCode);
 
-            for (const period of periods) {
+            for (const period of uniquePeriods) {
+              const matchingEntry = periodEntries.find((entry) => Number(entry.period) === Number(period));
+              const classTokenForBooking = matchingEntry ? matchingEntry.classToken : classGroupKey;
               stats.candidates += 1;
-              const slotKey = `${dateIso}|${period}|${classTokenKey}`;
+              const slotKey = `${dateIso}|${period}|${classTokenForBooking}`;
               if (existingSlots.has(slotKey)) {
                 stats.skippedExisting += 1;
                 continue;
@@ -735,7 +752,7 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
               const booking = {
                 staff_id: staffId,
                 staff_name: staffName,
-                class_name: classTokenKey,
+                class_name: classTokenForBooking,
                 booking_date: dateIso,
                 period: String(period),
                 recipe: planner.recipe,
