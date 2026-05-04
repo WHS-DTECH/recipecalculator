@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Browse Practicals</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .browse-practicals-page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 1rem 1.25rem 2rem;
+        }
+        .browse-practicals-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .browse-practicals-week-label {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #374151;
+            margin-right: auto;
+        }
+        @media (max-width: 600px) {
+            .browse-practicals-toolbar {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .browse-practicals-week-label {
+                margin-right: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+
+    <div class="browse-practicals-page">
+        <h1>Browse Practicals</h1>
+
+        <div class="browse-practicals-toolbar">
+            <div id="calendarWeekLabel" class="browse-practicals-week-label">Loading&hellip;</div>
+            <button id="prevWeekBtn">&larr; Previous</button>
+            <button id="todayBtn">Today</button>
+            <button id="nextWeekBtn">Next &rarr;</button>
+            <button id="printScheduleBtn" class="add-booking-print-btn">Print Schedule (A4)</button>
+            <select id="scheduleViewModeSelect" title="Calendar cell display mode" style="padding:0.4rem 0.6rem;border:1px solid #90a4ae;border-radius:5px;font-size:0.92rem;background:#fff;cursor:pointer;">
+                <option value="class">Show: Class</option>
+                <option value="recipe">Show: Recipe</option>
+            </select>
+        </div>
+
+        <div class="calendar-wrap add-booking-calendar-wrap">
+            <table class="calendar-table" id="scheduleCalendarTable"></table>
+        </div>
+    </div>
+
+    <script>
+        window.bookingPageLabel = 'Browse Practicals';
+    </script>
+    <script src="schedule_calendar.js"></script>
+</body>
+</html>
