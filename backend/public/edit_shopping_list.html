@@ -409,6 +409,8 @@
       let currentSavedListId = null;
       let currentSourceFilename = '';
       let allSavedLists = [];
+      let allFoodTruckBookings = null;
+      let autoPopulateInFlight = false;
 
       function escHtml(str) {
         return String(str == null ? '' : str)
@@ -518,6 +520,162 @@
         var date = new Date(value);
         if (Number.isNaN(date.getTime())) return '';
         return date.toLocaleString();
+      }
+
+      function toIsoDate(date) {
+        var year = date.getFullYear();
+        var month = String(date.getMonth() + 1).padStart(2, '0');
+        var day = String(date.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      }
+
+      function parseWeekEndingDate(text) {
+        var input = String(text || '').trim();
+        if (!input) return null;
+
+        var iso = input.match(/(\d{4}-\d{2}-\d{2})/);
+        if (iso) {
+          var isoDate = new Date(iso[1] + 'T00:00:00');
+          return Number.isNaN(isoDate.getTime()) ? null : isoDate;
+        }
+
+        var compact = input.match(/(\d{1,2})\s*([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
+        if (!compact) return null;
+
+        var day = Number(compact[1]);
+        var monthName = String(compact[2] || '').toLowerCase();
+        var monthMap = {
+          jan: 0, january: 0,
+          feb: 1, february: 1,
+          mar: 2, march: 2,
+          apr: 3, april: 3,
+          may: 4,
+          jun: 5, june: 5,
+          jul: 6, july: 6,
+          aug: 7, august: 7,
+          sep: 8, sept: 8, september: 8,
+          oct: 9, october: 9,
+          nov: 10, november: 10,
+          dec: 11, december: 11
+        };
+        if (!Number.isFinite(day) || monthMap[monthName] == null) return null;
+
+        var year = compact[3] ? Number(compact[3]) : (new Date()).getFullYear();
+        var parsed = new Date(year, monthMap[monthName], day);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      function weekdayLabel(dateObj) {
+        var names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        return names[dateObj.getDay()] || '';
+      }
+
+      function normalizeSummaryRows(rows) {
+        return (Array.isArray(rows) ? rows : []).map(function (row) {
+          var classInfo = String(row && row.classInfo || '').trim().replace(/\s+/g, ' ').toLowerCase();
+          var recipe = String(row && row.recipe || '').trim().replace(/\s+/g, ' ').toLowerCase();
+          return classInfo + '|' + recipe;
+        });
+      }
+
+      function hasSummaryDifference(beforeRows, afterRows) {
+        var a = normalizeSummaryRows(beforeRows);
+        var b = normalizeSummaryRows(afterRows);
+        if (a.length !== b.length) return true;
+        for (var i = 0; i < a.length; i += 1) {
+          if (a[i] !== b[i]) return true;
+        }
+        return false;
+      }
+
+      async function fetchFoodTruckBookings() {
+        if (Array.isArray(allFoodTruckBookings)) return allFoodTruckBookings;
+        var data = await requestJson('/api/bookings/all?planner_stream=Food%20Truck');
+        allFoodTruckBookings = Array.isArray(data.bookings) ? data.bookings : [];
+        return allFoodTruckBookings;
+      }
+
+      function deriveWeekRangeFromState(state) {
+        var endingDate = parseWeekEndingDate(state && state.weekDate);
+        if (!endingDate) return null;
+
+        var friday = new Date(endingDate.getFullYear(), endingDate.getMonth(), endingDate.getDate());
+        var monday = new Date(friday);
+        monday.setDate(friday.getDate() - 4);
+        monday.setHours(0, 0, 0, 0);
+        friday.setHours(0, 0, 0, 0);
+
+        return { monday: monday, friday: friday };
+      }
+
+      function buildClassRecipeRowsFromBookings(bookings, monday, friday) {
+        var startIso = toIsoDate(monday);
+        var endIso = toIsoDate(friday);
+
+        var rows = bookings
+          .filter(function (row) {
+            var dateKey = String(row && row.booking_date || '').slice(0, 10);
+            if (!dateKey) return false;
+            return dateKey >= startIso && dateKey <= endIso;
+          })
+          .sort(function (a, b) {
+            var dateA = String(a && a.booking_date || '');
+            var dateB = String(b && b.booking_date || '');
+            if (dateA !== dateB) return dateA.localeCompare(dateB);
+            var periodA = Number(a && a.period || 0);
+            var periodB = Number(b && b.period || 0);
+            if (periodA !== periodB) return periodA - periodB;
+            return String(a && a.class_name || '').localeCompare(String(b && b.class_name || ''));
+          })
+          .map(function (row) {
+            var dateKey = String(row && row.booking_date || '').slice(0, 10);
+            var day = new Date(dateKey + 'T00:00:00');
+            var dayLabel = Number.isNaN(day.getTime()) ? '' : weekdayLabel(day);
+            var className = String(row && row.class_name || '').trim();
+            return {
+              classInfo: (dayLabel ? (dayLabel + ':  ') : '') + className,
+              recipe: String(row && row.recipe || '').trim()
+            };
+          });
+
+        return rows;
+      }
+
+      async function autoPopulateSummaryFromCalendar() {
+        if (autoPopulateInFlight) return;
+        if (!shoppingState.term || !shoppingState.week || !shoppingState.weekDate) return;
+
+        var range = deriveWeekRangeFromState(shoppingState);
+        if (!range) {
+          setStatus('Set a valid Date ending value (for example: 1 May) to auto-load Classes & Recipes.', '');
+          return;
+        }
+
+        autoPopulateInFlight = true;
+        try {
+          var bookings = await fetchFoodTruckBookings();
+          var generatedRows = buildClassRecipeRowsFromBookings(bookings, range.monday, range.friday);
+          if (!generatedRows.length) {
+            setStatus('No Add Booking classes were found for the selected week range.', '');
+            autoPopulateInFlight = false;
+            return;
+          }
+
+          var previousRows = Array.isArray(shoppingState.classRecipeRows) ? shoppingState.classRecipeRows.slice() : [];
+          var changed = hasSummaryDifference(previousRows, generatedRows);
+
+          shoppingState.classRecipeRows = generatedRows;
+          renderSummaryTable();
+
+          if (changed && previousRows.length) {
+            window.alert('Classes & Recipes were updated from Add Booking calendar and differences were found. Please review the changes in the table.');
+          }
+
+          setStatus('Classes & Recipes auto-populated from Add Booking for week ending ' + shoppingState.weekDate + '.', 'ok');
+        } catch (err) {
+          setStatus('Could not auto-populate Classes & Recipes: ' + (err.message || String(err)), 'error');
+        }
+        autoPopulateInFlight = false;
       }
 
       function formatSavedListOption(list) {
@@ -789,16 +947,19 @@
       slTermSelect.addEventListener('change', function () {
         shoppingState.term = slTermSelect.value;
         shoppingState.weekInfo = buildWeekInfo(shoppingState);
+        autoPopulateSummaryFromCalendar();
       });
 
       slWeekSelect.addEventListener('change', function () {
         shoppingState.week = slWeekSelect.value;
         shoppingState.weekInfo = buildWeekInfo(shoppingState);
+        autoPopulateSummaryFromCalendar();
       });
 
       slWeekDateInput.addEventListener('change', function () {
         shoppingState.weekDate = slWeekDateInput.value;
         shoppingState.weekInfo = buildWeekInfo(shoppingState);
+        autoPopulateSummaryFromCalendar();
       });
 
       slGrid.addEventListener('input', handleGridInput);
