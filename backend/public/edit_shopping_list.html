@@ -1,0 +1,721 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Edit Shopping List</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .sl-page {
+      max-width: 1260px;
+      margin: 24px auto 60px;
+      padding: 0 1rem;
+    }
+    .sl-card {
+      background: #fff;
+      border: 1px solid #d8dee6;
+      border-radius: 14px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.07);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+    }
+    .sl-card h2 {
+      margin: 0 0 0.25rem;
+      font-size: 1.2rem;
+      color: #1f2937;
+    }
+    .sl-card-sub {
+      font-size: 0.91rem;
+      color: #4a5568;
+      margin-bottom: 1rem;
+    }
+    .sl-upload-row,
+    .sl-toolbar,
+    .sl-header-row {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .sl-upload-row input[type="file"] {
+      flex: 1 1 260px;
+      border: 1px solid #d0d7de;
+      border-radius: 7px;
+      padding: 0.45rem 0.7rem;
+      font-size: 0.97rem;
+    }
+    .sl-btn {
+      background: #1976d2;
+      color: #fff;
+      border: none;
+      border-radius: 7px;
+      padding: 0.5rem 1rem;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .sl-btn:hover { background: #1565c0; }
+    .sl-btn:disabled { background: #90a4ae; cursor: default; }
+    .sl-btn-secondary { background: #475569; }
+    .sl-btn-secondary:hover { background: #334155; }
+    .sl-btn-danger { background: #dc2626; }
+    .sl-btn-danger:hover { background: #b91c1c; }
+    .sl-status {
+      margin-top: 0.7rem;
+      font-size: 0.95rem;
+      color: #374151;
+      min-height: 1.4em;
+    }
+    .sl-status.error { color: #c62828; }
+    .sl-status.ok { color: #2e7d32; }
+    .sl-output { display: none; }
+    .sl-output.visible { display: block; }
+    .sl-doc-header {
+      background: #1e3a5f;
+      color: #fff;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1rem;
+    }
+    .sl-header-input {
+      border: 1px solid rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.08);
+      color: #fff;
+      border-radius: 8px;
+      padding: 0.55rem 0.7rem;
+      font-size: 1rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .sl-header-input::placeholder { color: rgba(255,255,255,0.7); }
+    .sl-header-title { flex: 1 1 460px; }
+    .sl-header-week { flex: 1 1 280px; }
+    .sl-toolbar {
+      margin-bottom: 1rem;
+      justify-content: space-between;
+    }
+    .sl-toolbar-group {
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .sl-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+    @media (max-width: 760px) {
+      .sl-grid { grid-template-columns: 1fr; }
+    }
+    .sl-category-card {
+      background: #fff;
+      border: 1px solid #d0d7de;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 18px rgba(15,23,42,0.06);
+    }
+    .sl-category-head {
+      background: #1976d2;
+      color: #fff;
+      padding: 0.5rem 0.75rem;
+      display: flex;
+      gap: 0.6rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .sl-category-title-input {
+      flex: 1 1 auto;
+      border: 1px solid rgba(255,255,255,0.4);
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      border-radius: 7px;
+      padding: 0.42rem 0.6rem;
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+    .sl-category-title-input::placeholder { color: rgba(255,255,255,0.7); }
+    .sl-category-body { padding: 0.75rem; }
+    .sl-section {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.65rem;
+      margin-bottom: 0.75rem;
+      background: #f8fbff;
+    }
+    .sl-section-row {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+      margin-bottom: 0.55rem;
+      align-items: center;
+    }
+    .sl-field {
+      border: 1px solid #cbd5e1;
+      border-radius: 7px;
+      padding: 0.45rem 0.6rem;
+      font-size: 0.9rem;
+      box-sizing: border-box;
+      width: 100%;
+      background: #fff;
+    }
+    .sl-day-input { flex: 1 1 160px; font-weight: 700; }
+    .sl-sublabel-input { flex: 1 1 160px; }
+    .sl-items-textarea {
+      min-height: 92px;
+      resize: vertical;
+      line-height: 1.45;
+      font-family: inherit;
+    }
+    .sl-section-actions,
+    .sl-category-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .sl-mini-btn {
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: #1e293b;
+      border-radius: 6px;
+      padding: 0.32rem 0.55rem;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .sl-mini-btn:hover { background: #eff6ff; }
+    .sl-mini-btn-danger { border-color: #fca5a5; color: #991b1b; }
+    .sl-summary-section { margin-bottom: 1.25rem; }
+    .sl-summary-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #1e3a5f;
+      margin: 0 0 0.6rem;
+    }
+    .sl-summary-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+    .sl-summary-table th {
+      background: #1976d2;
+      color: #fff;
+      padding: 0.45rem 0.75rem;
+      text-align: left;
+      font-size: 0.85rem;
+    }
+    .sl-summary-table td {
+      border: 1px solid #e2e8f0;
+      padding: 0.45rem 0.55rem;
+      vertical-align: top;
+      background: #fff;
+    }
+    .sl-empty-note {
+      color: #64748b;
+      font-style: italic;
+      font-size: 0.9rem;
+    }
+    @media print {
+      #navbar-include,
+      .sl-card:first-of-type,
+      .sl-toolbar .sl-btn,
+      .sl-mini-btn,
+      .sl-category-actions,
+      .sl-section-actions {
+        display: none !important;
+      }
+      .sl-page { margin: 0; padding: 0.5rem; }
+      .sl-grid { grid-template-columns: 1fr 1fr; }
+      .sl-doc-header,
+      .sl-category-head,
+      .sl-summary-table th {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .sl-doc-header { background: #1e3a5f !important; color: #fff !important; }
+      .sl-category-head { background: #1976d2 !important; color: #fff !important; }
+      .sl-header-input,
+      .sl-category-title-input,
+      .sl-field {
+        border: none !important;
+        background: transparent !important;
+        color: inherit !important;
+        padding: 0 !important;
+      }
+      .sl-section { break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+
+  <div class="sl-page">
+    <h1 style="margin:0 0 0.25rem;color:#1f2937;font-size:1.5rem;">Edit Shopping List</h1>
+    <p style="color:#4a5568;font-size:0.95rem;margin:0 0 1.25rem;">Load the teacher shopping list, edit the printed layout, and print the final version for the technician.</p>
+
+    <div class="sl-card">
+      <h2>Load or Start a List</h2>
+      <div class="sl-card-sub">Load an existing .docx shopping list, or start with a blank editable layout.</div>
+      <div class="sl-upload-row">
+        <input type="file" id="docxFileInput" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-label="Select shopping list .docx file">
+        <button type="button" id="parseBtn" class="sl-btn" disabled>Load List</button>
+        <button type="button" id="blankBtn" class="sl-btn sl-btn-secondary">Start Blank</button>
+      </div>
+      <div id="parseStatus" class="sl-status"></div>
+    </div>
+
+    <div id="slOutput" class="sl-output">
+      <div class="sl-doc-header">
+        <div class="sl-header-row">
+          <div class="sl-header-title">
+            <input id="slDocTitleInput" class="sl-header-input" type="text" placeholder="Shopping list title">
+          </div>
+          <div class="sl-header-week sl-header-row">
+            <input id="slDocWeekInput" class="sl-header-input" type="text" placeholder="Week / ending date">
+          </div>
+        </div>
+      </div>
+
+      <div class="sl-toolbar">
+        <div class="sl-toolbar-group">
+          <strong style="font-size:1rem;color:#1e3a5f;">Edit Shopping List</strong>
+          <span class="sl-empty-note">One item per line inside each section.</span>
+        </div>
+        <div class="sl-toolbar-group">
+          <button type="button" id="addCategoryBtn" class="sl-btn">Add Category</button>
+          <button type="button" id="addSummaryRowBtn" class="sl-btn sl-btn-secondary">Add Class / Recipe Row</button>
+          <button type="button" id="printBtn" class="sl-btn sl-btn-secondary">Print</button>
+        </div>
+      </div>
+
+      <div id="slGrid" class="sl-grid"></div>
+
+      <div id="slSummarySection" class="sl-summary-section">
+        <div class="sl-summary-title">Classes &amp; Recipes</div>
+        <table class="sl-summary-table">
+          <thead>
+            <tr>
+              <th>Name and date of class</th>
+              <th>Recipe being made</th>
+              <th style="width:88px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="slSummaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/navbar_loader.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+      const DAY_RE = /^(monday|tuesday|wednesday|thursday|friday)\b/i;
+
+      const docxFileInput = document.getElementById('docxFileInput');
+      const parseBtn = document.getElementById('parseBtn');
+      const blankBtn = document.getElementById('blankBtn');
+      const parseStatus = document.getElementById('parseStatus');
+      const slOutput = document.getElementById('slOutput');
+      const slGrid = document.getElementById('slGrid');
+      const slSummaryBody = document.getElementById('slSummaryBody');
+      const printBtn = document.getElementById('printBtn');
+      const addCategoryBtn = document.getElementById('addCategoryBtn');
+      const addSummaryRowBtn = document.getElementById('addSummaryRowBtn');
+      const slDocTitleInput = document.getElementById('slDocTitleInput');
+      const slDocWeekInput = document.getElementById('slDocWeekInput');
+
+      let shoppingState = createBlankState();
+
+      function escHtml(str) {
+        return String(str == null ? '' : str)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function createBlankSection(label) {
+        return { label: label || 'General', sublabel: '', items: [] };
+      }
+
+      function createBlankCategory(name) {
+        return { name: name || 'New Category', sections: [createBlankSection('General')] };
+      }
+
+      function createBlankState() {
+        return {
+          title: 'Shopping List',
+          weekInfo: '',
+          columns: [[], []],
+          classRecipeRows: []
+        };
+      }
+
+      function paraText(p) {
+        return Array.from(p.getElementsByTagNameNS(WNS, 't')).map(function (t) { return t.textContent; }).join('');
+      }
+
+      function cellText(tc) {
+        return Array.from(tc.getElementsByTagNameNS(WNS, 'p')).map(paraText).filter(Boolean).join('\n');
+      }
+
+      function isParaBold(p) {
+        var runs = Array.from(p.getElementsByTagNameNS(WNS, 'r'));
+        if (!runs.length) return false;
+        var boldCount = 0;
+        runs.forEach(function (r) {
+          var rpr = r.getElementsByTagNameNS(WNS, 'rPr')[0];
+          if (!rpr) return;
+          var b = rpr.getElementsByTagNameNS(WNS, 'b')[0];
+          if (!b) return;
+          var val = b.getAttributeNS(WNS, 'val');
+          if (val !== 'false' && val !== '0') boldCount += 1;
+        });
+        return boldCount > 0 && boldCount >= Math.ceil(runs.length / 2);
+      }
+
+      function isDayHeading(text) {
+        return DAY_RE.test(String(text || '').trim());
+      }
+
+      function isSubLabel(text) {
+        var t = String(text || '').trim();
+        return t.length < 60 && /[:]$/.test(t) && !DAY_RE.test(t);
+      }
+
+      function parseCellCategories(tc) {
+        var paras = Array.from(tc.getElementsByTagNameNS(WNS, 'p'));
+        var categories = [];
+        var currentCat = null;
+        var currentSection = null;
+
+        paras.forEach(function (p) {
+          var trimmed = paraText(p).trim();
+          if (!trimmed) return;
+
+          if (isParaBold(p)) {
+            currentSection = createBlankSection('General');
+            currentCat = { name: trimmed, sections: [currentSection] };
+            categories.push(currentCat);
+            return;
+          }
+
+          if (!currentCat) return;
+
+          if (isDayHeading(trimmed)) {
+            var dayLabel = trimmed.replace(/\s*[:]\s*$/, '').trim();
+            dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
+            currentSection = createBlankSection(dayLabel);
+            currentCat.sections.push(currentSection);
+            return;
+          }
+
+          if (isSubLabel(trimmed)) {
+            var parentLabel = currentSection ? currentSection.label : 'General';
+            currentSection = { label: parentLabel, sublabel: trimmed.replace(/[:]\s*$/, '').trim(), items: [] };
+            currentCat.sections.push(currentSection);
+            return;
+          }
+
+          if (!currentSection) {
+            currentSection = createBlankSection('General');
+            currentCat.sections.push(currentSection);
+          }
+          currentSection.items.push(trimmed);
+        });
+
+        return categories;
+      }
+
+      function parseDocx(xmlStr) {
+        var doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
+        var tables = Array.from(doc.getElementsByTagNameNS(WNS, 'tbl'));
+        if (!tables.length) {
+          return { error: 'No tables found in document. Please check the file format.' };
+        }
+
+        var title = '';
+        var weekInfo = '';
+        var leftCol = [];
+        var rightCol = [];
+        var classRecipeRows = [];
+        var mainRows = Array.from(tables[0].getElementsByTagNameNS(WNS, 'tr'));
+
+        mainRows.forEach(function (row, rowIdx) {
+          var cells = Array.from(row.getElementsByTagNameNS(WNS, 'tc'));
+          if (rowIdx === 0) {
+            var allParas = [];
+            cells.forEach(function (tc) {
+              Array.from(tc.getElementsByTagNameNS(WNS, 'p')).forEach(function (p) { allParas.push(p); });
+            });
+            allParas.forEach(function (p) {
+              var text = paraText(p).trim();
+              if (!text) return;
+              if (isParaBold(p) && !title) title = text;
+              else if (!weekInfo) weekInfo = text;
+            });
+            return;
+          }
+
+          cells.forEach(function (tc, colIdx) {
+            var cats = parseCellCategories(tc);
+            if (!cats.length) return;
+            (colIdx === 0 ? leftCol : rightCol).push.apply(colIdx === 0 ? leftCol : rightCol, cats);
+          });
+        });
+
+        if (tables.length >= 2) {
+          Array.from(tables[1].getElementsByTagNameNS(WNS, 'tr')).forEach(function (row, rowIdx) {
+            if (rowIdx === 0) return;
+            var cells = Array.from(row.getElementsByTagNameNS(WNS, 'tc'));
+            var classInfo = cells[0] ? cellText(cells[0]).trim() : '';
+            var recipe = cells[1] ? cellText(cells[1]).trim() : '';
+            if (classInfo || recipe) {
+              classRecipeRows.push({ classInfo: classInfo, recipe: recipe });
+            }
+          });
+        }
+
+        return { title: title, weekInfo: weekInfo, leftCol: leftCol, rightCol: rightCol, classRecipeRows: classRecipeRows };
+      }
+
+      function normalizeParsed(parsed) {
+        return {
+          title: parsed.title || 'Shopping List',
+          weekInfo: parsed.weekInfo || '',
+          columns: [parsed.leftCol || [], parsed.rightCol || []],
+          classRecipeRows: Array.isArray(parsed.classRecipeRows) ? parsed.classRecipeRows.slice() : []
+        };
+      }
+
+      function ensureSectionItems(section) {
+        return Array.isArray(section.items) ? section.items : [];
+      }
+
+      function renderSummaryTable() {
+        if (!shoppingState.classRecipeRows.length) {
+          slSummaryBody.innerHTML = '<tr><td colspan="3" class="sl-empty-note">No class / recipe rows yet.</td></tr>';
+          return;
+        }
+
+        slSummaryBody.innerHTML = shoppingState.classRecipeRows.map(function (row, rowIndex) {
+          return '<tr>'
+            + '<td><input class="sl-field sl-summary-input" data-summary-index="' + rowIndex + '" data-summary-field="classInfo" value="' + escHtml(row.classInfo || '') + '" placeholder="Name and date of class"></td>'
+            + '<td><input class="sl-field sl-summary-input" data-summary-index="' + rowIndex + '" data-summary-field="recipe" value="' + escHtml(row.recipe || '') + '" placeholder="Recipe being made"></td>'
+            + '<td><button type="button" class="sl-mini-btn sl-mini-btn-danger" data-remove-summary="' + rowIndex + '">Remove</button></td>'
+            + '</tr>';
+        }).join('');
+      }
+
+      function renderCategoryCard(category, columnIndex, categoryIndex) {
+        var sectionsHtml = (category.sections || []).map(function (section, sectionIndex) {
+          return '<div class="sl-section">'
+            + '<div class="sl-section-row">'
+            + '<input class="sl-field sl-day-input" data-column-index="' + columnIndex + '" data-category-index="' + categoryIndex + '" data-section-index="' + sectionIndex + '" data-field="label" value="' + escHtml(section.label || '') + '" placeholder="Day or section label">'
+            + '<input class="sl-field sl-sublabel-input" data-column-index="' + columnIndex + '" data-category-index="' + categoryIndex + '" data-section-index="' + sectionIndex + '" data-field="sublabel" value="' + escHtml(section.sublabel || '') + '" placeholder="Optional sub-label">'
+            + '</div>'
+            + '<textarea class="sl-field sl-items-textarea" data-column-index="' + columnIndex + '" data-category-index="' + categoryIndex + '" data-section-index="' + sectionIndex + '" data-field="items" placeholder="One shopping item per line">' + escHtml(ensureSectionItems(section).join('\n')) + '</textarea>'
+            + '<div class="sl-section-actions" style="margin-top:0.5rem;">'
+            + '<button type="button" class="sl-mini-btn sl-mini-btn-danger" data-remove-section="' + columnIndex + ':' + categoryIndex + ':' + sectionIndex + '">Remove Section</button>'
+            + '</div>'
+            + '</div>';
+        }).join('');
+
+        return '<div class="sl-category-card">'
+          + '<div class="sl-category-head">'
+          + '<input class="sl-category-title-input" data-column-index="' + columnIndex + '" data-category-index="' + categoryIndex + '" data-category-field="name" value="' + escHtml(category.name || '') + '" placeholder="Category name">'
+          + '<div class="sl-category-actions">'
+          + '<button type="button" class="sl-mini-btn" data-add-section="' + columnIndex + ':' + categoryIndex + '">Add Section</button>'
+          + '<button type="button" class="sl-mini-btn sl-mini-btn-danger" data-remove-category="' + columnIndex + ':' + categoryIndex + '">Remove</button>'
+          + '</div>'
+          + '</div>'
+          + '<div class="sl-category-body">'
+          + (sectionsHtml || '<div class="sl-empty-note">No sections yet.</div>')
+          + '</div>'
+          + '</div>';
+      }
+
+      function renderEditor() {
+        slDocTitleInput.value = shoppingState.title || '';
+        slDocWeekInput.value = shoppingState.weekInfo || '';
+
+        var maxLen = Math.max(shoppingState.columns[0].length, shoppingState.columns[1].length, 1);
+        var html = '';
+        for (var index = 0; index < maxLen; index += 1) {
+          var left = shoppingState.columns[0][index] || null;
+          var right = shoppingState.columns[1][index] || null;
+          html += left ? renderCategoryCard(left, 0, index) : '<div></div>';
+          html += right ? renderCategoryCard(right, 1, index) : '<div></div>';
+        }
+        slGrid.innerHTML = html;
+        renderSummaryTable();
+        slOutput.classList.add('visible');
+      }
+
+      function getCategory(columnIndex, categoryIndex) {
+        if (!shoppingState.columns[columnIndex]) return null;
+        return shoppingState.columns[columnIndex][categoryIndex] || null;
+      }
+
+      function handleGridInput(event) {
+        var target = event.target;
+        if (!target) return;
+
+        if (target.matches('[data-category-field="name"]')) {
+          var category = getCategory(Number(target.dataset.columnIndex), Number(target.dataset.categoryIndex));
+          if (category) category.name = target.value;
+          return;
+        }
+
+        if (target.matches('[data-field]')) {
+          var category = getCategory(Number(target.dataset.columnIndex), Number(target.dataset.categoryIndex));
+          if (!category) return;
+          var section = category.sections[Number(target.dataset.sectionIndex)];
+          if (!section) return;
+
+          var field = target.dataset.field;
+          if (field === 'items') {
+            section.items = String(target.value || '').split('\n').map(function (item) { return item.trim(); }).filter(Boolean);
+          } else {
+            section[field] = target.value;
+          }
+        }
+      }
+
+      function handleSummaryInput(event) {
+        var target = event.target;
+        if (!target || !target.matches('.sl-summary-input')) return;
+        var row = shoppingState.classRecipeRows[Number(target.dataset.summaryIndex)];
+        if (!row) return;
+        row[target.dataset.summaryField] = target.value;
+      }
+
+      function loadState(nextState) {
+        shoppingState = nextState;
+        renderEditor();
+        slOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
+      docxFileInput.addEventListener('change', function () {
+        parseBtn.disabled = !docxFileInput.files.length;
+        parseStatus.textContent = '';
+        parseStatus.className = 'sl-status';
+      });
+
+      parseBtn.addEventListener('click', async function () {
+        var file = docxFileInput.files[0];
+        if (!file) return;
+
+        parseBtn.disabled = true;
+        parseStatus.className = 'sl-status';
+        parseStatus.textContent = 'Reading file…';
+
+        try {
+          if (typeof JSZip === 'undefined') {
+            throw new Error('JSZip library failed to load. Please reload the page and try again.');
+          }
+
+          var buffer = await file.arrayBuffer();
+          var zip = await JSZip.loadAsync(buffer);
+          var docEntry = zip.file('word/document.xml');
+          if (!docEntry) {
+            throw new Error('Could not find document content in the file.');
+          }
+
+          var xmlStr = await docEntry.async('string');
+          var parsed = parseDocx(xmlStr);
+          if (parsed.error) {
+            throw new Error(parsed.error);
+          }
+
+          loadState(normalizeParsed(parsed));
+          var totalCats = shoppingState.columns[0].length + shoppingState.columns[1].length;
+          parseStatus.className = 'sl-status ok';
+          parseStatus.textContent = totalCats + ' categories loaded from "' + file.name + '".';
+        } catch (err) {
+          parseStatus.className = 'sl-status error';
+          parseStatus.textContent = 'Error: ' + (err.message || String(err));
+        }
+
+        parseBtn.disabled = false;
+      });
+
+      blankBtn.addEventListener('click', function () {
+        loadState(createBlankState());
+        parseStatus.className = 'sl-status ok';
+        parseStatus.textContent = 'Blank shopping list ready to edit.';
+      });
+
+      slDocTitleInput.addEventListener('input', function () {
+        shoppingState.title = slDocTitleInput.value;
+      });
+
+      slDocWeekInput.addEventListener('input', function () {
+        shoppingState.weekInfo = slDocWeekInput.value;
+      });
+
+      slGrid.addEventListener('input', handleGridInput);
+      slSummaryBody.addEventListener('input', handleSummaryInput);
+
+      slGrid.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!target) return;
+
+        if (target.matches('[data-add-section]')) {
+          var parts = target.dataset.addSection.split(':').map(Number);
+          var category = getCategory(parts[0], parts[1]);
+          if (!category) return;
+          category.sections.push(createBlankSection('General'));
+          renderEditor();
+          return;
+        }
+
+        if (target.matches('[data-remove-category]')) {
+          var removeCategoryParts = target.dataset.removeCategory.split(':').map(Number);
+          shoppingState.columns[removeCategoryParts[0]].splice(removeCategoryParts[1], 1);
+          renderEditor();
+          return;
+        }
+
+        if (target.matches('[data-remove-section]')) {
+          var removeSectionParts = target.dataset.removeSection.split(':').map(Number);
+          var category = getCategory(removeSectionParts[0], removeSectionParts[1]);
+          if (!category) return;
+          category.sections.splice(removeSectionParts[2], 1);
+          if (!category.sections.length) category.sections.push(createBlankSection('General'));
+          renderEditor();
+        }
+      });
+
+      slSummaryBody.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!target) return;
+        if (target.matches('[data-remove-summary]')) {
+          shoppingState.classRecipeRows.splice(Number(target.dataset.removeSummary), 1);
+          renderSummaryTable();
+        }
+      });
+
+      addCategoryBtn.addEventListener('click', function () {
+        var targetColumn = shoppingState.columns[0].length <= shoppingState.columns[1].length ? 0 : 1;
+        shoppingState.columns[targetColumn].push(createBlankCategory('New Category'));
+        renderEditor();
+      });
+
+      addSummaryRowBtn.addEventListener('click', function () {
+        shoppingState.classRecipeRows.push({ classInfo: '', recipe: '' });
+        renderSummaryTable();
+      });
+
+      printBtn.addEventListener('click', function () {
+        window.print();
+      });
+
+      loadState(createBlankState());
+    })();
+  </script>
+</body>
+</html>
