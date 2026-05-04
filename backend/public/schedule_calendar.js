@@ -56,29 +56,52 @@ function getCellPrimaryText(booking) {
   return `Class: ${booking.class_name || ''}`;
 }
 
+// Curated teacher palette — all colours clearly distinct from the school planner
+// colours (orange = Senior, green = Junior, blue = Middle) and from each other.
+// Colours are assigned sequentially per visible teacher each week, so no two
+// teachers shown at the same time ever share a colour.
+const TEACHER_COLOUR_PALETTE = [
+  { bg: '#fee2e2', border: '#fca5a5', teacherText: '#991b1b' },  // Crimson
+  { bg: '#fef3c7', border: '#fcd34d', teacherText: '#78350f' },  // Amber/Gold
+  { bg: '#d9f99d', border: '#84cc16', teacherText: '#365314' },  // Lime
+  { bg: '#a5f3fc', border: '#06b6d4', teacherText: '#0e7490' },  // Cyan
+  { bg: '#ede9fe', border: '#8b5cf6', teacherText: '#4c1d95' },  // Violet
+  { bg: '#fdf4ff', border: '#d946ef', teacherText: '#701a75' },  // Fuchsia
+  { bg: '#ffe4e6', border: '#fb7185', teacherText: '#881337' },  // Rose
+  { bg: '#f1f5f9', border: '#94a3b8', teacherText: '#1e293b' },  // Slate
+];
+
+let _teacherColourMap = new Map();
+
+function buildTeacherColourMap(bookings) {
+  _teacherColourMap = new Map();
+  let idx = 0;
+  for (const b of (Array.isArray(bookings) ? bookings : [])) {
+    const name = String((b && b.staff_name) || '').trim();
+    if (!name || _teacherColourMap.has(name)) continue;
+    _teacherColourMap.set(name, TEACHER_COLOUR_PALETTE[idx % TEACHER_COLOUR_PALETTE.length]);
+    idx++;
+  }
+}
+
 function teacherColorFromName(name) {
-  const input = String(name || '').trim().toLowerCase();
+  const input = String(name || '').trim();
   if (!input) {
-    return { bg: '#e8f5e9', border: '#c8e6c9', text: '#1f2937', teacherText: '#2e7d32' };
+    return { bg: '#f3f4f6', border: '#d1d5db', text: '#1f2937', teacherText: '#374151' };
   }
-
-  // Keep key staff visually distinct and stable across reloads.
-  if (input.includes('lisa-jane') || input.includes('lawson')) {
-    return { bg: '#ede9fe', border: '#c4b5fd', text: '#1f2937', teacherText: '#5b21b6' };
+  const entry = _teacherColourMap.get(input);
+  if (entry) {
+    return { bg: entry.bg, border: entry.border, text: '#1f2937', teacherText: entry.teacherText };
   }
-
+  // Fallback for teachers not in the current week (e.g. legend called before map built):
+  // use a stable palette index derived from the name hash.
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
     hash = ((hash << 5) - hash) + input.charCodeAt(i);
     hash |= 0;
   }
-  const hue = Math.abs(hash) % 360;
-  return {
-    bg: `hsl(${hue}, 58%, 93%)`,
-    border: `hsl(${hue}, 55%, 76%)`,
-    text: '#1f2937',
-    teacherText: `hsl(${hue}, 55%, 32%)`
-  };
+  const fallback = TEACHER_COLOUR_PALETTE[Math.abs(hash) % TEACHER_COLOUR_PALETTE.length];
+  return { bg: fallback.bg, border: fallback.border, text: '#1f2937', teacherText: fallback.teacherText };
 }
 
 function getCalendarCellBaseStyle(booking) {
@@ -904,6 +927,7 @@ async function renderScheduleCalendar() {
   // Fetch bookings for this week
   const bookings = await fetchBookingsForWeek(currentMonday);
   window.currentScheduleBookings = bookings;
+  buildTeacherColourMap(bookings);
 
   const grid = buildPrintGrid(bookings, weekDates);
 
