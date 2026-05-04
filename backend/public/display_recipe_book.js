@@ -240,9 +240,14 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
 
+    const panel = document.getElementById('inlineLoginPanel');
+
     setInlineSuggestVisible(false);
     setInlineLoginStatus(message || '', '');
     setInlineLoginVisible(true);
+    if (panel && typeof panel.scrollIntoView === 'function') {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
     clearInlineLoginFallbackTimer();
     inlineLoginFallbackTimer = setTimeout(() => {
       if (canOpenRecipeDetails || inlineLoginReady) return;
