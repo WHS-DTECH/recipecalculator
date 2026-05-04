@@ -109,6 +109,18 @@
     .sl-header-input::placeholder { color: rgba(255,255,255,0.7); }
     .sl-header-title { flex: 1 1 460px; }
     .sl-header-week { flex: 1 1 280px; }
+    .sl-week-field {
+      flex: 1 1 110px;
+      min-width: 110px;
+    }
+    .sl-week-field-label {
+      display: block;
+      margin: 0 0 0.22rem;
+      font-size: 0.76rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.92);
+      letter-spacing: 0.01em;
+    }
     .sl-toolbar {
       margin-bottom: 1rem;
       justify-content: space-between;
@@ -319,30 +331,39 @@
             <input id="slDocTitleInput" class="sl-header-input" type="text" placeholder="Shopping list title">
           </div>
           <div class="sl-header-week sl-header-row">
-            <select id="slTermSelect" class="sl-header-input" aria-label="Term selector">
-              <option value="">Term</option>
-              <option value="1">Term 1</option>
-              <option value="2">Term 2</option>
-              <option value="3">Term 3</option>
-              <option value="4">Term 4</option>
-            </select>
-            <select id="slWeekSelect" class="sl-header-input" aria-label="Week selector">
-              <option value="">Week</option>
-              <option value="1">Week 1</option>
-              <option value="2">Week 2</option>
-              <option value="3">Week 3</option>
-              <option value="4">Week 4</option>
-              <option value="5">Week 5</option>
-              <option value="6">Week 6</option>
-              <option value="7">Week 7</option>
-              <option value="8">Week 8</option>
-              <option value="9">Week 9</option>
-              <option value="10">Week 10</option>
-              <option value="11">Week 11</option>
-              <option value="12">Week 12</option>
-              <option value="13">Week 13</option>
-            </select>
-            <input id="slWeekDateInput" class="sl-header-input" type="text" placeholder="Date ending: 1 May" aria-label="Week date ending selector">
+            <div class="sl-week-field">
+              <label class="sl-week-field-label" for="slTermSelect">Term</label>
+              <select id="slTermSelect" class="sl-header-input" aria-label="Term selector">
+                <option value="">Term</option>
+                <option value="1">Term 1</option>
+                <option value="2">Term 2</option>
+                <option value="3">Term 3</option>
+                <option value="4">Term 4</option>
+              </select>
+            </div>
+            <div class="sl-week-field">
+              <label class="sl-week-field-label" for="slWeekSelect">Week</label>
+              <select id="slWeekSelect" class="sl-header-input" aria-label="Week selector">
+                <option value="">Week</option>
+                <option value="1">Week 1</option>
+                <option value="2">Week 2</option>
+                <option value="3">Week 3</option>
+                <option value="4">Week 4</option>
+                <option value="5">Week 5</option>
+                <option value="6">Week 6</option>
+                <option value="7">Week 7</option>
+                <option value="8">Week 8</option>
+                <option value="9">Week 9</option>
+                <option value="10">Week 10</option>
+                <option value="11">Week 11</option>
+                <option value="12">Week 12</option>
+                <option value="13">Week 13</option>
+              </select>
+            </div>
+            <div class="sl-week-field" style="flex:1 1 180px;min-width:180px;">
+              <label class="sl-week-field-label" for="slWeekDateInput">Date ending</label>
+              <input id="slWeekDateInput" class="sl-header-input" type="text" placeholder="1 May" aria-label="Week date ending selector">
+            </div>
           </div>
         </div>
       </div>

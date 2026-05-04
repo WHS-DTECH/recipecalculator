@@ -95,6 +95,25 @@ async function ensureMasterKeyword(masterName, aisleCategoryId, memberKeywords) 
   }
 }
 
+async function syncKeywordToAisleKeywords(keyword, aisleCategoryId) {
+  const cleanKeyword = String(keyword || '').trim();
+  if (!cleanKeyword || !aisleCategoryId) return;
+
+  const existingKeyword = await pool.query(
+    'SELECT id, aisle_category_id FROM aisle_keywords WHERE lower(keyword) = lower($1) LIMIT 1',
+    [cleanKeyword]
+  );
+
+  if (existingKeyword.rows.length) {
+    const row = existingKeyword.rows[0];
+    if (String(row.aisle_category_id) !== String(aisleCategoryId)) {
+      await pool.query('UPDATE aisle_keywords SET aisle_category_id = $1 WHERE id = $2', [aisleCategoryId, row.id]);
+    }
+  } else {
+    await pool.query('INSERT INTO aisle_keywords (aisle_category_id, keyword) VALUES ($1, $2)', [aisleCategoryId, cleanKeyword]);
+  }
+}
+
 async function ensureMasterKeywordSeedData() {
   if (masterKeywordSeedReady) return;
   await ensureMasterKeywordSchema();
@@ -189,7 +208,10 @@ router.get('/masters', async (req, res) => {
     const result = await pool.query(
       `SELECT mk.id, mk.name, mk.aisle_category_id, ac.name AS aisle_category,
               COALESCE(
-                json_agg(mkm.keyword ORDER BY mkm.keyword) FILTER (WHERE mkm.keyword IS NOT NULL),
+                json_agg(
+                  json_build_object('id', mkm.id, 'keyword', mkm.keyword)
+                  ORDER BY mkm.keyword
+                ) FILTER (WHERE mkm.keyword IS NOT NULL),
                 '[]'::json
               ) AS members
          FROM aisle_master_keywords mk
@@ -201,6 +223,146 @@ router.get('/masters', async (req, res) => {
     return res.json({ success: true, masters: result.rows });
   } catch (err) {
     return res.json({ success: false, error: err.message, masters: [] });
+  }
+});
+
+router.post('/masters/add', async (req, res) => {
+  const name = String(req.body && req.body.name || '').trim();
+  const aisleCategoryId = Number(req.body && req.body.aisle_category_id || 0);
+  if (!name || !aisleCategoryId) {
+    return res.json({ success: false, error: 'name and aisle_category_id are required.' });
+  }
+
+  try {
+    await ensureMasterKeywordSeedData();
+    const existing = await pool.query('SELECT id FROM aisle_master_keywords WHERE lower(name) = lower($1) LIMIT 1', [name]);
+    if (existing.rows.length) {
+      return res.json({ success: false, error: 'Master keyword already exists.' });
+    }
+
+    const inserted = await pool.query(
+      `INSERT INTO aisle_master_keywords (name, aisle_category_id)
+       VALUES ($1, $2)
+       RETURNING id, name, aisle_category_id`,
+      [name, aisleCategoryId]
+    );
+
+    return res.json({ success: true, master: inserted.rows[0] });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+router.post('/masters/edit', async (req, res) => {
+  const id = Number(req.body && req.body.id || 0);
+  const name = String(req.body && req.body.name || '').trim();
+  const aisleCategoryId = Number(req.body && req.body.aisle_category_id || 0);
+  if (!id || !name || !aisleCategoryId) {
+    return res.json({ success: false, error: 'id, name and aisle_category_id are required.' });
+  }
+
+  try {
+    await ensureMasterKeywordSeedData();
+
+    const duplicate = await pool.query(
+      'SELECT id FROM aisle_master_keywords WHERE lower(name) = lower($1) AND id <> $2 LIMIT 1',
+      [name, id]
+    );
+    if (duplicate.rows.length) {
+      return res.json({ success: false, error: 'Another master keyword already uses that name.' });
+    }
+
+    const updated = await pool.query(
+      `UPDATE aisle_master_keywords
+          SET name = $2,
+              aisle_category_id = $3,
+              updated_at = NOW()
+        WHERE id = $1
+        RETURNING id, name, aisle_category_id`,
+      [id, name, aisleCategoryId]
+    );
+
+    if (!updated.rows.length) {
+      return res.json({ success: false, error: 'Master keyword not found.' });
+    }
+
+    const members = await pool.query(
+      'SELECT keyword FROM aisle_master_keyword_members WHERE master_keyword_id = $1',
+      [id]
+    );
+    for (const row of members.rows) {
+      await syncKeywordToAisleKeywords(row.keyword, aisleCategoryId);
+    }
+
+    return res.json({ success: true, master: updated.rows[0] });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+router.post('/masters/delete', async (req, res) => {
+  const id = Number(req.body && req.body.id || 0);
+  if (!id) return res.json({ success: false, error: 'id is required.' });
+
+  try {
+    await ensureMasterKeywordSeedData();
+    const deleted = await pool.query('DELETE FROM aisle_master_keywords WHERE id = $1 RETURNING id', [id]);
+    if (!deleted.rows.length) {
+      return res.json({ success: false, error: 'Master keyword not found.' });
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+router.post('/masters/members/add', async (req, res) => {
+  const masterId = Number(req.body && req.body.master_keyword_id || 0);
+  const keyword = String(req.body && req.body.keyword || '').trim();
+  if (!masterId || !keyword) {
+    return res.json({ success: false, error: 'master_keyword_id and keyword are required.' });
+  }
+
+  try {
+    await ensureMasterKeywordSeedData();
+    const masterResult = await pool.query(
+      'SELECT id, aisle_category_id FROM aisle_master_keywords WHERE id = $1 LIMIT 1',
+      [masterId]
+    );
+    if (!masterResult.rows.length) {
+      return res.json({ success: false, error: 'Master keyword not found.' });
+    }
+    const aisleCategoryId = masterResult.rows[0].aisle_category_id;
+
+    await pool.query(
+      `INSERT INTO aisle_master_keyword_members (master_keyword_id, keyword)
+       VALUES ($1, $2)
+       ON CONFLICT (master_keyword_id, lower(keyword))
+       DO UPDATE SET updated_at = NOW()`,
+      [masterId, keyword]
+    );
+
+    await syncKeywordToAisleKeywords(keyword, aisleCategoryId);
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
+  }
+});
+
+router.post('/masters/members/delete', async (req, res) => {
+  const memberId = Number(req.body && req.body.id || 0);
+  if (!memberId) return res.json({ success: false, error: 'id is required.' });
+
+  try {
+    await ensureMasterKeywordSeedData();
+    const deleted = await pool.query('DELETE FROM aisle_master_keyword_members WHERE id = $1 RETURNING id', [memberId]);
+    if (!deleted.rows.length) {
+      return res.json({ success: false, error: 'Member keyword not found.' });
+    }
+    // We intentionally do not delete from aisle_keywords to avoid breaking existing matching behavior.
+    return res.json({ success: true });
+  } catch (err) {
+    return res.json({ success: false, error: err.message });
   }
 });
 
