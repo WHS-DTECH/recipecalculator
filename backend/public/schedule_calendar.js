@@ -163,63 +163,166 @@ async function fetchLinkedRecipesForBooking(bookingId) {
   return Array.isArray(data.recipes) ? data.recipes : [];
 }
 
+// --- Recipe detail helpers for the version chooser modal ---
+const _recipeDetailCache = new Map();
+
+async function fetchRecipeDetailsForModal(recipeId) {
+  const id = Number(recipeId);
+  if (_recipeDetailCache.has(id)) return _recipeDetailCache.get(id);
+  try {
+    const r = await fetch(`/api/recipes/${encodeURIComponent(String(id))}`);
+    if (!r.ok) return null;
+    const data = await r.json();
+    _recipeDetailCache.set(id, data);
+    return data;
+  } catch (_) {
+    return null;
+  }
+}
+
+function extractRecipeListItems(value) {
+  if (Array.isArray(value)) return value.map(i => String(i || '').trim()).filter(Boolean);
+  const text = String(value || '').trim();
+  if (!text) return [];
+  const liMatches = [];
+  const liRegex = /<li[^>]*>([\s\S]*?)<\/li>/gi;
+  let m;
+  while ((m = liRegex.exec(text)) !== null) {
+    const cleaned = String(m[1] || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    if (cleaned) liMatches.push(cleaned);
+  }
+  if (liMatches.length) return liMatches;
+  return text.split(/\r?\n/).map(l => l.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+}
+
 function choosePlannerRecipeVersion(booking, linkedRecipes) {
   return new Promise((resolve) => {
     const list = Array.isArray(linkedRecipes) ? linkedRecipes : [];
     const overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;z-index:10001;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.52);display:flex;align-items:center;justify-content:center;z-index:10001;padding:1rem;box-sizing:border-box;';
     const modal = document.createElement('div');
-    modal.style.cssText = 'background:#fff;border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,0.25);padding:1rem 1.1rem;max-width:760px;width:min(92vw,760px);max-height:85vh;overflow:auto;';
+    modal.style.cssText = 'background:#fff;border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,0.28);width:min(95vw,980px);max-height:88vh;display:flex;flex-direction:column;overflow:hidden;';
 
-    const plannerName = escHtml(String((booking && booking.recipe) || 'Planner Recipe'));
-    const choicesHtml = list.map((recipe, idx) => {
+    const plannerName = escHtml(String((booking && booking.recipe) || 'Recipe'));
+
+    const radioListHtml = list.length ? list.map((recipe, idx) => {
       const recipeId = recipe && recipe.recipe_id != null ? recipe.recipe_id : recipe.id;
       const safeId = escHtml(String(recipeId || ''));
       const safeName = escHtml(String((recipe && recipe.name) || `Recipe ${safeId}`));
       const url = String((recipe && recipe.url) || '').trim();
       return `
-        <label style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:0.65rem 0.7rem;margin:0 0 0.55rem 0;cursor:pointer;">
-          <div style="display:flex;gap:0.55rem;align-items:flex-start;">
-            <input type="radio" name="plannerRecipeChoice" value="${safeId}" ${idx === 0 ? 'checked' : ''} style="margin-top:0.2rem;" />
-            <div>
-              <div style="font-weight:700;color:#1f2937;">${safeName}</div>
-              <div style="font-size:0.82rem;color:#6b7280;">ID: ${safeId}</div>
-              ${url ? `<a href="${escHtml(url)}" target="_blank" rel="noopener" style="font-size:0.82rem;color:#1976d2;word-break:break-all;">${escHtml(url)}</a>` : '<div style="font-size:0.82rem;color:#9ca3af;">No source URL</div>'}
-            </div>
+        <label data-recipe-id="${safeId}" style="display:flex;align-items:flex-start;gap:0.5rem;border:2px solid #e5e7eb;border-radius:8px;padding:0.6rem 0.7rem;margin:0 0 0.45rem 0;cursor:pointer;transition:border-color 0.15s;">
+          <input type="radio" name="plannerRecipeChoice" value="${safeId}" ${idx === 0 ? 'checked' : ''} style="margin-top:0.22rem;flex-shrink:0;" />
+          <div style="min-width:0;">
+            <div style="font-weight:700;color:#1f2937;font-size:0.93rem;">${safeName}</div>
+            <div style="font-size:0.76rem;color:#6b7280;">ID: ${safeId}</div>
+            ${url ? `<div style="font-size:0.76rem;color:#1976d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escHtml(url)}">${escHtml(url)}</div>` : '<div style="font-size:0.76rem;color:#9ca3af;">No source URL</div>'}
           </div>
         </label>
       `;
-    }).join('');
+    }).join('') : '<div style="color:#9ca3af;font-size:0.88rem;padding:0.5rem 0;">No linked recipe versions found.</div>';
 
     modal.innerHTML = `
-      <div style="font-size:1.12rem;font-weight:700;color:#1f2937;margin-bottom:0.35rem;">Choose Recipe Version</div>
-      <div style="font-size:0.9rem;color:#4b5563;margin-bottom:0.8rem;">Planner item: <strong>${plannerName}</strong></div>
-      <div style="font-size:0.82rem;color:#6b7280;margin-bottom:0.6rem;">Select the version to use when booking this class.</div>
-      ${choicesHtml || '<div style="color:#9ca3af;font-size:0.9rem;">No linked recipes found for this planner item.</div>'}
-      <div style="display:flex;justify-content:flex-end;gap:0.5rem;margin-top:0.8rem;border-top:1px solid #e5e7eb;padding-top:0.75rem;">
-        <button type="button" id="plannerVersionCancelBtn" style="padding:0.42rem 0.82rem;border:1px solid #cbd5e1;background:#f8fafc;border-radius:6px;cursor:pointer;">Cancel</button>
-        <button type="button" id="plannerVersionAdjustBtn" style="padding:0.42rem 0.82rem;border:1px solid #059669;background:#ecfdf5;color:#065f46;border-radius:6px;cursor:pointer;${list.length ? '' : 'display:none;'}">Adjust Recipe</button>
-        <button type="button" id="plannerVersionUseBtn" style="padding:0.42rem 0.82rem;border:none;background:#1976d2;color:#fff;border-radius:6px;cursor:pointer;${list.length ? '' : 'display:none;'}">Use This Version</button>
+      <div style="padding:0.9rem 1.1rem 0.6rem;border-bottom:1px solid #e5e7eb;flex-shrink:0;">
+        <div style="font-size:1.05rem;font-weight:700;color:#1f2937;">Choose Recipe Version</div>
+        <div style="font-size:0.85rem;color:#4b5563;margin-top:0.15rem;">Recipe: <strong>${plannerName}</strong> &mdash; select a version to see full details before choosing.</div>
+      </div>
+      <div style="display:flex;flex:1;min-height:0;overflow:hidden;">
+        <div id="rcv-list" style="width:270px;min-width:180px;flex-shrink:0;padding:0.7rem 0.8rem;border-right:1px solid #e5e7eb;overflow-y:auto;">
+          <div style="font-size:0.7rem;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.45rem;">Versions</div>
+          ${radioListHtml}
+        </div>
+        <div id="rcv-detail" style="flex:1;min-width:0;padding:0.7rem 0.9rem;overflow-y:auto;background:#fafafa;">
+          <div id="rcv-detail-content" style="color:#9ca3af;font-size:0.88rem;">Loading&hellip;</div>
+        </div>
+      </div>
+      <div style="padding:0.65rem 1.1rem;border-top:1px solid #e5e7eb;display:flex;justify-content:flex-end;gap:0.5rem;flex-shrink:0;background:#fff;">
+        <button type="button" id="plannerVersionCancelBtn" style="padding:0.4rem 0.8rem;border:1px solid #cbd5e1;background:#f8fafc;border-radius:6px;cursor:pointer;">Cancel</button>
+        <button type="button" id="plannerVersionAdjustBtn" style="padding:0.4rem 0.8rem;border:1px solid #059669;background:#ecfdf5;color:#065f46;border-radius:6px;cursor:pointer;${list.length ? '' : 'display:none;'}">Adjust Recipe</button>
+        <button type="button" id="plannerVersionUseBtn" style="padding:0.4rem 0.85rem;border:none;background:#1976d2;color:#fff;border-radius:6px;cursor:pointer;font-weight:600;${list.length ? '' : 'display:none;'}">Use This Version</button>
       </div>
     `;
 
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
-    const cleanup = () => {
-      overlay.remove();
-    };
+    const cleanup = () => overlay.remove();
+
+    function highlightSelected() {
+      modal.querySelectorAll('label[data-recipe-id]').forEach(lbl => {
+        const radio = lbl.querySelector('input[type="radio"]');
+        if (radio && radio.checked) {
+          lbl.style.borderColor = '#1976d2';
+          lbl.style.background = '#eff6ff';
+        } else {
+          lbl.style.borderColor = '#e5e7eb';
+          lbl.style.background = '';
+        }
+      });
+    }
+
+    async function showDetail(recipeId) {
+      const detailEl = modal.querySelector('#rcv-detail-content');
+      if (!detailEl) return;
+      detailEl.innerHTML = '<span style="color:#9ca3af;">Loading recipe details&hellip;</span>';
+      const recipe = await fetchRecipeDetailsForModal(recipeId);
+      if (!recipe) {
+        detailEl.innerHTML = '<span style="color:#c62828;">Could not load details for this recipe.</span>';
+        return;
+      }
+      const name = escHtml(String(recipe.name || ''));
+      const serving = recipe.serving_size ? escHtml(String(recipe.serving_size)) : '';
+      const url = String(recipe.url || '').trim();
+      let domain = '';
+      if (url) { try { domain = new URL(url).hostname.replace(/^www\./, ''); } catch (_) {} }
+      const ings = extractRecipeListItems(recipe.ingredients_display || recipe.ingredients || '');
+      const steps = extractRecipeListItems(recipe.instructions_display || recipe.instructions_extracted || recipe.instructions || '');
+      const MAX_I = 15, MAX_S = 6;
+      const ingHtml = ings.length
+        ? `<ol style="margin:0;padding-left:1.1rem;font-size:0.85rem;line-height:1.65;">${ings.slice(0, MAX_I).map(i => `<li>${escHtml(i)}</li>`).join('')}${ings.length > MAX_I ? `<li style="color:#9ca3af;font-style:italic;">&hellip; and ${ings.length - MAX_I} more</li>` : ''}</ol>`
+        : '<div style="color:#9ca3af;font-size:0.83rem;">No ingredients listed.</div>';
+      const stepHtml = steps.length
+        ? `<ol style="margin:0;padding-left:1.1rem;font-size:0.85rem;line-height:1.65;">${steps.slice(0, MAX_S).map(s => `<li>${escHtml(s)}</li>`).join('')}${steps.length > MAX_S ? `<li style="color:#9ca3af;font-style:italic;">&hellip; and ${steps.length - MAX_S} more steps</li>` : ''}</ol>`
+        : '<div style="color:#9ca3af;font-size:0.83rem;">No method listed.</div>';
+      detailEl.innerHTML = `
+        <div style="font-size:1rem;font-weight:700;color:#1f2937;margin-bottom:0.25rem;">${name}</div>
+        <div style="font-size:0.8rem;color:#4b5563;margin-bottom:0.7rem;display:flex;flex-wrap:wrap;gap:0.7rem;">
+          ${serving ? `<span>&#127869; Serves <strong>${serving}</strong></span>` : ''}
+          ${url ? `<span>&#128279; <a href="${escHtml(url)}" target="_blank" rel="noopener" style="color:#1976d2;">${escHtml(domain || url)}</a></span>` : '<span style="color:#9ca3af;">No source URL</span>'}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+          <div>
+            <div style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Ingredients</div>
+            ${ingHtml}
+          </div>
+          <div>
+            <div style="font-size:0.7rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Method</div>
+            ${stepHtml}
+          </div>
+        </div>
+      `;
+    }
+
+    // Wire up radio change events
+    modal.querySelectorAll('input[name="plannerRecipeChoice"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        highlightSelected();
+        showDetail(radio.value);
+      });
+    });
+
+    // Load first item immediately
+    highlightSelected();
+    if (list.length) {
+      const firstId = String(list[0].recipe_id != null ? list[0].recipe_id : list[0].id);
+      showDetail(firstId);
+    }
 
     const cancelBtn = modal.querySelector('#plannerVersionCancelBtn');
     const useBtn = modal.querySelector('#plannerVersionUseBtn');
     const adjustBtn = modal.querySelector('#plannerVersionAdjustBtn');
 
-    if (cancelBtn) {
-      cancelBtn.onclick = () => {
-        cleanup();
-        resolve(null);
-      };
-    }
+    if (cancelBtn) cancelBtn.onclick = () => { cleanup(); resolve(null); };
 
     if (adjustBtn) {
       adjustBtn.onclick = () => {
@@ -235,11 +338,7 @@ function choosePlannerRecipeVersion(booking, linkedRecipes) {
     if (useBtn) {
       useBtn.onclick = () => {
         const selected = modal.querySelector('input[name="plannerRecipeChoice"]:checked');
-        if (!selected) {
-          resolve(null);
-          cleanup();
-          return;
-        }
+        if (!selected) { resolve(null); cleanup(); return; }
         const selectedId = String(selected.value || '').trim();
         const selectedRecipe = list.find((item) => String(item.recipe_id != null ? item.recipe_id : item.id) === selectedId) || null;
         cleanup();
@@ -248,10 +347,7 @@ function choosePlannerRecipeVersion(booking, linkedRecipes) {
     }
 
     overlay.addEventListener('click', (event) => {
-      if (event.target === overlay) {
-        cleanup();
-        resolve(null);
-      }
+      if (event.target === overlay) { cleanup(); resolve(null); }
     });
   });
 }
@@ -531,6 +627,51 @@ async function handlePlannerChipClick(bookingId) {
     showInfoToast(`Selected recipe version: ${selectedRecipeName}`);
   } catch (err) {
     showInfoToast(err && err.message ? err.message : 'Unable to load linked recipes for this planner event.');
+  }
+}
+
+async function handleBookedCellRecipeClick(bookingId) {
+  const normalizedId = Number(bookingId);
+  if (!Number.isInteger(normalizedId) || normalizedId <= 0) return;
+  const bookings = Array.isArray(window.currentScheduleBookings) ? window.currentScheduleBookings : [];
+  const booking = bookings.find((b) => Number(b.id) === normalizedId);
+  if (!booking) return;
+
+  try {
+    const linkedRecipes = await fetchLinkedRecipesForBooking(normalizedId);
+    if (!linkedRecipes.length) {
+      showInfoToast('No recipe versions linked to this booking yet. Use Match Planner Recipes to add versions.');
+      return;
+    }
+
+    const result = await choosePlannerRecipeVersion(booking, linkedRecipes);
+    if (!result) return;
+
+    if (result && result.action === 'adjust') {
+      const adjustedRecipe = await showAdjustRecipeModal(result.recipe, booking);
+      if (!adjustedRecipe) return;
+      const baseId = result.recipe && (result.recipe.recipe_id != null ? result.recipe.recipe_id : result.recipe.id);
+      publishBookingToBookClassForm({
+        ...booking,
+        recipe_id: adjustedRecipe.recipeId,
+        recipe: adjustedRecipe.name,
+        recipe_selection_info: `Adjusted from version ID ${baseId || '-'} (${result.recipe && result.recipe.name ? result.recipe.name : 'base recipe'})`
+      });
+      showInfoToast(`Adjusted recipe: ${adjustedRecipe.name}. Click UPDATE to apply.`);
+      return;
+    }
+
+    const selectedRecipeId = result.recipe_id != null ? result.recipe_id : result.id;
+    const selectedRecipeName = String(result.name || booking.recipe || '').trim();
+    publishBookingToBookClassForm({
+      ...booking,
+      recipe_id: selectedRecipeId,
+      recipe: selectedRecipeName,
+      recipe_selection_info: `Changed to version ID ${selectedRecipeId || '-'} (${selectedRecipeName})`
+    });
+    showInfoToast(`Recipe changed to: ${selectedRecipeName}. Click UPDATE to save.`);
+  } catch (err) {
+    showInfoToast(err && err.message ? err.message : 'Unable to load recipe versions for this booking.');
   }
 }
 
@@ -978,7 +1119,7 @@ async function renderScheduleCalendar() {
             <div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${cell.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.32rem 0.18rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;'>
               <div style='font-weight:bold;font-size:0.98em;color:${cellStyle.text};'>${escHtml(getCellPrimaryText(cell))}</div>
               <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:0.95em;'>Teacher: ${escHtml(cell.staff_name)}</div>
-              <div style='margin-top:0.24rem;'><a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.75rem;text-decoration:none;font-weight:700;'>Slots</a></div>
+              <div style='margin-top:0.24rem;display:flex;gap:0.22rem;justify-content:center;flex-wrap:wrap;'><a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.75rem;text-decoration:none;font-weight:700;'>Slots</a>${cell.recipe_id ? `<button onclick='event.stopPropagation();handleBookedCellRecipeClick(${Number(cell.id)})' style='padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.75rem;cursor:pointer;font-weight:700;'>Recipes</button>` : ''}</div>
             </div>
           </td>`;
       } else {
