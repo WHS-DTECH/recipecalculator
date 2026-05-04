@@ -192,7 +192,7 @@
 
   <div class="sl-page">
     <h1 style="margin:0 0 0.25rem;color:#1f2937;font-size:1.5rem;">Upload Shopping List</h1>
-    <p style="color:#4a5568;font-size:0.95rem;margin:0 0 1.25rem;">Upload a teacher's .docx shopping list and view it in a formatted layout.</p>
+    <p style="color:#4a5568;font-size:0.95rem;margin:0 0 1.25rem;">Upload a teacher's .docx shopping list, save it for editing, and preview it in a formatted layout.</p>
 
     <div class="sl-card" id="uploadCard">
       <h2>Select Shopping List File</h2>
@@ -212,8 +212,11 @@
 
       <div style="display:flex;gap:0.75rem;align-items:center;margin-bottom:1rem;flex-wrap:wrap;">
         <strong style="font-size:1rem;color:#1e3a5f;">Shopping List</strong>
+        <button type="button" id="saveBtn" class="sl-btn" disabled>Save To Edit Shopping</button>
         <button type="button" id="printBtn" class="sl-btn" style="background:#374151;">Print</button>
       </div>
+
+      <div id="saveStatus" class="sl-status"></div>
 
       <div id="slGrid" class="sl-grid"></div>
 
@@ -249,12 +252,43 @@
       const slGrid = document.getElementById('slGrid');
       const slSummarySection = document.getElementById('slSummarySection');
       const slSummaryBody = document.getElementById('slSummaryBody');
+      const saveBtn = document.getElementById('saveBtn');
+      const saveStatus = document.getElementById('saveStatus');
       const printBtn = document.getElementById('printBtn');
+
+      let currentState = null;
+      let currentSavedListId = null;
+      let currentFileName = '';
 
       function escHtml(str) {
         return String(str == null ? '' : str)
           .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
           .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      }
+
+      function requestJson(url, options) {
+        var settings = options || {};
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, settings.headers || {});
+        return fetch(url, Object.assign({}, settings, {
+          credentials: 'include',
+          headers: headers
+        })).then(async function (response) {
+          var payload = null;
+          try {
+            payload = await response.json();
+          } catch (err) {
+            payload = null;
+          }
+          if (!response.ok || (payload && payload.success === false)) {
+            throw new Error(payload && payload.error ? payload.error : ('Request failed (' + response.status + ')'));
+          }
+          return payload || {};
+        });
+      }
+
+      function setSaveStatus(message, type) {
+        saveStatus.className = 'sl-status' + (type ? ' ' + type : '');
+        saveStatus.textContent = message || '';
       }
 
       // ── DOCX XML helpers ──────────────────────────────────────────────
@@ -416,6 +450,15 @@
         return { title: title, weekInfo: weekInfo, leftCol: leftCol, rightCol: rightCol, classRecipeRows: classRecipeRows };
       }
 
+      function normalizeParsed(parsed) {
+        return {
+          title: parsed.title || 'Shopping List',
+          weekInfo: parsed.weekInfo || '',
+          columns: [parsed.leftCol || [], parsed.rightCol || []],
+          classRecipeRows: Array.isArray(parsed.classRecipeRows) ? parsed.classRecipeRows.slice() : []
+        };
+      }
+
       // ── Render ────────────────────────────────────────────────────────
 
       function renderCategoryCard(cat) {
@@ -466,24 +509,26 @@
           + '</div>';
       }
 
-      function renderOutput(parsed) {
-        slDocTitle.textContent = parsed.title || 'Shopping List';
-        slDocWeek.textContent = parsed.weekInfo || '';
+      function renderOutput(state) {
+        var leftCol = state.columns[0] || [];
+        var rightCol = state.columns[1] || [];
+        slDocTitle.textContent = state.title || 'Shopping List';
+        slDocWeek.textContent = state.weekInfo || '';
 
         // Build 2-column grid by interleaving left/right columns
-        var maxLen = Math.max(parsed.leftCol.length, parsed.rightCol.length);
+        var maxLen = Math.max(leftCol.length, rightCol.length);
         var gridHtml = '';
         for (var i = 0; i < maxLen; i++) {
-          var leftCat = parsed.leftCol[i] || null;
-          var rightCat = parsed.rightCol[i] || null;
+          var leftCat = leftCol[i] || null;
+          var rightCat = rightCol[i] || null;
           gridHtml += leftCat ? renderCategoryCard(leftCat) : '<div></div>';
           gridHtml += rightCat ? renderCategoryCard(rightCat) : '<div></div>';
         }
         slGrid.innerHTML = gridHtml;
 
         // Class/recipe table
-        if (parsed.classRecipeRows && parsed.classRecipeRows.length) {
-          slSummaryBody.innerHTML = parsed.classRecipeRows.map(function (row) {
+        if (state.classRecipeRows && state.classRecipeRows.length) {
+          slSummaryBody.innerHTML = state.classRecipeRows.map(function (row) {
             return '<tr><td>' + escHtml(row.classInfo) + '</td><td>' + escHtml(row.recipe) + '</td></tr>';
           }).join('');
           slSummarySection.hidden = false;
@@ -501,6 +546,7 @@
         parseBtn.disabled = !docxFileInput.files.length;
         parseStatus.textContent = '';
         parseStatus.className = 'sl-status';
+        setSaveStatus('');
       });
 
       parseBtn.addEventListener('click', async function () {
@@ -511,6 +557,8 @@
         parseStatus.className = 'sl-status';
         parseStatus.textContent = 'Reading file…';
         slOutput.classList.remove('visible');
+        saveBtn.disabled = true;
+        setSaveStatus('');
 
         try {
           if (typeof JSZip === 'undefined') {
@@ -544,15 +592,50 @@
             return;
           }
 
-          renderOutput(parsed);
+          currentState = normalizeParsed(parsed);
+          currentSavedListId = null;
+          currentFileName = file.name;
+          renderOutput(currentState);
+          saveBtn.disabled = false;
           parseStatus.className = 'sl-status ok';
           parseStatus.textContent = totalCats + ' categories loaded from "' + file.name + '".';
+          setSaveStatus('Preview ready. Click Save To Edit Shopping to store this list for the Edit Shopping page.', '');
         } catch (err) {
           parseStatus.className = 'sl-status error';
           parseStatus.textContent = 'Error: ' + (err.message || String(err));
+          currentState = null;
         }
 
         parseBtn.disabled = false;
+      });
+
+      saveBtn.addEventListener('click', async function () {
+        if (!currentState) return;
+
+        var isUpdate = Boolean(currentSavedListId);
+        saveBtn.disabled = true;
+        setSaveStatus(isUpdate ? 'Updating saved shopping list...' : 'Saving shopping list for Edit Shopping...', '');
+        try {
+          var payload = {
+            title: currentState.title,
+            weekInfo: currentState.weekInfo,
+            sourceFilename: currentFileName,
+            state: currentState
+          };
+          var url = isUpdate
+            ? '/api/saved-shopping-lists/' + encodeURIComponent(currentSavedListId)
+            : '/api/saved-shopping-lists';
+          var method = isUpdate ? 'PUT' : 'POST';
+          var data = await requestJson(url, {
+            method: method,
+            body: JSON.stringify(payload)
+          });
+          currentSavedListId = data.list.id;
+          setSaveStatus('Saved. This list is now available in Edit Shopping List.', 'ok');
+        } catch (err) {
+          setSaveStatus('Error: ' + (err.message || String(err)), 'error');
+        }
+        saveBtn.disabled = false;
       });
 
       printBtn.addEventListener('click', function () {

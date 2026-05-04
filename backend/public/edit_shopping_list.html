@@ -37,12 +37,14 @@
       flex-wrap: wrap;
       align-items: center;
     }
-    .sl-upload-row input[type="file"] {
+    .sl-upload-row input[type="file"],
+    .sl-select {
       flex: 1 1 260px;
       border: 1px solid #d0d7de;
       border-radius: 7px;
       padding: 0.45rem 0.7rem;
       font-size: 0.97rem;
+      background: #fff;
     }
     .sl-btn {
       background: #1976d2;
@@ -252,14 +254,16 @@
 
   <div class="sl-page">
     <h1 style="margin:0 0 0.25rem;color:#1f2937;font-size:1.5rem;">Edit Shopping List</h1>
-    <p style="color:#4a5568;font-size:0.95rem;margin:0 0 1.25rem;">Load the teacher shopping list, edit the printed layout, and print the final version for the technician.</p>
+    <p style="color:#4a5568;font-size:0.95rem;margin:0 0 1.25rem;">Select a saved shopping list, edit the printed layout, and print the final version for the technician.</p>
 
     <div class="sl-card">
-      <h2>Load or Start a List</h2>
-      <div class="sl-card-sub">Load an existing .docx shopping list, or start with a blank editable layout.</div>
+      <h2>Select or Start a List</h2>
+      <div class="sl-card-sub">Choose a shopping list saved from Upload Shopping List, or start with a blank editable layout.</div>
       <div class="sl-upload-row">
-        <input type="file" id="docxFileInput" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" aria-label="Select shopping list .docx file">
-        <button type="button" id="parseBtn" class="sl-btn" disabled>Load List</button>
+        <select id="savedListSelect" class="sl-select" aria-label="Select saved shopping list">
+          <option value="">Loading saved shopping lists...</option>
+        </select>
+        <button type="button" id="refreshListsBtn" class="sl-btn sl-btn-secondary">Refresh</button>
         <button type="button" id="blankBtn" class="sl-btn sl-btn-secondary">Start Blank</button>
       </div>
       <div id="parseStatus" class="sl-status"></div>
@@ -281,8 +285,10 @@
         <div class="sl-toolbar-group">
           <strong style="font-size:1rem;color:#1e3a5f;">Edit Shopping List</strong>
           <span class="sl-empty-note">One item per line inside each section.</span>
+          <span id="currentListMeta" class="sl-empty-note"></span>
         </div>
         <div class="sl-toolbar-group">
+          <button type="button" id="saveBtn" class="sl-btn">Save Changes</button>
           <button type="button" id="addCategoryBtn" class="sl-btn">Add Category</button>
           <button type="button" id="addSummaryRowBtn" class="sl-btn sl-btn-secondary">Add Class / Recipe Row</button>
           <button type="button" id="printBtn" class="sl-btn sl-btn-secondary">Print</button>
@@ -308,28 +314,28 @@
   </div>
 
   <script src="shared/navbar_loader.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script>
     (function () {
       'use strict';
 
-      const WNS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-      const DAY_RE = /^(monday|tuesday|wednesday|thursday|friday)\b/i;
-
-      const docxFileInput = document.getElementById('docxFileInput');
-      const parseBtn = document.getElementById('parseBtn');
+      const savedListSelect = document.getElementById('savedListSelect');
+      const refreshListsBtn = document.getElementById('refreshListsBtn');
       const blankBtn = document.getElementById('blankBtn');
       const parseStatus = document.getElementById('parseStatus');
       const slOutput = document.getElementById('slOutput');
       const slGrid = document.getElementById('slGrid');
       const slSummaryBody = document.getElementById('slSummaryBody');
       const printBtn = document.getElementById('printBtn');
+      const saveBtn = document.getElementById('saveBtn');
       const addCategoryBtn = document.getElementById('addCategoryBtn');
       const addSummaryRowBtn = document.getElementById('addSummaryRowBtn');
       const slDocTitleInput = document.getElementById('slDocTitleInput');
       const slDocWeekInput = document.getElementById('slDocWeekInput');
+      const currentListMeta = document.getElementById('currentListMeta');
 
       let shoppingState = createBlankState();
+      let currentSavedListId = null;
+      let currentSourceFilename = '';
 
       function escHtml(str) {
         return String(str == null ? '' : str)
@@ -354,141 +360,91 @@
         };
       }
 
-      function paraText(p) {
-        return Array.from(p.getElementsByTagNameNS(WNS, 't')).map(function (t) { return t.textContent; }).join('');
-      }
-
-      function cellText(tc) {
-        return Array.from(tc.getElementsByTagNameNS(WNS, 'p')).map(paraText).filter(Boolean).join('\n');
-      }
-
-      function isParaBold(p) {
-        var runs = Array.from(p.getElementsByTagNameNS(WNS, 'r'));
-        if (!runs.length) return false;
-        var boldCount = 0;
-        runs.forEach(function (r) {
-          var rpr = r.getElementsByTagNameNS(WNS, 'rPr')[0];
-          if (!rpr) return;
-          var b = rpr.getElementsByTagNameNS(WNS, 'b')[0];
-          if (!b) return;
-          var val = b.getAttributeNS(WNS, 'val');
-          if (val !== 'false' && val !== '0') boldCount += 1;
+      function requestJson(url, options) {
+        var settings = options || {};
+        var headers = Object.assign({ 'Content-Type': 'application/json' }, settings.headers || {});
+        return fetch(url, Object.assign({}, settings, {
+          credentials: 'include',
+          headers: headers
+        })).then(async function (response) {
+          var payload = null;
+          try {
+            payload = await response.json();
+          } catch (err) {
+            payload = null;
+          }
+          if (!response.ok || (payload && payload.success === false)) {
+            throw new Error(payload && payload.error ? payload.error : ('Request failed (' + response.status + ')'));
+          }
+          return payload || {};
         });
-        return boldCount > 0 && boldCount >= Math.ceil(runs.length / 2);
       }
 
-      function isDayHeading(text) {
-        return DAY_RE.test(String(text || '').trim());
+      function setStatus(message, type) {
+        parseStatus.className = 'sl-status' + (type ? ' ' + type : '');
+        parseStatus.textContent = message || '';
       }
 
-      function isSubLabel(text) {
-        var t = String(text || '').trim();
-        return t.length < 60 && /[:]$/.test(t) && !DAY_RE.test(t);
+      function formatDateTime(value) {
+        if (!value) return '';
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleString();
       }
 
-      function parseCellCategories(tc) {
-        var paras = Array.from(tc.getElementsByTagNameNS(WNS, 'p'));
-        var categories = [];
-        var currentCat = null;
-        var currentSection = null;
-
-        paras.forEach(function (p) {
-          var trimmed = paraText(p).trim();
-          if (!trimmed) return;
-
-          if (isParaBold(p)) {
-            currentSection = createBlankSection('General');
-            currentCat = { name: trimmed, sections: [currentSection] };
-            categories.push(currentCat);
-            return;
-          }
-
-          if (!currentCat) return;
-
-          if (isDayHeading(trimmed)) {
-            var dayLabel = trimmed.replace(/\s*[:]\s*$/, '').trim();
-            dayLabel = dayLabel.charAt(0).toUpperCase() + dayLabel.slice(1);
-            currentSection = createBlankSection(dayLabel);
-            currentCat.sections.push(currentSection);
-            return;
-          }
-
-          if (isSubLabel(trimmed)) {
-            var parentLabel = currentSection ? currentSection.label : 'General';
-            currentSection = { label: parentLabel, sublabel: trimmed.replace(/[:]\s*$/, '').trim(), items: [] };
-            currentCat.sections.push(currentSection);
-            return;
-          }
-
-          if (!currentSection) {
-            currentSection = createBlankSection('General');
-            currentCat.sections.push(currentSection);
-          }
-          currentSection.items.push(trimmed);
-        });
-
-        return categories;
+      function formatSavedListOption(list) {
+        var parts = [list.title || 'Shopping List'];
+        if (list.week_info) parts.push(list.week_info);
+        if (list.created_by_name) parts.push(list.created_by_name);
+        return parts.join(' - ');
       }
 
-      function parseDocx(xmlStr) {
-        var doc = new DOMParser().parseFromString(xmlStr, 'application/xml');
-        var tables = Array.from(doc.getElementsByTagNameNS(WNS, 'tbl'));
-        if (!tables.length) {
-          return { error: 'No tables found in document. Please check the file format.' };
+      function updateCurrentListMeta(list) {
+        if (!list || !list.id) {
+          currentListMeta.textContent = 'Unsaved list';
+          return;
         }
-
-        var title = '';
-        var weekInfo = '';
-        var leftCol = [];
-        var rightCol = [];
-        var classRecipeRows = [];
-        var mainRows = Array.from(tables[0].getElementsByTagNameNS(WNS, 'tr'));
-
-        mainRows.forEach(function (row, rowIdx) {
-          var cells = Array.from(row.getElementsByTagNameNS(WNS, 'tc'));
-          if (rowIdx === 0) {
-            var allParas = [];
-            cells.forEach(function (tc) {
-              Array.from(tc.getElementsByTagNameNS(WNS, 'p')).forEach(function (p) { allParas.push(p); });
-            });
-            allParas.forEach(function (p) {
-              var text = paraText(p).trim();
-              if (!text) return;
-              if (isParaBold(p) && !title) title = text;
-              else if (!weekInfo) weekInfo = text;
-            });
-            return;
-          }
-
-          cells.forEach(function (tc, colIdx) {
-            var cats = parseCellCategories(tc);
-            if (!cats.length) return;
-            (colIdx === 0 ? leftCol : rightCol).push.apply(colIdx === 0 ? leftCol : rightCol, cats);
-          });
-        });
-
-        if (tables.length >= 2) {
-          Array.from(tables[1].getElementsByTagNameNS(WNS, 'tr')).forEach(function (row, rowIdx) {
-            if (rowIdx === 0) return;
-            var cells = Array.from(row.getElementsByTagNameNS(WNS, 'tc'));
-            var classInfo = cells[0] ? cellText(cells[0]).trim() : '';
-            var recipe = cells[1] ? cellText(cells[1]).trim() : '';
-            if (classInfo || recipe) {
-              classRecipeRows.push({ classInfo: classInfo, recipe: recipe });
-            }
-          });
-        }
-
-        return { title: title, weekInfo: weekInfo, leftCol: leftCol, rightCol: rightCol, classRecipeRows: classRecipeRows };
+        var meta = ['Saved list #' + list.id];
+        if (list.createdByName || list.created_by_name) meta.push('by ' + (list.createdByName || list.created_by_name));
+        var updatedAt = list.updatedAt || list.updated_at;
+        if (updatedAt) meta.push('updated ' + formatDateTime(updatedAt));
+        currentListMeta.textContent = meta.join(' | ');
       }
 
-      function normalizeParsed(parsed) {
-        return {
-          title: parsed.title || 'Shopping List',
-          weekInfo: parsed.weekInfo || '',
-          columns: [parsed.leftCol || [], parsed.rightCol || []],
-          classRecipeRows: Array.isArray(parsed.classRecipeRows) ? parsed.classRecipeRows.slice() : []
-        };
+      async function refreshSavedLists(selectedId) {
+        savedListSelect.disabled = true;
+        try {
+          var data = await requestJson('/api/saved-shopping-lists');
+          var lists = Array.isArray(data.lists) ? data.lists : [];
+          savedListSelect.innerHTML = '<option value="">Select a saved shopping list...</option>' + lists.map(function (list) {
+            var selected = String(selectedId || '') === String(list.id) ? ' selected' : '';
+            return '<option value="' + escHtml(String(list.id)) + '"' + selected + '>' + escHtml(formatSavedListOption(list)) + '</option>';
+          }).join('');
+          if (!lists.length) {
+            setStatus('No saved shopping lists yet. Use Upload Shopping List to import one.', '');
+          }
+        } catch (err) {
+          savedListSelect.innerHTML = '<option value="">Unable to load saved shopping lists</option>';
+          setStatus('Error: ' + (err.message || String(err)), 'error');
+        }
+        savedListSelect.disabled = false;
+      }
+
+      async function loadSavedList(listId) {
+        if (!listId) return;
+        setStatus('Loading shopping list...', '');
+        savedListSelect.disabled = true;
+        try {
+          var data = await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(listId));
+          currentSavedListId = data.list.id;
+          currentSourceFilename = data.list.sourceFilename || '';
+          loadState(data.list.state, { scroll: true });
+          updateCurrentListMeta(data.list);
+          setStatus('Loaded "' + (data.list.title || 'Shopping List') + '".', 'ok');
+        } catch (err) {
+          setStatus('Error: ' + (err.message || String(err)), 'error');
+        }
+        savedListSelect.disabled = false;
       }
 
       function ensureSectionItems(section) {
@@ -593,60 +549,30 @@
         row[target.dataset.summaryField] = target.value;
       }
 
-      function loadState(nextState) {
+      function loadState(nextState, options) {
         shoppingState = nextState;
         renderEditor();
-        slOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (!options || options.scroll !== false) {
+          slOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
       }
 
-      docxFileInput.addEventListener('change', function () {
-        parseBtn.disabled = !docxFileInput.files.length;
-        parseStatus.textContent = '';
-        parseStatus.className = 'sl-status';
+      savedListSelect.addEventListener('change', function () {
+        if (!savedListSelect.value) return;
+        loadSavedList(savedListSelect.value);
       });
 
-      parseBtn.addEventListener('click', async function () {
-        var file = docxFileInput.files[0];
-        if (!file) return;
-
-        parseBtn.disabled = true;
-        parseStatus.className = 'sl-status';
-        parseStatus.textContent = 'Reading file…';
-
-        try {
-          if (typeof JSZip === 'undefined') {
-            throw new Error('JSZip library failed to load. Please reload the page and try again.');
-          }
-
-          var buffer = await file.arrayBuffer();
-          var zip = await JSZip.loadAsync(buffer);
-          var docEntry = zip.file('word/document.xml');
-          if (!docEntry) {
-            throw new Error('Could not find document content in the file.');
-          }
-
-          var xmlStr = await docEntry.async('string');
-          var parsed = parseDocx(xmlStr);
-          if (parsed.error) {
-            throw new Error(parsed.error);
-          }
-
-          loadState(normalizeParsed(parsed));
-          var totalCats = shoppingState.columns[0].length + shoppingState.columns[1].length;
-          parseStatus.className = 'sl-status ok';
-          parseStatus.textContent = totalCats + ' categories loaded from "' + file.name + '".';
-        } catch (err) {
-          parseStatus.className = 'sl-status error';
-          parseStatus.textContent = 'Error: ' + (err.message || String(err));
-        }
-
-        parseBtn.disabled = false;
+      refreshListsBtn.addEventListener('click', function () {
+        refreshSavedLists(currentSavedListId);
       });
 
       blankBtn.addEventListener('click', function () {
+        currentSavedListId = null;
+        currentSourceFilename = '';
+        savedListSelect.value = '';
         loadState(createBlankState());
-        parseStatus.className = 'sl-status ok';
-        parseStatus.textContent = 'Blank shopping list ready to edit.';
+        updateCurrentListMeta(null);
+        setStatus('Blank shopping list ready to edit.', 'ok');
       });
 
       slDocTitleInput.addEventListener('input', function () {
@@ -710,11 +636,43 @@
         renderSummaryTable();
       });
 
+      saveBtn.addEventListener('click', async function () {
+        saveBtn.disabled = true;
+        setStatus(currentSavedListId ? 'Saving changes...' : 'Saving new shopping list...', '');
+        try {
+          var isUpdate = Boolean(currentSavedListId);
+          var payload = {
+            title: shoppingState.title,
+            weekInfo: shoppingState.weekInfo,
+            sourceFilename: currentSourceFilename,
+            state: shoppingState
+          };
+          var url = isUpdate
+            ? '/api/saved-shopping-lists/' + encodeURIComponent(currentSavedListId)
+            : '/api/saved-shopping-lists';
+          var method = isUpdate ? 'PUT' : 'POST';
+          var data = await requestJson(url, {
+            method: method,
+            body: JSON.stringify(payload)
+          });
+          currentSavedListId = data.list.id;
+          await refreshSavedLists(currentSavedListId);
+          savedListSelect.value = String(currentSavedListId);
+          updateCurrentListMeta(data.list);
+          setStatus(isUpdate ? 'Shopping list changes saved.' : 'Shopping list saved to the shared list selector.', 'ok');
+        } catch (err) {
+          setStatus('Error: ' + (err.message || String(err)), 'error');
+        }
+        saveBtn.disabled = false;
+      });
+
       printBtn.addEventListener('click', function () {
         window.print();
       });
 
       loadState(createBlankState());
+      updateCurrentListMeta(null);
+      refreshSavedLists();
     })();
   </script>
 </body>
