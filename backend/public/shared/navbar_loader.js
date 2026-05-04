@@ -1,6 +1,6 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260504d';
+  var ASSET_VERSION = '20260504e';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
     '/navbar.css'
@@ -249,8 +249,30 @@
     });
   }
 
+  function getNavbarContainer() {
+    var preferred = document.getElementById('navbar-include');
+    if (preferred) return preferred;
+
+    var legacy = document.getElementById('navbarContainer');
+    if (legacy) {
+      legacy.id = 'navbar-include';
+      return legacy;
+    }
+
+    if (!document.body) return null;
+
+    var created = document.createElement('div');
+    created.id = 'navbar-include';
+    if (document.body.firstChild) {
+      document.body.insertBefore(created, document.body.firstChild);
+    } else {
+      document.body.appendChild(created);
+    }
+    return created;
+  }
+
   function loadNavbar() {
-    var container = document.getElementById('navbar-include');
+    var container = getNavbarContainer();
     if (!container) return;
 
     ensureStyles();

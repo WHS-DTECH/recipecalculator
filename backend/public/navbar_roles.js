@@ -183,7 +183,9 @@
     planningSections.forEach(section => {
       const isDrawerStateElement =
         section.id === 'planningDrawer'
-        || section.id === 'planningDrawerBackdrop';
+        || section.id === 'planningDrawerBackdrop'
+        || section.id === 'shoppingDrawer'
+        || section.id === 'shoppingDrawerBackdrop';
 
       if (normalized === 'admin' || normalized === 'lead_teacher') {
         section.style.display = '';

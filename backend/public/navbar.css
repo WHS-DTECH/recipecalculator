@@ -1,5 +1,9 @@
 /* Robust Navbar + Management Drawer */
 
+[hidden] {
+  display: none !important;
+}
+
 .navbar-shell {
   display: flex;
   align-items: center;
