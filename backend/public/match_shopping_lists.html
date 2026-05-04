@@ -872,7 +872,7 @@
         let html = '';
         byCat.forEach((items, category) => {
           html += `<h4 style="margin:0.45rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
-          html += '<table class="ms-table"><thead><tr><th>Teacher Item</th></tr></thead><tbody>';
+          html += '<table class="ms-table"><tbody>';
           items.forEach((item) => {
             html += `<tr><td>${escHtml(item.raw)}</td></tr>`;
           });
