@@ -46,6 +46,22 @@
       font-size: 0.97rem;
       background: #fff;
     }
+    .sl-filter-row {
+      margin-top: 0.75rem;
+      display: flex;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+    .sl-filter-row .sl-select,
+    .sl-filter-row .sl-date-input {
+      flex: 1 1 180px;
+      border: 1px solid #d0d7de;
+      border-radius: 7px;
+      padding: 0.45rem 0.7rem;
+      font-size: 0.95rem;
+      background: #fff;
+    }
     .sl-btn {
       background: #1976d2;
       color: #fff;
@@ -266,6 +282,33 @@
         <button type="button" id="refreshListsBtn" class="sl-btn sl-btn-secondary">Refresh</button>
         <button type="button" id="blankBtn" class="sl-btn sl-btn-secondary">Start Blank</button>
       </div>
+      <div class="sl-filter-row">
+        <select id="filterTermSelect" class="sl-select" aria-label="Filter saved lists by term">
+          <option value="">All terms</option>
+          <option value="1">Term 1</option>
+          <option value="2">Term 2</option>
+          <option value="3">Term 3</option>
+          <option value="4">Term 4</option>
+        </select>
+        <select id="filterWeekSelect" class="sl-select" aria-label="Filter saved lists by week">
+          <option value="">All weeks</option>
+          <option value="1">Week 1</option>
+          <option value="2">Week 2</option>
+          <option value="3">Week 3</option>
+          <option value="4">Week 4</option>
+          <option value="5">Week 5</option>
+          <option value="6">Week 6</option>
+          <option value="7">Week 7</option>
+          <option value="8">Week 8</option>
+          <option value="9">Week 9</option>
+          <option value="10">Week 10</option>
+          <option value="11">Week 11</option>
+          <option value="12">Week 12</option>
+          <option value="13">Week 13</option>
+        </select>
+        <input id="filterDateInput" class="sl-date-input" type="date" aria-label="Filter saved lists by date">
+        <button type="button" id="clearWeekFiltersBtn" class="sl-btn sl-btn-secondary">Clear Filters</button>
+      </div>
       <div id="parseStatus" class="sl-status"></div>
     </div>
 
@@ -276,7 +319,30 @@
             <input id="slDocTitleInput" class="sl-header-input" type="text" placeholder="Shopping list title">
           </div>
           <div class="sl-header-week sl-header-row">
-            <input id="slDocWeekInput" class="sl-header-input" type="text" placeholder="Week / ending date">
+            <select id="slTermSelect" class="sl-header-input" aria-label="Term selector">
+              <option value="">Term</option>
+              <option value="1">Term 1</option>
+              <option value="2">Term 2</option>
+              <option value="3">Term 3</option>
+              <option value="4">Term 4</option>
+            </select>
+            <select id="slWeekSelect" class="sl-header-input" aria-label="Week selector">
+              <option value="">Week</option>
+              <option value="1">Week 1</option>
+              <option value="2">Week 2</option>
+              <option value="3">Week 3</option>
+              <option value="4">Week 4</option>
+              <option value="5">Week 5</option>
+              <option value="6">Week 6</option>
+              <option value="7">Week 7</option>
+              <option value="8">Week 8</option>
+              <option value="9">Week 9</option>
+              <option value="10">Week 10</option>
+              <option value="11">Week 11</option>
+              <option value="12">Week 12</option>
+              <option value="13">Week 13</option>
+            </select>
+            <input id="slWeekDateInput" class="sl-header-input" type="date" aria-label="Week date selector">
           </div>
         </div>
       </div>
@@ -321,6 +387,10 @@
       const savedListSelect = document.getElementById('savedListSelect');
       const refreshListsBtn = document.getElementById('refreshListsBtn');
       const blankBtn = document.getElementById('blankBtn');
+      const filterTermSelect = document.getElementById('filterTermSelect');
+      const filterWeekSelect = document.getElementById('filterWeekSelect');
+      const filterDateInput = document.getElementById('filterDateInput');
+      const clearWeekFiltersBtn = document.getElementById('clearWeekFiltersBtn');
       const parseStatus = document.getElementById('parseStatus');
       const slOutput = document.getElementById('slOutput');
       const slGrid = document.getElementById('slGrid');
@@ -330,12 +400,15 @@
       const addCategoryBtn = document.getElementById('addCategoryBtn');
       const addSummaryRowBtn = document.getElementById('addSummaryRowBtn');
       const slDocTitleInput = document.getElementById('slDocTitleInput');
-      const slDocWeekInput = document.getElementById('slDocWeekInput');
+      const slTermSelect = document.getElementById('slTermSelect');
+      const slWeekSelect = document.getElementById('slWeekSelect');
+      const slWeekDateInput = document.getElementById('slWeekDateInput');
       const currentListMeta = document.getElementById('currentListMeta');
 
       let shoppingState = createBlankState();
       let currentSavedListId = null;
       let currentSourceFilename = '';
+      let allSavedLists = [];
 
       function escHtml(str) {
         return String(str == null ? '' : str)
@@ -355,9 +428,45 @@
         return {
           title: 'Shopping List',
           weekInfo: '',
+          term: '',
+          week: '',
+          weekDate: '',
           columns: [[], []],
           classRecipeRows: []
         };
+      }
+
+      function normalizeWeekMeta(state) {
+        if (!state || typeof state !== 'object') return createBlankState();
+        return Object.assign(createBlankState(), state, {
+          term: String(state.term || '').trim(),
+          week: String(state.week || '').trim(),
+          weekDate: /^\d{4}-\d{2}-\d{2}$/.test(String(state.weekDate || '').trim()) ? String(state.weekDate || '').trim() : ''
+        });
+      }
+
+      function parseLegacyWeekInfo(weekInfo) {
+        var text = String(weekInfo || '').trim();
+        var out = { term: '', week: '', weekDate: '' };
+        if (!text) return out;
+
+        var termMatch = text.match(/\bterm\s*(\d{1,2})\b/i);
+        if (termMatch) out.term = String(termMatch[1]);
+
+        var weekMatch = text.match(/\bweek\s*(\d{1,2})\b/i);
+        if (weekMatch) out.week = String(weekMatch[1]);
+
+        var dateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+        if (dateMatch) out.weekDate = dateMatch[1];
+        return out;
+      }
+
+      function buildWeekInfo(state) {
+        var parts = [];
+        if (state.term) parts.push('Term ' + state.term);
+        if (state.week) parts.push('Week ' + state.week);
+        if (state.weekDate) parts.push(state.weekDate);
+        return parts.join(' | ');
       }
 
       function requestJson(url, options) {
@@ -394,7 +503,13 @@
 
       function formatSavedListOption(list) {
         var parts = [list.title || 'Shopping List'];
-        if (list.week_info) parts.push(list.week_info);
+        var term = String(list.term || '').trim();
+        var week = String(list.week || '').trim();
+        var weekDate = String(list.week_date || list.weekDate || '').trim();
+        if (term) parts.push('Term ' + term);
+        if (week) parts.push('Week ' + week);
+        if (weekDate) parts.push(weekDate);
+        if (!term && !week && !weekDate && list.week_info) parts.push(list.week_info);
         if (list.created_by_name) parts.push(list.created_by_name);
         return parts.join(' - ');
       }
@@ -420,13 +535,39 @@
         savedListSelect.disabled = true;
         try {
           var data = await requestJson('/api/saved-shopping-lists');
-          var lists = Array.isArray(data.lists) ? data.lists : [];
+          allSavedLists = Array.isArray(data.lists) ? data.lists : [];
+          var filterTerm = String(filterTermSelect.value || '').trim();
+          var filterWeek = String(filterWeekSelect.value || '').trim();
+          var filterDate = String(filterDateInput.value || '').trim();
+
+          var lists = allSavedLists.filter(function (list) {
+            var listTerm = String(list.term || '').trim();
+            var listWeek = String(list.week || '').trim();
+            var listDate = String(list.week_date || '').trim();
+
+            if ((!listTerm || !listWeek || !listDate) && list.week_info) {
+              var parsed = parseLegacyWeekInfo(list.week_info);
+              if (!listTerm) listTerm = parsed.term;
+              if (!listWeek) listWeek = parsed.week;
+              if (!listDate) listDate = parsed.weekDate;
+            }
+
+            if (filterTerm && filterTerm !== listTerm) return false;
+            if (filterWeek && filterWeek !== listWeek) return false;
+            if (filterDate && filterDate !== listDate) return false;
+            return true;
+          });
+
           savedListSelect.innerHTML = '<option value="">Select a saved shopping list...</option>' + lists.map(function (list) {
             var selected = String(selectedId || '') === String(list.id) ? ' selected' : '';
             return '<option value="' + escHtml(String(list.id)) + '"' + selected + '>' + escHtml(formatSavedListOption(list)) + '</option>';
           }).join('');
           if (!lists.length) {
-            setStatus('No saved shopping lists yet. Use Upload Shopping List to import one.', '');
+            if (allSavedLists.length) {
+              setStatus('No saved lists match the selected Term/Week/Date filters.', '');
+            } else {
+              setStatus('No saved shopping lists yet. Use Upload Shopping List to import one.', '');
+            }
           }
         } catch (err) {
           savedListSelect.innerHTML = '<option value="">Unable to load saved shopping lists</option>';
@@ -443,7 +584,14 @@
           var data = await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(listId));
           currentSavedListId = data.list.id;
           currentSourceFilename = data.list.sourceFilename || '';
-          loadState(data.list.state, { scroll: true });
+          var state = normalizeWeekMeta(data.list.state || {});
+          if ((!state.term || !state.week || !state.weekDate) && data.list.weekInfo) {
+            var parsed = parseLegacyWeekInfo(data.list.weekInfo);
+            if (!state.term) state.term = parsed.term;
+            if (!state.week) state.week = parsed.week;
+            if (!state.weekDate) state.weekDate = parsed.weekDate;
+          }
+          loadState(state, { scroll: true });
           updateCurrentListMeta(data.list);
           setStatus('Loaded "' + (data.list.title || 'Shopping List') + '".', 'ok');
         } catch (err) {
@@ -501,7 +649,9 @@
 
       function renderEditor() {
         slDocTitleInput.value = shoppingState.title || '';
-        slDocWeekInput.value = shoppingState.weekInfo || '';
+        slTermSelect.value = shoppingState.term || '';
+        slWeekSelect.value = shoppingState.week || '';
+        slWeekDateInput.value = shoppingState.weekDate || '';
 
         var maxLen = Math.max(shoppingState.columns[0].length, shoppingState.columns[1].length, 1);
         var html = '';
@@ -555,7 +705,7 @@
       }
 
       function loadState(nextState, options) {
-        shoppingState = nextState;
+        shoppingState = normalizeWeekMeta(nextState);
         renderEditor();
         if (!options || options.scroll !== false) {
           slOutput.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -568,6 +718,25 @@
       });
 
       refreshListsBtn.addEventListener('click', function () {
+        refreshSavedLists(currentSavedListId);
+      });
+
+      filterTermSelect.addEventListener('change', function () {
+        refreshSavedLists(currentSavedListId);
+      });
+
+      filterWeekSelect.addEventListener('change', function () {
+        refreshSavedLists(currentSavedListId);
+      });
+
+      filterDateInput.addEventListener('change', function () {
+        refreshSavedLists(currentSavedListId);
+      });
+
+      clearWeekFiltersBtn.addEventListener('click', function () {
+        filterTermSelect.value = '';
+        filterWeekSelect.value = '';
+        filterDateInput.value = '';
         refreshSavedLists(currentSavedListId);
       });
 
@@ -584,8 +753,19 @@
         shoppingState.title = slDocTitleInput.value;
       });
 
-      slDocWeekInput.addEventListener('input', function () {
-        shoppingState.weekInfo = slDocWeekInput.value;
+      slTermSelect.addEventListener('change', function () {
+        shoppingState.term = slTermSelect.value;
+        shoppingState.weekInfo = buildWeekInfo(shoppingState);
+      });
+
+      slWeekSelect.addEventListener('change', function () {
+        shoppingState.week = slWeekSelect.value;
+        shoppingState.weekInfo = buildWeekInfo(shoppingState);
+      });
+
+      slWeekDateInput.addEventListener('change', function () {
+        shoppingState.weekDate = slWeekDateInput.value;
+        shoppingState.weekInfo = buildWeekInfo(shoppingState);
       });
 
       slGrid.addEventListener('input', handleGridInput);
@@ -648,7 +828,10 @@
           var isUpdate = Boolean(currentSavedListId);
           var payload = {
             title: shoppingState.title,
-            weekInfo: shoppingState.weekInfo,
+            weekInfo: buildWeekInfo(shoppingState),
+            term: shoppingState.term,
+            week: shoppingState.week,
+            weekDate: shoppingState.weekDate,
             sourceFilename: currentSourceFilename,
             state: shoppingState
           };

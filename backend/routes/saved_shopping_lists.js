@@ -32,6 +32,34 @@ function normalizeText(value, fallback = '') {
   return text || fallback;
 }
 
+function normalizeWeekNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  const week = Math.trunc(n);
+  return week >= 1 && week <= 53 ? String(week) : '';
+}
+
+function normalizeTermNumber(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return '';
+  const term = Math.trunc(n);
+  return term >= 1 && term <= 4 ? String(term) : '';
+}
+
+function normalizeDateValue(value) {
+  const text = String(value == null ? '' : value).trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+}
+
+function buildWeekInfoFromState(state) {
+  const parts = [];
+  if (state.term) parts.push(`Term ${state.term}`);
+  if (state.week) parts.push(`Week ${state.week}`);
+  if (state.weekDate) parts.push(state.weekDate);
+  if (parts.length) return parts.join(' | ');
+  return normalizeText(state.weekInfo);
+}
+
 function toInt(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
@@ -77,6 +105,9 @@ function normalizeStatePayload(input) {
   return {
     title: normalizeText(raw.title, 'Shopping List'),
     weekInfo: normalizeText(raw.weekInfo),
+    term: normalizeTermNumber(raw.term),
+    week: normalizeWeekNumber(raw.week),
+    weekDate: normalizeDateValue(raw.weekDate),
     columns: [leftColumn, rightColumn],
     classRecipeRows
   };
@@ -175,7 +206,11 @@ router.get('/', requireShoppingListAccess, async (req, res) => {
   try {
     await ensureSchema();
     const result = await pool.query(
-      `SELECT id, title, week_info, source_filename, created_by_email, created_by_name, created_at, updated_at
+      `SELECT id, title, week_info, source_filename,
+              COALESCE(NULLIF(parsed_state->>'term', ''), '') AS term,
+              COALESCE(NULLIF(parsed_state->>'week', ''), '') AS week,
+              COALESCE(NULLIF(parsed_state->>'weekDate', ''), '') AS week_date,
+              created_by_email, created_by_name, created_at, updated_at
          FROM saved_shopping_lists
         ORDER BY updated_at DESC, id DESC`
     );
@@ -214,6 +249,9 @@ router.get('/:id', requireShoppingListAccess, async (req, res) => {
         title: row.title,
         weekInfo: row.week_info || '',
         sourceFilename: row.source_filename || '',
+        term: String(row.term || ''),
+        week: String(row.week || ''),
+        weekDate: String(row.week_date || ''),
         state: normalizeStatePayload(row.parsed_state || {}),
         createdByEmail: row.created_by_email || '',
         createdByName: row.created_by_name || '',
@@ -237,6 +275,10 @@ router.post('/', requireShoppingListAccess, async (req, res) => {
     const normalizedState = normalizeStatePayload(incomingState);
     if (req.body && req.body.title != null) normalizedState.title = normalizeText(req.body.title, normalizedState.title);
     if (req.body && req.body.weekInfo != null) normalizedState.weekInfo = normalizeText(req.body.weekInfo);
+    if (req.body && req.body.term != null) normalizedState.term = normalizeTermNumber(req.body.term);
+    if (req.body && req.body.week != null) normalizedState.week = normalizeWeekNumber(req.body.week);
+    if (req.body && req.body.weekDate != null) normalizedState.weekDate = normalizeDateValue(req.body.weekDate);
+    normalizedState.weekInfo = buildWeekInfoFromState(normalizedState);
 
     const result = await pool.query(
       `INSERT INTO saved_shopping_lists (
@@ -294,6 +336,10 @@ router.put('/:id', requireShoppingListAccess, async (req, res) => {
     const normalizedState = normalizeStatePayload(incomingState);
     if (req.body && req.body.title != null) normalizedState.title = normalizeText(req.body.title, normalizedState.title);
     if (req.body && req.body.weekInfo != null) normalizedState.weekInfo = normalizeText(req.body.weekInfo);
+    if (req.body && req.body.term != null) normalizedState.term = normalizeTermNumber(req.body.term);
+    if (req.body && req.body.week != null) normalizedState.week = normalizeWeekNumber(req.body.week);
+    if (req.body && req.body.weekDate != null) normalizedState.weekDate = normalizeDateValue(req.body.weekDate);
+    normalizedState.weekInfo = buildWeekInfoFromState(normalizedState);
 
     const result = await pool.query(
       `UPDATE saved_shopping_lists
