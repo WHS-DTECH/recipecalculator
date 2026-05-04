@@ -628,15 +628,26 @@
         if (!teacherFilterSelect) return;
 
         const teacherMap = new Map();
-        foodTruckBookings.forEach((row) => {
-          const teacherCode = getTeacherCodeForBooking(row);
-          if (!teacherCode) return; // skip bookings with no valid class→teacher mapping
-          const key = `code:${teacherCode}`;
-          if (!teacherMap.has(key)) {
-            const name = getTeacherNameForCode(teacherCode) || teacherCode;
-            teacherMap.set(key, name);
-          }
-        });
+
+        // Show the full staff list (same source as booking pages), not only staff present in current bookings.
+        if (staffCodeNameMap.size) {
+          staffCodeNameMap.forEach((name, teacherCode) => {
+            const cleanCode = String(teacherCode || '').trim().toUpperCase();
+            if (!cleanCode) return;
+            teacherMap.set(`code:${cleanCode}`, String(name || cleanCode));
+          });
+        } else {
+          // Fallback if staff data failed to load.
+          foodTruckBookings.forEach((row) => {
+            const teacherCode = getTeacherCodeForBooking(row);
+            if (!teacherCode) return;
+            const key = `code:${teacherCode}`;
+            if (!teacherMap.has(key)) {
+              const name = getTeacherNameForCode(teacherCode) || teacherCode;
+              teacherMap.set(key, name);
+            }
+          });
+        }
 
         const options = Array.from(teacherMap.entries())
           .sort((a, b) => String(a[1]).localeCompare(String(b[1]), undefined, { sensitivity: 'base' }));
