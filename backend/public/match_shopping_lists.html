@@ -175,18 +175,6 @@
       font-weight: 800;
     }
 
-    .ms-dual-table {
-      margin-top: 0.7rem;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 0.85rem;
-    }
-
-    @media (max-width: 980px) {
-      .ms-dual-table {
-        grid-template-columns: 1fr;
-      }
-    }
   </style>
 </head>
 <body>
@@ -281,43 +269,18 @@
       </div>
 
       <div>
-        <h3 class="ms-subsection-title">Recipe List Comparison</h3>
-        <div class="ms-dual-table">
-          <div class="ms-match-list">
-            <table class="ms-table">
-              <thead>
-                <tr>
-                  <th>Add Booking Recipes (Selected Week)</th>
-                </tr>
-              </thead>
-              <tbody id="bookRecipeBody"></tbody>
-            </table>
-          </div>
-          <div class="ms-match-list">
-            <table class="ms-table">
-              <thead>
-                <tr>
-                  <th>Teacher Uploaded Recipes</th>
-                </tr>
-              </thead>
-              <tbody id="teacherRecipeBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div style="margin-top:0.7rem;">
-          <div class="ms-match-list">
-            <table class="ms-table">
-              <thead>
-                <tr>
-                  <th style="width:120px;">Result</th>
-                  <th>Add Booking Recipe</th>
-                  <th>Teacher Recipe</th>
-                </tr>
-              </thead>
-              <tbody id="recipeMatchBody"></tbody>
-            </table>
-          </div>
+        <h3 class="ms-subsection-title">Recipe Like-for-like Comparison</h3>
+        <div class="ms-match-list">
+          <table class="ms-table">
+            <thead>
+              <tr>
+                <th style="width:120px;">Result</th>
+                <th>Add Booking Recipe</th>
+                <th>Teacher Recipe</th>
+              </tr>
+            </thead>
+            <tbody id="recipeMatchBody"></tbody>
+          </table>
         </div>
       </div>
 
@@ -378,8 +341,6 @@
       const bookColumn = document.getElementById('bookColumn');
       const teacherColumn = document.getElementById('teacherColumn');
       const matchTableBody = document.getElementById('matchTableBody');
-      const bookRecipeBody = document.getElementById('bookRecipeBody');
-      const teacherRecipeBody = document.getElementById('teacherRecipeBody');
       const recipeMatchBody = document.getElementById('recipeMatchBody');
 
       let savedLists = [];
@@ -794,14 +755,27 @@
       }
 
       function buildRecipeComparison(bookingRecipeRows, teacherRecipeRows) {
-        const booking = (Array.isArray(bookingRecipeRows) ? bookingRecipeRows : []).map((item) => ({
-          raw: String(item || '').trim(),
-          key: normalizeRecipeText(item)
+        function toUniqueRecipes(rows) {
+          const out = [];
+          const seen = new Set();
+          (Array.isArray(rows) ? rows : []).forEach((item) => {
+            const raw = String(item || '').trim();
+            const key = normalizeRecipeText(raw);
+            if (!key || seen.has(key)) return;
+            seen.add(key);
+            out.push({ raw, key });
+          });
+          return out;
+        }
+
+        const booking = toUniqueRecipes(bookingRecipeRows).map((item) => ({
+          raw: item.raw,
+          key: item.key
         })).filter((item) => item.key);
 
-        const teacher = (Array.isArray(teacherRecipeRows) ? teacherRecipeRows : []).map((item) => ({
-          raw: String(item || '').trim(),
-          key: normalizeRecipeText(item)
+        const teacher = toUniqueRecipes(teacherRecipeRows).map((item) => ({
+          raw: item.raw,
+          key: item.key
         })).filter((item) => item.key);
 
         const teacherUnused = teacher.slice();
@@ -833,23 +807,6 @@
           bookingOnly: bookingUnused,
           teacherOnly: teacherUnused
         };
-      }
-
-      function renderRecipeRows(tbody, rows) {
-        const unique = [];
-        const seen = new Set();
-        (Array.isArray(rows) ? rows : []).forEach((value) => {
-          const raw = String(value || '').trim();
-          if (!raw) return;
-          const key = raw.toLowerCase();
-          if (seen.has(key)) return;
-          seen.add(key);
-          unique.push(raw);
-        });
-
-        tbody.innerHTML = unique.length
-          ? unique.map((value) => `<tr><td>${escHtml(value)}</td></tr>`).join('')
-          : '<tr><td class="ms-muted">No recipe rows found.</td></tr>';
       }
 
       function renderRecipeMatches(result) {
@@ -991,8 +948,6 @@
           countMatched.textContent = String(comparison.matched.length);
           countDifferent.textContent = String(comparison.bookOnly.length + comparison.teacherOnly.length);
 
-          renderRecipeRows(bookRecipeBody, bookingRecipes);
-          renderRecipeRows(teacherRecipeBody, teacherRecipes);
           renderRecipeMatches(recipeComparison);
 
           bookColumn.innerHTML = renderBookColumn(bookItems);
