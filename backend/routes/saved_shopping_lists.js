@@ -385,4 +385,29 @@ router.put('/:id', requireShoppingListAccess, async (req, res) => {
   }
 });
 
+router.delete('/:id', requireShoppingListAccess, async (req, res) => {
+  const listId = toInt(req.params.id);
+  if (!listId) {
+    return res.status(400).json({ success: false, error: 'Invalid shopping list id.' });
+  }
+
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      `DELETE FROM saved_shopping_lists
+        WHERE id = $1
+        RETURNING id`,
+      [listId]
+    );
+
+    if (!result.rowCount) {
+      return res.status(404).json({ success: false, error: 'Saved shopping list not found.' });
+    }
+
+    return res.json({ success: true, id: listId });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to delete shopping list.' });
+  }
+});
+
 module.exports = router;

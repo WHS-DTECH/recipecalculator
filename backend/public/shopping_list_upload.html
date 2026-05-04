@@ -104,6 +104,33 @@
       background: #dbeafe;
     }
 
+    .sl-saved-list-actions {
+      display: inline-flex;
+      gap: 0.45rem;
+      align-items: center;
+    }
+
+    .sl-delete-btn {
+      border: 1px solid #fecaca;
+      background: #fef2f2;
+      color: #b91c1c;
+      border-radius: 7px;
+      font-size: 0.86rem;
+      font-weight: 600;
+      padding: 0.42rem 0.75rem;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .sl-delete-btn:hover {
+      background: #fee2e2;
+    }
+
+    .sl-delete-btn:disabled {
+      opacity: 0.7;
+      cursor: default;
+    }
+
     /* Output layout */
     .sl-output { display: none; }
     .sl-output.visible { display: block; }
@@ -419,9 +446,40 @@
             + '<div class="sl-saved-list-title">' + escHtml(list.title || 'Shopping List') + '</div>'
             + '<div>' + escHtml(detailParts.join(' | ')) + '</div>'
             + '</div>'
+            + '<div class="sl-saved-list-actions">'
             + '<a class="sl-link-btn" href="' + editLink + '">Open In Edit Shopping List</a>'
+            + '<button type="button" class="sl-delete-btn" data-list-id="' + escHtml(String(list.id)) + '" data-list-title="' + escHtml(list.title || 'Shopping List') + '">Delete</button>'
+            + '</div>'
             + '</div>';
         }).join('');
+      }
+
+      async function deleteSavedList(listId, title, buttonEl) {
+        var cleanId = Number(listId || 0);
+        if (!cleanId) return;
+
+        var label = String(title || 'this shopping list').trim();
+        var ok = window.confirm('Delete "' + label + '"? This cannot be undone.');
+        if (!ok) return;
+
+        if (buttonEl) buttonEl.disabled = true;
+        setSavedListsStatus('Deleting shopping list...', '');
+        try {
+          await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(String(cleanId)), {
+            method: 'DELETE'
+          });
+
+          if (currentSavedListId && Number(currentSavedListId) === cleanId) {
+            currentSavedListId = null;
+            setSaveStatus('Deleted. This preview is no longer linked to a saved shopping list.', '');
+          }
+
+          await refreshSavedLists();
+          setSavedListsStatus('Deleted "' + label + '".', 'ok');
+        } catch (err) {
+          setSavedListsStatus('Error: ' + (err.message || String(err)), 'error');
+          if (buttonEl) buttonEl.disabled = false;
+        }
       }
 
       async function refreshSavedLists() {
@@ -804,6 +862,14 @@
 
       refreshSavedListsBtn.addEventListener('click', function () {
         refreshSavedLists();
+      });
+
+      savedListsWrap.addEventListener('click', function (event) {
+        var target = event.target;
+        if (!target || !target.classList || !target.classList.contains('sl-delete-btn')) return;
+        var listId = target.getAttribute('data-list-id') || '';
+        var listTitle = target.getAttribute('data-list-title') || '';
+        deleteSavedList(listId, listTitle, target);
       });
 
       printBtn.addEventListener('click', function () {
