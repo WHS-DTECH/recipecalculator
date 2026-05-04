@@ -38,10 +38,14 @@ async function ensurePlannerUploadSchema() {
   plannerUploadSchemaReady = true;
 }
 
+// All Junior Food subject codes recognized by this system
+const JUNIOR_FOOD_CODES = ['JFOOD', 'VEFOOD', 'MMFOOD', 'SDFOOD', 'PIFOOD', 'SRFOOD', 'JTRFOOD', 'MTRFOOD'];
+const JUNIOR_FOOD_REGEX = new RegExp(JUNIOR_FOOD_CODES.join('|'), 'i');
+
 function getLegacyClassNamesForStream(stream) {
   const normalized = String(stream || '').trim().toLowerCase();
   if (normalized === 'middle') return ['MFOOD'];
-  if (normalized === 'junior') return ['JFOOD', 'VEFOOD'];
+  if (normalized === 'junior') return [...JUNIOR_FOOD_CODES];
   if (normalized === 'senior') return ['HOSP', '11HOSP', '12HOSP', '13HOSP', '100HOSP', '200HOSP', '300HOSP'];
   return [];
 }
@@ -49,7 +53,7 @@ function getLegacyClassNamesForStream(stream) {
 function inferPlannerStreamFromCode(code) {
   const value = String(code || '').trim().toUpperCase();
   if (!value) return 'Other';
-  if (value.includes('JFOOD') || value.includes('VEFOOD')) return 'Junior';
+  if (JUNIOR_FOOD_REGEX.test(value)) return 'Junior';
   if (value.includes('HOSP')) return 'Senior';
   if (value.includes('MFOOD')) return 'Middle';
   return 'Other';
@@ -87,7 +91,7 @@ function inferStreamFromClassToken(classToken) {
   const value = normalizeClassToken(classToken);
   if (!value) return '';
   if (value.includes('HOSP')) return 'Senior';
-  if (value.includes('JFOOD') || value.includes('VEFOOD')) return 'Junior';
+  if (JUNIOR_FOOD_REGEX.test(value)) return 'Junior';
   if (value.includes('MFOOD') || value.includes('FOOD')) return 'Middle';
   return '';
 }
@@ -512,7 +516,7 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
               THEN initcap(lower(trim(coalesce(b.planner_stream, ''))))
             WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%HOSP%'
               THEN 'Senior'
-            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%JFOOD%'
+            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE ANY(ARRAY['%JFOOD%','%VEFOOD%','%MMFOOD%','%SDFOOD%','%PIFOOD%','%SRFOOD%','%JTRFOOD%','%MTRFOOD%'])
               THEN 'Junior'
             WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%MFOOD%'
               THEN 'Middle'
