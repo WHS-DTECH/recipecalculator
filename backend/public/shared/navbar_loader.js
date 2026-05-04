@@ -59,6 +59,11 @@
         backdrop: document.getElementById('planningDrawerBackdrop')
       },
       {
+        toggle: document.querySelector('.navbar-admin-toggle[aria-controls="shoppingDrawer"]'),
+        drawer: document.getElementById('shoppingDrawer'),
+        backdrop: document.getElementById('shoppingDrawerBackdrop')
+      },
+      {
         toggle: document.querySelector('.navbar-admin-toggle[aria-controls="ftTeacherDrawer"]'),
         drawer: document.getElementById('ftTeacherDrawer'),
         backdrop: document.getElementById('ftTeacherDrawerBackdrop')

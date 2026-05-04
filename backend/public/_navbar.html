@@ -42,6 +42,15 @@
   <button
     type="button"
     class="navbar-admin-toggle"
+    data-role="planning"
+    aria-expanded="false"
+    aria-controls="shoppingDrawer">
+    Shopping
+  </button>
+
+  <button
+    type="button"
+    class="navbar-admin-toggle"
     data-role="authenticated"
     data-route="ft_teacher"
     aria-expanded="false"
@@ -66,6 +75,7 @@
 
 <div id="adminDrawerBackdrop" class="navbar-drawer-backdrop" data-role="admin" hidden></div>
 <div id="planningDrawerBackdrop" class="navbar-drawer-backdrop" data-role="planning" hidden></div>
+<div id="shoppingDrawerBackdrop" class="navbar-drawer-backdrop" data-role="planning" hidden></div>
 <div id="ftTeacherDrawerBackdrop" class="navbar-drawer-backdrop" data-role="authenticated" hidden></div>
 
 <aside id="planningDrawer" class="navbar-admin-drawer" data-role="planning" hidden aria-label="Planning Menu">
@@ -79,6 +89,18 @@
     <a href="admin_match_recipes.html" class="navbar-submenu-item">Match Planner Recipes</a>
     <a href="admin_prefill_planner.html" class="navbar-submenu-item">Planner Prefill</a>
     <a href="add_recipe_manually.html" class="navbar-submenu-item">Add Recipe Manually</a>
+  </div>
+</aside>
+
+<aside id="shoppingDrawer" class="navbar-admin-drawer" data-role="planning" hidden aria-label="Shopping Menu">
+  <div class="navbar-drawer-header">
+    <div class="navbar-drawer-title">Shopping</div>
+    <button type="button" class="navbar-drawer-close" aria-label="Close shopping menu">×</button>
+  </div>
+
+  <div class="navbar-drawer-links" style="padding-top:0.6rem;">
+    <a href="book_the_shopping.html" class="navbar-submenu-item">Book Shopping</a>
+    <a href="shopping_list_upload.html" class="navbar-submenu-item">Upload Shopping List</a>
   </div>
 </aside>
 
