@@ -468,11 +468,7 @@
 
       function getTeacherFilterKey(row) {
         const teacherCode = getTeacherCodeForBooking(row);
-        if (teacherCode) return `code:${teacherCode}`;
-        const staffId = String(row && row.staff_id || '').trim().toUpperCase();
-        if (staffId) return `id:${staffId}`;
-        const name = String(row && row.staff_name || '').trim().toLowerCase();
-        return `name:${name}`;
+          return teacherCode ? `code:${teacherCode}` : '';
       }
 
       function getTeacherLabel(row) {
@@ -480,19 +476,38 @@
         if (teacherCode && staffCodeNameMap.has(teacherCode)) {
           return staffCodeNameMap.get(teacherCode);
         }
-        return String(row && row.staff_name || '').trim() || 'Unassigned teacher';
+          return 'Unassigned teacher';
       }
 
       function normalizeClassCode(value) {
         return String(value || '').trim().toUpperCase();
       }
 
-      function getTeacherCodeForBooking(row) {
-        const classCode = normalizeClassCode(row && row.class_name);
-        if (classCode && classTeacherCodeMap.has(classCode)) {
-          return classTeacherCodeMap.get(classCode);
+        function getTeacherCodeFromClassCode(value) {
+          const classCode = normalizeClassCode(value);
+          if (!classCode) return '';
+          if (classTeacherCodeMap.has(classCode)) {
+            return classTeacherCodeMap.get(classCode);
+          }
+
+          const parts = classCode.split('-').filter(Boolean);
+          const prefix = parts[0] || '';
+          if (prefix && staffCodeNameMap.has(prefix)) {
+            return prefix;
+          }
+
+          for (let index = 0; index < parts.length; index += 1) {
+            const part = parts[index];
+            if (classTeacherCodeMap.has(part)) {
+              return classTeacherCodeMap.get(part);
+            }
+          }
+
+          return '';
         }
-        return String(row && row.staff_id || '').trim().toUpperCase();
+
+      function getTeacherCodeForBooking(row) {
+          return getTeacherCodeFromClassCode(row && row.class_name);
       }
 
       function getTeacherNameForCode(code) {
@@ -506,7 +521,10 @@
 
       function getTeacherFilteredBookings() {
         if (!selectedTeacherFilter) return foodTruckBookings;
-        return foodTruckBookings.filter((row) => getTeacherFilterKey(row) === selectedTeacherFilter);
+        return foodTruckBookings.filter((row) => {
+          const teacherKey = getTeacherFilterKey(row);
+          return teacherKey && teacherKey === selectedTeacherFilter;
+        });
       }
 
       function getVisibleFilteredBookings() {
