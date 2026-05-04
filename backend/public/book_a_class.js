@@ -870,7 +870,31 @@ function updateBookingDateDayLabel() {
     dayLabel.textContent = '';
     return;
   }
-  dayLabel.textContent = `(${shortWeekdayFormatter.format(parsed)})`;
+  const info = (window.NZSchoolCalendar && typeof window.NZSchoolCalendar.getDateInfo === 'function')
+    ? window.NZSchoolCalendar.getDateInfo(value)
+    : null;
+
+  const notes = [];
+  if (info && info.termName && !info.isSchoolHoliday) {
+    notes.push(String(info.termName).replace(/\s+\d{4}$/, ''));
+  }
+  if (info && info.schoolHolidayName) {
+    notes.push('School holidays');
+  }
+  if (info && info.publicHolidayName) {
+    notes.push(info.publicHolidayName);
+  }
+  if (info && info.additionalSchoolClosedDayName) {
+    notes.push(info.additionalSchoolClosedDayName);
+  }
+
+  dayLabel.textContent = notes.length
+    ? `(${shortWeekdayFormatter.format(parsed)} | ${notes.join(' | ')})`
+    : `(${shortWeekdayFormatter.format(parsed)})`;
+
+  dayLabel.style.color = (info && (info.isSchoolHoliday || info.isPublicHoliday || info.isAdditionalSchoolClosedDay))
+    ? '#b45309'
+    : '#666';
 }
 
 function getWeekMonday(dateObj) {
@@ -1364,6 +1388,23 @@ function saveBooking(options = {}) {
   if (isFoodTruckStudentMode && cookMode === 'single' && partnerStudentSelect) {
     partnerStudentSelect.value = '';
   }
+
+  const dateInfo = (window.NZSchoolCalendar && typeof window.NZSchoolCalendar.getDateInfo === 'function')
+    ? window.NZSchoolCalendar.getDateInfo(bookingDate)
+    : null;
+  if (dateInfo && dateInfo.valid && dateInfo.isSchoolClosed) {
+    const reasons = [];
+    if (dateInfo.isWeekend) reasons.push('weekend');
+    if (dateInfo.isSchoolHoliday) reasons.push('school holidays');
+    if (dateInfo.isPublicHoliday && dateInfo.publicHolidayName) reasons.push(dateInfo.publicHolidayName);
+    if (dateInfo.isAdditionalSchoolClosedDay && dateInfo.additionalSchoolClosedDayName) reasons.push(dateInfo.additionalSchoolClosedDayName);
+    const reasonText = reasons.length ? reasons.join(' / ') : 'school closure';
+    const proceed = window.confirm(`Selected date ${bookingDate} is marked as ${reasonText}. Save booking anyway?`);
+    if (!proceed) {
+      return Promise.reject(new Error('Booking cancelled due to school closure date.'));
+    }
+  }
+
   // Get recipe_id from selected option (assume dropdown options have data-recipe-id)
   let recipeId = '';
   let recipeName = '';

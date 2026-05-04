@@ -48,6 +48,40 @@ function updatePrintButtonLabel() {
   btn.textContent = scheduleViewMode === 'recipe' ? 'Print by Recipe' : 'Print Schedule (A4)';
 }
 
+function getNzSchoolDateInfo(isoDate) {
+  if (!window.NZSchoolCalendar || typeof window.NZSchoolCalendar.getDateInfo !== 'function') {
+    return null;
+  }
+  return window.NZSchoolCalendar.getDateInfo(isoDate);
+}
+
+function formatTermLabelForBadge(termName) {
+  return String(termName || '').replace(/\s+\d{4}$/, '');
+}
+
+function buildCalendarDateHeaderHtml(weekDate) {
+  const base = escHtml(String(weekDate && weekDate.display ? weekDate.display : ''));
+  const info = getNzSchoolDateInfo(weekDate && weekDate.iso ? weekDate.iso : '');
+  if (!info) return base;
+
+  const chips = [];
+  if (info.termName && !info.isSchoolHoliday) {
+    chips.push(`<span style='display:inline-block;padding:0.05rem 0.34rem;border-radius:999px;background:#e8f5e9;color:#166534;border:1px solid #bbf7d0;font-size:0.68rem;font-weight:700;'>${escHtml(formatTermLabelForBadge(info.termName))}</span>`);
+  }
+  if (info.schoolHolidayName) {
+    chips.push(`<span style='display:inline-block;padding:0.05rem 0.34rem;border-radius:999px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:0.68rem;font-weight:700;'>School holidays</span>`);
+  }
+  if (info.publicHolidayName) {
+    chips.push(`<span style='display:inline-block;padding:0.05rem 0.34rem;border-radius:999px;background:#fef2f2;color:#991b1b;border:1px solid #fecaca;font-size:0.68rem;font-weight:700;'>${escHtml(info.publicHolidayName)}</span>`);
+  }
+  if (info.additionalSchoolClosedDayName) {
+    chips.push(`<span style='display:inline-block;padding:0.05rem 0.34rem;border-radius:999px;background:#fff7ed;color:#9a3412;border:1px solid #fed7aa;font-size:0.68rem;font-weight:700;'>${escHtml(info.additionalSchoolClosedDayName)}</span>`);
+  }
+
+  if (!chips.length) return base;
+  return `${base}<div style='display:flex;flex-direction:column;gap:0.12rem;align-items:center;margin-top:0.18rem;'>${chips.join('')}</div>`;
+}
+
 function getCellPrimaryText(booking) {
   if (scheduleViewMode === 'recipe') {
     const recipeLabel = String(booking.recipe || '').trim();
@@ -924,7 +958,7 @@ async function printScheduleForWeek(printMonday, includeWeekends = showWeekends,
   tableHtml += visibleWeekDates.map(d => `<th>${d.weekday}</th>`).join('');
   tableHtml += '</tr>';
   tableHtml += '<tr><th class="period-col"></th>';
-  tableHtml += visibleWeekDates.map(d => `<th class="date-head">${d.display}</th>`).join('');
+  tableHtml += visibleWeekDates.map(d => `<th class="date-head">${buildCalendarDateHeaderHtml(d)}</th>`).join('');
   tableHtml += '</tr></thead><tbody>';
 
   for (let p = 0; p < periods.length; ++p) {
@@ -1076,7 +1110,7 @@ async function renderScheduleCalendar() {
     let html = `<thead><tr style='background:#1976d2;color:#fff;'>
       <th style='width:48px;background:#1976d2;'></th>` + visibleWeekDates.map((d) => `<th style='padding:0.35rem 0.1rem;font-size:0.98em;background:#1976d2;color:#fff;'>${d.weekday}</th>`).join('') + '</tr>';
     html += `<tr style='background:#e3eafc;color:#222;'>
-      <th style='width:48px;'></th>` + visibleWeekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${date.display}</th>`).join('') + '</tr></thead>';
+      <th style='width:48px;'></th>` + visibleWeekDates.map(date => `<th style='padding:0.15rem 0.1rem;font-size:0.92em;'>${buildCalendarDateHeaderHtml(date)}</th>`).join('') + '</tr></thead>';
 
   // Planner row — year planner entries, each shown individually with a delete button
   html += `<tr><td style='background:#e8eaf6;font-weight:bold;text-align:center;font-size:0.85em;color:#283593;padding:0.3rem 0.1rem;'>Planner</td>`;
