@@ -815,6 +815,9 @@ app.use('/api/permissions', permissionsRouter);
 const userRolesRouter = require('./routes/user_roles');
 app.use('/api/user_roles', userRolesRouter);
 
+const subscriptionsRouter = require('./routes/subscriptions');
+app.use('/api/subscriptions', subscriptionsRouter);
+
 // --- Google Auth API ---
 app.get('/api/auth/google/config', (req, res) => {
   const clientId = getGoogleClientId();

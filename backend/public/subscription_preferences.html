@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Recipe Subscription Preferences</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .preferences-page {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 2rem 1.25rem;
+        }
+        .preferences-card {
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 2rem;
+            margin-bottom: 1.5rem;
+        }
+        .preferences-section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 1rem;
+        }
+        .preferences-description {
+            color: #6b7280;
+            margin-bottom: 1.5rem;
+            line-height: 1.5;
+        }
+        .subscription-toggle {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 28px;
+            background-color: #cbd5e0;
+            border-radius: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .toggle-switch.active {
+            background-color: #10b981;
+        }
+        .toggle-switch-inner {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background-color: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: left 0.3s;
+        }
+        .toggle-switch.active .toggle-switch-inner {
+            left: 24px;
+        }
+        .toggle-label {
+            font-weight: 500;
+            color: #374151;
+        }
+        .email-display {
+            background: white;
+            padding: 1rem;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+            word-break: break-all;
+        }
+        .email-label {
+            font-size: 0.875rem;
+            color: #6b7280;
+            margin-bottom: 0.25rem;
+        }
+        .email-value {
+            font-weight: 500;
+            color: #1f2937;
+        }
+        .button-group {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .btn-primary {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #2563eb;
+        }
+        .btn-secondary {
+            background-color: #e5e7eb;
+            color: #374151;
+        }
+        .btn-secondary:hover {
+            background-color: #d1d5db;
+        }
+        .status-message {
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1.5rem;
+            display: none;
+        }
+        .status-message.success {
+            background-color: #d1fae5;
+            color: #065f46;
+            border: 1px solid #6ee7b7;
+            display: block;
+        }
+        .status-message.error {
+            background-color: #fee2e2;
+            color: #7f1d1d;
+            border: 1px solid #fca5a5;
+            display: block;
+        }
+        .status-message.info {
+            background-color: #dbeafe;
+            color: #0c2d6b;
+            border: 1px solid #93c5fd;
+            display: block;
+        }
+        .loading {
+            opacity: 0.6;
+            pointer-events: none;
+        }
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f4f6;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            margin-right: 0.5rem;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="navbar-include"></div>
+    <script src="shared/navbar_loader.js"></script>
+
+    <div class="preferences-page">
+        <h1>Recipe Subscription Preferences</h1>
+
+        <div id="statusMessage" class="status-message"></div>
+
+        <div class="preferences-card">
+            <div class="preferences-section-title">Email Notifications</div>
+            <div class="preferences-description">
+                Receive email notifications when new recipes are published to the Food Room recipe collection.
+            </div>
+
+            <div class="email-display">
+                <div class="email-label">Your Email</div>
+                <div class="email-value" id="userEmailDisplay">Loading...</div>
+            </div>
+
+            <div class="subscription-toggle">
+                <div class="toggle-switch" id="subscriptionToggle">
+                    <div class="toggle-switch-inner"></div>
+                </div>
+                <div class="toggle-label" id="subscriptionLabel">Subscribed</div>
+            </div>
+
+            <div class="button-group">
+                <button id="saveBtn" class="btn btn-primary" disabled>Save Preferences</button>
+                <button id="logoutBtn" class="btn btn-secondary">Change Account</button>
+            </div>
+        </div>
+
+        <div class="preferences-card" style="background: #f0f9ff; border-color: #93c5fd;">
+            <div class="preferences-section-title" style="color: #0c4a6e;">How It Works</div>
+            <div class="preferences-description">
+                <ul style="margin: 0; padding-left: 1.5rem;">
+                    <li>When subscribed, you'll receive an email each time a new recipe is published</li>
+                    <li>Notifications include the recipe name and a link to view it</li>
+                    <li>You can change your subscription preference at any time</li>
+                    <li>Unsubscribe removes your email from all future notifications</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script src="shared/nz_school_calendar.js"></script>
+    <script>
+        (function() {
+            'use strict';
+
+            const statusEl = document.getElementById('statusMessage');
+            const emailDisplay = document.getElementById('userEmailDisplay');
+            const toggleSwitch = document.getElementById('subscriptionToggle');
+            const toggleLabel = document.getElementById('subscriptionLabel');
+            const saveBtn = document.getElementById('saveBtn');
+            const logoutBtn = document.getElementById('logoutBtn');
+
+            let currentEmail = '';
+            let currentSubscriptionStatus = null;
+            let userType = '';
+            let userName = '';
+
+            function showStatus(message, type = 'info') {
+                statusEl.textContent = message;
+                statusEl.className = `status-message ${type}`;
+                setTimeout(() => {
+                    if (statusEl.className.includes(type)) {
+                        statusEl.className = 'status-message';
+                    }
+                }, 5000);
+            }
+
+            function setButtonLoading(btn, loading) {
+                if (loading) {
+                    btn.classList.add('loading');
+                    btn.innerHTML = '<span class="spinner"></span>Saving...';
+                    btn.disabled = true;
+                } else {
+                    btn.classList.remove('loading');
+                    btn.innerHTML = 'Save Preferences';
+                    btn.disabled = false;
+                }
+            }
+
+            function updateToggleVisuals() {
+                if (currentSubscriptionStatus === true) {
+                    toggleSwitch.classList.add('active');
+                    toggleLabel.textContent = 'Subscribed';
+                } else {
+                    toggleSwitch.classList.remove('active');
+                    toggleLabel.textContent = 'Unsubscribed';
+                }
+            }
+
+            function initializeUser() {
+                // Try to get user from auth endpoint
+                fetch('/api/auth/me', { credentials: 'include' })
+                    .then(res => {
+                        if (!res.ok) throw new Error('Not authenticated');
+                        return res.json();
+                    })
+                    .then(data => {
+                        if (data && data.user && data.user.email) {
+                            currentEmail = data.user.email;
+                            userType = data.user.type || 'user';
+                            userName = data.user.name || '';
+                            loadSubscriptionStatus();
+                        } else {
+                            showStatus('Unable to determine your email. Please log in again.', 'error');
+                        }
+                    })
+                    .catch(() => {
+                        showStatus('Unable to load your account information. Please log in again.', 'error');
+                        logoutBtn.textContent = 'Log In';
+                    });
+            }
+
+            function loadSubscriptionStatus() {
+                emailDisplay.textContent = currentEmail;
+
+                fetch(`/api/subscriptions/status?email=${encodeURIComponent(currentEmail)}`)
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.success) {
+                            currentSubscriptionStatus = data.isSubscribed;
+                            updateToggleVisuals();
+                            saveBtn.disabled = false;
+                        } else {
+                            // New user - default to not subscribed
+                            currentSubscriptionStatus = false;
+                            updateToggleVisuals();
+                            saveBtn.disabled = false;
+                        }
+                    })
+                    .catch(err => {
+                        console.error('Error loading subscription status:', err);
+                        showStatus('Error loading your preferences. Please try again.', 'error');
+                    });
+            }
+
+            function toggleSubscription() {
+                if (currentSubscriptionStatus === null) return;
+                currentSubscriptionStatus = !currentSubscriptionStatus;
+                updateToggleVisuals();
+                saveBtn.disabled = false;
+            }
+
+            function savePreferences() {
+                if (currentSubscriptionStatus === null || !currentEmail) {
+                    showStatus('Unable to save preferences. Please refresh the page.', 'error');
+                    return;
+                }
+
+                setButtonLoading(saveBtn, true);
+
+                const endpoint = currentSubscriptionStatus ? '/api/subscriptions/subscribe' : '/api/subscriptions/unsubscribe';
+                const payload = {
+                    email: currentEmail,
+                    name: userName,
+                    userType: userType
+                };
+
+                fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify(payload)
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        setButtonLoading(saveBtn, false);
+                        if (data.success) {
+                            const message = currentSubscriptionStatus
+                                ? 'You are now subscribed to recipe updates!'
+                                : 'You have been unsubscribed from recipe updates.';
+                            showStatus(message, 'success');
+                        } else {
+                            showStatus('Error saving preferences: ' + (data.error || 'Unknown error'), 'error');
+                        }
+                    })
+                    .catch(err => {
+                        setButtonLoading(saveBtn, false);
+                        console.error('Error saving preferences:', err);
+                        showStatus('Error saving preferences. Please try again.', 'error');
+                    });
+            }
+
+            function logout() {
+                fetch('/api/auth/logout', {
+                    method: 'POST',
+                    credentials: 'include'
+                })
+                    .then(() => {
+                        window.location.href = 'index.html';
+                    })
+                    .catch(() => {
+                        window.location.href = 'index.html';
+                    });
+            }
+
+            // Event listeners
+            toggleSwitch.addEventListener('click', toggleSubscription);
+            saveBtn.addEventListener('click', savePreferences);
+            logoutBtn.addEventListener('click', logout);
+
+            // Initialize on page load
+            initializeUser();
+        })();
+    </script>
+</body>
+</html>
