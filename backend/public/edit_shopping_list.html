@@ -399,6 +399,11 @@
         return parts.join(' - ');
       }
 
+      function getInitialSavedListId() {
+        var params = new URLSearchParams(window.location.search || '');
+        return params.get('saved_list_id') || '';
+      }
+
       function updateCurrentListMeta(list) {
         if (!list || !list.id) {
           currentListMeta.textContent = 'Unsaved list';
@@ -670,9 +675,15 @@
         window.print();
       });
 
+        var initialSavedListId = getInitialSavedListId();
       loadState(createBlankState());
       updateCurrentListMeta(null);
-      refreshSavedLists();
+        refreshSavedLists(initialSavedListId).then(function () {
+          if (initialSavedListId) {
+            savedListSelect.value = initialSavedListId;
+            loadSavedList(initialSavedListId);
+          }
+        });
     })();
   </script>
 </body>

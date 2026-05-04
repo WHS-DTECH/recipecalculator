@@ -63,6 +63,46 @@
     }
     .sl-status.error { color: #c62828; }
     .sl-status.ok { color: #2e7d32; }
+    .sl-saved-list-wrap {
+      display: grid;
+      gap: 0.6rem;
+    }
+    .sl-saved-list-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 0.75rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 9px;
+      padding: 0.6rem 0.7rem;
+      background: #f8fbff;
+      flex-wrap: wrap;
+    }
+    .sl-saved-list-meta {
+      flex: 1 1 320px;
+      color: #334155;
+      font-size: 0.9rem;
+      line-height: 1.35;
+    }
+    .sl-saved-list-title {
+      font-weight: 700;
+      color: #1e3a5f;
+    }
+    .sl-link-btn {
+      display: inline-block;
+      text-decoration: none;
+      padding: 0.42rem 0.75rem;
+      border-radius: 7px;
+      border: 1px solid #93c5fd;
+      background: #eff6ff;
+      color: #1e40af;
+      font-size: 0.86rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .sl-link-btn:hover {
+      background: #dbeafe;
+    }
 
     /* Output layout */
     .sl-output { display: none; }
@@ -204,6 +244,18 @@
       <div id="parseStatus" class="sl-status"></div>
     </div>
 
+    <div class="sl-card">
+      <div class="sl-upload-row" style="justify-content:space-between;align-items:center;gap:0.6rem;">
+        <div>
+          <h2 style="margin:0;">Uploaded Shopping Lists</h2>
+          <div class="sl-card-sub" style="margin:0.2rem 0 0;">Open any saved list directly in Edit Shopping List.</div>
+        </div>
+        <button type="button" id="refreshSavedListsBtn" class="sl-btn sl-btn-secondary">Refresh List</button>
+      </div>
+      <div id="savedListsStatus" class="sl-status"></div>
+      <div id="savedListsWrap" class="sl-saved-list-wrap"></div>
+    </div>
+
     <div id="slOutput" class="sl-output">
       <div id="slDocHeader" class="sl-doc-header">
         <div id="slDocTitle" class="sl-doc-title"></div>
@@ -246,6 +298,9 @@
       const docxFileInput = document.getElementById('docxFileInput');
       const parseBtn = document.getElementById('parseBtn');
       const parseStatus = document.getElementById('parseStatus');
+      const refreshSavedListsBtn = document.getElementById('refreshSavedListsBtn');
+      const savedListsStatus = document.getElementById('savedListsStatus');
+      const savedListsWrap = document.getElementById('savedListsWrap');
       const slOutput = document.getElementById('slOutput');
       const slDocTitle = document.getElementById('slDocTitle');
       const slDocWeek = document.getElementById('slDocWeek');
@@ -289,6 +344,55 @@
       function setSaveStatus(message, type) {
         saveStatus.className = 'sl-status' + (type ? ' ' + type : '');
         saveStatus.textContent = message || '';
+      }
+
+      function setSavedListsStatus(message, type) {
+        savedListsStatus.className = 'sl-status' + (type ? ' ' + type : '');
+        savedListsStatus.textContent = message || '';
+      }
+
+      function formatDateTime(value) {
+        if (!value) return '';
+        var date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleString();
+      }
+
+      function renderSavedLists(lists) {
+        if (!lists.length) {
+          savedListsWrap.innerHTML = '<div class="sl-empty-note">No uploaded shopping lists saved yet.</div>';
+          return;
+        }
+
+        savedListsWrap.innerHTML = lists.map(function (list) {
+          var editLink = 'edit_shopping_list.html?saved_list_id=' + encodeURIComponent(String(list.id));
+          var detailParts = [];
+          if (list.week_info) detailParts.push(list.week_info);
+          if (list.created_by_name) detailParts.push('By ' + list.created_by_name);
+          if (list.updated_at) detailParts.push('Updated ' + formatDateTime(list.updated_at));
+          return '<div class="sl-saved-list-row">'
+            + '<div class="sl-saved-list-meta">'
+            + '<div class="sl-saved-list-title">' + escHtml(list.title || 'Shopping List') + '</div>'
+            + '<div>' + escHtml(detailParts.join(' | ')) + '</div>'
+            + '</div>'
+            + '<a class="sl-link-btn" href="' + editLink + '">Open In Edit Shopping List</a>'
+            + '</div>';
+        }).join('');
+      }
+
+      async function refreshSavedLists() {
+        refreshSavedListsBtn.disabled = true;
+        setSavedListsStatus('Loading uploaded shopping lists...', '');
+        try {
+          var data = await requestJson('/api/saved-shopping-lists');
+          var lists = Array.isArray(data.lists) ? data.lists : [];
+          renderSavedLists(lists);
+          setSavedListsStatus(lists.length ? 'Showing ' + lists.length + ' saved shopping list(s).' : 'No uploaded shopping lists saved yet.', lists.length ? 'ok' : '');
+        } catch (err) {
+          savedListsWrap.innerHTML = '<div class="sl-empty-note">Could not load uploaded shopping lists.</div>';
+          setSavedListsStatus('Error: ' + (err.message || String(err)), 'error');
+        }
+        refreshSavedListsBtn.disabled = false;
       }
 
       // ── DOCX XML helpers ──────────────────────────────────────────────
@@ -632,15 +736,22 @@
           });
           currentSavedListId = data.list.id;
           setSaveStatus('Saved. This list is now available in Edit Shopping List.', 'ok');
+          refreshSavedLists();
         } catch (err) {
           setSaveStatus('Error: ' + (err.message || String(err)), 'error');
         }
         saveBtn.disabled = false;
       });
 
+      refreshSavedListsBtn.addEventListener('click', function () {
+        refreshSavedLists();
+      });
+
       printBtn.addEventListener('click', function () {
         window.print();
       });
+
+      refreshSavedLists();
     })();
   </script>
 </body>
