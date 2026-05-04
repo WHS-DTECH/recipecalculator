@@ -386,6 +386,7 @@
       <article class="right-tools">
         <section class="slot-card">
           <div style="font-weight:800;color:#0f172a;margin-bottom:0.3rem;">Class Students</div>
+          <div id="classStudentsMeta" style="font-size:0.82rem;color:#334155;margin-bottom:0.35rem;"></div>
           <div class="search-row">
             <input id="studentSearchInput" type="search" placeholder="Search student by name or ID">
           </div>
@@ -393,9 +394,11 @@
             <table class="students-table">
               <thead>
                 <tr>
-                  <th style="width:28%;">ID</th>
                   <th>Name</th>
-                  <th style="width:72px;">Action</th>
+                  <th style="width:28%;">Recipe</th>
+                  <th style="width:16%;">Date</th>
+                  <th style="width:10%;">Period</th>
+                  <th style="width:92px;">Action</th>
                 </tr>
               </thead>
               <tbody id="studentsBody"></tbody>
@@ -441,6 +444,7 @@
       const activeSeatMeta = document.getElementById('activeSeatMeta');
       const studentsBody = document.getElementById('studentsBody');
       const studentSearchInput = document.getElementById('studentSearchInput');
+      const classStudentsMeta = document.getElementById('classStudentsMeta');
       const unbookedSummary = document.getElementById('unbookedSummary');
       const unbookedList = document.getElementById('unbookedList');
       const studentDayMeta = document.getElementById('studentDayMeta');
@@ -455,20 +459,45 @@
       let roster = [];
       let activeSeat = { slot: 1, seat: 1 };
       let foodTruckBookings = [];
+      let classTeacherCodeMap = new Map();
+      let staffCodeNameMap = new Map();
 
       function isFoodTruckBooking(row) {
         return String(row && row.planner_stream || '').trim().toLowerCase() === FOOD_TRUCK_STREAM.toLowerCase();
       }
 
       function getTeacherFilterKey(row) {
-        const staffId = String(row && row.staff_id || '').trim();
+        const teacherCode = getTeacherCodeForBooking(row);
+        if (teacherCode) return `code:${teacherCode}`;
+        const staffId = String(row && row.staff_id || '').trim().toUpperCase();
         if (staffId) return `id:${staffId}`;
         const name = String(row && row.staff_name || '').trim().toLowerCase();
         return `name:${name}`;
       }
 
       function getTeacherLabel(row) {
+        const teacherCode = getTeacherCodeForBooking(row);
+        if (teacherCode && staffCodeNameMap.has(teacherCode)) {
+          return staffCodeNameMap.get(teacherCode);
+        }
         return String(row && row.staff_name || '').trim() || 'Unassigned teacher';
+      }
+
+      function normalizeClassCode(value) {
+        return String(value || '').trim().toUpperCase();
+      }
+
+      function getTeacherCodeForBooking(row) {
+        const classCode = normalizeClassCode(row && row.class_name);
+        if (classCode && classTeacherCodeMap.has(classCode)) {
+          return classTeacherCodeMap.get(classCode);
+        }
+        return String(row && row.staff_id || '').trim().toUpperCase();
+      }
+
+      function getTeacherNameForCode(code) {
+        const clean = String(code || '').trim().toUpperCase();
+        return clean ? (staffCodeNameMap.get(clean) || clean) : '';
       }
 
       function getClassFilterKey(row) {
@@ -533,7 +562,8 @@
       function renderBookingMeta() {
         if (!booking) return;
         const dateStr = String(booking.booking_date || '');
-        slotBookingMeta.textContent = `Booking #${booking.id} | ${booking.staff_name || '-'} | ${booking.class_name || '-'} | ${dateStr} | P${booking.period || '-'} | ${booking.recipe || '-'}`;
+        const teacherName = getTeacherLabel(booking) || booking.staff_name || '-';
+        slotBookingMeta.textContent = `Booking #${booking.id} | ${teacherName} | ${booking.class_name || '-'} | ${dateStr} | P${booking.period || '-'} | ${booking.recipe || '-'}`;
 
         const linked = `${safeSourcePage}?booking_id=${encodeURIComponent(String(bookingId))}`;
         backCalendarLink.href = linked;
@@ -545,8 +575,35 @@
         const period = String(row && row.period || '-').trim() || '-';
         const recipe = String(row && row.recipe || '-').trim() || '-';
         const className = String(row && row.class_name || '-').trim() || '-';
-        const staffName = String(row && row.staff_name || '-').trim() || '-';
+        const staffName = String(getTeacherLabel(row) || row && row.staff_name || '-').trim() || '-';
         return `${bookingDate} | P${period} | ${recipe} | ${className} | ${staffName}`;
+      }
+
+      async function loadReferenceData() {
+        classTeacherCodeMap = new Map();
+        staffCodeNameMap = new Map();
+
+        const [classesRes, staffRes] = await Promise.all([
+          fetch('/api/classes/class_upload/all').then((r) => r.json().catch(() => ({}))),
+          fetch('/api/staff_upload/dropdown').then((r) => r.json().catch(() => ({})))
+        ]);
+
+        const classes = Array.isArray(classesRes && classesRes.classes) ? classesRes.classes : [];
+        classes.forEach((row) => {
+          const classCode = normalizeClassCode(row && row.ttcode);
+          const teacherCode = String(row && row.teacher_in_charge || '').trim().toUpperCase();
+          if (classCode && teacherCode) classTeacherCodeMap.set(classCode, teacherCode);
+        });
+
+        const staff = Array.isArray(staffRes && staffRes.staff) ? staffRes.staff : [];
+        staff.forEach((row) => {
+          const code = String(row && row.code || '').trim().toUpperCase();
+          if (!code) return;
+          const first = String(row && row.first_name || '').trim();
+          const last = String(row && row.last_name || '').trim();
+          const fullName = [first, last].filter(Boolean).join(' ').trim() || code;
+          staffCodeNameMap.set(code, fullName);
+        });
       }
 
       function renderTeacherFilterOptions() {
@@ -736,6 +793,17 @@
         });
       }
 
+      function renderClassStudentsMeta() {
+        if (!booking) {
+          classStudentsMeta.textContent = '';
+          return;
+        }
+        const recipe = String(booking.recipe || '-').trim() || '-';
+        const date = String(booking.booking_date || '-').trim() || '-';
+        const period = String(booking.period || '-').trim() || '-';
+        classStudentsMeta.textContent = `Recipe: ${recipe} | Date: ${date} | Period: P${period}`;
+      }
+
       async function loadStudentDay(student) {
         if (!booking || !student || !student.id_number) return;
         studentDayMeta.textContent = `Loading timetable for ${student.student_name || ''} (${student.id_number || ''})...`;
@@ -771,8 +839,10 @@
 
         studentsBody.innerHTML = filtered.map((s) => `
           <tr>
-            <td>${escapeHtml(s.id_number || '')}</td>
             <td>${escapeHtml(s.student_name || '')}</td>
+            <td>${escapeHtml(booking && booking.recipe || '-')}</td>
+            <td>${escapeHtml(booking && booking.booking_date || '-')}</td>
+            <td>${escapeHtml(booking && booking.period ? `P${booking.period}` : '-')}</td>
             <td><button type="button" class="assign-student-btn" data-id="${escapeHtml(s.id_number || '')}">Assign</button></td>
           </tr>
         `).join('');
@@ -783,6 +853,7 @@
             const student = roster.find((r) => String(r.id_number || '').trim() === studentId);
             if (!student) return;
             try {
+              btn.title = `Assign ${student.student_name || ''} to Slot ${activeSeat.slot}, Seat ${activeSeat.seat}`;
               const res = await fetch(`/api/booking-slot-lists/${encodeURIComponent(String(bookingId))}/assign`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -834,8 +905,7 @@
         }
 
         let url = `/api/student_upload/by-class/${encodeURIComponent(String(booking.class_name || ''))}`;
-        const codeMatch = /\(([^)]+)\)/.exec(String(booking.staff_name || ''));
-        const staffCode = codeMatch ? String(codeMatch[1] || '').trim() : '';
+        const staffCode = getTeacherCodeForBooking(booking);
         if (staffCode) {
           url += `?staffCode=${encodeURIComponent(staffCode)}`;
         }
@@ -876,6 +946,7 @@
         allowPairsInput.checked = !!slotList.allow_pairs;
 
         renderBookingMeta();
+        renderClassStudentsMeta();
         renderActiveSeatMeta();
         renderSlots();
         renderRoster();
@@ -954,7 +1025,7 @@
         updateUrlWithBooking(selectedId);
       });
 
-      loadFoodTruckBookingList()
+      Promise.all([loadReferenceData(), loadFoodTruckBookingList()])
         .then(() => refreshAll())
         .catch((err) => {
           setStatus(err.message || 'Failed to load Food Truck booking list.', true);
