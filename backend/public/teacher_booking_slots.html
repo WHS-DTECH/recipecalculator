@@ -56,6 +56,43 @@
       max-width: 100%;
       background: #fff;
     }
+
+    .slot-booking-picker > label {
+      min-width: 220px;
+    }
+
+    .slot-booking-picker > label:nth-child(2) {
+      min-width: 320px;
+      flex: 0 1 auto;
+    }
+
+    .teacher-day-tabs {
+      display: inline-flex;
+      gap: 0.3rem;
+      flex-wrap: nowrap;
+      align-items: center;
+      padding-bottom: 1px;
+    }
+
+    .teacher-day-btn {
+      border: 1px solid #b9c6d7;
+      background: #d8e0ec;
+      color: #10223a;
+      border-radius: 6px;
+      padding: 0.28rem 0.62rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      cursor: pointer;
+      min-width: 54px;
+      line-height: 1.1;
+      transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+
+    .teacher-day-btn.active {
+      background: #1d4ed8;
+      border-color: #1d4ed8;
+      color: #fff;
+    }
     .slot-actions a,
     .slot-actions button {
       text-decoration: none;
@@ -300,42 +337,23 @@
 
     @media (max-width: 1080px) {
       .slot-grid { grid-template-columns: 1fr; }
+      .slot-booking-picker > label:nth-child(2) {
+        min-width: 100%;
+      }
+      .teacher-day-tabs {
+        flex-wrap: wrap;
+      }
     }
 
     @media print {
       #navbar-include,
       .slot-booking-picker,
       .slot-actions,
-        grid-template-columns: minmax(220px, 1fr) auto minmax(220px, 1fr);
       .search-row,
       .students-table-wrap,
       .student-day,
-
       .teacher-day-tabs {
-        display: inline-flex;
-        gap: 0.24rem;
-        flex-wrap: nowrap;
-        align-items: center;
-        padding-bottom: 1px;
-      }
-
-      .teacher-day-btn {
-        border: 1px solid #cbd5e1;
-        background: #e2e8f0;
-        color: #1e293b;
-        border-radius: 6px;
-        padding: 0.28rem 0.52rem;
-        font-size: 0.74rem;
-        font-weight: 700;
-        cursor: pointer;
-        min-width: 42px;
-        line-height: 1.1;
-      }
-
-      .teacher-day-btn.active {
-        background: #1d4ed8;
-        border-color: #1d4ed8;
-        color: #fff;
+        display: none !important;
       }
       .slot-status {
         display: none !important;
@@ -763,14 +781,7 @@
         const classMap = new Map();
 
         const teacherCode = String(selectedTeacherFilter || '').replace(/^code:/i, '').trim().toUpperCase();
-        if (teacherCode && teacherClassCodeMap.has(teacherCode)) {
-          const mappedClasses = teacherClassCodeMap.get(teacherCode);
-          mappedClasses.forEach((label, key) => classMap.set(key, label));
-        } else if (!teacherCode) {
-          allClassCodeMap.forEach((label, key) => classMap.set(key, label));
-        }
-
-        // Keep visible-booking classes as fallback, even if class_upload mapping is incomplete.
+        // Show classes currently visible for selected teacher/day first.
         getDayFilteredBookings().forEach((row) => {
           const key = getClassFilterKey(row);
           if (!key) return;
@@ -778,6 +789,16 @@
             classMap.set(key, String(row.class_name || '').trim() || key);
           }
         });
+
+        // If no bookings are visible for that day, fall back to class mappings.
+        if (!classMap.size) {
+          if (teacherCode && teacherClassCodeMap.has(teacherCode)) {
+            const mappedClasses = teacherClassCodeMap.get(teacherCode);
+            mappedClasses.forEach((label, key) => classMap.set(key, label));
+          } else if (!teacherCode) {
+            allClassCodeMap.forEach((label, key) => classMap.set(key, label));
+          }
+        }
 
         const options = Array.from(classMap.entries())
           .sort((a, b) => String(a[1]).localeCompare(String(b[1]), undefined, { sensitivity: 'base' }));
@@ -905,8 +926,11 @@
       }
 
       function renderClassStudentsMeta() {
+        const selectedClass = normalizeClassCode(selectedClassFilter);
         if (!booking) {
-          classStudentsMeta.textContent = '';
+          classStudentsMeta.textContent = selectedClass
+            ? `Class: ${selectedClass} | No linked booking selected for this filter.`
+            : 'Choose a class to view students.';
           return;
         }
         const recipe = String(booking.recipe || '-').trim() || '-';
@@ -943,8 +967,9 @@
 
       function renderRoster() {
         const filtered = getFilteredRoster();
+        const canAssign = !!bookingId;
         if (!filtered.length) {
-          studentsBody.innerHTML = '<tr><td colspan="3">No students found.</td></tr>';
+          studentsBody.innerHTML = '<tr><td colspan="5">No students found.</td></tr>';
           return;
         }
 
@@ -954,12 +979,16 @@
             <td>${escapeHtml(booking && booking.recipe || '-')}</td>
             <td>${escapeHtml(booking && booking.booking_date || '-')}</td>
             <td>${escapeHtml(booking && booking.period ? `P${booking.period}` : '-')}</td>
-            <td><button type="button" class="assign-student-btn" data-id="${escapeHtml(s.id_number || '')}">Assign</button></td>
+            <td><button type="button" class="assign-student-btn" data-id="${escapeHtml(s.id_number || '')}"${canAssign ? '' : ' disabled title="Select a linked booking to assign seats"'}>Assign</button></td>
           </tr>
         `).join('');
 
         studentsBody.querySelectorAll('.assign-student-btn').forEach((btn) => {
           btn.addEventListener('click', async () => {
+            if (!bookingId) {
+              setStatus('Select a linked booking before assigning students to seats.', true);
+              return;
+            }
             const studentId = String(btn.getAttribute('data-id') || '').trim();
             const student = roster.find((r) => String(r.id_number || '').trim() === studentId);
             if (!student) return;
@@ -1010,13 +1039,15 @@
       }
 
       async function loadRosterForBooking() {
-        if (!booking || !booking.class_name) {
+        const classCode = normalizeClassCode(booking && booking.class_name ? booking.class_name : selectedClassFilter);
+        if (!classCode) {
           roster = [];
           return;
         }
 
-        let url = `/api/student_upload/by-class/${encodeURIComponent(String(booking.class_name || ''))}`;
-        const staffCode = getTeacherCodeForBooking(booking);
+        let url = `/api/student_upload/by-class/${encodeURIComponent(classCode)}`;
+        const selectedTeacherCode = String(selectedTeacherFilter || '').replace(/^code:/i, '').trim().toUpperCase();
+        const staffCode = booking ? getTeacherCodeForBooking(booking) : selectedTeacherCode;
         if (staffCode) {
           url += `?staffCode=${encodeURIComponent(staffCode)}`;
         }
@@ -1042,12 +1073,16 @@
 
       async function refreshAll() {
         if (!bookingId) {
+          booking = null;
+          slotList = { max_slots: 24, allow_pairs: true };
+          slots = [];
           slotBookingMeta.textContent = 'No Food Truck booking found for the selected Teacher/Day/Class filter.';
           slotsBody.innerHTML = '<tr><td colspan="3">No booking selected.</td></tr>';
-          studentsBody.innerHTML = '<tr><td colspan="3">No students found.</td></tr>';
-          unbookedSummary.textContent = '';
-          unbookedList.innerHTML = '';
+          seat2Header.style.display = '';
+          await loadRosterForBooking();
           renderClassStudentsMeta();
+          renderRoster();
+          renderUnbooked();
           return;
         }
 
@@ -1095,8 +1130,14 @@
 
       teacherFilterSelect.addEventListener('change', () => {
         selectedTeacherFilter = String(teacherFilterSelect.value || '').trim();
-        selectedClassFilter = '';
         renderClassFilterOptions();
+        if (selectedClassFilter && !Array.from(classFilterSelect.options).some((opt) => opt.value === selectedClassFilter)) {
+          selectedClassFilter = '';
+        }
+        if (!selectedClassFilter && classFilterSelect.options.length > 1) {
+          selectedClassFilter = String(classFilterSelect.options[1].value || '').trim().toUpperCase();
+          classFilterSelect.value = selectedClassFilter;
+        }
         renderFoodTruckBookingOptions();
         updateDayTabs();
         refreshAll()
@@ -1110,8 +1151,13 @@
         dayFilterTabs.querySelectorAll('.teacher-day-btn').forEach((btn) => {
           btn.addEventListener('click', () => {
             selectedWeekdayFilter = String(btn.getAttribute('data-weekday') || '').trim();
+            selectedClassFilter = '';
             updateDayTabs();
             renderClassFilterOptions();
+            if (classFilterSelect.options.length > 1) {
+              selectedClassFilter = String(classFilterSelect.options[1].value || '').trim().toUpperCase();
+              classFilterSelect.value = selectedClassFilter;
+            }
             renderFoodTruckBookingOptions();
             refreshAll()
               .then(() => setStatus('Day filter applied.', false))
@@ -1135,6 +1181,11 @@
       loadReferenceData()
         .then(() => loadFoodTruckBookingList())
         .then(() => {
+          if (!selectedClassFilter && classFilterSelect.options.length > 1) {
+            selectedClassFilter = String(classFilterSelect.options[1].value || '').trim().toUpperCase();
+            classFilterSelect.value = selectedClassFilter;
+            renderFoodTruckBookingOptions();
+          }
           updateDayTabs();
           return refreshAll();
         })
