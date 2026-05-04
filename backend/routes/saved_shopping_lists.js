@@ -48,14 +48,17 @@ function normalizeTermNumber(value) {
 
 function normalizeDateValue(value) {
   const text = String(value == null ? '' : value).trim();
-  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : '';
+  if (!text) return '';
+  // Accept both ISO dates and readable labels like "1 May".
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  return text.replace(/\s+/g, ' ').trim();
 }
 
 function buildWeekInfoFromState(state) {
   const parts = [];
   if (state.term) parts.push(`Term ${state.term}`);
   if (state.week) parts.push(`Week ${state.week}`);
-  if (state.weekDate) parts.push(state.weekDate);
+  if (state.weekDate) parts.push(`Date ending: ${state.weekDate}`);
   if (parts.length) return parts.join(' | ');
   return normalizeText(state.weekInfo);
 }

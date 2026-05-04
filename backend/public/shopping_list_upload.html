@@ -346,6 +346,50 @@
         saveStatus.textContent = message || '';
       }
 
+      function parseWeekMetaFromText(inputText) {
+        var text = String(inputText || '').trim();
+        var out = { term: '', week: '', weekDate: '' };
+        if (!text) return out;
+
+        var termMatch = text.match(/\bterm\s*(\d{1,2})\b/i) || text.match(/\bt\s*(\d{1,2})\b/i);
+        if (termMatch) out.term = String(termMatch[1]);
+
+        var weekMatch = text.match(/\bweek\s*(\d{1,2})\b/i) || text.match(/\bw\s*(\d{1,2})\b/i);
+        if (weekMatch) out.week = String(weekMatch[1]);
+
+        var dateEndingMatch = text.match(/(?:date\s*)?ending\s*[:\-]?\s*([^|,;]+)/i);
+        if (dateEndingMatch) {
+          out.weekDate = String(dateEndingMatch[1] || '').trim();
+        } else {
+          var isoDateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+          if (isoDateMatch) {
+            out.weekDate = isoDateMatch[1];
+          } else {
+            var shortDateMatch = text.match(/\b(\d{1,2}\s*[A-Za-z]{3,9})\b/);
+            if (shortDateMatch) out.weekDate = String(shortDateMatch[1] || '').trim();
+          }
+        }
+
+        return out;
+      }
+
+      function parseWeekMetaFromFilename(filename) {
+        var cleanName = String(filename || '')
+          .replace(/\.docx$/i, '')
+          .replace(/[._-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return parseWeekMetaFromText(cleanName);
+      }
+
+      function buildWeekInfo(state) {
+        var parts = [];
+        if (state.term) parts.push('Term ' + state.term);
+        if (state.week) parts.push('Week ' + state.week);
+        if (state.weekDate) parts.push('Date ending: ' + state.weekDate);
+        return parts.join(' | ');
+      }
+
       function setSavedListsStatus(message, type) {
         savedListsStatus.className = 'sl-status' + (type ? ' ' + type : '');
         savedListsStatus.textContent = message || '';
@@ -558,6 +602,9 @@
         return {
           title: parsed.title || 'Shopping List',
           weekInfo: parsed.weekInfo || '',
+          term: '',
+          week: '',
+          weekDate: '',
           columns: [parsed.leftCol || [], parsed.rightCol || []],
           classRecipeRows: Array.isArray(parsed.classRecipeRows) ? parsed.classRecipeRows.slice() : []
         };
@@ -699,6 +746,15 @@
           currentState = normalizeParsed(parsed);
           currentSavedListId = null;
           currentFileName = file.name;
+
+          var filenameMeta = parseWeekMetaFromFilename(file.name);
+          if (filenameMeta.term) currentState.term = filenameMeta.term;
+          if (filenameMeta.week) currentState.week = filenameMeta.week;
+          if (filenameMeta.weekDate) currentState.weekDate = filenameMeta.weekDate;
+          if (currentState.term || currentState.week || currentState.weekDate) {
+            currentState.weekInfo = buildWeekInfo(currentState);
+          }
+
           renderOutput(currentState);
           saveBtn.disabled = false;
           parseStatus.className = 'sl-status ok';
@@ -722,7 +778,10 @@
         try {
           var payload = {
             title: currentState.title,
-            weekInfo: currentState.weekInfo,
+            weekInfo: buildWeekInfo(currentState) || currentState.weekInfo,
+            term: currentState.term || '',
+            week: currentState.week || '',
+            weekDate: currentState.weekDate || '',
             sourceFilename: currentFileName,
             state: currentState
           };

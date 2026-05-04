@@ -306,7 +306,7 @@
           <option value="12">Week 12</option>
           <option value="13">Week 13</option>
         </select>
-        <input id="filterDateInput" class="sl-date-input" type="date" aria-label="Filter saved lists by date">
+        <input id="filterDateInput" class="sl-date-input" type="text" placeholder="Date ending: 1 May" aria-label="Filter saved lists by date ending">
         <button type="button" id="clearWeekFiltersBtn" class="sl-btn sl-btn-secondary">Clear Filters</button>
       </div>
       <div id="parseStatus" class="sl-status"></div>
@@ -342,7 +342,7 @@
               <option value="12">Week 12</option>
               <option value="13">Week 13</option>
             </select>
-            <input id="slWeekDateInput" class="sl-header-input" type="date" aria-label="Week date selector">
+            <input id="slWeekDateInput" class="sl-header-input" type="text" placeholder="Date ending: 1 May" aria-label="Week date ending selector">
           </div>
         </div>
       </div>
@@ -441,31 +441,50 @@
         return Object.assign(createBlankState(), state, {
           term: String(state.term || '').trim(),
           week: String(state.week || '').trim(),
-          weekDate: /^\d{4}-\d{2}-\d{2}$/.test(String(state.weekDate || '').trim()) ? String(state.weekDate || '').trim() : ''
+          weekDate: String(state.weekDate || '').trim().replace(/\s+/g, ' ')
         });
       }
 
-      function parseLegacyWeekInfo(weekInfo) {
-        var text = String(weekInfo || '').trim();
+      function parseWeekMetaFromText(inputText) {
+        var text = String(inputText || '').trim();
         var out = { term: '', week: '', weekDate: '' };
         if (!text) return out;
 
-        var termMatch = text.match(/\bterm\s*(\d{1,2})\b/i);
+        var termMatch = text.match(/\bterm\s*(\d{1,2})\b/i) || text.match(/\bt\s*(\d{1,2})\b/i);
         if (termMatch) out.term = String(termMatch[1]);
 
         var weekMatch = text.match(/\bweek\s*(\d{1,2})\b/i);
         if (weekMatch) out.week = String(weekMatch[1]);
 
-        var dateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
-        if (dateMatch) out.weekDate = dateMatch[1];
+        var dateEndingMatch = text.match(/date\s*ending\s*[:\-]?\s*([^|,;]+)/i);
+        if (dateEndingMatch) {
+          out.weekDate = String(dateEndingMatch[1] || '').trim();
+        } else {
+          var isoDateMatch = text.match(/\b(\d{4}-\d{2}-\d{2})\b/);
+          if (isoDateMatch) {
+            out.weekDate = isoDateMatch[1];
+          } else {
+            var shortDateMatch = text.match(/\b(\d{1,2}\s*[A-Za-z]{3,9})\b/);
+            if (shortDateMatch) out.weekDate = String(shortDateMatch[1] || '').trim();
+          }
+        }
         return out;
+      }
+
+      function parseWeekMetaFromFilename(filename) {
+        var cleanName = String(filename || '')
+          .replace(/\.docx$/i, '')
+          .replace(/[._-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return parseWeekMetaFromText(cleanName);
       }
 
       function buildWeekInfo(state) {
         var parts = [];
         if (state.term) parts.push('Term ' + state.term);
         if (state.week) parts.push('Week ' + state.week);
-        if (state.weekDate) parts.push(state.weekDate);
+        if (state.weekDate) parts.push('Date ending: ' + state.weekDate);
         return parts.join(' | ');
       }
 
@@ -538,7 +557,7 @@
           allSavedLists = Array.isArray(data.lists) ? data.lists : [];
           var filterTerm = String(filterTermSelect.value || '').trim();
           var filterWeek = String(filterWeekSelect.value || '').trim();
-          var filterDate = String(filterDateInput.value || '').trim();
+          var filterDate = String(filterDateInput.value || '').trim().toLowerCase();
 
           var lists = allSavedLists.filter(function (list) {
             var listTerm = String(list.term || '').trim();
@@ -546,15 +565,22 @@
             var listDate = String(list.week_date || '').trim();
 
             if ((!listTerm || !listWeek || !listDate) && list.week_info) {
-              var parsed = parseLegacyWeekInfo(list.week_info);
+              var parsed = parseWeekMetaFromText(list.week_info);
               if (!listTerm) listTerm = parsed.term;
               if (!listWeek) listWeek = parsed.week;
               if (!listDate) listDate = parsed.weekDate;
             }
 
+            if ((!listTerm || !listWeek || !listDate) && list.source_filename) {
+              var parsedFromName = parseWeekMetaFromFilename(list.source_filename);
+              if (!listTerm) listTerm = parsedFromName.term;
+              if (!listWeek) listWeek = parsedFromName.week;
+              if (!listDate) listDate = parsedFromName.weekDate;
+            }
+
             if (filterTerm && filterTerm !== listTerm) return false;
             if (filterWeek && filterWeek !== listWeek) return false;
-            if (filterDate && filterDate !== listDate) return false;
+            if (filterDate && filterDate !== String(listDate || '').trim().toLowerCase()) return false;
             return true;
           });
 
@@ -586,11 +612,18 @@
           currentSourceFilename = data.list.sourceFilename || '';
           var state = normalizeWeekMeta(data.list.state || {});
           if ((!state.term || !state.week || !state.weekDate) && data.list.weekInfo) {
-            var parsed = parseLegacyWeekInfo(data.list.weekInfo);
+            var parsed = parseWeekMetaFromText(data.list.weekInfo);
             if (!state.term) state.term = parsed.term;
             if (!state.week) state.week = parsed.week;
             if (!state.weekDate) state.weekDate = parsed.weekDate;
           }
+          if ((!state.term || !state.week || !state.weekDate) && data.list.sourceFilename) {
+            var parsedFileMeta = parseWeekMetaFromFilename(data.list.sourceFilename);
+            if (!state.term) state.term = parsedFileMeta.term;
+            if (!state.week) state.week = parsedFileMeta.week;
+            if (!state.weekDate) state.weekDate = parsedFileMeta.weekDate;
+          }
+          state.weekInfo = buildWeekInfo(state);
           loadState(state, { scroll: true });
           updateCurrentListMeta(data.list);
           setStatus('Loaded "' + (data.list.title || 'Shopping List') + '".', 'ok');
@@ -729,7 +762,7 @@
         refreshSavedLists(currentSavedListId);
       });
 
-      filterDateInput.addEventListener('change', function () {
+      filterDateInput.addEventListener('input', function () {
         refreshSavedLists(currentSavedListId);
       });
 
