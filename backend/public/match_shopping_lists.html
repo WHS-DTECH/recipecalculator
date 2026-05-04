@@ -450,6 +450,15 @@
         return out;
       }
 
+      function parseWeekMetaFromFilename(filename) {
+        const cleanName = String(filename || '')
+          .replace(/\.docx$/i, '')
+          .replace(/[._-]+/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        return parseWeekMetaFromText(cleanName);
+      }
+
       function parseDateEndingText(text) {
         const clean = String(text || '').trim();
         if (!clean) return null;
@@ -520,15 +529,37 @@
         const parsedFromMeta = parseDateEndingText(meta.weekDate);
         if (parsedFromMeta) {
           weekStartInput.value = toIsoDate(mondayOf(parsedFromMeta));
+          return;
+        }
+
+        const filenameMeta = parseWeekMetaFromFilename(String(list.source_filename || ''));
+        const parsedFromFilename = parseDateEndingText(filenameMeta.weekDate);
+        if (parsedFromFilename) {
+          weekStartInput.value = toIsoDate(mondayOf(parsedFromFilename));
         }
       }
 
       function formatSavedLabel(list) {
         const meta = list.state || {};
         const parts = [list.title || 'Shopping List'];
-        const term = String(meta.term || list.term || '').trim();
-        const week = String(meta.week || list.week || '').trim();
-        const weekDate = String(meta.weekDate || list.week_date || '').trim();
+        let term = String(meta.term || list.term || '').trim();
+        let week = String(meta.week || list.week || '').trim();
+        let weekDate = String(meta.weekDate || list.week_date || '').trim();
+
+        if ((!term || !week || !weekDate) && list.weekInfo) {
+          const parsedInfo = parseWeekMetaFromText(list.weekInfo);
+          if (!term) term = parsedInfo.term;
+          if (!week) week = parsedInfo.week;
+          if (!weekDate) weekDate = parsedInfo.weekDate;
+        }
+
+        if ((!term || !week || !weekDate) && list.source_filename) {
+          const parsedFile = parseWeekMetaFromFilename(list.source_filename);
+          if (!term) term = parsedFile.term;
+          if (!week) week = parsedFile.week;
+          if (!weekDate) weekDate = parsedFile.weekDate;
+        }
+
         if (term) parts.push('Term ' + term);
         if (week) parts.push('Week ' + week);
         if (weekDate) parts.push('Date ending: ' + weekDate);
@@ -551,6 +582,13 @@
             if (!term) term = parsed.term;
             if (!week) week = parsed.week;
             if (!dateEnding) dateEnding = parsed.weekDate;
+          }
+
+          if ((!term || !week || !dateEnding) && list.source_filename) {
+            const parsedFile = parseWeekMetaFromFilename(list.source_filename);
+            if (!term) term = parsedFile.term;
+            if (!week) week = parsedFile.week;
+            if (!dateEnding) dateEnding = parsedFile.weekDate;
           }
 
           if (termFilter && term !== termFilter) return false;
@@ -583,6 +621,7 @@
                 id: row.id,
                 title: row.title,
                 weekInfo: row.week_info || '',
+                source_filename: row.source_filename || '',
                 term: row.term || '',
                 week: row.week || '',
                 week_date: row.week_date || '',
