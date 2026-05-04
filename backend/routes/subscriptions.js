@@ -15,10 +15,16 @@ async function ensureSubscriptionSchema() {
       user_name VARCHAR(255),
       user_type VARCHAR(50),
       is_subscribed BOOLEAN DEFAULT false,
+      calendar_change_subscribed BOOLEAN DEFAULT false,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(user_email)
     )
+  `);
+
+  await pool.query(`
+    ALTER TABLE recipe_subscriptions
+    ADD COLUMN IF NOT EXISTS calendar_change_subscribed BOOLEAN DEFAULT false
   `);
   
   // Create subscription log table for tracking notifications sent
@@ -49,7 +55,7 @@ router.get('/status', async (req, res) => {
     }
     
     const result = await pool.query(
-      'SELECT is_subscribed, user_name, user_type FROM recipe_subscriptions WHERE LOWER(user_email) = LOWER($1)',
+      'SELECT is_subscribed, calendar_change_subscribed, user_name, user_type FROM recipe_subscriptions WHERE LOWER(user_email) = LOWER($1)',
       [userEmail]
     );
     
@@ -57,6 +63,7 @@ router.get('/status', async (req, res) => {
     res.json({
       success: true,
       isSubscribed: subscription ? subscription.is_subscribed : false,
+      isCalendarChangeSubscribed: subscription ? subscription.calendar_change_subscribed : false,
       userEmail: userEmail,
       userName: subscription ? subscription.user_name : null,
       userType: subscription ? subscription.user_type : null
@@ -76,8 +83,8 @@ router.post('/subscribe', async (req, res) => {
     }
     
     const result = await pool.query(
-      `INSERT INTO recipe_subscriptions (user_email, user_name, user_type, is_subscribed)
-       VALUES (LOWER($1), $2, $3, true)
+      `INSERT INTO recipe_subscriptions (user_email, user_name, user_type, is_subscribed, calendar_change_subscribed)
+       VALUES (LOWER($1), $2, $3, true, false)
        ON CONFLICT (user_email) DO UPDATE
        SET is_subscribed = true, user_name = COALESCE($2, user_name), user_type = COALESCE($3, user_type), updated_at = CURRENT_TIMESTAMP
        RETURNING id, user_email, is_subscribed`,
@@ -114,8 +121,8 @@ router.post('/unsubscribe', async (req, res) => {
     if (result.rows.length === 0) {
       // Create a new unsubscribed entry for tracking
       await pool.query(
-        `INSERT INTO recipe_subscriptions (user_email, is_subscribed)
-         VALUES (LOWER($1), false)`,
+        `INSERT INTO recipe_subscriptions (user_email, is_subscribed, calendar_change_subscribed)
+         VALUES (LOWER($1), false, false)`,
         [email]
       );
     }
@@ -127,6 +134,41 @@ router.post('/unsubscribe', async (req, res) => {
   } catch (err) {
     console.error('[SUBSCRIPTIONS] Error unsubscribing:', err);
     res.status(500).json({ success: false, error: 'Failed to unsubscribe' });
+  }
+});
+
+// POST /api/subscriptions/preferences - Save recipe and calendar subscription preferences in one request
+router.post('/preferences', async (req, res) => {
+  try {
+    const { email, name, userType, isSubscribed, isCalendarChangeSubscribed } = req.body || {};
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email required' });
+    }
+
+    const normalizedRecipe = typeof isSubscribed === 'boolean' ? isSubscribed : null;
+    const normalizedCalendar = typeof isCalendarChangeSubscribed === 'boolean' ? isCalendarChangeSubscribed : null;
+
+    const result = await pool.query(
+      `INSERT INTO recipe_subscriptions (user_email, user_name, user_type, is_subscribed, calendar_change_subscribed)
+       VALUES (LOWER($1), $2, $3, COALESCE($4, false), COALESCE($5, false))
+       ON CONFLICT (user_email) DO UPDATE
+       SET is_subscribed = COALESCE($4, recipe_subscriptions.is_subscribed),
+           calendar_change_subscribed = COALESCE($5, recipe_subscriptions.calendar_change_subscribed),
+           user_name = COALESCE($2, recipe_subscriptions.user_name),
+           user_type = COALESCE($3, recipe_subscriptions.user_type),
+           updated_at = CURRENT_TIMESTAMP
+       RETURNING id, user_email, is_subscribed, calendar_change_subscribed`,
+      [email, name || null, userType || null, normalizedRecipe, normalizedCalendar]
+    );
+
+    res.json({
+      success: true,
+      message: 'Subscription preferences saved',
+      subscription: result.rows[0]
+    });
+  } catch (err) {
+    console.error('[SUBSCRIPTIONS] Error saving preferences:', err);
+    res.status(500).json({ success: false, error: 'Failed to save subscription preferences' });
   }
 });
 

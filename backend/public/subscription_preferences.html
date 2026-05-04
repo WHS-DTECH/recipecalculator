@@ -36,6 +36,22 @@
             margin-bottom: 1.5rem;
             cursor: pointer;
         }
+        .subscription-group-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 0.5rem;
+        }
+        .subscription-help {
+            margin-top: -1rem;
+            margin-bottom: 1rem;
+            color: #6b7280;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .is-hidden {
+            display: none !important;
+        }
         .toggle-switch {
             position: relative;
             width: 50px;
@@ -173,11 +189,23 @@
                 <div class="email-value" id="userEmailDisplay">Loading...</div>
             </div>
 
+            <div class="subscription-group-title">New Recipe Notifications</div>
             <div class="subscription-toggle" id="subscriptionToggleRow">
                 <div class="toggle-switch" id="subscriptionToggle" role="switch" aria-checked="false" tabindex="0" aria-label="Recipe email subscription toggle">
                     <div class="toggle-switch-inner"></div>
                 </div>
                 <div class="toggle-label" id="subscriptionLabel">Unsubscribed</div>
+            </div>
+
+            <div id="teacherCalendarSection" class="is-hidden">
+                <div class="subscription-group-title">Teacher Calendar Change Notifications</div>
+                <div class="subscription-help">Teachers can subscribe to receive calendar update notifications.</div>
+                <div class="subscription-toggle" id="calendarToggleRow">
+                    <div class="toggle-switch" id="calendarToggle" role="switch" aria-checked="false" tabindex="0" aria-label="Calendar change subscription toggle">
+                        <div class="toggle-switch-inner"></div>
+                    </div>
+                    <div class="toggle-label" id="calendarLabel">Unsubscribed</div>
+                </div>
             </div>
 
             <div class="button-group">
@@ -191,6 +219,7 @@
             <div class="preferences-description">
                 <ul style="margin: 0; padding-left: 1.5rem;">
                     <li>When subscribed, you'll receive an email each time a new recipe is published</li>
+                    <li>Teachers can also subscribe to calendar change notifications</li>
                     <li>Notifications include the recipe name and a link to view it</li>
                     <li>You can change your subscription preference at any time</li>
                     <li>Unsubscribe removes your email from all future notifications</li>
@@ -209,13 +238,22 @@
             const toggleSwitch = document.getElementById('subscriptionToggle');
             const toggleRow = document.getElementById('subscriptionToggleRow');
             const toggleLabel = document.getElementById('subscriptionLabel');
+            const teacherCalendarSection = document.getElementById('teacherCalendarSection');
+            const calendarToggle = document.getElementById('calendarToggle');
+            const calendarToggleRow = document.getElementById('calendarToggleRow');
+            const calendarLabel = document.getElementById('calendarLabel');
             const saveBtn = document.getElementById('saveBtn');
             const logoutBtn = document.getElementById('logoutBtn');
 
             let currentEmail = '';
             let currentSubscriptionStatus = null;
+            let currentCalendarChangeStatus = false;
+            let userRole = 'public_access';
+            let isTeacherRole = false;
             let userType = '';
             let userName = '';
+
+            const TEACHER_CALENDAR_ROLES = new Set(['teacher', 'lead_teacher', 'admin']);
 
             function showStatus(message, type = 'info') {
                 statusEl.textContent = message;
@@ -251,6 +289,28 @@
                 }
             }
 
+            function updateCalendarToggleVisuals() {
+                if (currentCalendarChangeStatus === true) {
+                    calendarToggle.classList.add('active');
+                    calendarToggle.setAttribute('aria-checked', 'true');
+                    calendarLabel.textContent = 'Subscribed';
+                } else {
+                    calendarToggle.classList.remove('active');
+                    calendarToggle.setAttribute('aria-checked', 'false');
+                    calendarLabel.textContent = 'Unsubscribed';
+                }
+            }
+
+            function updateTeacherCalendarVisibility() {
+                if (isTeacherRole) {
+                    teacherCalendarSection.classList.remove('is-hidden');
+                } else {
+                    teacherCalendarSection.classList.add('is-hidden');
+                    currentCalendarChangeStatus = false;
+                    updateCalendarToggleVisuals();
+                }
+            }
+
             function initializeUser() {
                 // Try to get user from auth endpoint
                 fetch('/api/auth/me', { credentials: 'include' })
@@ -261,8 +321,11 @@
                     .then(data => {
                         if (data && data.user && data.user.email) {
                             currentEmail = data.user.email;
-                            userType = data.user.type || 'user';
+                            userRole = String(data.user.role || 'public_access').toLowerCase();
+                            isTeacherRole = TEACHER_CALENDAR_ROLES.has(userRole);
+                            userType = userRole;
                             userName = data.user.name || '';
+                            updateTeacherCalendarVisibility();
                             loadSubscriptionStatus();
                         } else {
                             showStatus('Unable to determine your email. Please log in again.', 'error');
@@ -282,12 +345,16 @@
                     .then(data => {
                         if (data.success) {
                             currentSubscriptionStatus = data.isSubscribed === true;
+                            currentCalendarChangeStatus = data.isCalendarChangeSubscribed === true;
                             updateToggleVisuals();
+                            updateCalendarToggleVisuals();
                             saveBtn.disabled = false;
                         } else {
                             // New user - default to not subscribed
                             currentSubscriptionStatus = false;
+                            currentCalendarChangeStatus = false;
                             updateToggleVisuals();
+                            updateCalendarToggleVisuals();
                             saveBtn.disabled = false;
                         }
                     })
@@ -304,10 +371,24 @@
                 saveBtn.disabled = false;
             }
 
+            function toggleCalendarSubscription() {
+                if (!isTeacherRole) return;
+                currentCalendarChangeStatus = !currentCalendarChangeStatus;
+                updateCalendarToggleVisuals();
+                saveBtn.disabled = false;
+            }
+
             function handleToggleKeydown(event) {
                 if (event.key === ' ' || event.key === 'Enter') {
                     event.preventDefault();
                     toggleSubscription();
+                }
+            }
+
+            function handleCalendarToggleKeydown(event) {
+                if (event.key === ' ' || event.key === 'Enter') {
+                    event.preventDefault();
+                    toggleCalendarSubscription();
                 }
             }
 
@@ -319,14 +400,15 @@
 
                 setButtonLoading(saveBtn, true);
 
-                const endpoint = currentSubscriptionStatus ? '/api/subscriptions/subscribe' : '/api/subscriptions/unsubscribe';
                 const payload = {
                     email: currentEmail,
                     name: userName,
-                    userType: userType
+                    userType: userType,
+                    isSubscribed: currentSubscriptionStatus === true,
+                    isCalendarChangeSubscribed: isTeacherRole && currentCalendarChangeStatus === true
                 };
 
-                fetch(endpoint, {
+                fetch('/api/subscriptions/preferences', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     credentials: 'include',
@@ -336,9 +418,11 @@
                     .then(data => {
                         setButtonLoading(saveBtn, false);
                         if (data.success) {
-                            const message = currentSubscriptionStatus
-                                ? 'You are now subscribed to recipe updates!'
-                                : 'You have been unsubscribed from recipe updates.';
+                            const recipeStatus = currentSubscriptionStatus ? 'subscribed' : 'unsubscribed';
+                            const calendarStatus = currentCalendarChangeStatus ? 'subscribed' : 'unsubscribed';
+                            const message = isTeacherRole
+                                ? `Preferences saved: recipe updates ${recipeStatus}; calendar changes ${calendarStatus}.`
+                                : `Preferences saved: recipe updates ${recipeStatus}.`;
                             showStatus(message, 'success');
                         } else {
                             showStatus('Error saving preferences: ' + (data.error || 'Unknown error'), 'error');
@@ -371,6 +455,12 @@
             });
             toggleRow.addEventListener('click', toggleSubscription);
             toggleSwitch.addEventListener('keydown', handleToggleKeydown);
+            calendarToggle.addEventListener('click', (event) => {
+                event.stopPropagation();
+                toggleCalendarSubscription();
+            });
+            calendarToggleRow.addEventListener('click', toggleCalendarSubscription);
+            calendarToggle.addEventListener('keydown', handleCalendarToggleKeydown);
             saveBtn.addEventListener('click', savePreferences);
             logoutBtn.addEventListener('click', logout);
 
