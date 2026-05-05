@@ -290,30 +290,8 @@
       </div>
 
       <div style="margin-top:0.95rem;">
-        <h3 class="ms-subsection-title">Like-for-like Ingredient Comparison</h3>
-        <div class="ms-match-list">
-          <table class="ms-table">
-            <thead>
-              <tr>
-                <th style="width:120px;">Result</th>
-                <th>Book Shopping</th>
-                <th>Teacher List</th>
-              </tr>
-            </thead>
-            <tbody id="matchTableBody"></tbody>
-          </table>
-        </div>
-      </div>
-
-      <div class="ms-compare-grid">
-        <div class="ms-col">
-          <h3>Book Shopping (Calculated)</h3>
-          <div id="bookColumn"></div>
-        </div>
-        <div class="ms-col">
-          <h3>Teacher Uploaded List</h3>
-          <div id="teacherColumn"></div>
-        </div>
+        <h3 class="ms-subsection-title">Master Category Alignment (Teacher Order)</h3>
+        <div id="alignedComparison"></div>
       </div>
 
       <div id="sendToExtrasBar" style="margin-top:1rem;padding-top:0.85rem;border-top:1px solid #dde6f0;display:flex;align-items:center;flex-wrap:wrap;gap:0.75rem;" hidden>
@@ -349,9 +327,7 @@
       const countTeacher = document.getElementById('countTeacher');
       const countMatched = document.getElementById('countMatched');
       const countDifferent = document.getElementById('countDifferent');
-      const bookColumn = document.getElementById('bookColumn');
-      const teacherColumn = document.getElementById('teacherColumn');
-      const matchTableBody = document.getElementById('matchTableBody');
+      const alignedComparison = document.getElementById('alignedComparison');
       const recipeMatchBody = document.getElementById('recipeMatchBody');
 
       let savedLists = [];
@@ -885,77 +861,104 @@
           : '<tr><td colspan="3" class="ms-muted">No recipe comparison rows.</td></tr>';
       }
 
-      function renderBookColumn(bookItems) {
-        if (!bookItems.length) return '<div class="ms-muted">No calculated items found.</div>';
-        const byCat = new Map();
-        bookItems.forEach((item) => {
-          if (!byCat.has(item.category)) byCat.set(item.category, []);
-          byCat.get(item.category).push(item);
-        });
-
-        let html = '';
-        byCat.forEach((items, category) => {
-          html += `<h4 style="margin:0.45rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
-          html += '<table class="ms-table"><thead><tr><th style="width:70px;">Qty</th><th style="width:70px;">Unit</th><th>Item</th></tr></thead><tbody>';
-          items.forEach((item) => {
-            html += `<tr><td>${escHtml(item.qty)}</td><td>${escHtml(item.unit)}</td><td>${escHtml(item.display)}</td></tr>`;
-          });
-          html += '</tbody></table>';
-        });
-        return html;
+      function formatBookItem(item) {
+        return String((item.qty ? item.qty + ' ' : '') + (item.unit ? item.unit + ' ' : '') + item.display).trim();
       }
 
-      function renderTeacherColumn(teacherItems) {
-        if (!teacherItems.length) return '<div class="ms-muted">No teacher uploaded items found.</div>';
-        const byCat = new Map();
+      function teacherSignature(item) {
+        return [String(item.category || ''), String(item.key || ''), String(item.raw || '')].join('|');
+      }
+
+      function pickCategoryForBookItem(bookItem, teacherCategoryOrder) {
+        const category = String(bookItem.category || '').trim();
+        const normalized = category.toLowerCase();
+        const categoryMap = {
+          dairy: ['dairy & pastry', 'dairy'],
+          produce: ['produce'],
+          pantry: ['dry ingredients', 'pantry'],
+          other: ['other'],
+          meat: ['meat']
+        };
+
+        // Exact case-insensitive match first.
+        const exact = teacherCategoryOrder.find((c) => c.toLowerCase() === normalized);
+        if (exact) return exact;
+
+        const candidates = categoryMap[normalized] || ['other'];
+        for (let i = 0; i < candidates.length; i += 1) {
+          const found = teacherCategoryOrder.find((c) => c.toLowerCase().includes(candidates[i]));
+          if (found) return found;
+        }
+
+        return teacherCategoryOrder.find((c) => c.toLowerCase() === 'other') || (teacherCategoryOrder[0] || 'Other');
+      }
+
+      function renderAlignedComparison(teacherItems, comparison) {
+        if (!teacherItems.length) {
+          alignedComparison.innerHTML = '<div class="ms-muted">No teacher uploaded items found.</div>';
+          return;
+        }
+
+        const teacherCategoryOrder = [];
         teacherItems.forEach((item) => {
-          if (!byCat.has(item.category)) byCat.set(item.category, []);
-          byCat.get(item.category).push(item);
+          const category = String(item.category || 'Other').trim() || 'Other';
+          if (!teacherCategoryOrder.includes(category)) teacherCategoryOrder.push(category);
+        });
+
+        const byCategoryRows = new Map();
+        teacherCategoryOrder.forEach((cat) => byCategoryRows.set(cat, []));
+
+        const matchedByTeacher = new Map();
+        (comparison.matched || []).forEach((match) => {
+          const key = teacherSignature(match.teacher);
+          if (!matchedByTeacher.has(key)) matchedByTeacher.set(key, []);
+          matchedByTeacher.get(key).push(match);
+        });
+
+        // Teacher order drives row order, with matching book item if present.
+        teacherItems.forEach((teacher) => {
+          const category = String(teacher.category || 'Other').trim() || 'Other';
+          const key = teacherSignature(teacher);
+          const queue = matchedByTeacher.get(key) || [];
+          const match = queue.length ? queue.shift() : null;
+          byCategoryRows.get(category).push({
+            type: match ? (match.type === 'same' ? 'Same' : 'Close') : 'Teacher Only',
+            book: match ? formatBookItem(match.book) : '',
+            teacher: teacher.raw
+          });
+        });
+
+        // Append book-only items into the best matching teacher master category.
+        (comparison.bookOnly || []).forEach((book) => {
+          const category = pickCategoryForBookItem(book, teacherCategoryOrder);
+          if (!byCategoryRows.has(category)) byCategoryRows.set(category, []);
+          byCategoryRows.get(category).push({
+            type: 'Book Only',
+            book: formatBookItem(book),
+            teacher: ''
+          });
         });
 
         let html = '';
-        byCat.forEach((items, category) => {
-          html += `<h4 style="margin:0.45rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
-          html += '<table class="ms-table"><tbody>';
-          items.forEach((item) => {
-            html += `<tr><td>${escHtml(item.raw)}</td></tr>`;
-          });
+        teacherCategoryOrder.forEach((category) => {
+          const rows = byCategoryRows.get(category) || [];
+          html += `<h4 style="margin:0.55rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
+          html += '<table class="ms-table"><thead><tr><th style="width:100px;">Result</th><th>Book Shopping</th><th>Teacher List</th></tr></thead><tbody>';
+          if (!rows.length) {
+            html += '<tr><td colspan="3" class="ms-muted">No items in this category.</td></tr>';
+          } else {
+            rows.forEach((row) => {
+              html += '<tr>'
+                + `<td>${escHtml(row.type)}</td>`
+                + `<td>${escHtml(row.book)}</td>`
+                + `<td>${escHtml(row.teacher)}</td>`
+                + '</tr>';
+            });
+          }
           html += '</tbody></table>';
         });
-        return html;
-      }
 
-      function renderMatches(result) {
-        const rows = [];
-
-        result.matched.forEach((m) => {
-          const label = m.type === 'same' ? 'Same' : 'Close';
-          rows.push('<tr>'
-            + `<td>${escHtml(label)}</td>`
-            + `<td>${escHtml((m.book.qty ? m.book.qty + ' ' : '') + (m.book.unit ? m.book.unit + ' ' : '') + m.book.display)}</td>`
-            + `<td>${escHtml(m.teacher.raw)}</td>`
-            + '</tr>');
-        });
-
-        result.bookOnly.forEach((b) => {
-          rows.push('<tr>'
-            + '<td>Book Only</td>'
-            + `<td>${escHtml((b.qty ? b.qty + ' ' : '') + (b.unit ? b.unit + ' ' : '') + b.display)}</td>`
-            + '<td></td>'
-            + '</tr>');
-        });
-
-        result.teacherOnly.forEach((t) => {
-          rows.push('<tr>'
-            + '<td>Teacher Only</td>'
-            + '<td></td>'
-            + `<td>${escHtml(t.raw)}</td>`
-            + '</tr>');
-        });
-
-        matchTableBody.innerHTML = rows.length
-          ? rows.join('')
-          : '<tr><td colspan="3" class="ms-muted">No comparison rows.</td></tr>';
+        alignedComparison.innerHTML = html;
       }
 
       async function runComparison() {
@@ -994,9 +997,7 @@
 
           renderRecipeMatches(recipeComparison);
 
-          bookColumn.innerHTML = renderBookColumn(bookItems);
-          teacherColumn.innerHTML = renderTeacherColumn(teacherItems);
-          renderMatches(comparison);
+          renderAlignedComparison(teacherItems, comparison);
           comparisonCard.hidden = false;
 
           if (recipeComparison.bookingOnly.length || recipeComparison.teacherOnly.length) {
