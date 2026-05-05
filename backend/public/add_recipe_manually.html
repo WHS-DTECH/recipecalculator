@@ -285,6 +285,22 @@
         grid-template-columns: 1fr;
       }
     }
+
+    .ft-editing-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      background: #fff3cd;
+      border: 1px solid #ffc107;
+      border-radius: 6px;
+      padding: 0.55rem 0.85rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.92rem;
+      color: #5a4200;
+    }
+
+    .ft-editing-banner[hidden] { display: none; }
   </style>
 </head>
 <body>
@@ -296,7 +312,12 @@
       <h1 class="ft-title">Add Recipe Manually</h1>
       <p class="ft-sub">Copy and paste recipe information from your source into the fields below. Save prepares and publishes the recipe, then runs async inventory sync from this RecipeID onward.</p>
 
-      <div class="ft-id-row">
+      <div id="editingBanner" class="ft-editing-banner" hidden>
+        <span>Editing RecipeID <strong id="editingRecipeId"></strong> — changes will update the existing recipe.</span>
+        <button type="button" id="newRecipeBtn" class="ft-btn secondary">+ New Recipe</button>
+      </div>
+
+      <div id="newIdRow" class="ft-id-row">
         <span>Next available RecipeID:</span>
         <span id="nextRecipeId" class="ft-id-pill">...</span>
         <span id="idMetaText" class="ft-hint">This is a preview. Final ID is assigned on save.</span>
@@ -360,9 +381,26 @@
       const clearBtn = document.getElementById('clearManualBtn');
       const studentNameInput = document.getElementById('manualStudentName');
       const photoUploadLink = document.getElementById('photoUploadLink');
+      const editingBanner = document.getElementById('editingBanner');
+      const editingRecipeIdEl = document.getElementById('editingRecipeId');
+      const newIdRow = document.getElementById('newIdRow');
+      const newRecipeBtn = document.getElementById('newRecipeBtn');
 
       let currentRecipeId = null;
       let currentUserEmail = '';
+
+      function setEditingMode(recipeId) {
+        if (recipeId) {
+          editingBanner.hidden = false;
+          editingRecipeIdEl.textContent = recipeId;
+          newIdRow.hidden = true;
+          saveBtn.textContent = 'Update Recipe #' + recipeId;
+        } else {
+          editingBanner.hidden = true;
+          newIdRow.hidden = false;
+          saveBtn.textContent = 'Publish';
+        }
+      }
 
       function getRecipeIdFromLocation() {
         const params = new URLSearchParams(window.location.search);
@@ -543,7 +581,7 @@
           document.getElementById('manualServing').value = data.serving_size == null ? '' : String(data.serving_size);
           document.getElementById('manualIngredients').value = String(data.ingredients || '').trim();
           document.getElementById('manualInstructions').value = String(data.instructions || '').trim();
-          saveBtn.textContent = 'Publish';
+          setEditingMode(currentRecipeId);
           updatePhotoUploadLink(currentRecipeId);
           await refreshNextId();
           setStatus('Loaded RecipeID ' + currentRecipeId + ' for editing.', '');
@@ -641,7 +679,7 @@
             updatePhotoUploadLink(currentRecipeId);
 
             const warnings = await runManualPublishFlow(recipeId);
-            if (saveBtn) saveBtn.textContent = 'Publish';
+            setEditingMode(currentRecipeId);
             if (warnings.length) {
               setStatus('RecipeID ' + recipeId + ' published with warnings: ' + warnings.join(' '), 'error');
             } else {
@@ -657,15 +695,18 @@
 
         form.addEventListener('submit', saveManualRecipe);
 
-        clearBtn.addEventListener('click', function() {
+        function resetToNewRecipe() {
           form.reset();
           currentRecipeId = null;
-          if (saveBtn) saveBtn.textContent = 'Publish';
+          setEditingMode(null);
           updatePhotoUploadLink(null);
           setStatus('', '');
           prepopulateStudentName(true);
           refreshNextId();
-        });
+        }
+
+        clearBtn.addEventListener('click', resetToNewRecipe);
+        newRecipeBtn.addEventListener('click', resetToNewRecipe);
 
         const preferredRecipeId = getRecipeIdFromLocation();
         try {
@@ -675,8 +716,10 @@
         }
         updatePhotoUploadLink(preferredRecipeId);
         if (preferredRecipeId) {
+          setEditingMode(preferredRecipeId);
           loadRecipeForEdit(preferredRecipeId).catch((err) => {
             currentRecipeId = null;
+            setEditingMode(null);
             updatePhotoUploadLink(null);
             setStatus(err && err.message ? err.message : 'Failed to load recipe.', 'error');
             prepopulateStudentName(true);

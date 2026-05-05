@@ -762,6 +762,20 @@
         };
       }
 
+      function editDistance(a, b) {
+        const m = a.length; const n = b.length;
+        const dp = Array.from({ length: m + 1 }, (_, i) => [i]);
+        for (let j = 0; j <= n; j += 1) dp[0][j] = j;
+        for (let i = 1; i <= m; i += 1) {
+          for (let j = 1; j <= n; j += 1) {
+            dp[i][j] = a[i - 1] === b[j - 1]
+              ? dp[i - 1][j - 1]
+              : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+          }
+        }
+        return dp[m][n];
+      }
+
       function buildRecipeComparison(bookingRecipeRows, teacherRecipeRows) {
         function toUniqueRecipes(rows) {
           const out = [];
@@ -807,6 +821,21 @@
             pairs.push({ booking: b.raw, teacher: teacherUnused[ti].raw, type: 'Close' });
             bookingUnused.splice(bi, 1);
             teacherUnused.splice(ti, 1);
+          }
+        }
+
+        // Fuzzy pass: edit distance ≤ 2 on normalised keys
+        for (let bi = bookingUnused.length - 1; bi >= 0; bi -= 1) {
+          const b = bookingUnused[bi];
+          let bestTi = -1; let bestDist = 3;
+          teacherUnused.forEach((t, ti) => {
+            const dist = editDistance(b.key, t.key);
+            if (dist <= 2 && dist < bestDist) { bestDist = dist; bestTi = ti; }
+          });
+          if (bestTi >= 0) {
+            pairs.push({ booking: b.raw, teacher: teacherUnused[bestTi].raw, type: 'Close' });
+            bookingUnused.splice(bi, 1);
+            teacherUnused.splice(bestTi, 1);
           }
         }
 
