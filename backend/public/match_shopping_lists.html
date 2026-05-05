@@ -760,6 +760,29 @@
       }
 
       function buildRecipeComparison(bookingRecipeRows, teacherRecipeRows) {
+        function tokenList(text) {
+          return String(text || '')
+            .split(' ')
+            .map((t) => t.trim())
+            .filter(Boolean);
+        }
+
+        function allowCloseContainment(aKey, bKey) {
+          const a = tokenList(aKey);
+          const b = tokenList(bKey);
+          const shortLen = Math.min(a.length, b.length);
+          const longLen = Math.max(a.length, b.length);
+          // Avoid matching short recipe names to long concatenated recipe titles.
+          if (longLen - shortLen > 2) return false;
+          return true;
+        }
+
+        function allowFuzzyByLength(aKey, bKey) {
+          const a = tokenList(aKey);
+          const b = tokenList(bKey);
+          return Math.abs(a.length - b.length) <= 2;
+        }
+
         function toUniqueRecipes(rows) {
           const out = [];
           const seen = new Set();
@@ -799,7 +822,11 @@
 
         for (let bi = bookingUnused.length - 1; bi >= 0; bi -= 1) {
           const b = bookingUnused[bi];
-          const ti = teacherUnused.findIndex((t) => t.key.includes(b.key) || b.key.includes(t.key));
+          const ti = teacherUnused.findIndex((t) => {
+            const contains = t.key.includes(b.key) || b.key.includes(t.key);
+            if (!contains) return false;
+            return allowCloseContainment(b.key, t.key);
+          });
           if (ti >= 0) {
             pairs.push({ booking: b.raw, teacher: teacherUnused[ti].raw, type: 'Close' });
             bookingUnused.splice(bi, 1);
@@ -812,6 +839,7 @@
           const b = bookingUnused[bi];
           let bestTi = -1; let bestDist = 3;
           teacherUnused.forEach((t, ti) => {
+            if (!allowFuzzyByLength(b.key, t.key)) return;
             const dist = editDistance(b.key, t.key);
             if (dist <= 2 && dist < bestDist) { bestDist = dist; bestTi = ti; }
           });

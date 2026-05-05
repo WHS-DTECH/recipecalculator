@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const requireAdmin = require('../middleware/requireAdmin');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
 async function ensureTable() {
   await pool.query(`
