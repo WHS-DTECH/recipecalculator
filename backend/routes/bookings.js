@@ -515,7 +515,7 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
               THEN initcap(lower(trim(coalesce(b.planner_stream, ''))))
             WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%HOSP%'
               THEN 'Senior'
-            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%JFOOD%'
+            WHEN upper(trim(coalesce(b.class_name, ''))) LIKE ANY (ARRAY['%JFOOD%', '%VEFOOD%', '%MMFOOD%', '%SDFOOD%', '%PIFOOD%', '%SRFOOD%', '%JTRFOOD%', '%MTRFOOD%'])
               THEN 'Junior'
             WHEN upper(trim(coalesce(b.class_name, ''))) LIKE '%MFOOD%'
               THEN 'Middle'

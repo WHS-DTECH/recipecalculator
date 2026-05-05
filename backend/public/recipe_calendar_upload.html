@@ -548,10 +548,13 @@
       }
     }
 
+    const juniorFoodCodes = ['JFOOD', 'VEFOOD', 'MMFOOD', 'SDFOOD', 'PIFOOD', 'SRFOOD', 'JTRFOOD', 'MTRFOOD'];
+
     async function loadPlannerClassOptions() {
       const fallbackClasses = [
         { code: 'MFOOD', name: 'Food and Nutrition', usageCount: 1 },
         { code: 'JFOOD', name: 'Junior Food', usageCount: 1 },
+        { code: 'VEFOOD', name: 'Junior Food', usageCount: 1 },
         { code: '11HOSP', name: 'Level 1 Hospitality', usageCount: 1 },
         { code: '12HOSP', name: 'Level 2 Hospitality', usageCount: 1 },
         { code: '13HOSP', name: 'Level 3 Hospitality', usageCount: 1 }
@@ -602,7 +605,7 @@
     function inferPlannerStream(code) {
       const value = String(code || '').trim().toUpperCase();
       if (!value) return 'Other';
-      if (value.includes('JFOOD')) return 'Junior';
+      if (juniorFoodCodes.some((token) => value.includes(token))) return 'Junior';
       if (value.includes('HOSP')) return 'Senior';
       if (value.includes('MFOOD')) return 'Middle';
       return 'Other';
@@ -661,11 +664,12 @@
     function detectPlannerDefaults(sourceText) {
       const text = String(sourceText || '').trim();
       if (!text) return null;
+      const juniorPattern = new RegExp(juniorFoodCodes.join('|'), 'i');
 
       if (/senior\s*school|hosp|hp100|hp300|year\s*13|13hosp/i.test(text)) {
         return { stream: 'Senior', className: getDefaultClassNameForStream('Senior') };
       }
-      if (/junior(?:\s*school|\s*recipes?|\s*food)?|jfood/i.test(text)) {
+      if (/junior(?:\s*school|\s*recipes?|\s*food)?/i.test(text) || juniorPattern.test(text)) {
         return { stream: 'Junior', className: getDefaultClassNameForStream('Junior') };
       }
       if (/middle\s*school|mfood/i.test(text)) {
