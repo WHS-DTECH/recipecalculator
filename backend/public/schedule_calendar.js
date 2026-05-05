@@ -1562,6 +1562,21 @@ async function printBookingInfoSheet(bookingId) {
     ? `<div class="recipe-photo-wrap"><img class="recipe-photo" src="${escHtml(recipeImageUrl)}" alt="${escHtml((recipe && recipe.name) || booking.recipe || 'Recipe photo')}" /></div>`
     : '';
 
+  const ingredientsSectionHtml = recipeImageHtml
+    ? `<div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
+        <div class="section-title" style="color:${streamScheme.header};">Ingredients</div>
+        <div class="ingredients-grid has-image">
+          <div class="ingredients-col">${ingredientsHtml}</div>
+          <div class="ingredients-image-col">${recipeImageHtml}</div>
+        </div>
+      </div>`
+    : `<div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
+        <div class="section-title" style="color:${streamScheme.header};">Ingredients</div>
+        <div class="ingredients-grid">
+          <div class="ingredients-col">${ingredientsHtml}</div>
+        </div>
+      </div>`;
+
   const methodSection = methodHtml
     ? `<div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
         <div class="section-title" style="color:${streamScheme.header};">Method</div>
@@ -1687,11 +1702,6 @@ async function printBookingInfoSheet(bookingId) {
       color: #6b7280;
       overflow-wrap: anywhere;
     }
-    .recipe-top-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 0.65rem;
-    }
     .recipe-photo-wrap {
       border-radius: 10px;
       overflow: hidden;
@@ -1705,6 +1715,18 @@ async function printBookingInfoSheet(bookingId) {
       height: 100%;
       max-height: 220px;
       object-fit: cover;
+    }
+    .ingredients-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.8rem;
+      align-items: start;
+    }
+    .ingredients-col {
+      min-width: 0;
+    }
+    .ingredients-image-col {
+      min-width: 0;
     }
     .section-grid {
       display: grid;
@@ -1764,9 +1786,8 @@ async function printBookingInfoSheet(bookingId) {
       .sheet { border: none; border-radius: 0; padding: 0; background: #fff; }
     }
     @media (min-width: 640px) {
-      .recipe-top-grid {
-        grid-template-columns: 1.45fr 1fr;
-        align-items: start;
+      .ingredients-grid.has-image {
+        grid-template-columns: 1.6fr 1fr;
       }
     }
   </style>
@@ -1801,23 +1822,17 @@ async function printBookingInfoSheet(bookingId) {
     </div>
 
     <div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
-      <div class="recipe-top-grid">
-        <div>
-          <div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.25rem;">
-            <h2 class="recipe-name">${recipe ? escHtml(recipe.name || booking.recipe || '') : escHtml(booking.recipe || 'No recipe linked')}</h2>
-          </div>
-          ${recipe && recipe.description ? `<div style="margin-top:0.2rem;font-size:0.9rem;color:#475569;font-style:italic;">${escHtml(recipe.description)}</div>` : ''}
-          ${recipeUrlHtml}
+      <div>
+        <div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.25rem;">
+          <h2 class="recipe-name">${recipe ? escHtml(recipe.name || booking.recipe || '') : escHtml(booking.recipe || 'No recipe linked')}</h2>
         </div>
-        ${recipeImageHtml}
+        ${recipe && recipe.description ? `<div style="margin-top:0.2rem;font-size:0.9rem;color:#475569;font-style:italic;">${escHtml(recipe.description)}</div>` : ''}
+        ${recipeUrlHtml}
       </div>
     </div>
 
     <div class="section-grid" style="margin-top:0.75rem;">
-      <div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
-        <div class="section-title" style="color:${streamScheme.header};">Ingredients</div>
-        ${ingredientsHtml}
-      </div>
+      ${ingredientsSectionHtml}
       ${methodSection}
     </div>
 
