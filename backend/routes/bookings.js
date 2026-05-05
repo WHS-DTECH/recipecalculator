@@ -282,39 +282,60 @@ router.post('/batch', async (req, res) => {
     await ensureSchema();
     await ensurePlannerUploadSchema();
 
-    // Build a set of already-existing Planner rows so duplicate uploads are harmless.
+    // Upsert planner rows: insert new, update if recipe changed, skip if unchanged.
     // Key: booking_date|planner_stream (one recipe per week per stream).
     const incomingDates = [...new Set(items.map((b) => String(b.booking_date || '').slice(0, 10)).filter(Boolean))];
-    let existingPlannerKeys = new Set();
+    // existingPlannerMap: dedupKey -> { id, recipe, recipe_url, recipe_id }
+    const existingPlannerMap = new Map();
     if (incomingDates.length) {
       const existingRes = await pool.query(
-        `SELECT booking_date, planner_stream FROM bookings
+        `SELECT id, booking_date, planner_stream, recipe, recipe_url, recipe_id FROM bookings
          WHERE period = 'Planner'
            AND booking_date = ANY($1::date[])`,
         [incomingDates]
       );
       for (const row of existingRes.rows) {
-        existingPlannerKeys.add(`${String(row.booking_date || '').slice(0, 10)}|${String(row.planner_stream || '').trim()}`);
+        const key = `${String(row.booking_date || '').slice(0, 10)}|${String(row.planner_stream || '').trim()}`;
+        existingPlannerMap.set(key, row);
       }
     }
 
     const ids = [];
     let skipped = 0;
+    let updated = 0;
     for (const b of items) {
       const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
       const streamVal = planner_stream || 'Middle';
       const dateVal = String(booking_date || '').slice(0, 10);
       const dedupKey = `${dateVal}|${streamVal}`;
-      if (existingPlannerKeys.has(dedupKey)) {
-        skipped += 1;
+
+      const existing = existingPlannerMap.get(dedupKey);
+      if (existing) {
+        // Same recipe — nothing to do.
+        const sameRecipe = String(existing.recipe || '').trim() === String(recipe || '').trim();
+        const sameUrl = String(existing.recipe_url || '').trim() === String(recipe_url || '').trim();
+        const sameId = String(existing.recipe_id || '') === String(recipe_id || '');
+        if (sameRecipe && sameUrl && sameId) {
+          skipped += 1;
+        } else {
+          // Recipe changed — update the existing row.
+          await pool.query(
+            `UPDATE bookings SET recipe=$1, recipe_url=$2, recipe_id=$3 WHERE id=$4`,
+            [recipe, recipe_url || '', recipe_id || null, existing.id]
+          );
+          ids.push(existing.id);
+          updated += 1;
+          existingPlannerMap.set(dedupKey, { ...existing, recipe, recipe_url, recipe_id });
+        }
         continue;
       }
+
       const result = await pool.query(
         "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
         [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, streamVal]
       );
       ids.push(result.rows[0].id);
-      existingPlannerKeys.add(dedupKey); // prevent dupes within the same batch
+      existingPlannerMap.set(dedupKey, { id: result.rows[0].id, recipe, recipe_url, recipe_id }); // prevent dupes within same batch
     }
 
     // Record this batch upload for planner file explorer/history UI.
@@ -353,7 +374,7 @@ router.post('/batch', async (req, res) => {
       ]
     );
 
-    res.json({ success: true, saved: ids.length, skipped, ids });
+    res.json({ success: true, saved: ids.length - updated, updated, skipped, ids });
   } catch (err) {
     console.error('Failed to batch create bookings:', err.message);
     res.status(500).json({ error: 'Failed to save bookings.' });

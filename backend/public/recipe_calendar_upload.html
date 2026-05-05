@@ -1043,17 +1043,24 @@
         });
         const data = await res.json();
         if (res.ok) {
-          saved = data.saved || bookings.length;
+          saved = data.saved || 0;
+          const updatedCount = data.updated || 0;
           const skippedDupes = data.skipped || 0;
           savedIds = Array.isArray(data.ids) ? data.ids : [];
-          const skipNote = skippedDupes > 0 ? ` (${skippedDupes} already existed, skipped)` : '';
-          
+
+          const parts = [];
+          if (saved > 0) parts.push(`${saved} new`);
+          if (updatedCount > 0) parts.push(`${updatedCount} updated`);
+          if (skippedDupes > 0) parts.push(`${skippedDupes} unchanged`);
+          const summaryNote = parts.length ? `(${parts.join(', ')})` : '';
+
           // Auto-match recipes after successful save
-          if (saved === 0 && skippedDupes > 0) {
+          const hasChanges = saved + updatedCount > 0;
+          if (!hasChanges && skippedDupes > 0) {
             saveStatus.className = 'rcal-status ok';
-            saveStatus.textContent = `All ${skippedDupes} row(s) already exist in the planner — nothing new was added.`;
-          } else if (saved > 0) {
-            saveStatus.textContent = `Saved ${saved} booking(s)${skipNote}. Auto-matching recipes…`;
+            saveStatus.textContent = `All ${skippedDupes} row(s) are already up to date — nothing changed.`;
+          } else if (hasChanges) {
+            saveStatus.textContent = `Saved ${summaryNote}. Auto-matching recipes…`;
             try {
               const matchRes = await fetch('/api/recipe-matching/auto-match', {
                 method: 'POST',
@@ -1063,14 +1070,14 @@
               const matchData = await matchRes.json();
               if (matchRes.ok) {
                 const { autoMatched, needsReview } = matchData.summary;
-                saveStatus.textContent = `✓ Saved ${saved} booking(s)${skipNote}. Auto-matched ${autoMatched} recipe(s).`;
+                saveStatus.textContent = `✓ Done ${summaryNote}. Auto-matched ${autoMatched} recipe(s).`;
                 if (needsReview > 0) {
                   saveStatus.innerHTML += ` ${needsReview} recipe(s) need <a href="admin_match_recipes.html" style="color:#1565c0;text-decoration:underline;font-weight:600;">Manual Review</a>.`;
                 }
               }
             } catch (matchErr) {
               console.warn('Auto-match failed (non-critical):', matchErr);
-              saveStatus.textContent = `✓ Saved ${saved} booking(s). Auto-match could not run; use `;
+              saveStatus.textContent = `✓ Done ${summaryNote}. Auto-match could not run; use `;
               saveStatus.innerHTML += `<a href="admin_match_recipes.html" style="color:#1565c0;text-decoration:underline;font-weight:600;">Match Planner Recipes</a>.`;
             }
           }
@@ -1087,7 +1094,7 @@
       if (failed === 0) {
         saveStatus.className = 'rcal-status ok';
         if (!saveStatus.textContent.includes('Auto-matched')) {
-          saveStatus.textContent = `✓ Saved ${saved} booking(s) successfully.`;
+            saveStatus.textContent = `✓ Done ${summaryNote} successfully.`;
         }
         renderMiniCal(); // refresh calendar after saving
         renderPlannerUploadsExplorer();
