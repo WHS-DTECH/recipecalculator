@@ -737,6 +737,11 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
       skippedNotDouble: 0
     };
 
+    // Diagnostics collected for dry run
+    const diagNotDouble = [];   // food classes found but only single period
+    const diagExisting = [];    // already-booked slots (sample)
+    const diagNoPlanner = [];   // double food periods with no planner recipe
+
     const cursor = new Date(startDateObj);
     cursor.setHours(0, 0, 0, 0);
 
@@ -775,6 +780,10 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
             const uniquePeriods = Array.from(new Set(periodEntries.map((entry) => Number(entry.period))));
             if (uniquePeriods.length < 2) {
               stats.skippedNotDouble += uniquePeriods.length;
+              const stream = inferStreamFromClassToken(classGroupKey);
+              if (dryRun && stream && diagNotDouble.length < 50) {
+                diagNotDouble.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, stream, periods: uniquePeriods });
+              }
               continue;
             }
 
@@ -789,6 +798,9 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
             const planner = plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
             if (!planner) {
               stats.skippedNoPlanner += uniquePeriods.length;
+              if (dryRun && diagNoPlanner.length < 20) {
+                diagNoPlanner.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, stream, periods: uniquePeriods });
+              }
               continue;
             }
 
@@ -803,6 +815,9 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
               const slotKey = `${dateIso}|${period}|${classTokenForBooking}`;
               if (existingSlots.has(slotKey)) {
                 stats.skippedExisting += 1;
+                if (dryRun && diagExisting.length < 30) {
+                  diagExisting.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: planner.recipe });
+                }
                 continue;
               }
 
@@ -868,7 +883,16 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
         endDate,
         ...stats
       },
-      preview: inserts.slice(0, 25)
+      preview: inserts.slice(0, 25),
+      ...(dryRun ? {
+        plannerRecipes: Array.from(plannerByDateAndStream.entries()).map(([key, row]) => {
+          const [date, stream] = key.split('|');
+          return { date, stream, recipe: row.recipe };
+        }).sort((a, b) => a.date.localeCompare(b.date)),
+        alreadyExist: diagExisting,
+        notDoublePeriod: diagNotDouble,
+        noPlanner: diagNoPlanner
+      } : {})
     });
   } catch (err) {
     console.error('Failed to prefill bookings from planner:', err.message);

@@ -35,7 +35,64 @@ function setStatus(message, isError) {
 function setResults(payload) {
   const resultsEl = document.getElementById('prefillResults');
   if (!resultsEl) return;
-  resultsEl.textContent = JSON.stringify(payload || {}, null, 2);
+  if (!payload) { resultsEl.innerHTML = ''; return; }
+  const s = payload.summary || {};
+  const isDry = payload.dryRun;
+
+  let html = `<div class="pf-section">`;
+  html += `<strong>${isDry ? 'Dry Run Summary' : 'Prefill Summary'}</strong> &nbsp; ${s.startDate} → ${s.endDate}<br>`;
+  html += `Planner recipes found: <b>${s.plannerRecipesFound}</b> &nbsp;|&nbsp; `;
+  html += `Candidates: <b>${s.candidates}</b> &nbsp;|&nbsp; `;
+  html += `${isDry ? 'Would insert' : 'Inserted'}: <b style="color:${s.inserted > 0 ? '#2e7d32' : '#374151'}">${s.inserted}</b> &nbsp;|&nbsp; `;
+  html += `Already exist: <b>${s.skippedExisting}</b> &nbsp;|&nbsp; `;
+  html += `No planner: <b>${s.skippedNoPlanner}</b>`;
+  html += `</div>`;
+
+  if (isDry && payload.plannerRecipes && payload.plannerRecipes.length) {
+    html += `<div class="pf-section"><strong>Planner recipes loaded (${payload.plannerRecipes.length})</strong><table class="pf-table"><tr><th>Date</th><th>Stream</th><th>Recipe</th></tr>`;
+    for (const r of payload.plannerRecipes) {
+      html += `<tr><td>${r.date}</td><td>${r.stream}</td><td>${r.recipe}</td></tr>`;
+    }
+    html += `</table></div>`;
+  }
+
+  if (isDry && payload.preview && payload.preview.length) {
+    html += `<div class="pf-section"><strong>Would insert (${s.inserted} total, showing first ${payload.preview.length})</strong><table class="pf-table"><tr><th>Date</th><th>P</th><th>Class</th><th>Teacher</th><th>Recipe</th></tr>`;
+    for (const b of payload.preview) {
+      html += `<tr><td>${b.booking_date}</td><td>${b.period}</td><td><b>${b.class_name}</b></td><td>${b.staff_name || ''}</td><td>${b.recipe}</td></tr>`;
+    }
+    html += `</table></div>`;
+  }
+
+  if (isDry && payload.alreadyExist && payload.alreadyExist.length) {
+    html += `<div class="pf-section"><strong>Already booked — skipped (${s.skippedExisting} total, showing first ${payload.alreadyExist.length})</strong><table class="pf-table"><tr><th>Date</th><th>P</th><th>Class</th><th>Teacher</th><th>Recipe</th></tr>`;
+    for (const b of payload.alreadyExist) {
+      html += `<tr><td>${b.date}</td><td>${b.period}</td><td><b>${b.class}</b></td><td>${b.teacher}</td><td>${b.recipe}</td></tr>`;
+    }
+    html += `</table></div>`;
+  }
+
+  if (isDry && payload.notDoublePeriod && payload.notDoublePeriod.length) {
+    html += `<div class="pf-section pf-warn"><strong>⚠ Food classes with only 1 period in timetable — NOT booked (${s.skippedNotDouble} total, showing first ${payload.notDoublePeriod.length})</strong><table class="pf-table"><tr><th>Date</th><th>Class</th><th>Teacher</th><th>Stream</th><th>Period(s)</th></tr>`;
+    for (const b of payload.notDoublePeriod) {
+      html += `<tr><td>${b.date}</td><td><b>${b.class}</b></td><td>${b.teacher}</td><td>${b.stream}</td><td>${b.periods.join(', ')}</td></tr>`;
+    }
+    html += `</table></div>`;
+  }
+
+  if (isDry && payload.noPlanner && payload.noPlanner.length) {
+    html += `<div class="pf-section pf-warn"><strong>⚠ Double-period food classes with no matching planner recipe (${s.skippedNoPlanner} total, showing first ${payload.noPlanner.length})</strong><table class="pf-table"><tr><th>Date</th><th>Class</th><th>Teacher</th><th>Stream</th></tr>`;
+    for (const b of payload.noPlanner) {
+      html += `<tr><td>${b.date}</td><td><b>${b.class}</b></td><td>${b.teacher}</td><td>${b.stream}</td></tr>`;
+    }
+    html += `</table></div>`;
+  }
+
+  if (!isDry) {
+    html += `<details><summary style="cursor:pointer;font-size:0.82rem;color:#6b7280;">Raw JSON</summary><pre style="font-size:0.78rem;margin-top:0.4rem">${JSON.stringify(payload, null, 2)}</pre></details>`;
+  }
+
+  resultsEl.innerHTML = html;
 }
 
 

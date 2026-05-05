@@ -85,12 +85,16 @@
       border: 1px solid #dbe3ee;
       border-radius: 8px;
       padding: 0.7rem 0.8rem;
-      font-family: Consolas, Menlo, Monaco, monospace;
-      font-size: 0.83rem;
-      white-space: pre-wrap;
-      max-height: 360px;
+      font-size: 0.87rem;
+      max-height: 70vh;
       overflow: auto;
     }
+    .pf-section { margin-bottom: 1rem; }
+    .pf-warn { background: #fffbeb; border: 1px solid #fcd34d; border-radius: 6px; padding: 0.5rem 0.7rem; }
+    .pf-table { border-collapse: collapse; width: 100%; margin-top: 0.4rem; font-size: 0.82rem; }
+    .pf-table th { background: #e2e8f0; padding: 0.3rem 0.5rem; text-align: left; font-weight: 600; }
+    .pf-table td { padding: 0.25rem 0.5rem; border-bottom: 1px solid #e2e8f0; }
+    .pf-table tr:hover td { background: #f1f5f9; }
     @media (max-width: 700px) {
       .prefill-grid {
         grid-template-columns: 1fr;
@@ -124,7 +128,7 @@
       </div>
 
       <div id="prefillStatus" class="prefill-status" aria-live="polite"></div>
-      <pre id="prefillResults" class="prefill-results">No results yet.</pre>
+      <div id="prefillResults" class="prefill-results">No results yet.</div>
 
     </section>
   </main>
