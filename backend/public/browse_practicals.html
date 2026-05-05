@@ -43,12 +43,15 @@
         <h1>Browse Practicals</h1>
 
         <div class="browse-practicals-toolbar">
-            <div id="calendarWeekLabel" class="browse-practicals-week-label">Loading&hellip;</div>
-            <button id="prevWeekBtn">&larr; Previous</button>
-            <button id="todayBtn">Today</button>
-            <button id="nextWeekBtn">Next &rarr;</button>
-            <button id="printScheduleBtn" class="add-booking-print-btn">Print Schedule (A4)</button>
-            <select id="scheduleViewModeSelect" title="Calendar cell display mode" style="padding:0.4rem 0.6rem;border:1px solid #90a4ae;border-radius:5px;font-size:0.92rem;background:#fff;cursor:pointer;">
+            <div id="calendarWeekLabel" class="browse-practicals-week-label" aria-live="polite" aria-atomic="true">Loading&hellip;</div>
+            <div role="toolbar" aria-label="Week navigation">
+            <button id="prevWeekBtn" type="button" aria-label="Previous week">&larr; Previous</button>
+            <button id="todayBtn" type="button">Today</button>
+            <button id="nextWeekBtn" type="button" aria-label="Next week">Next &rarr;</button>
+            </div>
+            <button id="printScheduleBtn" type="button" class="add-booking-print-btn">Print Schedule (A4)</button>
+            <label for="scheduleViewModeSelect" class="sr-only">Calendar cell display mode</label>
+            <select id="scheduleViewModeSelect" class="add-booking-view-mode-select" aria-label="Calendar cell display mode">
                 <option value="class">Show: Class</option>
                 <option value="recipe">Show: Recipe</option>
             </select>

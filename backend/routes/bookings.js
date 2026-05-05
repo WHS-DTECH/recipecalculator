@@ -613,7 +613,10 @@ router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
 
     const plannerByDateAndStream = new Map();
     for (const row of plannerResult.rows) {
-      const stream = String(row.planner_stream || inferStreamFromClassToken(row.class_name) || inferPlannerStreamFromCode(row.class_name) || '').trim();
+      const storedStream = String(row.planner_stream || '').trim();
+      const stream = (storedStream && storedStream !== 'Other')
+        ? storedStream
+        : String(inferStreamFromClassToken(row.class_name) || inferPlannerStreamFromCode(row.class_name) || '').trim();
       if (!stream || stream === 'Other') continue;
       const date = String(row.booking_date || '').slice(0, 10);
       const key = `${date}|${stream}`;
