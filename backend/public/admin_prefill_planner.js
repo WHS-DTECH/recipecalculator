@@ -43,6 +43,8 @@ function setResults(payload) {
   html += `<strong>${isDry ? 'Dry Run Summary' : 'Prefill Summary'}</strong> &nbsp; ${s.startDate} → ${s.endDate}<br>`;
   html += `Planner recipes found: <b>${s.plannerRecipesFound}</b> &nbsp;|&nbsp; `;
   html += `Candidates: <b>${s.candidates}</b> &nbsp;|&nbsp; `;
+  html += `Single-period: <b>${s.singlePeriodCandidates || 0}</b> &nbsp;|&nbsp; `;
+  html += `Multi-period: <b>${s.multiPeriodCandidates || 0}</b> &nbsp;|&nbsp; `;
   html += `${isDry ? 'Would insert' : 'Inserted'}: <b style="color:${s.inserted > 0 ? '#2e7d32' : '#374151'}">${s.inserted}</b> &nbsp;|&nbsp; `;
   html += `Already exist: <b>${s.skippedExisting}</b> &nbsp;|&nbsp; `;
   html += `No planner: <b>${s.skippedNoPlanner}</b>`;
@@ -72,16 +74,16 @@ function setResults(payload) {
     html += `</table></div>`;
   }
 
-  if (isDry && payload.notDoublePeriod && payload.notDoublePeriod.length) {
-    html += `<div class="pf-section pf-warn"><strong>⚠ Food classes with only 1 period in timetable — NOT booked (${s.skippedNotDouble} total, showing first ${payload.notDoublePeriod.length})</strong><table class="pf-table"><tr><th>Date</th><th>Class</th><th>Teacher</th><th>Stream</th><th>Period(s)</th></tr>`;
-    for (const b of payload.notDoublePeriod) {
-      html += `<tr><td>${b.date}</td><td><b>${b.class}</b></td><td>${b.teacher}</td><td>${b.stream}</td><td>${b.periods.join(', ')}</td></tr>`;
+  if (isDry && payload.singlePeriodMatches && payload.singlePeriodMatches.length) {
+    html += `<div class="pf-section"><strong>Single-period classes matched to planner (showing first ${payload.singlePeriodMatches.length})</strong><table class="pf-table"><tr><th>Date</th><th>P</th><th>Class</th><th>Teacher</th><th>Stream</th><th>Status</th><th>Recipe</th></tr>`;
+    for (const b of payload.singlePeriodMatches) {
+      html += `<tr><td>${b.date}</td><td>${b.period}</td><td><b>${b.class}</b></td><td>${b.teacher}</td><td>${b.stream}</td><td>${b.status}</td><td>${b.recipe}</td></tr>`;
     }
     html += `</table></div>`;
   }
 
   if (isDry && payload.noPlanner && payload.noPlanner.length) {
-    html += `<div class="pf-section pf-warn"><strong>⚠ Double-period food classes with no matching planner recipe (${s.skippedNoPlanner} total, showing first ${payload.noPlanner.length})</strong><table class="pf-table"><tr><th>Date</th><th>Class</th><th>Teacher</th><th>Stream</th></tr>`;
+    html += `<div class="pf-section pf-warn"><strong>⚠ Food classes with no matching planner recipe (${s.skippedNoPlanner} total, showing first ${payload.noPlanner.length})</strong><table class="pf-table"><tr><th>Date</th><th>Class</th><th>Teacher</th><th>Stream</th></tr>`;
     for (const b of payload.noPlanner) {
       html += `<tr><td>${b.date}</td><td><b>${b.class}</b></td><td>${b.teacher}</td><td>${b.stream}</td></tr>`;
     }
@@ -157,7 +159,7 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   if (runBtn) {
     runBtn.addEventListener('click', () => {
-      const yes = window.confirm('Create bookings now? This inserts class bookings for matching double periods.');
+      const yes = window.confirm('Create bookings now? This inserts class bookings for matching Food/HOSP periods (single and double).');
       if (!yes) return;
       runPrefill(false);
     });
