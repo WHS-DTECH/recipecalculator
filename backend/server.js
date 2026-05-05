@@ -821,6 +821,9 @@ app.use('/api/subscriptions', subscriptionsRouter);
 const savedShoppingListsRouter = require('./routes/saved_shopping_lists');
 app.use('/api/saved-shopping-lists', savedShoppingListsRouter);
 
+const shoppingExtrasRouter = require('./routes/shopping_extras');
+app.use('/api/shopping-extras', shoppingExtrasRouter);
+
 // --- Google Auth API ---
 app.get('/api/auth/google/config', (req, res) => {
   const clientId = getGoogleClientId();

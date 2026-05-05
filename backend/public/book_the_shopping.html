@@ -72,6 +72,19 @@
         <button id="generateByTeacherBtn" class="btn btn-primary shopping-bottom-btn">Generate Shopping List by Teacher</button>
         <button id="generateByCategoryBtn" class="btn btn-success shopping-bottom-btn">Generate Shopping List by Category</button>
         <button id="autoWeekListBtn" class="btn btn-primary shopping-bottom-btn" data-theme="dark">Auto Week List + Print</button>
+        <button id="loadTeacherExtrasBtn" class="btn btn-secondary shopping-bottom-btn">Load Teacher Extras</button>
+
+            <!-- Teacher Extras panel (below the main shopping layout) -->
+            <div id="teacherExtrasPanel" style="max-width:900px;margin:1.5rem auto 2rem;padding:0 1rem;display:none;">
+                <div style="background:#fff;border:1px solid #cdd8e3;border-radius:8px;padding:1.1rem 1.3rem;box-shadow:0 1px 4px rgba(0,0,0,0.06);">
+                    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.9rem;">
+                        <h2 style="margin:0;font-size:1.05rem;font-weight:700;color:#1a3a5c;">Teacher Extras</h2>
+                        <a href="shopping_extras.html" style="font-size:0.87rem;">Edit Extras →</a>
+                    </div>
+                    <div id="teacherExtrasContent"><em style="color:#888;">Click "Load Teacher Extras" in the button bar below.</em></div>
+                </div>
+            </div>
+
     </div>
         <script src="shared/nz_school_calendar.js"></script>
         <script src="schedule_calendar.js"></script>
@@ -98,5 +111,74 @@
     </style>
     <script src="shared/quality_tools.js"></script>
     <script src="book_the_shopping.js"></script>
+
+        <script>
+        (function () {
+            var loadExtrasBtn = document.getElementById('loadTeacherExtrasBtn');
+            var extrasPanel = document.getElementById('teacherExtrasPanel');
+            var extrasContent = document.getElementById('teacherExtrasContent');
+
+            function escHtml(s) {
+                return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            }
+
+            function getFridayDate() {
+                // Use currentMonday from schedule_calendar.js if available
+                var base = (typeof currentMonday !== 'undefined' && currentMonday instanceof Date)
+                    ? new Date(currentMonday)
+                    : new Date();
+                var day = base.getDay();
+                var diff = day <= 5 ? 5 - day : 6;
+                base.setDate(base.getDate() + diff);
+                return base.toISOString().slice(0, 10);
+            }
+
+            function renderExtras(standing, week) {
+                var all = [];
+                // Week-specific first, then standing
+                (week || []).forEach(function(r) { all.push(r); });
+                (standing || []).forEach(function(r) { all.push(r); });
+                if (!all.length) {
+                    extrasContent.innerHTML = '<em style="color:#888;">No extras saved for this week. <a href="shopping_extras.html">Add some →</a></em>';
+                    return;
+                }
+                var byCategory = {};
+                all.forEach(function(r) {
+                    var cat = String(r.category || 'Other');
+                    if (!byCategory[cat]) byCategory[cat] = [];
+                    byCategory[cat].push(r);
+                });
+                var html = '';
+                Object.keys(byCategory).forEach(function(cat) {
+                    html += '<h4 style="margin:0.55rem 0 0.2rem;color:#1a3a5c;font-size:0.88rem;">' + escHtml(cat) + '</h4>';
+                    html += '<table style="width:100%;border-collapse:collapse;margin-bottom:0.4rem;">';
+                    byCategory[cat].forEach(function(r, idx) {
+                        var bg = idx % 2 === 0 ? '#fff' : '#f5f9fd';
+                        var badge = r.is_standing ? ' <span style="font-size:0.75rem;background:#e3edf7;color:#1a3a5c;border-radius:3px;padding:0 4px;">standing</span>' : '';
+                        html += '<tr style="background:' + bg + '">';
+                        html += '<td style="padding:0.3rem 0.5rem;font-size:0.91rem;">' + escHtml(r.item_text) + badge + '</td>';
+                        html += '</tr>';
+                    });
+                    html += '</table>';
+                });
+                extrasContent.innerHTML = html;
+            }
+
+            if (loadExtrasBtn) {
+                loadExtrasBtn.addEventListener('click', async function () {
+                    var friday = getFridayDate();
+                    extrasPanel.style.display = '';
+                    extrasContent.innerHTML = '<em>Loading…</em>';
+                    try {
+                        var res = await fetch('/api/shopping-extras?week_date=' + encodeURIComponent(friday), { credentials: 'include' });
+                        var data = await res.json().catch(function(){ return {}; });
+                        renderExtras(data.standing || [], data.week || []);
+                    } catch (err) {
+                        extrasContent.innerHTML = '<span style="color:#c0392b;">Failed to load extras: ' + escHtml(err.message) + '</span>';
+                    }
+                });
+            }
+        })();
+        </script>
 </body>
 </html>
