@@ -578,27 +578,9 @@
 
       const topUsed = plannerClassOptions.filter((item) => Number(item.usageCount) > 0);
       const remaining = plannerClassOptions.filter((item) => Number(item.usageCount) <= 0);
-      const currentValue = String(classnameInput.value || '').trim();
 
-      const options = [];
-      options.push('<option value="">Select class...</option>');
-
-      const renderOption = (item) => {
-        const labelParts = [item.code];
-        if (item.name) labelParts.push(item.name);
-        return `<option value="${escHtml(item.code || '')}">${escHtml(labelParts.join(' - '))}</option>`;
-      };
-
-      topUsed.forEach((item) => options.push(renderOption(item)));
-      if (topUsed.length && remaining.length) {
-        options.push('<option value="" disabled>──────────</option>');
-      }
-      remaining.forEach((item) => options.push(renderOption(item)));
-
-      classnameInput.innerHTML = options.join('');
-
-      const nextValue = currentValue || getDefaultClassNameForStream(document.getElementById('plannerStreamSelect').value || 'Middle');
-      setGlobalClassValue(nextValue);
+      const currentStream = String(document.getElementById('plannerStreamSelect').value || 'Middle');
+      refreshClassnameDropdown(currentStream);
       populateDeletePlannerClassOptions();
     }
 
@@ -661,6 +643,39 @@
       return 'MFOOD';
     }
 
+    function getClassOptionsForStream(stream) {
+      if (stream === 'Junior') return juniorFoodCodes;
+      if (stream === 'Senior') return ['11HOSP', '12HOSP', '13HOSP', 'HOSP', '11HOSPCOOK', '12HOSPCOOK', '13HOSPCOOK'];
+      return ['MFOOD'];
+    }
+
+    // Rebuild the global class name dropdown filtered to the current stream
+    function refreshClassnameDropdown(stream) {
+      const streamCodes = getClassOptionsForStream(stream);
+      const currentVal = String(classnameInput.value || '').trim();
+      const options = ['<option value="">Select class...</option>'];
+      const usedInStream = plannerClassOptions.filter((item) => streamCodes.includes(item.code));
+      const fallback = streamCodes.filter((code) => !usedInStream.some((u) => u.code === code))
+        .map((code) => ({ code, name: '' }));
+      [...usedInStream, ...fallback].forEach(({ code, name }) => {
+        const label = name ? `${code} - ${name}` : code;
+        options.push(`<option value="${escHtml(code)}">${escHtml(label)}</option>`);
+      });
+      classnameInput.innerHTML = options.join('');
+      const newVal = (currentVal && streamCodes.includes(currentVal)) ? currentVal : getDefaultClassNameForStream(stream);
+      setGlobalClassValue(newVal);
+    }
+
+    // Update per-row class selects to match available codes for stream
+    function refreshRowClassSelects(stream) {
+      const codes = getClassOptionsForStream(stream);
+      document.querySelectorAll('.rcal-classname').forEach((sel) => {
+        const current = sel.value;
+        sel.innerHTML = codes.map((c) => `<option value="${escHtml(c)}">${escHtml(c)}</option>`).join('');
+        sel.value = (current && codes.includes(current)) ? current : codes[0];
+      });
+    }
+
     function detectPlannerDefaults(sourceText) {
       const text = String(sourceText || '').trim();
       if (!text) return null;
@@ -685,6 +700,7 @@
       const previousValue = classnameInput.value.trim();
 
       plannerStreamSelect.value = detectedDefaults.stream;
+      refreshClassnameDropdown(detectedDefaults.stream);
       setGlobalClassValue(detectedDefaults.className);
       applyGlobalClassNameToRows(previousValue);
       classnameAutoHint.style.display = '';
@@ -725,12 +741,10 @@
     document.getElementById('plannerStreamSelect').addEventListener('change', function() {
       const classnameAutoHint = document.getElementById('classnameAutoHint');
       const previousValue = classnameInput.value.trim();
-      const nextDefault = getDefaultClassNameForStream(this.value || 'Middle');
-      if (!previousValue || ['MFOOD', 'JFOOD', 'HOSP', '11HOSP', '12HOSP', '13HOSP'].includes(previousValue)) {
-        setGlobalClassValue(nextDefault);
-        applyGlobalClassNameToRows(previousValue);
-        classnameAutoHint.style.display = '';
-      }
+      refreshClassnameDropdown(this.value || 'Middle');
+      refreshRowClassSelects(this.value || 'Middle');
+      applyGlobalClassNameToRows(previousValue);
+      classnameAutoHint.style.display = '';
     });
 
     deletePlannerStreamSelect.addEventListener('change', populateDeletePlannerClassOptions);
@@ -923,7 +937,7 @@
         <td><input type="date" class="rcal-date" value="${escHtml(w.startDate || '')}"></td>
         <td><input type="text" class="rcal-recipe" value="${escHtml(w.recipe || '')}" placeholder="Recipe name"></td>
         <td><input type="url" class="rcal-url" value="${escHtml(w.url || '')}" placeholder="https://..." style="width:180px;"></td>
-        <td><input type="text" class="rcal-classname" value="${escHtml(w.class_name || globalClassName || '')}" placeholder="e.g. 9FT1"></td>
+        <td><select class="rcal-classname" style="padding:0.3rem 0.5rem;border:1px solid #c8d3de;border-radius:5px;font-size:0.88rem;">${getClassOptionsForStream(document.getElementById('plannerStreamSelect').value || 'Middle').map((c) => `<option value="${escHtml(c)}"${(w.class_name || globalClassName) === c ? ' selected' : ''}>${escHtml(c)}</option>`).join('')}</select></td>
         <td>
           ${w.confidence === 'auto' ? '<span class="rcal-badge-auto">auto</span>' :
             w.confidence === 'missing' ? '<span class="rcal-badge-missing">missing</span>' :
