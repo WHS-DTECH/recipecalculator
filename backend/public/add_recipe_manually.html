@@ -345,7 +345,7 @@
       <div class="ft-image-panel">
         <h2 style="margin:0 0 0.3rem;font-size:1.15rem;color:var(--ft-heading);">Recipe Photos</h2>
         <p class="ft-hint" id="photoHandoffNote">Photos now upload on the dedicated Food Truck Recipe Photos page so students can add images of their own finished dish.</p>
-        <a id="photoUploadLink" href="food_truck_recipe_photos.html" class="ft-btn" style="display:inline-flex;text-decoration:none;">Open Recipe Photos Page</a>
+        <a id="photoUploadLink" href="admin_recipe_images.html" class="ft-btn" style="display:inline-flex;text-decoration:none;">Open Recipe Photos Page</a>
       </div>
     </section>
   </main>
@@ -389,7 +389,7 @@
 
       function updatePhotoUploadLink(recipeId) {
         const suffix = recipeId ? ('?recipeId=' + encodeURIComponent(String(recipeId))) : '';
-        photoUploadLink.href = 'food_truck_recipe_photos.html' + suffix;
+        photoUploadLink.href = 'admin_recipe_images.html' + suffix;
       }
 
         async function publishRecipeToDisplay(recipeId) {
