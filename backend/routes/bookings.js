@@ -288,11 +288,15 @@ router.post('/batch', async (req, res) => {
     // existingPlannerMap: dedupKey -> { id, recipe, recipe_url, recipe_id }
     const existingPlannerMap = new Map();
     if (incomingDates.length) {
+      const sortedDates = [...incomingDates].sort();
+      const minDate = sortedDates[0];
+      const maxDate = sortedDates[sortedDates.length - 1];
       const existingRes = await pool.query(
         `SELECT id, booking_date, planner_stream, recipe, recipe_url, recipe_id FROM bookings
          WHERE period = 'Planner'
-           AND booking_date = ANY($1::date[])`,
-        [incomingDates]
+           AND booking_date >= $1
+           AND booking_date <= $2`,
+        [minDate, maxDate]
       );
       for (const row of existingRes.rows) {
         const key = `${String(row.booking_date || '').slice(0, 10)}|${String(row.planner_stream || '').trim()}`;
