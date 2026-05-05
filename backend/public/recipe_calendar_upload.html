@@ -1044,11 +1044,16 @@
         const data = await res.json();
         if (res.ok) {
           saved = data.saved || bookings.length;
+          const skippedDupes = data.skipped || 0;
           savedIds = Array.isArray(data.ids) ? data.ids : [];
+          const skipNote = skippedDupes > 0 ? ` (${skippedDupes} already existed, skipped)` : '';
           
           // Auto-match recipes after successful save
-          if (saved > 0) {
-            saveStatus.textContent = `Saved ${saved} booking(s). Auto-matching recipes…`;
+          if (saved === 0 && skippedDupes > 0) {
+            saveStatus.className = 'rcal-status ok';
+            saveStatus.textContent = `All ${skippedDupes} row(s) already exist in the planner — nothing new was added.`;
+          } else if (saved > 0) {
+            saveStatus.textContent = `Saved ${saved} booking(s)${skipNote}. Auto-matching recipes…`;
             try {
               const matchRes = await fetch('/api/recipe-matching/auto-match', {
                 method: 'POST',
@@ -1058,7 +1063,7 @@
               const matchData = await matchRes.json();
               if (matchRes.ok) {
                 const { autoMatched, needsReview } = matchData.summary;
-                saveStatus.textContent = `✓ Saved ${saved} booking(s). Auto-matched ${autoMatched} recipe(s).`;
+                saveStatus.textContent = `✓ Saved ${saved} booking(s)${skipNote}. Auto-matched ${autoMatched} recipe(s).`;
                 if (needsReview > 0) {
                   saveStatus.innerHTML += ` ${needsReview} recipe(s) need <a href="admin_match_recipes.html" style="color:#1565c0;text-decoration:underline;font-weight:600;">Manual Review</a>.`;
                 }
