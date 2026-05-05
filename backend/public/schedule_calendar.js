@@ -1460,59 +1460,71 @@ async function printBookingInfoSheet(bookingId) {
   const booking = bookings.find((b) => Number(b.id) === normalizedId);
   if (!booking) { showInfoToast('Could not find that booking.'); return; }
 
-  // Fetch recipe details if there is one linked
+  // Fetch recipe details if there is one linked.
   let recipe = null;
   if (booking.recipe_id) {
-    recipe = await fetchRecipeDetailsForModal(booking.recipe_id);
+    try {
+      recipe = await fetchRecipeDetailsForModal(booking.recipe_id);
+    } catch (_) {
+      recipe = null;
+    }
   }
 
-  // Determine stream colour scheme
+  // Determine stream colour scheme.
   const stream = normalizePlannerStream(booking);
   const streamScheme = stream === 'Junior'
-    ? { header: '#166534', headerBg: '#dcfce7', accent: '#15803d', chipBg: '#bbf7d0', chipText: '#14532d', label: 'Junior Food' }
+    ? { header: '#166534', headerBg: '#dcfce7', accent: '#15803d', chipBg: '#bbf7d0', chipText: '#14532d', panel: '#f0fdf4', label: 'Junior Food' }
     : stream === 'Senior'
-    ? { header: '#9a3412', headerBg: '#ffedd5', accent: '#c2410c', chipBg: '#fed7aa', chipText: '#7c2d12', label: 'Senior Food / Hospitality' }
-    : { header: '#1e40af', headerBg: '#dbeafe', accent: '#1d4ed8', chipBg: '#bfdbfe', chipText: '#1e3a8a', label: 'Middle Food' };
+    ? { header: '#9a3412', headerBg: '#ffedd5', accent: '#c2410c', chipBg: '#fed7aa', chipText: '#7c2d12', panel: '#fff7ed', label: 'Senior Food / Hospitality' }
+    : { header: '#1e40af', headerBg: '#dbeafe', accent: '#1d4ed8', chipBg: '#bfdbfe', chipText: '#1e3a8a', panel: '#eff6ff', label: 'Middle Food' };
 
   const teacherColour = teacherColorFromName(booking.staff_name || '');
+  const logoUrl = new URL('images/whs logo circular reo .png', window.location.href).href;
 
-  // Format date nicely
+  // Format date nicely.
   const rawDate = String(booking.booking_date || '').trim();
   const dateDisplay = rawDate
     ? (() => { const d = new Date(rawDate + 'T00:00:00'); return Number.isNaN(d.getTime()) ? rawDate : longDateFormatter.format(d); })()
     : '';
 
-  // Build ingredients HTML
-  function buildListHtml(rawValue, accentColour) {
+  function buildUnorderedListHtml(rawValue) {
     const items = extractRecipeListItems(rawValue);
     if (!items.length) return '<p style="color:#6b7280;font-style:italic;">Not available.</p>';
-    return `<ol style="margin:0;padding-left:1.4rem;line-height:1.7;">` +
-      items.map(i => `<li style="margin-bottom:0.18rem;">${escHtml(i)}</li>`).join('') +
-      `</ol>`;
+    return `<ul class="info-list">` + items.map((i) => `<li>${escHtml(i)}</li>`).join('') + `</ul>`;
+  }
+
+  function buildOrderedStepsHtml(rawValue) {
+    const steps = extractRecipeListItems(rawValue);
+    if (!steps.length) return '<p style="color:#6b7280;font-style:italic;">Not available.</p>';
+    return `<ol class="method-list">` + steps.map((step) => `<li>${escHtml(step)}</li>`).join('') + `</ol>`;
   }
 
   const ingredientsHtml = recipe
-    ? buildListHtml(recipe.ingredients_display || recipe.ingredients || '', streamScheme.accent)
+    ? buildUnorderedListHtml(recipe.ingredients_display || recipe.ingredients || '')
     : '<p style="color:#6b7280;font-style:italic;">No recipe linked to this booking.</p>';
 
   const methodHtml = recipe
-    ? buildListHtml(recipe.instructions_display || recipe.instructions || '', streamScheme.accent)
+    ? buildOrderedStepsHtml(recipe.instructions_display || recipe.instructions || '')
     : '';
 
   const servingSizeHtml = (recipe && recipe.serving_size)
-    ? `<span style="display:inline-block;background:${streamScheme.chipBg};color:${streamScheme.chipText};border-radius:999px;padding:0.15rem 0.7rem;font-size:0.82rem;font-weight:700;margin-left:0.5rem;">Serves ${escHtml(String(recipe.serving_size))}</span>`
+    ? `<span class="meta-chip" style="background:${streamScheme.chipBg};color:${streamScheme.chipText};">Serves ${escHtml(String(recipe.serving_size))}</span>`
     : '';
 
   const recipeUrlHtml = (recipe && recipe.url)
-    ? `<div style="margin-top:0.35rem;font-size:0.78rem;color:#6b7280;">Source: <span style="color:${streamScheme.accent};">${escHtml(recipe.url)}</span></div>`
+    ? `<div class="recipe-source">Source: <span style="color:${streamScheme.accent};">${escHtml(recipe.url)}</span></div>`
     : '';
 
   const methodSection = methodHtml
-    ? `<div style="margin-top:1.5rem;">
-        <div style="font-size:1.05rem;font-weight:800;color:${streamScheme.header};border-bottom:2px solid ${streamScheme.headerBg};padding-bottom:0.3rem;margin-bottom:0.6rem;text-transform:uppercase;letter-spacing:0.04em;">Method</div>
+    ? `<div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
+        <div class="section-title" style="color:${streamScheme.header};">Method</div>
         ${methodHtml}
       </div>`
     : '';
+
+  const studentNote = recipe
+    ? 'Bring a pen and work safely. Tick off each step as you complete it.'
+    : 'Ask your teacher which recipe will be used for this session.';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -1522,59 +1534,223 @@ async function printBookingInfoSheet(bookingId) {
   <style>
     @page { size: A4; margin: 18mm 15mm 18mm 15mm; }
     * { box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 13px; color: #1f2937; margin: 0; padding: 0; background: #fff; }
+    body {
+      font-family: 'Trebuchet MS', 'Segoe UI', Arial, sans-serif;
+      font-size: 13px;
+      color: #1f2937;
+      margin: 0;
+      padding: 0;
+      background: #fff;
+    }
+    .sheet {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid #e5e7eb;
+      border-radius: 14px;
+      padding: 1.1rem 1.1rem 1rem;
+      background:
+        radial-gradient(circle at 90% 8%, ${streamScheme.headerBg} 0, ${streamScheme.headerBg} 9%, transparent 10%),
+        linear-gradient(180deg, #ffffff 0%, #ffffff 100%);
+    }
+    .top-banner {
+      display: grid;
+      grid-template-columns: 72px 1fr;
+      gap: 0.8rem;
+      align-items: center;
+      background: ${streamScheme.headerBg};
+      border-left: 7px solid ${streamScheme.header};
+      border-radius: 11px;
+      padding: 0.7rem 0.9rem;
+      margin-bottom: 0.9rem;
+    }
+    .logo {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+      background: #fff;
+      border-radius: 999px;
+      padding: 0.18rem;
+      border: 1px solid #d1d5db;
+    }
+    .kicker {
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: ${streamScheme.header};
+      margin-bottom: 0.2rem;
+    }
+    .main-title {
+      margin: 0;
+      font-size: 1.6rem;
+      line-height: 1.1;
+      color: ${streamScheme.header};
+      font-weight: 900;
+    }
+    .subline {
+      margin-top: 0.22rem;
+      font-size: 0.92rem;
+      color: ${streamScheme.accent};
+      font-weight: 700;
+    }
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.44rem;
+      margin-bottom: 0.9rem;
+    }
+    .meta-chip {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 0.2rem 0.78rem;
+      border: 1px solid #d1d5db;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .student-box {
+      border: 2px dashed ${streamScheme.chipBg};
+      border-radius: 10px;
+      padding: 0.6rem 0.75rem;
+      margin-bottom: 0.95rem;
+      background: #fff;
+    }
+    .student-box-title {
+      font-size: 0.86rem;
+      font-weight: 800;
+      color: ${streamScheme.header};
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 0.25rem;
+    }
+    .student-line {
+      font-size: 0.9rem;
+      color: #334155;
+      margin-top: 0.22rem;
+    }
+    .recipe-name {
+      font-size: 1.28rem;
+      font-weight: 900;
+      color: ${streamScheme.header};
+      margin: 0;
+      line-height: 1.2;
+    }
+    .recipe-source {
+      margin-top: 0.35rem;
+      font-size: 0.78rem;
+      color: #6b7280;
+      overflow-wrap: anywhere;
+    }
+    .section-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.75rem;
+    }
+    .section-card {
+      border: 1px solid #dbeafe;
+      border-radius: 10px;
+      padding: 0.72rem 0.8rem;
+      background: #fff;
+    }
+    .section-title {
+      font-size: 1.02rem;
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 0.45rem;
+      border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+      padding-bottom: 0.2rem;
+    }
+    .info-list {
+      margin: 0;
+      padding-left: 1.25rem;
+      line-height: 1.58;
+    }
+    .info-list li {
+      margin-bottom: 0.2rem;
+      break-inside: avoid;
+    }
+    .method-list {
+      margin: 0;
+      padding-left: 1.35rem;
+      line-height: 1.62;
+    }
+    .method-list li {
+      margin-bottom: 0.28rem;
+      break-inside: avoid;
+    }
+    .footer {
+      margin-top: 0.9rem;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 0.6rem;
+      font-size: 0.72rem;
+      color: #6b7280;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.3rem;
+    }
     .no-print { display: none !important; }
     @media screen {
       body { padding: 1.5rem; max-width: 820px; margin: 0 auto; }
       .no-print { display: block !important; }
     }
+    @media print {
+      .sheet { border: none; border-radius: 0; padding: 0; background: #fff; }
+    }
   </style>
 </head>
 <body>
-  <!-- Print button (screen only) -->
   <div class="no-print" style="margin-bottom:1.2rem;display:flex;gap:0.6rem;align-items:center;">
     <button onclick="window.print()" style="background:${streamScheme.header};color:#fff;border:none;border-radius:6px;padding:0.5rem 1.3rem;font-size:0.95rem;font-weight:700;cursor:pointer;">&#128438; Print / Save as PDF</button>
     <button onclick="window.close()" style="background:#f3f4f6;color:#374151;border:1px solid #d1d5db;border-radius:6px;padding:0.5rem 1rem;font-size:0.95rem;cursor:pointer;">Close</button>
   </div>
 
-  <!-- Header banner -->
-  <div style="background:${streamScheme.headerBg};border-left:6px solid ${streamScheme.header};border-radius:10px;padding:1rem 1.2rem 0.85rem;margin-bottom:1.2rem;">
-    <div style="font-size:0.72rem;font-weight:700;color:${streamScheme.header};text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.18rem;">Westland High School — ${escHtml(streamScheme.label)}</div>
-    <div style="font-size:1.6rem;font-weight:900;color:${streamScheme.header};line-height:1.15;">${escHtml(booking.class_name || 'Class')}</div>
-    ${dateDisplay ? `<div style="font-size:0.92rem;color:${streamScheme.accent};font-weight:600;margin-top:0.18rem;">${escHtml(dateDisplay)}${booking.period ? ' &nbsp;·&nbsp; Period ' + escHtml(String(booking.period)) : ''}</div>` : ''}
-  </div>
+  <div class="sheet">
+    <div class="top-banner">
+      <img class="logo" src="${logoUrl}" alt="Westland High School logo" />
+      <div>
+        <div class="kicker">Westland High School - ${escHtml(streamScheme.label)}</div>
+        <h1 class="main-title">${escHtml(booking.class_name || 'Class')} Student Recipe Sheet</h1>
+        ${dateDisplay ? `<div class="subline">${escHtml(dateDisplay)}${booking.period ? ' - Period ' + escHtml(String(booking.period)) : ''}</div>` : ''}
+      </div>
+    </div>
 
-  <!-- Booking meta chips -->
-  <div style="display:flex;flex-wrap:wrap;gap:0.5rem;margin-bottom:1.2rem;">
-    ${booking.staff_name ? `<span style="background:${teacherColour.bg};border:1px solid ${teacherColour.border};color:${teacherColour.teacherText};border-radius:999px;padding:0.22rem 0.9rem;font-size:0.82rem;font-weight:700;">&#128105;&#8205;&#127979; ${escHtml(booking.staff_name)}</span>` : ''}
-    ${booking.class_size ? `<span style="background:#f0fdf4;border:1px solid #86efac;color:#166534;border-radius:999px;padding:0.22rem 0.9rem;font-size:0.82rem;font-weight:700;">&#128101; ${escHtml(String(booking.class_size))} students</span>` : ''}
-    ${booking.period ? `<span style="background:#fafafa;border:1px solid #e5e7eb;color:#374151;border-radius:999px;padding:0.22rem 0.9rem;font-size:0.82rem;font-weight:700;">Period ${escHtml(String(booking.period))}</span>` : ''}
-  </div>
-
-  <!-- Recipe section -->
-  <div style="border:1px solid ${streamScheme.headerBg};border-radius:10px;padding:1rem 1.1rem;margin-bottom:1rem;">
-    <div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
-      <div style="font-size:1.22rem;font-weight:900;color:${streamScheme.header};">${recipe ? escHtml(recipe.name || booking.recipe || '') : escHtml(booking.recipe || 'No recipe linked')}</div>
+    <div class="chip-row">
+      ${booking.staff_name ? `<span class="meta-chip" style="background:${teacherColour.bg};border-color:${teacherColour.border};color:${teacherColour.teacherText};">Teacher: ${escHtml(booking.staff_name)}</span>` : ''}
+      ${booking.class_size ? `<span class="meta-chip" style="background:#f8fafc;color:#334155;">Class size: ${escHtml(String(booking.class_size))}</span>` : ''}
+      ${booking.period ? `<span class="meta-chip" style="background:#fafafa;color:#374151;">Period ${escHtml(String(booking.period))}</span>` : ''}
       ${servingSizeHtml}
     </div>
-    ${recipeUrlHtml}
-    ${recipe && recipe.description ? `<div style="margin-top:0.4rem;font-size:0.88rem;color:#4b5563;font-style:italic;">${escHtml(recipe.description)}</div>` : ''}
 
-    <div style="margin-top:1rem;">
-      <div style="font-size:1.05rem;font-weight:800;color:${streamScheme.header};border-bottom:2px solid ${streamScheme.headerBg};padding-bottom:0.3rem;margin-bottom:0.6rem;text-transform:uppercase;letter-spacing:0.04em;">Ingredients</div>
-      ${ingredientsHtml}
+    <div class="student-box">
+      <div class="student-box-title">Student Focus</div>
+      <div class="student-line">${escHtml(studentNote)}</div>
+      <div class="student-line">Name: ____________________  Partner: ____________________</div>
     </div>
-    ${methodSection}
-  </div>
 
-  <!-- Footer -->
-  <div style="margin-top:1rem;border-top:1px solid #e5e7eb;padding-top:0.6rem;font-size:0.72rem;color:#9ca3af;display:flex;justify-content:space-between;flex-wrap:wrap;gap:0.3rem;">
-    <span>Westland High School — Food Technology</span>
-    <span>Printed ${new Date().toLocaleDateString()}</span>
+    <div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
+      <div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.25rem;">
+        <h2 class="recipe-name">${recipe ? escHtml(recipe.name || booking.recipe || '') : escHtml(booking.recipe || 'No recipe linked')}</h2>
+      </div>
+      ${recipe && recipe.description ? `<div style="margin-top:0.2rem;font-size:0.9rem;color:#475569;font-style:italic;">${escHtml(recipe.description)}</div>` : ''}
+      ${recipeUrlHtml}
+    </div>
+
+    <div class="section-grid" style="margin-top:0.75rem;">
+      <div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
+        <div class="section-title" style="color:${streamScheme.header};">Ingredients</div>
+        ${ingredientsHtml}
+      </div>
+      ${methodSection}
+    </div>
+
+    <div class="footer">
+      <span>Westland High School - Food Technology</span>
+      <span>Printed ${new Date().toLocaleDateString()}</span>
+    </div>
   </div>
 
   <script>
-    // Auto-trigger print dialog (can be dismissed; the Print button is also available)
     window.addEventListener('load', () => window.print());
   <\/script>
 </body>
