@@ -1481,11 +1481,54 @@ async function printBookingInfoSheet(bookingId) {
   const teacherColour = teacherColorFromName(booking.staff_name || '');
   const logoUrl = new URL('images/whs logo circular reo .png', window.location.href).href;
 
+  function pickRecipeImageUrl(recipeRow) {
+    const candidates = [
+      recipeRow && recipeRow.image_url,
+      recipeRow && recipeRow.imageUrl,
+      recipeRow && recipeRow.image,
+      recipeRow && recipeRow.photo,
+      recipeRow && recipeRow.photo_url,
+      recipeRow && recipeRow.thumbnail,
+      recipeRow && recipeRow.thumbnail_url,
+      recipeRow && recipeRow.hero_image
+    ];
+    for (const candidate of candidates) {
+      const url = String(candidate || '').trim();
+      if (!url) continue;
+      if (/^javascript:/i.test(url)) continue;
+      return url;
+    }
+    return '';
+  }
+
+  async function fetchRecipeDisplayImageUrl(recipeId) {
+    const id = Number(recipeId);
+    if (!Number.isInteger(id) || id <= 0) return '';
+    try {
+      if (!Array.isArray(window._recipeDisplayImageRowsCache)) {
+        const res = await fetch('/api/recipes/display-table');
+        if (!res.ok) return '';
+        const rows = await res.json();
+        window._recipeDisplayImageRowsCache = Array.isArray(rows) ? rows : [];
+      }
+      const rows = window._recipeDisplayImageRowsCache;
+      const match = rows.find((row) => Number(row && row.recipeid) === id || Number(row && row.id) === id);
+      return String(match && match.image_url ? match.image_url : '').trim();
+    } catch (_) {
+      return '';
+    }
+  }
+
   // Format date nicely.
   const rawDate = String(booking.booking_date || '').trim();
   const dateDisplay = rawDate
     ? (() => { const d = new Date(rawDate + 'T00:00:00'); return Number.isNaN(d.getTime()) ? rawDate : longDateFormatter.format(d); })()
     : '';
+
+  let recipeImageUrl = pickRecipeImageUrl(recipe);
+  if (!recipeImageUrl && booking.recipe_id) {
+    recipeImageUrl = await fetchRecipeDisplayImageUrl(booking.recipe_id);
+  }
 
   function buildUnorderedListHtml(rawValue) {
     const items = extractRecipeListItems(rawValue);
@@ -1513,6 +1556,10 @@ async function printBookingInfoSheet(bookingId) {
 
   const recipeUrlHtml = (recipe && recipe.url)
     ? `<div class="recipe-source">Source: <span style="color:${streamScheme.accent};">${escHtml(recipe.url)}</span></div>`
+    : '';
+
+  const recipeImageHtml = recipeImageUrl
+    ? `<div class="recipe-photo-wrap"><img class="recipe-photo" src="${escHtml(recipeImageUrl)}" alt="${escHtml((recipe && recipe.name) || booking.recipe || 'Recipe photo')}" /></div>`
     : '';
 
   const methodSection = methodHtml
@@ -1640,6 +1687,25 @@ async function printBookingInfoSheet(bookingId) {
       color: #6b7280;
       overflow-wrap: anywhere;
     }
+    .recipe-top-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 0.65rem;
+    }
+    .recipe-photo-wrap {
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      max-height: 220px;
+    }
+    .recipe-photo {
+      display: block;
+      width: 100%;
+      height: 100%;
+      max-height: 220px;
+      object-fit: cover;
+    }
     .section-grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -1697,6 +1763,12 @@ async function printBookingInfoSheet(bookingId) {
     @media print {
       .sheet { border: none; border-radius: 0; padding: 0; background: #fff; }
     }
+    @media (min-width: 640px) {
+      .recipe-top-grid {
+        grid-template-columns: 1.45fr 1fr;
+        align-items: start;
+      }
+    }
   </style>
 </head>
 <body>
@@ -1729,11 +1801,16 @@ async function printBookingInfoSheet(bookingId) {
     </div>
 
     <div class="section-card" style="background:${streamScheme.panel};border-color:${streamScheme.headerBg};">
-      <div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.25rem;">
-        <h2 class="recipe-name">${recipe ? escHtml(recipe.name || booking.recipe || '') : escHtml(booking.recipe || 'No recipe linked')}</h2>
+      <div class="recipe-top-grid">
+        <div>
+          <div style="display:flex;align-items:baseline;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.25rem;">
+            <h2 class="recipe-name">${recipe ? escHtml(recipe.name || booking.recipe || '') : escHtml(booking.recipe || 'No recipe linked')}</h2>
+          </div>
+          ${recipe && recipe.description ? `<div style="margin-top:0.2rem;font-size:0.9rem;color:#475569;font-style:italic;">${escHtml(recipe.description)}</div>` : ''}
+          ${recipeUrlHtml}
+        </div>
+        ${recipeImageHtml}
       </div>
-      ${recipe && recipe.description ? `<div style="margin-top:0.2rem;font-size:0.9rem;color:#475569;font-style:italic;">${escHtml(recipe.description)}</div>` : ''}
-      ${recipeUrlHtml}
     </div>
 
     <div class="section-grid" style="margin-top:0.75rem;">
