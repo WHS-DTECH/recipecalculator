@@ -257,6 +257,26 @@ router.put('/:id', async (req, res) => {
   }
 });
 
+// PATCH /api/bookings/:id/groups — lightweight update of just the groups field
+router.patch('/:id/groups', async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid booking id.' });
+  }
+  const groupsVal = req.body && req.body.groups != null ? Number(req.body.groups) : null;
+  if (groupsVal !== null && (!Number.isInteger(groupsVal) || groupsVal <= 0)) {
+    return res.status(400).json({ success: false, error: 'groups must be a positive integer.' });
+  }
+  try {
+    await ensureSchema();
+    const result = await pool.query('UPDATE bookings SET groups = $1 WHERE id = $2', [groupsVal, id]);
+    if (!result.rowCount) return res.status(404).json({ success: false, error: 'Booking not found.' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Failed to update groups.' });
+  }
+});
+
 // DELETE /api/bookings/clear-planners - Clear planner bookings (admin function)
 // Optional query params: stream=Middle|Junior|Senior|All, className=<TT code>
 router.delete('/clear-planners', async (req, res) => {
@@ -743,13 +763,15 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
     const endDate = toIsoDate(endDateObj);
 
     const plannerResult = await pool.query(
-      `SELECT id, booking_date, class_name, planner_stream, recipe, recipe_url, recipe_id
-       FROM bookings
-       WHERE period = 'Planner'
-         AND booking_date >= $1
-         AND booking_date <= $2
-         AND trim(coalesce(recipe, '')) <> ''
-       ORDER BY booking_date ASC, id ASC`,
+      `SELECT b.id, b.booking_date, b.class_name, b.planner_stream, b.recipe, b.recipe_url, b.recipe_id,
+              r.name as recipe_current_name
+       FROM bookings b
+       LEFT JOIN recipes r ON r.id = b.recipe_id
+       WHERE b.period = 'Planner'
+         AND b.booking_date >= $1
+         AND b.booking_date <= $2
+         AND trim(coalesce(b.recipe, '')) <> ''
+       ORDER BY b.booking_date ASC, b.id ASC`,
       [startDate, endDate]
     );
 
@@ -763,7 +785,9 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       const date = String(row.booking_date || '').slice(0, 10);
       const key = `${date}|${stream}`;
       if (!plannerByDateAndStream.has(key)) {
-        plannerByDateAndStream.set(key, row);
+        // Use fresh recipe name from recipes table if available, otherwise fall back to stored name
+        const recipeName = row.recipe_current_name || row.recipe;
+        plannerByDateAndStream.set(key, { ...row, recipe: recipeName });
       }
     }
 
