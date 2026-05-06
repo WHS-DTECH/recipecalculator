@@ -2,17 +2,20 @@
 
 Goal: Make the Teacher Shopping List the source of truth, then generate a finalized Technician ordering list with strong quantity accuracy controls.
 
-## Phase 0 - Safety + Scope Lock
-- [ ] Confirm week boundary rule (Friday date ending) for all shopping plans.
-- [ ] Confirm authority model:
-  - [ ] Lead Teacher can finalize/reopen plan.
-  - [ ] Technician is read-only on finalized list + supplier notes only.
-- [ ] Confirm quantity policy:
-  - [ ] Final quantity comes from Teacher Qty when edited.
-  - [ ] Else final quantity comes from calculated qty.
+## Phase 0 - Safety + Scope Lock ✅
+
+**Decisions confirmed 6 May 2026:**
+
+- [x] Week boundary: **Friday** — all shopping plans are keyed by the Friday date of that week.
+- [x] Authority model:
+  - [x] **Lead Teacher** (admin role) can finalize and reopen a plan.
+  - [x] **Technician** is read-only on the finalized list; can add supplier notes only.
+- [x] Quantity policy:
+  - [x] Final quantity = **Teacher Qty** when the teacher has explicitly edited it.
+  - [x] Else final quantity = **Calculated Qty** (from recipe scaling).
 
 Acceptance
-- [ ] Written decisions captured in this file before coding starts.
+- [x] Written decisions captured in this file before coding starts.
 
 ---
 
