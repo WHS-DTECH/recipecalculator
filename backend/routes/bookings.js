@@ -785,9 +785,17 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       const date = String(row.booking_date || '').slice(0, 10);
       const key = `${date}|${stream}`;
       if (!plannerByDateAndStream.has(key)) {
-        // Use fresh recipe name from recipes table if available, otherwise fall back to stored name
+        // Use fresh recipe name from recipes table if available, otherwise use stored name
         const recipeName = row.recipe_current_name || row.recipe;
-        plannerByDateAndStream.set(key, { ...row, recipe: recipeName });
+        plannerByDateAndStream.set(key, {
+          id: row.id,
+          booking_date: row.booking_date,
+          class_name: row.class_name,
+          planner_stream: row.planner_stream,
+          recipe: recipeName,
+          recipe_url: row.recipe_url,
+          recipe_id: row.recipe_id
+        });
       }
     }
 
