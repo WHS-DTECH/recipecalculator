@@ -814,6 +814,60 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
          AND period IN ('1','2','3','4','5')`,
       [startDate, endDate]
     );
+
+    // Build class-size fallback maps so planner-prefilled bookings can inherit
+    // known class sizes from recent matching bookings.
+    const classSizeHistoryResult = await pool.query(
+      `SELECT class_name, staff_id, staff_name, class_size
+       FROM bookings
+       WHERE class_size IS NOT NULL
+         AND trim(class_size::text) <> ''
+       ORDER BY booking_date DESC, id DESC`
+    );
+    const classSizeByClassAndStaffId = new Map();
+    const classSizeByClassAndStaffName = new Map();
+    const classSizeByClass = new Map();
+    for (const row of classSizeHistoryResult.rows) {
+      const classKey = normalizeClassToken(row.class_name);
+      if (!classKey) continue;
+      const parsedSize = parseInt(String(row.class_size || '').trim(), 10);
+      if (!Number.isFinite(parsedSize) || parsedSize <= 0) continue;
+
+      const staffIdKey = String(row.staff_id || '').trim();
+      const staffNameKey = normalizeClassToken(row.staff_name);
+      if (staffIdKey) {
+        const key = `${classKey}|${staffIdKey}`;
+        if (!classSizeByClassAndStaffId.has(key)) classSizeByClassAndStaffId.set(key, parsedSize);
+      }
+      if (staffNameKey) {
+        const key = `${classKey}|${staffNameKey}`;
+        if (!classSizeByClassAndStaffName.has(key)) classSizeByClassAndStaffName.set(key, parsedSize);
+      }
+      if (!classSizeByClass.has(classKey)) classSizeByClass.set(classKey, parsedSize);
+    }
+
+    function resolvePrefillClassSize(className, staffId, staffName) {
+      const classKey = normalizeClassToken(className);
+      if (!classKey) return null;
+
+      const staffIdKey = String(staffId || '').trim();
+      if (staffIdKey) {
+        const byId = classSizeByClassAndStaffId.get(`${classKey}|${staffIdKey}`);
+        if (Number.isFinite(byId) && byId > 0) return byId;
+      }
+
+      const staffNameKey = normalizeClassToken(staffName);
+      if (staffNameKey) {
+        const byName = classSizeByClassAndStaffName.get(`${classKey}|${staffNameKey}`);
+        if (Number.isFinite(byName) && byName > 0) return byName;
+      }
+
+      const byClass = classSizeByClass.get(classKey);
+      if (Number.isFinite(byClass) && byClass > 0) return byClass;
+
+      return null;
+    }
+
     const existingSlots = new Set(
       existingResult.rows.map((r) => `${String(r.booking_date || '').slice(0, 10)}|${String(r.period || '').trim()}|${normalizeClassToken(r.class_name)}`)
     );
@@ -828,7 +882,8 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       skippedExisting: 0,
       skippedNoPlanner: 0,
       skippedNonFood: 0,
-      skippedNotDouble: 0
+      skippedNotDouble: 0,
+      classSizePrefilled: 0
     };
 
     // Diagnostics collected for dry run
@@ -932,9 +987,10 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 recipe: planner.recipe,
                 recipe_url: planner.recipe_url || '',
                 recipe_id: planner.recipe_id || null,
-                class_size: null,
+                class_size: resolvePrefillClassSize(classTokenForBooking, staffId, staffName),
                 planner_stream: stream
               };
+              if (booking.class_size) stats.classSizePrefilled += 1;
               inserts.push(booking);
               existingSlots.add(slotKey);
             }
