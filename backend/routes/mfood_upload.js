@@ -155,7 +155,7 @@ router.post('/', async (req, res) => {
            AND (
              CASE
                WHEN (length(upper(trim(class_name))) - length(replace(upper(trim(class_name)), '-', ''))) >= 2
-                 THEN regexp_replace(upper(trim(class_name)), '-[^-]+$', '')
+                 THEN regexp_replace(regexp_replace(upper(trim(class_name)), '^[^-]+-', ''), '-[^-]+$', '')
                ELSE upper(trim(class_name))
              END
            ) = upper(trim($1))`,
