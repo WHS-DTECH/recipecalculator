@@ -71,7 +71,7 @@
   <main class="sp-wrap">
     <section class="sp-head">
       <h1 class="sp-title">Shopping Plan Setup</h1>
-      <p class="sp-sub">Create a week-based draft shopping plan from bookings, then generate draft ingredient totals.</p>
+      <p class="sp-sub">Confirm all classes being taught this week, then generate a draft shopping list from those bookings.</p>
     </section>
 
     <section class="sp-card">
@@ -190,24 +190,46 @@
       selectionCount.textContent = selectedIds().length + ' selected';
     }
 
+    const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
     function renderRows(rows) {
-      currentRows = rows || [];
+      // Exclude Planner-stream rows entirely
+      currentRows = (rows || []).filter((r) => String(r.period || '').toLowerCase() !== 'planner');
+
       if (!currentRows.length) {
         bookingBody.innerHTML = '<tr><td colspan="7" class="sp-muted">No bookings found for that week.</td></tr>';
         updateSelectionCount();
         return;
       }
-      bookingBody.innerHTML = currentRows.map((row) => {
-        return '<tr>' +
-          '<td><input class="sp-booking-check" type="checkbox" checked value="' + Number(row.id) + '" aria-label="Select booking ' + Number(row.id) + '"></td>' +
-          '<td>' + esc(row.booking_date) + '</td>' +
-          '<td>' + esc(row.period || '') + '</td>' +
-          '<td>' + esc(row.class_name || '') + '</td>' +
-          '<td>' + esc(row.staff_name || '') + '</td>' +
-          '<td>' + esc(row.recipe || '') + '</td>' +
-          '<td>' + esc(row.class_size || '') + '</td>' +
-        '</tr>';
-      }).join('');
+
+      // Group by date
+      const groups = [];
+      const seen = {};
+      currentRows.forEach((row) => {
+        const d = row.booking_date;
+        if (!seen[d]) { seen[d] = []; groups.push({ date: d, rows: seen[d] }); }
+        seen[d].push(row);
+      });
+
+      let html = '';
+      groups.forEach((g) => {
+        const utcDate = new Date(g.date + 'T00:00:00Z');
+        const dayName = DAY_NAMES[utcDate.getUTCDay()] || g.date;
+        html += '<tr style="background:#e8f0f8;"><td colspan="7" style="padding:0.4rem 0.55rem;font-weight:700;color:#1a3f5e;font-size:0.88rem;">' + esc(dayName) + ' — ' + esc(g.date) + '</td></tr>';
+        g.rows.forEach((row) => {
+          html += '<tr>' +
+            '<td><input class="sp-booking-check" type="checkbox" checked value="' + Number(row.id) + '" aria-label="Select booking ' + Number(row.id) + '"></td>' +
+            '<td>' + esc(row.booking_date) + '</td>' +
+            '<td>' + esc(row.period || '') + '</td>' +
+            '<td>' + esc(row.class_name || '') + '</td>' +
+            '<td>' + esc(row.staff_name || '') + '</td>' +
+            '<td>' + esc(row.recipe || '') + '</td>' +
+            '<td>' + esc(row.class_size || '') + '</td>' +
+          '</tr>';
+        });
+      });
+
+      bookingBody.innerHTML = html;
       document.querySelectorAll('.sp-booking-check').forEach((cb) => cb.addEventListener('change', updateSelectionCount));
       updateSelectionCount();
     }
@@ -232,7 +254,10 @@
         }
         const rows = Array.isArray(payload.bookings) ? payload.bookings : [];
         renderRows(rows);
-        setStatus(loadStatus, 'Loaded ' + rows.length + ' booking(s).', 'ok');
+        const plannerCount = rows.length - (rows.filter((r) => String(r.period || '').toLowerCase() !== 'planner').length);
+        const displayCount = rows.length - plannerCount;
+        const note = plannerCount > 0 ? ' (' + plannerCount + ' planner entries excluded)' : '';
+        setStatus(loadStatus, 'Loaded ' + displayCount + ' booking(s).' + note, 'ok');
       } catch (err) {
         renderRows([]);
         setStatus(loadStatus, 'Failed to load bookings: ' + err.message, 'err');
