@@ -9,6 +9,88 @@ const pool = require('../db');
 const { requireAdmin } = require('../middleware/requireAdmin');
 
 // ---------------------------------------------------------------------------
+// Auto-migration: create shopping_plan tables if they don't exist yet.
+// Safe to call multiple times — all statements use IF NOT EXISTS.
+// ---------------------------------------------------------------------------
+let _schemaReady = false;
+async function ensureSchema() {
+  if (_schemaReady) return;
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopping_plan (
+      id              SERIAL PRIMARY KEY,
+      week_ending     DATE        NOT NULL,
+      status          TEXT        NOT NULL DEFAULT 'draft'
+                                  CHECK (status IN ('draft', 'finalized')),
+      version         INTEGER     NOT NULL DEFAULT 1,
+      created_by      TEXT        NOT NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      finalized_by    TEXT,
+      finalized_at    TIMESTAMPTZ,
+      notes           TEXT,
+      UNIQUE (week_ending, version)
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopping_plan_classes (
+      id               SERIAL PRIMARY KEY,
+      plan_id          INTEGER     NOT NULL REFERENCES shopping_plan(id) ON DELETE CASCADE,
+      booking_id       INTEGER     REFERENCES bookings(id) ON DELETE SET NULL,
+      class_name       TEXT        NOT NULL,
+      teacher_name     TEXT,
+      recipe_id        INTEGER     REFERENCES recipes(id) ON DELETE SET NULL,
+      planned_servings INTEGER,
+      included         BOOLEAN     NOT NULL DEFAULT TRUE,
+      sort_order       INTEGER     NOT NULL DEFAULT 0
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_spc_plan_sort
+      ON shopping_plan_classes (plan_id, sort_order)
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopping_plan_items (
+      id                   SERIAL PRIMARY KEY,
+      plan_id              INTEGER        NOT NULL REFERENCES shopping_plan(id) ON DELETE CASCADE,
+      category             TEXT           NOT NULL DEFAULT 'Uncategorised',
+      item_name            TEXT           NOT NULL,
+      normalized_item_key  TEXT,
+      base_unit            TEXT,
+      calculated_qty       NUMERIC(10, 4),
+      teacher_qty          NUMERIC(10, 4),
+      final_qty            NUMERIC(10, 4),
+      source_type          TEXT,
+      source_detail_json   JSONB,
+      notes                TEXT,
+      sort_order           INTEGER        NOT NULL DEFAULT 0,
+      edited_by            TEXT,
+      edited_at            TIMESTAMPTZ
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_spi_plan_cat_sort
+      ON shopping_plan_items (plan_id, category, sort_order)
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopping_plan_item_audit (
+      id            SERIAL PRIMARY KEY,
+      plan_item_id  INTEGER     NOT NULL REFERENCES shopping_plan_items(id) ON DELETE CASCADE,
+      field_name    TEXT        NOT NULL,
+      old_value     TEXT,
+      new_value     TEXT,
+      reason        TEXT,
+      changed_by    TEXT        NOT NULL,
+      changed_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS idx_spia_plan_item
+      ON shopping_plan_item_audit (plan_item_id, changed_at)
+  `);
+  _schemaReady = true;
+}
+
+
+// ---------------------------------------------------------------------------
 // Helper: resolve the requesting user's email from the request
 // ---------------------------------------------------------------------------
 function requestEmail(req) {
@@ -132,6 +214,7 @@ function isFriday(dateStr) {
 // Body: { week_ending: "YYYY-MM-DD", booking_ids?: number[], notes?: string }
 // ===========================================================================
 router.post('/create', requireAdmin, async (req, res) => {
+  await ensureSchema();
   const { week_ending, booking_ids, notes } = req.body || {};
 
   if (!week_ending) {
@@ -210,6 +293,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
   }
 
   try {
+    await ensureSchema();
     // Confirm plan exists and is still a draft
     const planRes = await pool.query('SELECT * FROM shopping_plan WHERE id = $1', [planId]);
     if (planRes.rowCount === 0) {
@@ -344,6 +428,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
 // ===========================================================================
 router.get('/', requireAdmin, async (req, res) => {
   try {
+    await ensureSchema();
     const result = await pool.query(
       `SELECT id, week_ending, status, version, created_by, created_at, finalized_at, notes
        FROM shopping_plan
@@ -367,6 +452,7 @@ router.get('/:id', requireAdmin, async (req, res) => {
   }
 
   try {
+    await ensureSchema();
     const [planRes, classesRes, itemsRes] = await Promise.all([
       pool.query('SELECT * FROM shopping_plan WHERE id = $1', [planId]),
       pool.query(
@@ -451,6 +537,7 @@ router.get('/:id', requireAdmin, async (req, res) => {
 // Writes audit records for any changed numeric/text field.
 // ===========================================================================
 router.put('/:id/items', requireAdmin, async (req, res) => {
+  await ensureSchema();
   const planId = parseInt(req.params.id, 10);
   if (!Number.isInteger(planId) || planId <= 0) {
     return res.status(400).json({ success: false, error: 'Invalid plan ID.' });
@@ -570,6 +657,7 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
   const email = requestEmail(req);
 
   try {
+    await ensureSchema();
     const planRes = await pool.query('SELECT * FROM shopping_plan WHERE id = $1', [planId]);
     if (planRes.rowCount === 0) return res.status(404).json({ success: false, error: 'Plan not found.' });
     if (planRes.rows[0].status !== 'draft') {
@@ -672,6 +760,7 @@ router.post('/:id/reopen', requireAdmin, async (req, res) => {
   const email = requestEmail(req);
 
   try {
+    await ensureSchema();
     const planRes = await pool.query('SELECT * FROM shopping_plan WHERE id = $1', [planId]);
     if (planRes.rowCount === 0) return res.status(404).json({ success: false, error: 'Plan not found.' });
     const original = planRes.rows[0];
@@ -737,6 +826,7 @@ router.get('/:id/technician-view', async (req, res) => {
   }
 
   try {
+    await ensureSchema();
     const planRes = await pool.query(
       'SELECT id, week_ending, status, version, finalized_by, finalized_at, notes FROM shopping_plan WHERE id = $1',
       [planId]
@@ -785,6 +875,7 @@ router.get('/:id/technician-view', async (req, res) => {
 router.post('/smoke-seed', requireAdmin, async (req, res) => {
   const stamp = Date.now();
   try {
+    await ensureSchema();
     const r1 = await pool.query(
       `INSERT INTO recipes (name, description, ingredients, serving_size, url)
        VALUES ($1, $2, $3, $4, $5) RETURNING id`,
@@ -848,6 +939,7 @@ router.post('/smoke-seed', requireAdmin, async (req, res) => {
 router.post('/smoke-cleanup', requireAdmin, async (req, res) => {
   const { planIds = [], bookingIds = [], recipeIds = [] } = req.body || {};
   try {
+    await ensureSchema();
     if (planIds.length) {
       await pool.query('DELETE FROM shopping_plan WHERE id = ANY($1::int[])', [planIds]);
     }
