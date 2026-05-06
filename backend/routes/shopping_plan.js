@@ -6,7 +6,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const requireAdmin = require('../middleware/requireAdmin');
+const { requireAdmin } = require('../middleware/requireAdmin');
 
 // ---------------------------------------------------------------------------
 // Helper: resolve the requesting user's email from the request
