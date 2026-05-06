@@ -326,25 +326,44 @@ document.addEventListener('DOMContentLoaded', function() {
     return Math.abs(hash) % length;
   }
 
+  function optimizeExternalImageUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return raw;
+    if (!/^https?:\/\//i.test(raw)) return raw;
+
+    try {
+      const parsed = new URL(raw);
+      if (/images\.pexels\.com$/i.test(parsed.hostname)) {
+        const width = Number(parsed.searchParams.get('w') || '0');
+        if (!width || width > 700) {
+          parsed.searchParams.set('w', '640');
+        }
+      }
+      return parsed.toString();
+    } catch (_) {
+      return raw;
+    }
+  }
+
   function getDishImage(name, rowId, category, index) {
     const lower = String(name || '').toLowerCase();
     const seed = `${rowId || ''}-${index}-${name || ''}`;
 
     if (/(cupcake|cake|cookie|brownie|muffin|pavlova|dessert|slice)/.test(lower)) {
       const list = STOCK_IMAGES.Baking;
-      return list[stableIndex(seed, list.length)];
+      return optimizeExternalImageUrl(list[stableIndex(seed, list.length)]);
     }
     if (/(salad|vegetable|veggie|beetroot|kumara|pumpkin)/.test(lower)) {
       const list = STOCK_IMAGES['Fresh and Veg'];
-      return list[stableIndex(seed, list.length)];
+      return optimizeExternalImageUrl(list[stableIndex(seed, list.length)]);
     }
     if (/(breakfast|granola|oats|toast|egg)/.test(lower)) {
       const list = STOCK_IMAGES.Breakfast;
-      return list[stableIndex(seed, list.length)];
+      return optimizeExternalImageUrl(list[stableIndex(seed, list.length)]);
     }
 
     const categoryImages = STOCK_IMAGES[category] || STOCK_IMAGES['Student Favourites'];
-    return categoryImages[stableIndex(seed, categoryImages.length)];
+    return optimizeExternalImageUrl(categoryImages[stableIndex(seed, categoryImages.length)]);
   }
 
   function getDishCategory(name) {
@@ -501,9 +520,11 @@ document.addEventListener('DOMContentLoaded', function() {
     const recipeNumber = row.recipeid || row.recipe_id || row.id;
     const category = getDishCategory(name);
     const normalizedImageUrl = normalizeRecipeImageUrl(row.image_url);
-    const imageUrl = normalizedImageUrl || getDishImage(name, row.id, category, index);
+    const imageUrl = optimizeExternalImageUrl(normalizedImageUrl || getDishImage(name, row.id, category, index));
     const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
     const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
+    const imageLoading = index < 4 ? 'eager' : 'lazy';
+    const imagePriority = index === 0 ? 'high' : 'auto';
     const categoryChipHtml = category === 'Student Favourites'
       ? ''
       : `<span class="recipe-chip">${category}</span>`;
@@ -523,7 +544,7 @@ document.addEventListener('DOMContentLoaded', function() {
     card.className = 'recipe-card';
     card.style.cursor = 'pointer';
     card.innerHTML = `
-      <img class="recipe-thumb" src="${imageUrl}" alt="${String(name).replace(/"/g, '&quot;')}" loading="lazy">
+      <img class="recipe-thumb" src="${imageUrl}" alt="${String(name).replace(/"/g, '&quot;')}" loading="${imageLoading}" decoding="async" fetchpriority="${imagePriority}">
       <div class="recipe-card-body">
         <div class="recipe-card-top">
           <div class="recipe-card-top-left">
@@ -540,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const img = card.querySelector('.recipe-thumb');
     if (img) {
       img.onerror = function() {
-        this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200';
+        this.src = 'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=640';
       };
     }
 
@@ -616,10 +637,9 @@ document.addEventListener('DOMContentLoaded', function() {
   Promise.all([
     refreshAuthState(),
     fetch('/api/recipes/display-table').then(res => res.json()).catch(() => []),
-    fetch('/api/recipes').then(res => res.json()).catch(() => []),
     fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
   ])
-    .then(([, displayRows, allRecipes, bookingsPayload]) => {
+    .then(([, displayRows, bookingsPayload]) => {
       const rows = Array.isArray(displayRows) ? displayRows : [];
       if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
@@ -634,9 +654,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const weeklyEmpty = document.getElementById('weeklyRecipeEmpty');
       if (!cardList) return;
 
-      const recipeById = new Map(
-        (Array.isArray(allRecipes) ? allRecipes : []).map(recipe => [String(recipe.id), recipe])
-      );
+      const recipeById = new Map();
       const displayByRecipeId = new Map(rows.map(row => [rowRecipeKey(row), row]));
       const displayByName = new Map(rows.map(row => [String(row.name || '').trim().toLowerCase(), row]));
       const bookings = Array.isArray(bookingsPayload && bookingsPayload.bookings) ? bookingsPayload.bookings : [];
