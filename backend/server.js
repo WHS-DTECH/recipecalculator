@@ -823,6 +823,9 @@ app.use('/api/subscriptions', subscriptionsRouter);
 const savedShoppingListsRouter = require('./routes/saved_shopping_lists');
 app.use('/api/saved-shopping-lists', savedShoppingListsRouter);
 
+const shoppingPlanRouter = require('./routes/shopping_plan');
+app.use('/api/shopping-plan', shoppingPlanRouter);
+
 const shoppingExtrasRouter = require('./routes/shopping_extras');
 app.use('/api/shopping-extras', shoppingExtrasRouter);
 
