@@ -1,0 +1,251 @@
+<!-- Food Room v2 Navigation
+     Desktop (≥1100px): logo + brand + inline nav links + Menu btn + user pill
+     Laptop (700-1099px): same but labels truncate, Menu shows icon-only
+     Mobile (<700px):  logo + brand + user pill + hamburger → left-slide panel
+-->
+<header class="nb2-bar" id="nb2Bar">
+
+  <!-- Identity -->
+  <a href="index.html" class="nb2-logo-link" aria-label="Food Room home">
+    <img src="images/whs%20logo%20circular%20reo%20.png" alt="" class="nb2-logo" aria-hidden="true">
+  </a>
+  <a href="index.html" class="nb2-brand">Food Room</a>
+
+  <!-- Primary nav (desktop/laptop — hidden on mobile, duplicated inside panel) -->
+  <nav class="nb2-nav" id="nb2Nav" aria-label="Primary navigation">
+    <a href="recipe_display.html" class="nb2-nav-link" data-route="recipes">Browse Recipes</a>
+    <a href="browse_practicals.html" class="nb2-nav-link" data-route="recipes">Browse Practicals</a>
+
+    <details class="nb2-nav-dropdown" data-route="food_truck">
+      <summary class="nb2-nav-link">Food Truck</summary>
+      <div class="nb2-dropdown-menu">
+        <a href="recipe_display.html?scope=food_truck" class="nb2-dropdown-link">Browse FT Recipes</a>
+        <a href="add_food_truck_booking.html" class="nb2-dropdown-link">Student Booking</a>
+        <a href="food_truck_manual_recipe.html" class="nb2-dropdown-link">Add Recipe Manually</a>
+        <a href="food_truck_recipe_photos.html" class="nb2-dropdown-link">Recipe Photos</a>
+      </div>
+    </details>
+
+    <a href="add_booking.html" class="nb2-nav-link" data-route="booking">Add Booking</a>
+    <a href="book_the_shopping.html" class="nb2-nav-link" data-route="shopping">Book Shopping</a>
+  </nav>
+
+  <div class="nb2-spacer" aria-hidden="true"></div>
+
+  <!-- Right controls -->
+  <div class="nb2-controls">
+
+    <!-- Menu button: opens right-slide panel on desktop/laptop; hidden on mobile -->
+    <button type="button" class="nb2-menu-btn" id="nb2MenuBtn"
+            aria-expanded="false" aria-controls="nb2Panel"
+            aria-label="Open menu" data-role="authenticated">
+      <svg class="nb2-icon" width="17" height="17" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+        <line x1="3" y1="6"  x2="21" y2="6"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+        <line x1="3" y1="18" x2="21" y2="18"/>
+      </svg>
+      <span class="nb2-menu-label">Menu</span>
+    </button>
+
+    <!-- User initials pill -->
+    <div class="nb2-user-wrap" id="nb2UserWrap">
+      <button type="button" class="nb2-user-btn" id="nb2UserBtn"
+              aria-expanded="false" aria-haspopup="menu"
+              aria-label="User account menu">
+        <span class="nb2-initials" id="nb2Initials">?</span>
+        <span class="nb2-role-badge" id="nb2RoleBadge" hidden></span>
+      </button>
+      <div class="nb2-user-dropdown" id="nb2UserDropdown" role="menu" hidden>
+        <div class="nb2-user-info" id="nb2UserInfo">
+          <span class="nb2-user-fullname" id="nb2UserFullname">Loading…</span>
+          <span class="nb2-user-email" id="nb2UserEmail"></span>
+        </div>
+        <hr class="nb2-divider">
+        <a href="subscription_preferences.html" class="nb2-user-menu-item" role="menuitem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" aria-hidden="true">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06
+                     a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09
+                     A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83
+                     l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09
+                     A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83
+                     l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09
+                     a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83
+                     l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09
+                     a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Preferences
+        </a>
+        <a href="#" class="nb2-user-menu-item nb2-logout-btn" role="menuitem">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+               stroke-width="2" aria-hidden="true">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+          Logout
+        </a>
+      </div>
+    </div>
+
+    <!-- Hamburger: mobile only, opens the left-slide panel -->
+    <button type="button" class="nb2-hamburger" id="nb2Hamburger"
+            aria-expanded="false" aria-controls="nb2Panel"
+            aria-label="Open navigation menu">
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+
+  </div><!-- /.nb2-controls -->
+
+</header>
+
+<!-- Panel backdrop -->
+<div class="nb2-panel-backdrop" id="nb2PanelBackdrop" hidden></div>
+
+<!-- ══════════════════════════════════════════════════════════
+     Unified slide panel
+     • Desktop/laptop: slides in from the RIGHT  (Menu button)
+     • Mobile:         slides in from the LEFT   (hamburger)
+     ══════════════════════════════════════════════════════════ -->
+<aside class="nb2-panel" id="nb2Panel" hidden aria-label="Menu">
+
+  <div class="nb2-panel-hd">
+    <span class="nb2-panel-title">Menu</span>
+    <button type="button" class="nb2-panel-close" id="nb2PanelClose" aria-label="Close menu">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="nb2-panel-body">
+
+    <!-- ── PRIMARY NAV (mobile only — rendered by CSS display) ── -->
+    <section class="nb2-panel-mobile-nav" aria-label="Main navigation">
+      <a href="recipe_display.html" class="nb2-panel-link" data-route="recipes">Browse Recipes</a>
+      <a href="browse_practicals.html" class="nb2-panel-link" data-route="recipes">Browse Practicals</a>
+
+      <details class="nb2-panel-sub" data-route="food_truck">
+        <summary class="nb2-panel-link nb2-panel-sub-trigger">Food Truck</summary>
+        <div class="nb2-panel-sublinks">
+          <a href="recipe_display.html?scope=food_truck" class="nb2-panel-sublink">Browse FT Recipes</a>
+          <a href="add_food_truck_booking.html" class="nb2-panel-sublink">Student Booking</a>
+          <a href="food_truck_manual_recipe.html" class="nb2-panel-sublink">Add Recipe Manually</a>
+          <a href="food_truck_recipe_photos.html" class="nb2-panel-sublink">Recipe Photos</a>
+        </div>
+      </details>
+
+      <a href="add_booking.html" class="nb2-panel-link" data-route="booking">Add Booking</a>
+      <a href="book_the_shopping.html" class="nb2-panel-link" data-route="shopping">Book Shopping</a>
+      <div class="nb2-panel-rule"></div>
+    </section>
+
+    <!-- ── PLANNING ── (admin + lead_teacher) -->
+    <section class="nb2-panel-section" data-role="planning">
+      <h2 class="nb2-section-hd">Planning</h2>
+      <a href="recipe_calendar_upload.html" class="nb2-panel-link" data-route="planning">Upload Planners</a>
+      <a href="admin_match_recipes.html"    class="nb2-panel-link" data-route="planning">Match Planner Recipes</a>
+      <a href="admin_prefill_planner.html"  class="nb2-panel-link" data-route="planning">Planner Prefill</a>
+      <a href="add_recipe_manually.html"    class="nb2-panel-link" data-route="planning">Add Recipe Manually</a>
+    </section>
+
+    <!-- ── SHOPPING ── (admin + lead_teacher) -->
+    <section class="nb2-panel-section" data-role="planning">
+      <h2 class="nb2-section-hd">Shopping</h2>
+      <a href="book_the_shopping.html"          class="nb2-panel-link">Book Shopping</a>
+      <a href="shopping_list_upload.html"        class="nb2-panel-link">Upload Shopping List</a>
+      <a href="shopping_extras.html"             class="nb2-panel-link">Shopping Extras</a>
+      <div class="nb2-panel-inner-rule"></div>
+      <a href="shopping_plan_setup.html"         class="nb2-panel-link">Shopping Plan Setup</a>
+      <a href="shopping_plan_editor.html"        class="nb2-panel-link">Shopping Plan Editor</a>
+      <a href="shopping_plan_technician.html"    class="nb2-panel-link">Technician Shopping View</a>
+    </section>
+
+    <!-- ── FT TEACHER ── (admin + lead_teacher + teacher) -->
+    <section class="nb2-panel-section" data-role="ft_teacher">
+      <h2 class="nb2-section-hd">FT Teacher</h2>
+      <a href="add_food_truck_booking.html"      class="nb2-panel-link" data-route="ft_teacher">Add Food Truck Booking</a>
+      <a href="food_truck_teacher_recipes.html"  class="nb2-panel-link" data-route="ft_teacher">Recipe Moderation List</a>
+      <a href="teacher_booking_slots.html"       class="nb2-panel-link" data-route="ft_teacher">Teacher Calendar List</a>
+    </section>
+
+    <!-- ── MANAGEMENT ── (admin only, collapsible sub-groups) -->
+    <section class="nb2-panel-section" data-role="admin">
+      <details class="nb2-mgmt-group" open>
+        <summary class="nb2-section-hd nb2-section-hd--toggle">Management</summary>
+
+        <details class="nb2-subgroup">
+          <summary class="nb2-subgroup-hd">Recipes</summary>
+          <a href="add_recipe.html"                   class="nb2-panel-link">Load Recipe</a>
+          <a href="add_recipe_manually.html"           class="nb2-panel-link">Add Recipe Manually</a>
+          <a href="recipe_setup_main.html"             class="nb2-panel-link">Recipe Setup</a>
+          <a href="calculate_servings.html"            class="nb2-panel-link">Calculate Servings</a>
+          <a href="recipe_extraction.html"             class="nb2-panel-link">Recipe Extraction</a>
+          <a href="extractor_title.html"               class="nb2-panel-link">Extractor: Title</a>
+          <a href="extractor_raw.html"                 class="nb2-panel-link">Extractor: Raw</a>
+          <a href="extractor_raw_folder_link.html"     class="nb2-panel-link">Extractor: Raw Folder Link</a>
+          <a href="extractor_ingredient.html"          class="nb2-panel-link">Extractor: Ingredients</a>
+          <a href="extractor_instructions.html"        class="nb2-panel-link">Extractor: Instructions</a>
+          <a href="extractor_serving_size.html"        class="nb2-panel-link">Extractor: Serving Size</a>
+          <a href="recipe_publish.html"                class="nb2-panel-link">Publish Recipes</a>
+        </details>
+
+        <details class="nb2-subgroup">
+          <summary class="nb2-subgroup-hd">Food Truck</summary>
+          <a href="food_truck_manual_recipe.html"  class="nb2-panel-link">Add Recipe Manually</a>
+          <a href="food_truck_recipe_photos.html"  class="nb2-panel-link">Recipe Photos</a>
+        </details>
+
+        <details class="nb2-subgroup">
+          <summary class="nb2-subgroup-hd">Ingredients &amp; Catering</summary>
+          <a href="ingredients_directory.html"     class="nb2-panel-link">Ingredients Directory</a>
+          <a href="admin_aisle_category.html"      class="nb2-panel-link">Load Aisle Categories</a>
+          <a href="admin_food_brands.html"         class="nb2-panel-link">Load Food Brands</a>
+          <a href="admin_aisle_keywords.html"      class="nb2-panel-link">Load Aisle Keywords</a>
+          <a href="calculate_qty.html"             class="nb2-panel-link">Calculate Qty</a>
+        </details>
+
+        <details class="nb2-subgroup">
+          <summary class="nb2-subgroup-hd">Staff &amp; Classes</summary>
+          <a href="schedule_calendar.html"  class="nb2-panel-link">Load Booking</a>
+          <a href="book_a_class.html"       class="nb2-panel-link">Book Class</a>
+          <a href="staff_upload.html"       class="nb2-panel-link">Upload Staff</a>
+          <a href="timetable_upload.html"   class="nb2-panel-link">Upload Timetable</a>
+          <a href="uploadSubjects.html"     class="nb2-panel-link">Upload Subjects</a>
+          <a href="student_upload.html"     class="nb2-panel-link">Upload Students</a>
+        </details>
+
+        <details class="nb2-subgroup">
+          <summary class="nb2-subgroup-hd">Settings</summary>
+          <a href="admin_user_roles.html"    class="nb2-panel-link">User Roles</a>
+          <a href="admin_permissions.html"   class="nb2-panel-link">Permissions</a>
+          <a href="admin_department.html"    class="nb2-panel-link">Department</a>
+        </details>
+
+        <details class="nb2-subgroup">
+          <summary class="nb2-subgroup-hd">Operations</summary>
+          <a href="ops_dashboard.html"            class="nb2-panel-link">Workflow Dashboard</a>
+          <a href="ops_review_queue.html"          class="nb2-panel-link">Review Queue</a>
+          <a href="ops_job_status.html"            class="nb2-panel-link">Job Status</a>
+          <a href="ops_import_history.html"        class="nb2-panel-link">Import History</a>
+          <a href="ops_publish_queue.html"         class="nb2-panel-link">Publish Review Queue</a>
+          <a href="ops_my_work.html"               class="nb2-panel-link">My Recipes &amp; Classes</a>
+          <a href="ops_exceptions.html"            class="nb2-panel-link">Quick Exceptions</a>
+          <a href="ops_recipe_compare.html"        class="nb2-panel-link">Recipe Compare</a>
+          <a href="ops_shopping_readiness.html"    class="nb2-panel-link">Shopping Readiness</a>
+          <a href="ops_account_settings.html"      class="nb2-panel-link">Auth &amp; Account Settings</a>
+          <a href="ops_duplicate_detection.html"   class="nb2-panel-link">Duplicate Detection</a>
+          <a href="ops_data_health.html"           class="nb2-panel-link">Data Health</a>
+        </details>
+
+      </details><!-- /.nb2-mgmt-group -->
+    </section>
+
+  </div><!-- /.nb2-panel-body -->
+</aside>

@@ -1,13 +1,12 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260506b';
-  var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
+  var ASSET_VERSION = '20260506c';
+  var NAVBAR_URL = '/navbar2.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
-    '/navbar.css'
+    '/navbar2.css'
   ];
   var SCRIPT_SRCS = [
-    '/navbar_user.js',
-    '/navbar_roles.js',
+    '/navbar2_behavior.js',
     '/shared/toast.js'
   ];
 
@@ -305,7 +304,11 @@
       if (xhr.status === 200) {
         container.innerHTML = xhr.responseText;
         markActiveNavbarLink(container);
-        initializeNavbarBehavior(container);
+          // v2 navbar: behaviour is handled by navbar2_behavior.js loaded below.
+          // Legacy behaviour function is preserved for rollback but not called.
+          if (NAVBAR_URL.indexOf('navbar2.html') === -1) {
+            initializeNavbarBehavior(container);
+          }
         ensureScripts();
       }
     };
