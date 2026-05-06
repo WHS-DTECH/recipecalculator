@@ -480,7 +480,7 @@ router.get('/:id', requireAdmin, async (req, res) => {
         item.source_detail_json.some(s => s.booking_id === bid)
       ));
     if (classesWithNoIngredients.length > 0) {
-      warnings.push(`${classesWithNoIngredients.length} included class(es) have no ingredient data — run generate-draft or check desired_servings_ingredients.`);
+      warnings.push(`${classesWithNoIngredients.length} class(es) have no ingredient data. Teachers need to complete the Calculate Servings step for those classes, then click Regenerate Draft to pick up their ingredients.`);
     }
 
     const itemsMissingUnit = itemsRes.rows.filter(item => !item.base_unit && item.calculated_qty > 0);
