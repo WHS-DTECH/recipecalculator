@@ -807,7 +807,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
     );
 
     const existingResult = await pool.query(
-      `SELECT booking_date, period, class_name
+      `SELECT id, booking_date, period, class_name, staff_id, staff_name, class_size
        FROM bookings
        WHERE booking_date >= $1
          AND booking_date <= $2
@@ -868,11 +868,16 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       return null;
     }
 
-    const existingSlots = new Set(
-      existingResult.rows.map((r) => `${String(r.booking_date || '').slice(0, 10)}|${String(r.period || '').trim()}|${normalizeClassToken(r.class_name)}`)
-    );
+    const existingSlots = new Set();
+    const existingBookingBySlot = new Map();
+    for (const row of existingResult.rows) {
+      const slotKey = `${String(row.booking_date || '').slice(0, 10)}|${String(row.period || '').trim()}|${normalizeClassToken(row.class_name)}`;
+      existingSlots.add(slotKey);
+      if (!existingBookingBySlot.has(slotKey)) existingBookingBySlot.set(slotKey, row);
+    }
 
     const inserts = [];
+    const updates = [];
     const stats = {
       plannerRecipesFound: plannerByDateAndStream.size,
       candidates: 0,
@@ -883,7 +888,8 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       skippedNoPlanner: 0,
       skippedNonFood: 0,
       skippedNotDouble: 0,
-      classSizePrefilled: 0
+      classSizePrefilled: 0,
+      classSizeBackfilled: 0
     };
 
     // Diagnostics collected for dry run
@@ -963,7 +969,17 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 stats.multiPeriodCandidates += 1;
               }
               const slotKey = `${dateIso}|${period}|${classTokenForBooking}`;
+              const resolvedClassSize = resolvePrefillClassSize(classTokenForBooking, staffId, staffName);
               if (existingSlots.has(slotKey)) {
+                const existingBooking = existingBookingBySlot.get(slotKey);
+                const hasClassSize = existingBooking && String(existingBooking.class_size || '').trim() !== '';
+                if (!hasClassSize && resolvedClassSize) {
+                  updates.push({
+                    id: Number(existingBooking.id),
+                    class_size: resolvedClassSize
+                  });
+                  stats.classSizeBackfilled += 1;
+                }
                 stats.skippedExisting += 1;
                 if (dryRun && diagExisting.length < 30) {
                   diagExisting.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: planner.recipe });
@@ -987,7 +1003,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 recipe: planner.recipe,
                 recipe_url: planner.recipe_url || '',
                 recipe_id: planner.recipe_id || null,
-                class_size: resolvePrefillClassSize(classTokenForBooking, staffId, staffName),
+                class_size: resolvedClassSize,
                 planner_stream: stream
               };
               if (booking.class_size) stats.classSizePrefilled += 1;
@@ -1000,10 +1016,18 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       cursor.setDate(cursor.getDate() + 1);
     }
 
-    if (!dryRun && inserts.length) {
+    if (!dryRun && (inserts.length || updates.length)) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
+
+        for (const u of updates) {
+          await client.query(
+            'UPDATE bookings SET class_size = $1 WHERE id = $2 AND (class_size IS NULL OR trim(class_size::text) = \'\')',
+            [u.class_size, u.id]
+          );
+        }
+
         for (const b of inserts) {
           await client.query(
             `INSERT INTO bookings
