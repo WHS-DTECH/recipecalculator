@@ -73,31 +73,33 @@ Acceptance
 
 ---
 
-## Phase 3 - Frontend Screens
+## Phase 3 - Frontend Screens ✅
+
+**Completed 6 May 2026** — files: `backend/public/shopping_plan_setup.html`, `backend/public/shopping_plan_editor.html`, `backend/public/shopping_plan_technician.html`
 
 ### 3.1 Weekly Setup Screen
-- [ ] Create `backend/public/shopping_plan_setup.html`.
-- [ ] Add controls: week ending date, booking selection, generate draft button.
-- [ ] Add class snapshot table.
+- [x] Create `backend/public/shopping_plan_setup.html`.
+- [x] Add controls: week ending date, booking selection, generate draft button.
+- [x] Add class snapshot table.
 
 ### 3.2 Draft Editor Screen (Core)
-- [ ] Create `backend/public/shopping_plan_editor.html`.
-- [ ] Group rows by master categories.
-- [ ] Columns: category, item, unit, calculated qty, teacher qty, final qty preview, notes, source.
-- [ ] Row actions: add, edit, delete, move category.
-- [ ] Save Draft and Finalize actions.
-- [ ] Show warning panel before finalize.
+- [x] Create `backend/public/shopping_plan_editor.html`.
+- [x] Group rows by master categories.
+- [x] Columns: category, item, unit, calculated qty, teacher qty, final qty preview, notes, source.
+- [x] Row actions: add, edit, delete, move category.
+- [x] Save Draft and Finalize actions.
+- [x] Show warning panel before finalize.
 
 ### 3.3 Technician Screen
-- [ ] Create `backend/public/shopping_plan_technician.html`.
-- [ ] Read-only finalized list.
-- [ ] Print and export buttons.
+- [x] Create `backend/public/shopping_plan_technician.html`.
+- [x] Read-only finalized list.
+- [x] Print and export buttons.
 
 ### 3.4 Navigation
-- [ ] Add links in `backend/public/_navbar.html` under Shopping drawer.
+- [x] Add links in `backend/public/_navbar.html` under Shopping drawer.
 
 Acceptance
-- [ ] Full draft-to-finalize-to-technician flow works via UI only.
+- [ ] Full draft-to-finalize-to-technician flow works via UI only (pending live migration + smoke test).
 
 ---
 

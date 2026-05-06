@@ -5,16 +5,402 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Shopping Plan Editor</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .spe-wrap { max-width: 1240px; margin: 1.5rem auto 2.2rem; padding: 0 1rem; }
+    .spe-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.7rem; align-items: end; margin-bottom: 0.9rem; }
+    .spe-title { margin: 0; color: #163a58; font-size: 1.72rem; }
+    .spe-sub { margin: 0.35rem 0 0; color: #4a6074; }
+    .spe-card {
+      background: #fff;
+      border: 1px solid #c8d5e2;
+      border-radius: 10px;
+      box-shadow: 0 2px 8px rgba(8, 34, 56, 0.08);
+      padding: 0.95rem 1.05rem;
+      margin-bottom: 0.9rem;
+    }
+    .spe-row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: end; }
+    .spe-field { display: flex; flex-direction: column; gap: 0.3rem; min-width: 210px; }
+    .spe-field label { font-size: 0.9rem; font-weight: 700; color: #2a4254; }
+    .spe-field input, .spe-field select {
+      border: 1px solid #b7c7d7;
+      border-radius: 7px;
+      padding: 0.45rem 0.55rem;
+      font: inherit;
+    }
+    .spe-btn {
+      border: none;
+      border-radius: 7px;
+      padding: 0.54rem 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .spe-btn.primary { background: #1e6daa; color: #fff; }
+    .spe-btn.primary:hover { background: #165b8f; }
+    .spe-btn.secondary { background: #617789; color: #fff; }
+    .spe-btn.secondary:hover { background: #516474; }
+    .spe-btn.success { background: #1d8754; color: #fff; }
+    .spe-btn.success:hover { background: #166a42; }
+    .spe-btn.warn { background: #b66e19; color: #fff; }
+    .spe-btn.warn:hover { background: #955912; }
+    .spe-table-wrap { overflow-x: auto; }
+    .spe-table { width: 100%; border-collapse: collapse; min-width: 1080px; }
+    .spe-table th { background: #225d8f; color: #fff; text-align: left; padding: 0.48rem 0.5rem; font-size: 0.85rem; }
+    .spe-table td { border-bottom: 1px solid #e4ecf3; padding: 0.35rem 0.45rem; vertical-align: top; }
+    .spe-table tr:nth-child(even) { background: #f8fbff; }
+    .spe-table input {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #b8c9d9;
+      border-radius: 6px;
+      padding: 0.3rem 0.42rem;
+      font: inherit;
+      font-size: 0.9rem;
+    }
+    .spe-number { text-align: right; font-variant-numeric: tabular-nums; }
+    .spe-del { background: #bf3e37; color: #fff; border: none; border-radius: 5px; padding: 0.28rem 0.5rem; cursor: pointer; font-size: 0.8rem; }
+    .spe-del:hover { background: #a8342d; }
+    .spe-status { min-height: 1.2rem; margin-top: 0.45rem; font-weight: 700; font-size: 0.92rem; }
+    .spe-status.ok { color: #1e7b4a; }
+    .spe-status.err { color: #b62c2c; }
+    .spe-warning {
+      border-left: 4px solid #c27918;
+      background: #fff6e8;
+      padding: 0.65rem 0.72rem;
+      border-radius: 6px;
+      margin-bottom: 0.45rem;
+      color: #663f0d;
+      font-size: 0.9rem;
+    }
+    .spe-muted { color: #62788a; font-size: 0.9rem; }
+    @media (max-width: 860px) {
+      .spe-head { align-items: start; }
+    }
+  </style>
 </head>
 <body>
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
-  <main style="max-width:900px;margin:2rem auto;padding:0 1rem;">
-    <section style="background:#fff;border:1px solid #cfd8e3;border-radius:8px;padding:1.2rem 1.4rem;">
-      <h1 style="margin:0 0 0.45rem;color:#1a3a5c;">Shopping Plan Editor</h1>
-      <p style="margin:0 0 0.85rem;color:#4a5560;">This page is prepared for tomorrow's implementation of editable teacher quantities and finalize flow.</p>
-      <p style="margin:0;color:#4a5560;">Next step: build category table editor, validation warnings, and finalize action.</p>
+  <main class="spe-wrap">
+    <section class="spe-head">
+      <div>
+        <h1 class="spe-title">Shopping Plan Editor</h1>
+        <p class="spe-sub">Edit teacher quantities, notes, and categories before finalizing the technician ordering view.</p>
+      </div>
+      <div>
+        <a href="shopping_plan_setup.html" class="spe-muted">Create new weekly plan</a>
+      </div>
+    </section>
+
+    <section class="spe-card">
+      <div class="spe-row">
+        <div class="spe-field">
+          <label for="planSelect">Plan</label>
+          <select id="planSelect"></select>
+        </div>
+        <button id="loadPlanBtn" class="spe-btn primary" type="button">Load Plan</button>
+        <button id="generateDraftBtn" class="spe-btn secondary" type="button">Regenerate Draft</button>
+        <button id="addRowBtn" class="spe-btn secondary" type="button">Add Manual Row</button>
+        <button id="saveBtn" class="spe-btn success" type="button">Save Draft</button>
+        <button id="finalizeBtn" class="spe-btn warn" type="button">Finalize Plan</button>
+      </div>
+      <div class="spe-status" id="topStatus"></div>
+      <p class="spe-muted" id="planMeta"></p>
+    </section>
+
+    <section class="spe-card" id="warningPanel">
+      <strong>Warnings</strong>
+      <div id="warningList" style="margin-top:0.45rem;"></div>
+    </section>
+
+    <section class="spe-card">
+      <div class="spe-table-wrap">
+        <table class="spe-table" aria-label="Shopping plan items editor">
+          <thead>
+            <tr>
+              <th style="width:180px;">Category</th>
+              <th>Item</th>
+              <th style="width:90px;">Unit</th>
+              <th style="width:115px;">Calculated Qty</th>
+              <th style="width:115px;">Teacher Qty</th>
+              <th style="width:110px;">Final Qty</th>
+              <th style="width:95px;">Source</th>
+              <th style="width:240px;">Notes</th>
+              <th style="width:70px;">Action</th>
+            </tr>
+          </thead>
+          <tbody id="itemsBody">
+            <tr><td colspan="9" class="spe-muted">Load a plan to edit items.</td></tr>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
+
+  <script>
+  (function () {
+    const planSelect = document.getElementById('planSelect');
+    const loadPlanBtn = document.getElementById('loadPlanBtn');
+    const saveBtn = document.getElementById('saveBtn');
+    const finalizeBtn = document.getElementById('finalizeBtn');
+    const generateDraftBtn = document.getElementById('generateDraftBtn');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const itemsBody = document.getElementById('itemsBody');
+    const topStatus = document.getElementById('topStatus');
+    const warningPanel = document.getElementById('warningPanel');
+    const warningList = document.getElementById('warningList');
+    const planMeta = document.getElementById('planMeta');
+
+    let currentPlan = null;
+    let rowsModel = [];
+    const deletedIds = new Set();
+
+    function getQueryPlanId() {
+      const q = new URLSearchParams(window.location.search);
+      const id = Number(q.get('plan_id'));
+      return Number.isInteger(id) && id > 0 ? id : null;
+    }
+
+    function esc(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function setStatus(msg, type) {
+      topStatus.textContent = msg || '';
+      topStatus.className = 'spe-status' + (type ? ' ' + type : '');
+    }
+
+    function numValue(v) {
+      if (v === null || v === undefined || v === '') return null;
+      const n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }
+
+    function renderWarnings(warnings) {
+      const list = Array.isArray(warnings) ? warnings : [];
+      if (!list.length) {
+        warningList.innerHTML = '<div class="spe-muted">No warnings on this draft.</div>';
+        return;
+      }
+      warningList.innerHTML = list.map((w) => '<div class="spe-warning">' + esc(w) + '</div>').join('');
+    }
+
+    function renderItems() {
+      if (!rowsModel.length) {
+        itemsBody.innerHTML = '<tr><td colspan="9" class="spe-muted">No rows in this plan yet.</td></tr>';
+        return;
+      }
+
+      itemsBody.innerHTML = rowsModel.map((r, i) => {
+        const calculated = r.calculated_qty !== null && r.calculated_qty !== undefined ? Number(r.calculated_qty) : null;
+        const teacher = r.teacher_qty !== null && r.teacher_qty !== undefined ? Number(r.teacher_qty) : null;
+        const previewFinal = teacher !== null && Number.isFinite(teacher) ? teacher : (calculated !== null && Number.isFinite(calculated) ? calculated : '');
+        return '<tr data-index="' + i + '">' +
+          '<td><input data-f="category" value="' + esc(r.category || 'Uncategorised') + '"></td>' +
+          '<td><input data-f="item_name" value="' + esc(r.item_name || '') + '" ' + (r.id ? 'disabled' : '') + '></td>' +
+          '<td><input data-f="base_unit" value="' + esc(r.base_unit || '') + '"></td>' +
+          '<td class="spe-number">' + (calculated !== null && Number.isFinite(calculated) ? calculated : '') + '</td>' +
+          '<td><input class="spe-number" data-f="teacher_qty" value="' + esc(r.teacher_qty !== null && r.teacher_qty !== undefined ? r.teacher_qty : '') + '"></td>' +
+          '<td class="spe-number">' + (previewFinal !== '' ? previewFinal : '') + '</td>' +
+          '<td>' + esc(r.source_type || 'recipe_scale') + '</td>' +
+          '<td><input data-f="notes" value="' + esc(r.notes || '') + '"></td>' +
+          '<td><button class="spe-del" data-action="del">Delete</button></td>' +
+        '</tr>';
+      }).join('');
+    }
+
+    function wireRowEvents() {
+      itemsBody.querySelectorAll('input[data-f]').forEach((input) => {
+        input.addEventListener('input', (ev) => {
+          const tr = ev.target.closest('tr');
+          const i = Number(tr.getAttribute('data-index'));
+          const f = ev.target.getAttribute('data-f');
+          if (!Number.isInteger(i) || !rowsModel[i]) return;
+          rowsModel[i][f] = ev.target.value;
+          if (f === 'teacher_qty') {
+            renderItems();
+            wireRowEvents();
+          }
+        });
+      });
+      itemsBody.querySelectorAll('button[data-action="del"]').forEach((btn) => {
+        btn.addEventListener('click', (ev) => {
+          const tr = ev.target.closest('tr');
+          const i = Number(tr.getAttribute('data-index'));
+          if (!Number.isInteger(i) || !rowsModel[i]) return;
+          if (rowsModel[i].id) deletedIds.add(Number(rowsModel[i].id));
+          rowsModel.splice(i, 1);
+          renderItems();
+          wireRowEvents();
+        });
+      });
+    }
+
+    async function loadPlanList(selectId) {
+      const resp = await fetch('/api/shopping-plan', { credentials: 'include' });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload.error || 'Failed to load plan list');
+
+      const plans = Array.isArray(payload.plans) ? payload.plans : [];
+      planSelect.innerHTML = plans.map((p) => {
+        const label = p.week_ending + ' | v' + p.version + ' | ' + p.status + ' | #' + p.id;
+        return '<option value="' + Number(p.id) + '">' + esc(label) + '</option>';
+      }).join('');
+
+      if (selectId && plans.some((p) => Number(p.id) === Number(selectId))) {
+        planSelect.value = String(selectId);
+      }
+    }
+
+    async function loadPlan(planId) {
+      setStatus('Loading plan...', '');
+      const resp = await fetch('/api/shopping-plan/' + planId, { credentials: 'include' });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload.error || 'Failed to load plan.');
+
+      currentPlan = payload.plan;
+      deletedIds.clear();
+      rowsModel = (Array.isArray(payload.items) ? payload.items : []).map((r) => Object.assign({}, r));
+      renderWarnings(payload.warnings || []);
+      renderItems();
+      wireRowEvents();
+
+      planMeta.textContent = 'Plan #' + currentPlan.id + ' | Week ending: ' + currentPlan.week_ending + ' | Version: ' + currentPlan.version + ' | Status: ' + currentPlan.status;
+      finalizeBtn.disabled = currentPlan.status !== 'draft';
+      generateDraftBtn.disabled = currentPlan.status !== 'draft';
+      saveBtn.disabled = currentPlan.status !== 'draft';
+      addRowBtn.disabled = currentPlan.status !== 'draft';
+
+      if (currentPlan.status !== 'draft') {
+        setStatus('Plan is finalized. Reopen it from API to edit further.', 'ok');
+      } else {
+        setStatus('Draft loaded.', 'ok');
+      }
+    }
+
+    async function saveDraft() {
+      if (!currentPlan) return;
+      if (currentPlan.status !== 'draft') {
+        setStatus('Plan is finalized and cannot be edited.', 'err');
+        return;
+      }
+
+      const updates = [];
+      const adds = [];
+      rowsModel.forEach((r) => {
+        const payloadRow = {
+          category: String(r.category || '').trim() || 'Uncategorised',
+          base_unit: String(r.base_unit || '').trim() || null,
+          teacher_qty: String(r.teacher_qty || '').trim() === '' ? null : numValue(r.teacher_qty),
+          notes: String(r.notes || '').trim() || null
+        };
+
+        if (r.id) {
+          updates.push(Object.assign({ id: Number(r.id) }, payloadRow));
+        } else {
+          adds.push(Object.assign({ item_name: String(r.item_name || '').trim() }, payloadRow));
+        }
+      });
+
+      setStatus('Saving changes...', '');
+      const resp = await fetch('/api/shopping-plan/' + currentPlan.id + '/items', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ updates, adds, deletes: Array.from(deletedIds) })
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload.error || 'Save failed.');
+      setStatus('Draft saved.', 'ok');
+      await loadPlan(currentPlan.id);
+    }
+
+    async function regenerateDraft() {
+      if (!currentPlan) return;
+      setStatus('Regenerating draft totals...', '');
+      const resp = await fetch('/api/shopping-plan/' + currentPlan.id + '/generate-draft', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload.error || 'Generate draft failed.');
+      setStatus('Draft totals regenerated: ' + (payload.items_generated || 0) + ' item(s).', 'ok');
+      await loadPlan(currentPlan.id);
+    }
+
+    async function finalizePlan() {
+      if (!currentPlan) return;
+      if (!confirm('Finalize this shopping plan? This locks the final quantities for technician view.')) return;
+      setStatus('Finalizing...', '');
+      const resp = await fetch('/api/shopping-plan/' + currentPlan.id + '/finalize', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        if (Array.isArray(payload.errors) && payload.errors.length) {
+          warningList.innerHTML = payload.errors.map((e) => '<div class="spe-warning">' + esc(e) + '</div>').join('');
+          throw new Error('Finalize blocked by validation errors.');
+        }
+        throw new Error(payload.error || 'Finalize failed.');
+      }
+      setStatus('Plan finalized. Technician view is now ready.', 'ok');
+      await loadPlan(currentPlan.id);
+    }
+
+    function addManualRow() {
+      if (!currentPlan || currentPlan.status !== 'draft') return;
+      rowsModel.unshift({
+        id: null,
+        category: 'Uncategorised',
+        item_name: '',
+        base_unit: '',
+        calculated_qty: null,
+        teacher_qty: null,
+        final_qty: null,
+        source_type: 'manual',
+        notes: ''
+      });
+      renderItems();
+      wireRowEvents();
+    }
+
+    loadPlanBtn.addEventListener('click', async () => {
+      try {
+        const planId = Number(planSelect.value);
+        if (!Number.isInteger(planId) || planId <= 0) throw new Error('Select a valid plan.');
+        await loadPlan(planId);
+      } catch (err) {
+        setStatus(err.message, 'err');
+      }
+    });
+
+    saveBtn.addEventListener('click', async () => {
+      try { await saveDraft(); } catch (err) { setStatus(err.message, 'err'); }
+    });
+    generateDraftBtn.addEventListener('click', async () => {
+      try { await regenerateDraft(); } catch (err) { setStatus(err.message, 'err'); }
+    });
+    finalizeBtn.addEventListener('click', async () => {
+      try { await finalizePlan(); } catch (err) { setStatus(err.message, 'err'); }
+    });
+    addRowBtn.addEventListener('click', addManualRow);
+
+    (async function init() {
+      try {
+        const requested = getQueryPlanId();
+        await loadPlanList(requested);
+        const idToLoad = requested || Number(planSelect.value);
+        if (Number.isInteger(idToLoad) && idToLoad > 0) await loadPlan(idToLoad);
+      } catch (err) {
+        setStatus('Startup failed: ' + err.message, 'err');
+        warningPanel.hidden = true;
+      }
+    })();
+  })();
+  </script>
 </body>
 </html>

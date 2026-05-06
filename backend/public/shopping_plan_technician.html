@@ -5,16 +5,230 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Technician Shopping View</title>
   <link rel="stylesheet" href="style.css">
+  <style>
+    .spt-wrap { max-width: 1180px; margin: 1.5rem auto 2.3rem; padding: 0 1rem; }
+    .spt-head { margin-bottom: 0.9rem; }
+    .spt-title { margin: 0; color: #173a58; font-size: 1.72rem; }
+    .spt-sub { margin: 0.38rem 0 0; color: #4b6073; }
+    .spt-card {
+      background: #fff;
+      border: 1px solid #c9d6e2;
+      border-radius: 10px;
+      padding: 1rem 1.06rem;
+      box-shadow: 0 2px 8px rgba(8, 34, 56, 0.08);
+      margin-bottom: 0.95rem;
+    }
+    .spt-row { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: end; }
+    .spt-field { display: flex; flex-direction: column; gap: 0.3rem; min-width: 220px; }
+    .spt-field label { font-size: 0.9rem; font-weight: 700; color: #2a4051; }
+    .spt-field input {
+      border: 1px solid #b6c8d8;
+      border-radius: 7px;
+      padding: 0.47rem 0.56rem;
+      font: inherit;
+    }
+    .spt-btn {
+      border: none;
+      border-radius: 7px;
+      padding: 0.55rem 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .spt-btn.primary { background: #1f6eae; color: #fff; }
+    .spt-btn.primary:hover { background: #195e93; }
+    .spt-btn.secondary { background: #627889; color: #fff; }
+    .spt-btn.secondary:hover { background: #526474; }
+    .spt-meta { color: #5f7588; font-size: 0.9rem; margin-top: 0.45rem; }
+    .spt-status { min-height: 1.2rem; margin-top: 0.45rem; font-size: 0.92rem; font-weight: 700; }
+    .spt-status.ok { color: #1f7c4c; }
+    .spt-status.err { color: #b82f2f; }
+    .spt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.8rem; }
+    .spt-cat { border: 1px solid #dbe5ee; border-radius: 8px; overflow: hidden; }
+    .spt-cat h3 { margin: 0; background: #245f91; color: #fff; font-size: 0.92rem; padding: 0.5rem 0.6rem; }
+    .spt-table { width: 100%; border-collapse: collapse; }
+    .spt-table th, .spt-table td { padding: 0.38rem 0.5rem; border-bottom: 1px solid #e6edf4; font-size: 0.9rem; }
+    .spt-table th { text-align: left; background: #f5f9fd; color: #365168; }
+    .spt-num { text-align: right; font-variant-numeric: tabular-nums; }
+    @media print {
+      body * { visibility: hidden !important; }
+      #printArea, #printArea * { visibility: visible !important; }
+      #printArea { position: absolute; inset: 0; background: #fff; }
+      .spt-card:first-child { display: none !important; }
+    }
+  </style>
 </head>
 <body>
   <div id="navbar-include"></div>
   <script src="shared/navbar_loader.js"></script>
-  <main style="max-width:900px;margin:2rem auto;padding:0 1rem;">
-    <section style="background:#fff;border:1px solid #cfd8e3;border-radius:8px;padding:1.2rem 1.4rem;">
-      <h1 style="margin:0 0 0.45rem;color:#1a3a5c;">Technician Shopping View</h1>
-      <p style="margin:0 0 0.85rem;color:#4a5560;">This page is prepared for tomorrow's implementation of read-only finalized ordering output.</p>
-      <p style="margin:0;color:#4a5560;">Next step: load finalized plan items, print layout, and export actions.</p>
+  <main class="spt-wrap">
+    <section class="spt-head">
+      <h1 class="spt-title">Technician Shopping View</h1>
+      <p class="spt-sub">Read-only finalized ordering list grouped by category for procurement and printing.</p>
+    </section>
+
+    <section class="spt-card">
+      <div class="spt-row">
+        <div class="spt-field">
+          <label for="planIdInput">Finalized plan ID</label>
+          <input id="planIdInput" type="number" min="1" step="1" placeholder="e.g. 42">
+        </div>
+        <button id="loadBtn" class="spt-btn primary" type="button">Load Finalized Plan</button>
+        <button id="printBtn" class="spt-btn secondary" type="button">Print</button>
+        <button id="csvBtn" class="spt-btn secondary" type="button">Export CSV</button>
+      </div>
+      <div class="spt-meta" id="planMeta"></div>
+      <div class="spt-status" id="status"></div>
+    </section>
+
+    <section id="printArea" class="spt-card">
+      <div id="categoryGrid" class="spt-grid">
+        <div class="spt-meta">Load a finalized plan ID to view items.</div>
+      </div>
     </section>
   </main>
+
+  <script>
+  (function () {
+    const planIdInput = document.getElementById('planIdInput');
+    const loadBtn = document.getElementById('loadBtn');
+    const printBtn = document.getElementById('printBtn');
+    const csvBtn = document.getElementById('csvBtn');
+    const planMeta = document.getElementById('planMeta');
+    const statusEl = document.getElementById('status');
+    const categoryGrid = document.getElementById('categoryGrid');
+
+    let currentPayload = null;
+
+    function esc(s) {
+      return String(s || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function setStatus(msg, type) {
+      statusEl.textContent = msg || '';
+      statusEl.className = 'spt-status' + (type ? ' ' + type : '');
+    }
+
+    function getPlanFromQuery() {
+      const q = new URLSearchParams(window.location.search);
+      const id = Number(q.get('plan_id'));
+      return Number.isInteger(id) && id > 0 ? id : null;
+    }
+
+    function render(payload) {
+      currentPayload = payload;
+      const plan = payload.plan || {};
+      const categories = payload.categories || {};
+
+      planMeta.textContent =
+        'Plan #' + plan.id +
+        ' | Week ending: ' + (plan.week_ending || '') +
+        ' | Version: ' + (plan.version || '') +
+        ' | Finalized by: ' + (plan.finalized_by || 'unknown');
+
+      const names = Object.keys(categories);
+      if (!names.length) {
+        categoryGrid.innerHTML = '<div class="spt-meta">No items found in this finalized plan.</div>';
+        return;
+      }
+
+      categoryGrid.innerHTML = names.map((cat) => {
+        const rows = Array.isArray(categories[cat]) ? categories[cat] : [];
+        return '<section class="spt-cat">' +
+          '<h3>' + esc(cat) + '</h3>' +
+          '<table class="spt-table">' +
+            '<thead><tr><th>Item</th><th class="spt-num">Qty</th><th>Unit</th><th>Notes</th></tr></thead>' +
+            '<tbody>' + rows.map((r) => {
+              return '<tr>' +
+                '<td>' + esc(r.item_name || '') + '</td>' +
+                '<td class="spt-num">' + esc(r.final_qty !== null && r.final_qty !== undefined ? r.final_qty : '') + '</td>' +
+                '<td>' + esc(r.base_unit || '') + '</td>' +
+                '<td>' + esc(r.notes || '') + '</td>' +
+              '</tr>';
+            }).join('') + '</tbody>' +
+          '</table>' +
+        '</section>';
+      }).join('');
+    }
+
+    async function loadPlan(id) {
+      setStatus('Loading finalized plan...', '');
+      const resp = await fetch('/api/shopping-plan/' + id + '/technician-view', { credentials: 'include' });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload.error || 'Failed to load technician view.');
+      render(payload);
+      setStatus('Finalized plan loaded.', 'ok');
+    }
+
+    function toCsv() {
+      if (!currentPayload || !currentPayload.categories) return '';
+      const lines = ['Category,Item,Final Qty,Unit,Notes'];
+      Object.keys(currentPayload.categories).forEach((cat) => {
+        const rows = currentPayload.categories[cat] || [];
+        rows.forEach((r) => {
+          const vals = [
+            cat,
+            r.item_name || '',
+            r.final_qty !== null && r.final_qty !== undefined ? String(r.final_qty) : '',
+            r.base_unit || '',
+            r.notes || ''
+          ].map((v) => '"' + String(v).replace(/"/g, '""') + '"');
+          lines.push(vals.join(','));
+        });
+      });
+      return lines.join('\n');
+    }
+
+    loadBtn.addEventListener('click', async () => {
+      try {
+        const id = Number(planIdInput.value);
+        if (!Number.isInteger(id) || id <= 0) throw new Error('Enter a valid plan ID.');
+        await loadPlan(id);
+      } catch (err) {
+        setStatus(err.message, 'err');
+      }
+    });
+
+    printBtn.addEventListener('click', () => {
+      if (!currentPayload) {
+        setStatus('Load a finalized plan before printing.', 'err');
+        return;
+      }
+      window.print();
+    });
+
+    csvBtn.addEventListener('click', () => {
+      if (!currentPayload) {
+        setStatus('Load a finalized plan before exporting.', 'err');
+        return;
+      }
+      const csv = toCsv();
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const planId = currentPayload.plan && currentPayload.plan.id ? currentPayload.plan.id : 'unknown';
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'technician_shopping_plan_' + planId + '.csv';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(link.href);
+    });
+
+    (async function init() {
+      const requested = getPlanFromQuery();
+      if (requested) {
+        planIdInput.value = String(requested);
+        try {
+          await loadPlan(requested);
+        } catch (err) {
+          setStatus(err.message, 'err');
+        }
+      }
+    })();
+  })();
+  </script>
 </body>
 </html>
