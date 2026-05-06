@@ -341,6 +341,7 @@
                             userType = userRole;
                             userName = data.user.name || '';
                             updateTeacherCalendarVisibility();
+                            revealDigestCard();
                             loadSubscriptionStatus();
                         } else {
                             showStatus('Unable to determine your email. Please log in again.', 'error');
@@ -497,13 +498,6 @@
             function revealDigestCard() {
                 if (userRole === 'admin') digestCard.classList.remove('is-hidden');
             }
-
-            // Reveal after initializeUser sets userRole
-            const _origInitUser = initializeUser;
-            // Patch: reveal when role is available (after loadSubscriptionStatus runs)
-            const _roleWatcher = setInterval(() => {
-                if (userRole) { clearInterval(_roleWatcher); revealDigestCard(); }
-            }, 200);
 
             digestPreviewBtn.addEventListener('click', () => {
                 window.open('/api/weekly-digest/preview', '_blank');
