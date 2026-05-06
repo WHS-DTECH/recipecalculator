@@ -226,6 +226,21 @@
                 </ul>
             </div>
         </div>
+
+        <!-- Admin-only: Weekly Digest controls -->
+        <div id="weeklyDigestAdminCard" class="preferences-card is-hidden" style="background:#faf5ff;border-color:#c4b5fd;">
+            <div class="preferences-section-title" style="color:#4c1d95;">&#128229; Weekly Digest (Admin)</div>
+            <div class="preferences-description">
+                Send the weekly email digest manually, preview what it looks like, or trigger a test email to your inbox.
+                The digest is also auto-sent every Monday morning via the scheduler.
+            </div>
+            <div id="digestStatus" style="margin-bottom:0.75rem;font-size:0.9rem;"></div>
+            <div class="button-group" style="flex-wrap:wrap;gap:0.6rem;">
+                <button id="digestPreviewBtn" class="btn btn-secondary" style="background:#7c3aed;color:#fff;border-color:#7c3aed;">&#128065; Preview Email</button>
+                <button id="digestTestBtn" class="btn btn-primary" style="background:#059669;border-color:#059669;">&#9993;&#65039; Send Test Email</button>
+                <button id="digestSendAllBtn" class="btn btn-secondary" style="background:#dc2626;color:#fff;border-color:#dc2626;">&#128228; Send to All Staff</button>
+            </div>
+        </div>
     </div>
 
     <script src="shared/nz_school_calendar.js"></script>
@@ -466,6 +481,80 @@
 
             // Initialize on page load
             initializeUser();
+
+            // ── Weekly Digest admin controls ────────────────────────────────
+            const digestCard    = document.getElementById('weeklyDigestAdminCard');
+            const digestStatus  = document.getElementById('digestStatus');
+            const digestPreviewBtn  = document.getElementById('digestPreviewBtn');
+            const digestTestBtn     = document.getElementById('digestTestBtn');
+            const digestSendAllBtn  = document.getElementById('digestSendAllBtn');
+
+            function showDigestStatus(msg, type) {
+                digestStatus.textContent = msg;
+                digestStatus.style.color = type === 'error' ? '#dc2626' : type === 'success' ? '#059669' : '#374151';
+            }
+
+            function revealDigestCard() {
+                if (userRole === 'admin') digestCard.classList.remove('is-hidden');
+            }
+
+            // Reveal after initializeUser sets userRole
+            const _origInitUser = initializeUser;
+            // Patch: reveal when role is available (after loadSubscriptionStatus runs)
+            const _roleWatcher = setInterval(() => {
+                if (userRole) { clearInterval(_roleWatcher); revealDigestCard(); }
+            }, 200);
+
+            digestPreviewBtn.addEventListener('click', () => {
+                window.open('/api/weekly-digest/preview', '_blank');
+            });
+
+            digestTestBtn.addEventListener('click', () => {
+                digestTestBtn.disabled = true;
+                digestTestBtn.textContent = 'Sending…';
+                showDigestStatus('', '');
+                fetch('/api/weekly-digest/send-test', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'x-user-email': currentEmail }
+                })
+                    .then(r => r.json())
+                    .then(d => {
+                        digestTestBtn.disabled = false;
+                        digestTestBtn.textContent = '✉️ Send Test Email';
+                        if (d.success) showDigestStatus('Test email sent! Check your inbox.', 'success');
+                        else showDigestStatus('Error: ' + (d.error || 'Unknown error'), 'error');
+                    })
+                    .catch(err => {
+                        digestTestBtn.disabled = false;
+                        digestTestBtn.textContent = '✉️ Send Test Email';
+                        showDigestStatus('Network error: ' + err.message, 'error');
+                    });
+            });
+
+            digestSendAllBtn.addEventListener('click', () => {
+                if (!confirm('Send the weekly digest to ALL current staff now?')) return;
+                digestSendAllBtn.disabled = true;
+                digestSendAllBtn.textContent = 'Sending…';
+                showDigestStatus('', '');
+                fetch('/api/weekly-digest/send', {
+                    method: 'POST',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json', 'x-user-email': currentEmail }
+                })
+                    .then(r => r.json())
+                    .then(d => {
+                        digestSendAllBtn.disabled = false;
+                        digestSendAllBtn.textContent = '📤 Send to All Staff';
+                        if (d.success) showDigestStatus(`Sent to ${d.count || 0} staff member(s).`, 'success');
+                        else showDigestStatus('Error: ' + (d.error || 'Unknown error'), 'error');
+                    })
+                    .catch(err => {
+                        digestSendAllBtn.disabled = false;
+                        digestSendAllBtn.textContent = '📤 Send to All Staff';
+                        showDigestStatus('Network error: ' + err.message, 'error');
+                    });
+            });
         })();
     </script>
 </body>
