@@ -117,14 +117,17 @@ Acceptance
 
 ---
 
-## Phase 5 - Backward Compatibility + Transition
-- [ ] Keep current Book Shopping pages intact during MVP rollout.
-- [ ] Add banner linking to new Teacher-First flow.
-- [ ] Feature flag to switch default shopping workflow after acceptance.
+## Phase 5 - Backward Compatibility + Transition ✅
+
+**Completed 6 May 2026** — files: `backend/public/book_the_shopping.html`, `backend/public/navbar2_behavior.js`
+
+- [x] Keep current Book Shopping pages intact during MVP rollout.
+- [x] Add banner linking to new Teacher-First flow.
+- [x] Feature flag to switch default shopping workflow after acceptance.
 
 Acceptance
-- [ ] No regression on Planner and Add Booking flows.
-- [ ] Existing shopping pages still accessible.
+- [x] No regression on Planner and Add Booking flows.
+- [x] Existing shopping pages still accessible.
 
 ---
 

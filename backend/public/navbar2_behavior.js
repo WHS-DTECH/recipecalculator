@@ -11,6 +11,9 @@
   /* ── constants ───────────────────────────────────────────── */
   var ROLE_KEY       = 'navbar_user_role';
   var STAFF_KEY      = 'currentStaffUser';
+  var SHOPPING_DEFAULT_KEY = 'shopping_workflow_default';
+  var SHOPPING_MODE_LEGACY = 'legacy';
+  var SHOPPING_MODE_TEACHER_FIRST = 'teacher_first';
   var SUPPORTED_ROLES = ['admin','lead_teacher','teacher','technician','staff','student','public_access'];
 
   /* ── state ───────────────────────────────────────────────── */
@@ -73,6 +76,70 @@
         'a[href], button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
       )
     ).filter(function(el) { return !el.hidden && el.offsetParent !== null; });
+  }
+
+  function normalizeShoppingMode(value) {
+    return String(value || '').trim().toLowerCase() === SHOPPING_MODE_TEACHER_FIRST
+      ? SHOPPING_MODE_TEACHER_FIRST
+      : SHOPPING_MODE_LEGACY;
+  }
+
+  function resolveShoppingDefaultMode() {
+    var mode = SHOPPING_MODE_LEGACY;
+
+    // Server/global override hook, if present.
+    if (window.__FEATURE_FLAGS && typeof window.__FEATURE_FLAGS.teacherFirstShoppingDefault !== 'undefined') {
+      mode = window.__FEATURE_FLAGS.teacherFirstShoppingDefault
+        ? SHOPPING_MODE_TEACHER_FIRST
+        : SHOPPING_MODE_LEGACY;
+    }
+
+    // Persisted client override.
+    try {
+      var saved = sessionStorage.getItem(SHOPPING_DEFAULT_KEY) || localStorage.getItem(SHOPPING_DEFAULT_KEY);
+      if (saved) mode = normalizeShoppingMode(saved);
+    } catch (_) {}
+
+    // Query param override: ?shopping_flow=new|legacy
+    try {
+      var params = new URLSearchParams(window.location.search || '');
+      var flow = String(params.get('shopping_flow') || '').trim().toLowerCase();
+      if (flow === 'new' || flow === 'teacher_first') {
+        mode = SHOPPING_MODE_TEACHER_FIRST;
+      } else if (flow === 'legacy' || flow === 'old') {
+        mode = SHOPPING_MODE_LEGACY;
+      }
+    } catch (_) {}
+
+    return normalizeShoppingMode(mode);
+  }
+
+  function setShoppingDefaultMode(mode) {
+    var normalized = normalizeShoppingMode(mode);
+    try {
+      localStorage.setItem(SHOPPING_DEFAULT_KEY, normalized);
+      sessionStorage.setItem(SHOPPING_DEFAULT_KEY, normalized);
+    } catch (_) {}
+    applyShoppingDefaultLinks(normalized);
+    return normalized;
+  }
+
+  function getShoppingDefaultMode() {
+    return resolveShoppingDefaultMode();
+  }
+
+  function applyShoppingDefaultLinks(mode) {
+    var normalized = normalizeShoppingMode(mode);
+    var target = normalized === SHOPPING_MODE_TEACHER_FIRST
+      ? 'shopping_plan_setup.html'
+      : 'book_the_shopping.html';
+
+    document.querySelectorAll('a[data-route="shopping"]').forEach(function(a) {
+      a.setAttribute('href', target);
+      a.setAttribute('data-shopping-default', normalized);
+    });
+
+    document.documentElement.setAttribute('data-shopping-default', normalized);
   }
 
   /* ══ PANEL ══════════════════════════════════════════════════ */
@@ -418,6 +485,9 @@
   function init() {
     wireUp();
 
+    // Phase 5 transition flag: controls where generic "Book Shopping" links point.
+    applyShoppingDefaultLinks(resolveShoppingDefaultMode());
+
     // Apply role from sessionStorage immediately (avoids flash)
     var storedRole = normalizeRole(
       (function() { try { return sessionStorage.getItem(ROLE_KEY); } catch (_) { return ''; } })()
@@ -440,6 +510,8 @@
       openPanel:  openPanel,
       closePanel: function() { closePanel(null); },
       setRole:    function(r) { applyRoleVisibility(r); },
+      setShoppingDefault: function(mode) { return setShoppingDefaultMode(mode); },
+      getShoppingDefault: function() { return getShoppingDefaultMode(); },
       getRole:    function() {
         try { return sessionStorage.getItem(ROLE_KEY); } catch (_) { return ''; }
       }

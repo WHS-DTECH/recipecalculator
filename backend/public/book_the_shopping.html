@@ -10,6 +10,19 @@
     <div id="navbar-include"></div>
     <script src="shared/navbar_loader.js"></script>
     <main class="shopping-app shopping-page">
+        <section id="shoppingTransitionBanner" style="max-width:1200px;margin:1rem auto 0;padding:0 1rem;">
+            <div style="background:#fff6e6;border:1px solid #f5cf90;border-left:6px solid #d17a00;border-radius:10px;padding:0.9rem 1rem;display:flex;gap:0.75rem;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+                <div>
+                    <strong style="display:block;color:#7a3f00;">Teacher-First Shopping is available</strong>
+                    <span style="color:#5b3a1d;font-size:0.95rem;">Try the new weekly draft → finalize workflow while keeping this legacy page available.</span>
+                </div>
+                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                    <a href="shopping_plan_setup.html" class="btn btn-primary" style="text-decoration:none;">Open Teacher-First Setup</a>
+                    <button id="setTeacherFirstDefaultBtn" type="button" class="btn btn-secondary">Set New Flow as Default</button>
+                </div>
+            </div>
+        </section>
+
         <div class="shopping-layout-wrap">
             <section class="shopping-calendar-column">
                 <div class="calendar-app">
@@ -114,6 +127,7 @@
 
         <script>
         (function () {
+            var setDefaultBtn = document.getElementById('setTeacherFirstDefaultBtn');
             var loadExtrasBtn = document.getElementById('loadTeacherExtrasBtn');
             var extrasPanel = document.getElementById('teacherExtrasPanel');
             var extrasContent = document.getElementById('teacherExtrasContent');
@@ -162,6 +176,23 @@
                     html += '</table>';
                 });
                 extrasContent.innerHTML = html;
+            }
+
+            if (setDefaultBtn) {
+                setDefaultBtn.addEventListener('click', function () {
+                    try {
+                        localStorage.setItem('shopping_workflow_default', 'teacher_first');
+                        sessionStorage.setItem('shopping_workflow_default', 'teacher_first');
+                    } catch (_) {}
+                    if (window.nb2Nav && typeof window.nb2Nav.setShoppingDefault === 'function') {
+                        window.nb2Nav.setShoppingDefault('teacher_first');
+                    }
+                    if (window.showToast) {
+                        window.showToast('Navigation default updated to Teacher-First Shopping.', 'success');
+                    } else {
+                        setDefaultBtn.textContent = 'Default Set';
+                    }
+                });
             }
 
             if (loadExtrasBtn) {
