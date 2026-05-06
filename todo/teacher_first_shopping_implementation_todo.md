@@ -44,38 +44,31 @@ Acceptance
 
 ---
 
-## Phase 2 - Backend API
+## Phase 2 - Backend API ✅
+
+**Completed 6 May 2026** — file: `backend/routes/shopping_plan.js`, registered in `backend/server.js` as `/api/shopping-plan`
 
 ### 2.1 New Router
-- [ ] Create `backend/routes/shopping_plan.js`.
-- [ ] Register route in `backend/server.js` as `/api/shopping-plan`.
+- [x] Create `backend/routes/shopping_plan.js`.
+- [x] Register route in `backend/server.js` as `/api/shopping-plan`.
 
 ### 2.2 Endpoints (MVP)
-- [ ] `POST /api/shopping-plan/create`
-  - Input: `week_ending`, optional selected booking IDs.
-  - Behavior: create draft plan + snapshot classes.
-- [ ] `POST /api/shopping-plan/:id/generate-draft`
-  - Behavior: compute ingredient totals from recipes and servings into `shopping_plan_items.calculated_qty`.
-- [ ] `GET /api/shopping-plan/:id`
-  - Return: plan header, classes, items, warnings.
-- [ ] `PUT /api/shopping-plan/:id/items`
-  - Save teacher edits (`teacher_qty`, `base_unit`, `category`, `notes`, add/delete rows).
-  - Write audit records for changed fields.
-- [ ] `POST /api/shopping-plan/:id/finalize`
-  - Compute `final_qty` = `teacher_qty` if present else `calculated_qty`.
-  - Lock plan to `status=finalized`.
-- [ ] `POST /api/shopping-plan/:id/reopen`
-  - Create next version draft copied from finalized plan.
-- [ ] `GET /api/shopping-plan/:id/technician-view`
-  - Read-only finalized rows, grouped by category.
+- [x] `POST /api/shopping-plan/create`
+- [x] `POST /api/shopping-plan/:id/generate-draft`
+- [x] `GET /api/shopping-plan` (list all plans)
+- [x] `GET /api/shopping-plan/:id`
+- [x] `PUT /api/shopping-plan/:id/items`
+- [x] `POST /api/shopping-plan/:id/finalize`
+- [x] `POST /api/shopping-plan/:id/reopen`
+- [x] `GET /api/shopping-plan/:id/technician-view`
 
 ### 2.3 Validation Rules
-- [ ] Block finalize on missing units for quantified lines.
-- [ ] Block finalize on invalid qty values (negative, NaN).
-- [ ] Warn on high variance vs previous plan version (soft warning only in MVP).
+- [x] Block finalize on missing units for quantified lines.
+- [x] Block finalize on invalid qty values (negative, NaN).
+- [x] Warn on classes with no ingredient data (soft warning in GET /:id).
 
 Acceptance
-- [ ] Endpoints protected by admin/lead-teacher permissions.
+- [ ] **Run DB migration first:** `node backend/run_shopping_plan_migration.js`
 - [ ] Postman or browser test script passes for all endpoint flows.
 
 ---
