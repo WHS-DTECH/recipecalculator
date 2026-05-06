@@ -1,13 +1,103 @@
 ﻿const express = require('express');
 const router = express.Router();
 const pool = require('../db');
-const { requireAdmin } = require('../middleware/requireAdmin');
 
 let schemaReady = false;
 let plannerUploadSchemaReady = false;
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
+}
+
+function getRequestEmail(req) {
+  return normalizeEmail(
+    (req && req.authUserEmail) ||
+    (req && req.headers && (req.headers['x-user-email'] || req.headers['x-staff-email'])) ||
+    (req && req.query && req.query.userEmail) ||
+    (req && req.body && req.body.userEmail)
+  );
+}
+
+function getBootstrapAdminEmails() {
+  const configured = String(process.env.ADMIN_BOOTSTRAP_EMAILS || '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
+
+  const preferred = normalizeEmail(process.env.PREFERRED_ADMIN_EMAIL || '');
+  if (preferred && !configured.includes(preferred)) configured.push(preferred);
+
+  return new Set(configured);
+}
+
+async function hasPlanningAccess(email) {
+  const normalized = normalizeEmail(email);
+  if (!normalized) return false;
+
+  if (getBootstrapAdminEmails().has(normalized)) {
+    return true;
+  }
+
+  try {
+    const additionalRoleResult = await pool.query(
+      `SELECT lower(trim(uar.role_name)) AS role_name
+         FROM user_additional_roles uar
+        WHERE lower(trim(uar.email)) = lower(trim($1))`,
+      [normalized]
+    );
+
+    if (additionalRoleResult.rows.some((row) => {
+      const role = String(row && row.role_name || '').trim().toLowerCase();
+      return role === 'admin' || role === 'lead_teacher';
+    })) {
+      return true;
+    }
+  } catch (err) {
+    if (!err || err.code !== '42P01') {
+      throw err;
+    }
+  }
+
+  try {
+    const staffResult = await pool.query(
+      `SELECT lower(trim(COALESCE(primary_role, 'staff'))) AS primary_role
+         FROM staff_upload
+        WHERE lower(trim(email_school)) = lower(trim($1))
+          AND COALESCE(status, 'Current') = 'Current'
+        LIMIT 1`,
+      [normalized]
+    );
+
+    if (staffResult.rows.length) {
+      const primaryRole = String(staffResult.rows[0].primary_role || '').trim().toLowerCase();
+      return primaryRole === 'admin' || primaryRole === 'lead_teacher';
+    }
+  } catch (err) {
+    if (!err || (err.code !== '42P01' && err.code !== '42703')) {
+      throw err;
+    }
+  }
+
+  return false;
+}
+
+async function requirePlanningRole(req, res, next) {
+  const email = getRequestEmail(req);
+  if (!email) {
+    return res.status(401).json({ success: false, error: 'Sign in required.' });
+  }
+
+  try {
+    const allowed = await hasPlanningAccess(email);
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: 'Planning access requires admin or lead_teacher role.' });
+    }
+    req.authUserEmail = email;
+    return next();
+  } catch (err) {
+    console.error('[BOOKINGS] requirePlanningRole failed:', err);
+    return res.status(500).json({ success: false, error: 'Authorization check failed.' });
+  }
 }
 
 async function ensureSchema() {
@@ -455,7 +545,7 @@ router.get('/planner-class-options', async (req, res) => {
 
 // GET /api/bookings/admin/resave-candidates
 // Admin-only audit endpoint to find bookings that likely need re-save after SQLite->Postgres migration.
-router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
+router.get('/admin/resave-candidates', requirePlanningRole, async (req, res) => {
   try {
     await ensureSchema();
 
@@ -633,7 +723,7 @@ router.get('/admin/resave-candidates', requireAdmin, async (req, res) => {
 // POST /api/bookings/prefill-from-planner
 // Admin-only utility: creates class bookings for Food/HOSP periods from planner recipes (single or double).
 // Body (optional): { startDate, endDate, dryRun }
-router.post('/prefill-from-planner', requireAdmin, async (req, res) => {
+router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
   try {
     await ensureSchema();
 

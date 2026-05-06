@@ -1,6 +1,6 @@
 // Dynamically loads the enhanced navbar and its assets into #navbar-include.
 (function() {
-  var ASSET_VERSION = '20260505c';
+  var ASSET_VERSION = '20260506b';
   var NAVBAR_URL = '/navbar_enhanced.html?v=' + ASSET_VERSION;
   var STYLE_HREFS = [
     '/navbar.css'
@@ -47,6 +47,7 @@
   function initializeNavbarBehavior(container) {
     var mobileToggle = document.querySelector('.navbar-mobile-toggle');
     var mobileNav = document.getElementById('primaryNavbarLinks');
+    var mobileDrawerBtns = document.getElementById('mobileDrawerBtns');
     var drawerConfigs = [
       {
         toggle: document.querySelector('.navbar-admin-toggle[aria-controls="adminManagementDrawer"]'),
@@ -131,6 +132,7 @@
       if (!mobileToggle || !mobileNav) return;
       mobileToggle.setAttribute('aria-expanded', 'false');
       mobileNav.classList.remove('is-open');
+      if (mobileDrawerBtns) mobileDrawerBtns.classList.remove('is-open');
     }
 
     if (mobileToggle && mobileNav) {
@@ -138,10 +140,29 @@
         var willOpen = mobileToggle.getAttribute('aria-expanded') !== 'true';
         mobileToggle.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
         mobileNav.classList.toggle('is-open', willOpen);
+        if (mobileDrawerBtns) mobileDrawerBtns.classList.toggle('is-open', willOpen);
       });
 
       mobileNav.querySelectorAll('a').forEach(function(link) {
         link.addEventListener('click', closeMobileNav);
+      });
+    }
+
+    // Wire mobile drawer buttons (inside hamburger menu) to open the same drawers
+    if (mobileDrawerBtns) {
+      mobileDrawerBtns.querySelectorAll('.navbar-mobile-drawer-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var drawerId = btn.getAttribute('aria-controls');
+          var matched = drawerState.find(function(s) { return s.cfg.drawer.id === drawerId; });
+          if (matched) {
+            closeMobileNav();
+            if (matched.isOpen) {
+              closeDrawer(matched, true);
+            } else {
+              openDrawer(matched);
+            }
+          }
+        });
       });
     }
 

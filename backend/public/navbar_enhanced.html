@@ -35,6 +35,7 @@
     <a href="book_the_shopping.html" class="navbar-core-link" title="Plan shopping for bookings" data-route="shopping">Book Shopping</a>
   </nav>
 
+  <!-- Drawer buttons: visible in top bar at desktop; hidden at ≤900px (moved into hamburger menu via .navbar-mobile-drawer-btns) -->
   <button
     type="button"
     class="navbar-admin-toggle"
@@ -44,14 +45,14 @@
     Planning
   </button>
 
-    <button
-      type="button"
-      class="navbar-admin-toggle"
-      data-role="planning"
-      aria-expanded="false"
-      aria-controls="shoppingDrawer">
-      Shopping
-    </button>
+  <button
+    type="button"
+    class="navbar-admin-toggle"
+    data-role="planning"
+    aria-expanded="false"
+    aria-controls="shoppingDrawer">
+    Shopping
+  </button>
 
   <button
     type="button"
@@ -72,6 +73,43 @@
     Management
   </button>
 
+  <!-- Mobile-only: drawer buttons shown inside the hamburger menu -->
+  <div class="navbar-mobile-drawer-btns" id="mobileDrawerBtns" aria-label="More navigation">
+    <button
+      type="button"
+      class="navbar-mobile-drawer-btn"
+      data-role="planning"
+      aria-expanded="false"
+      aria-controls="planningDrawer">
+      Planning
+    </button>
+    <button
+      type="button"
+      class="navbar-mobile-drawer-btn"
+      data-role="planning"
+      aria-expanded="false"
+      aria-controls="shoppingDrawer">
+      Shopping
+    </button>
+    <button
+      type="button"
+      class="navbar-mobile-drawer-btn"
+      data-role="authenticated"
+      data-route="ft_teacher"
+      aria-expanded="false"
+      aria-controls="ftTeacherDrawer">
+      FT Teacher
+    </button>
+    <button
+      type="button"
+      class="navbar-mobile-drawer-btn"
+      data-role="admin"
+      aria-expanded="false"
+      aria-controls="adminManagementDrawer">
+      Management
+    </button>
+  </div>
+
   <div class="navbar-account">
     <a href="#" id="navbarUsername" class="navbar-user-link">User</a>
     <a href="subscription_preferences.html" title="Manage recipe notifications" class="navbar-user-link">Preferences</a>
@@ -91,10 +129,10 @@
   </div>
 
   <div class="navbar-drawer-links" style="padding-top:0.6rem;">
-    <a href="recipe_calendar_upload.html" class="navbar-submenu-item">Upload Planners</a>
-    <a href="admin_match_recipes.html" class="navbar-submenu-item">Match Planner Recipes</a>
-    <a href="admin_prefill_planner.html" class="navbar-submenu-item">Planner Prefill</a>
-    <a href="add_recipe_manually.html" class="navbar-submenu-item">Add Recipe Manually</a>
+    <a href="recipe_calendar_upload.html" class="navbar-submenu-item" data-route="planning">Upload Planners</a>
+    <a href="admin_match_recipes.html" class="navbar-submenu-item" data-route="planning">Match Planner Recipes</a>
+    <a href="admin_prefill_planner.html" class="navbar-submenu-item" data-route="planning">Planner Prefill</a>
+    <a href="add_recipe_manually.html" class="navbar-submenu-item" data-route="planning">Add Recipe Manually</a>
   </div>
 </aside>
 
