@@ -143,7 +143,7 @@ Acceptance
 - [x] Reopen creates a new version and preserves history.
 
 ### Accuracy
-- [ ] Scaling formula verified for at least 5 recipes with different serving sizes.
+- [x] Scaling formula verified for at least 5 recipes with different serving sizes. (evidence script: scripts/phase6_1_scaling_smoke.js)
 - [x] Duplicate ingredient merge verified across multiple classes.
 - [x] Unit conversion checks pass for tsp/tbsp and g/kg.
 

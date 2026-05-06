@@ -933,6 +933,103 @@ router.post('/smoke-seed', requireAdmin, async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/shopping-plan/smoke-seed-scaling  (admin only)
+// Seeds 5 varied-serving recipes/bookings/DSI rows to validate scaling math.
+// Returns the cases so scripts can verify expected calculated_qty values.
+// ---------------------------------------------------------------------------
+router.post('/smoke-seed-scaling', requireAdmin, async (req, res) => {
+  const stamp = Date.now();
+  try {
+    await ensureSchema();
+
+    // Determine next Friday for booking dates.
+    const d = new Date();
+    const day = d.getUTCDay();
+    const add = day <= 5 ? 5 - day : 12 - day;
+    d.setUTCDate(d.getUTCDate() + add);
+    const friday = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+    const cases = [
+      { label: 'Scale Case A', serving_size: 2, desired_servings: 10, measure_qty: 1.5, measure_unit: 'g' },
+      { label: 'Scale Case B', serving_size: 4, desired_servings: 14, measure_qty: 2.0, measure_unit: 'g' },
+      { label: 'Scale Case C', serving_size: 6, desired_servings: 21, measure_qty: 0.75, measure_unit: 'g' },
+      { label: 'Scale Case D', serving_size: 8, desired_servings: 18, measure_qty: 3.25, measure_unit: 'g' },
+      { label: 'Scale Case E', serving_size: 10, desired_servings: 25, measure_qty: 1.2, measure_unit: 'g' }
+    ];
+
+    const recipeIds = [];
+    const bookingIds = [];
+    const seededCases = [];
+
+    for (let i = 0; i < cases.length; i++) {
+      const c = cases[i];
+      const expectedQty = Math.round((c.measure_qty * (c.desired_servings / c.serving_size)) * 10000) / 10000;
+      const ingredientName = `${c.label} Ingredient ${stamp}`;
+
+      const recipeRes = await pool.query(
+        `INSERT INTO recipes (name, description, ingredients, serving_size, url)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
+        [`${c.label} ${stamp}`, 'phase6.1 scaling smoke', ingredientName, c.serving_size, `https://example.com/phase6_1_${i + 1}`]
+      );
+      const recipeId = Number(recipeRes.rows[0].id);
+      recipeIds.push(recipeId);
+
+      const bookingRes = await pool.query(
+        `INSERT INTO bookings (staff_name, class_name, booking_date, period, recipe, recipe_id, class_size, planner_stream)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+         RETURNING id`,
+        ['Phase6.1 Teacher', `PH6.1-${i + 1}-${stamp}`, friday, `P${(i % 4) + 1}`, `${c.label} ${stamp}`, recipeId, c.desired_servings, 'Middle']
+      );
+      const bookingId = Number(bookingRes.rows[0].id);
+      bookingIds.push(bookingId);
+
+      await pool.query(
+        `INSERT INTO desired_servings_ingredients
+           (booking_id, ingredient_name, fooditem, stripfooditem, measure_qty, measure_unit, calculated_qty, desired_servings, recipe_id, class_size)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [
+          bookingId,
+          ingredientName,
+          ingredientName,
+          ingredientName,
+          c.measure_qty,
+          c.measure_unit,
+          expectedQty,
+          c.desired_servings,
+          recipeId,
+          c.desired_servings
+        ]
+      );
+
+      seededCases.push({
+        index: i + 1,
+        label: c.label,
+        recipeId,
+        bookingId,
+        ingredientName,
+        serving_size: c.serving_size,
+        desired_servings: c.desired_servings,
+        measure_qty: c.measure_qty,
+        measure_unit: c.measure_unit,
+        expected_calculated_qty: expectedQty
+      });
+    }
+
+    return res.json({
+      success: true,
+      friday,
+      recipeIds,
+      bookingIds,
+      cases: seededCases
+    });
+  } catch (err) {
+    console.error('[shopping-plan] smoke-seed-scaling error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/shopping-plan/smoke-cleanup  (admin only)
 // Deletes data created by smoke-seed. Expects { planIds, bookingIds, recipeIds }
 // ---------------------------------------------------------------------------
