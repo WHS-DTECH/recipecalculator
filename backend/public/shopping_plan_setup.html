@@ -63,6 +63,19 @@
     .sp-status.ok { color: #1e7c4b; }
     .sp-status.err { color: #bb2f2f; }
     .sp-muted { color: #65798c; font-size: 0.9rem; }
+    .sp-inline-input {
+      width: 78px;
+      border: 1px solid #9db3c7;
+      border-radius: 6px;
+      padding: 0.22rem 0.34rem;
+      font-size: 0.88rem;
+      background: #fff;
+    }
+    .sp-inline-input:focus {
+      outline: 2px solid #9cc3e6;
+      outline-offset: 1px;
+      border-color: #4a8bc2;
+    }
   </style>
 </head>
 <body>
@@ -191,6 +204,99 @@
       selectionCount.textContent = selectedIds().length + ' selected';
     }
 
+    function hasValue(v) {
+      return String(v == null ? '' : v).trim() !== '';
+    }
+
+    function rowById(id) {
+      return currentRows.find((r) => Number(r.id) === Number(id)) || null;
+    }
+
+    function inlineClassSizeCell(row) {
+      if (hasValue(row.class_size)) return esc(row.class_size);
+      return '<input class="sp-inline-input sp-class-size-input" type="number" min="1" step="1" data-booking-id="' + Number(row.id) + '" placeholder="size" aria-label="Class size for booking ' + Number(row.id) + '">';
+    }
+
+    function inlineGroupsCell(row) {
+      if (hasValue(row.groups)) return esc(row.groups);
+      return '<input class="sp-inline-input sp-groups-input" type="number" min="1" step="1" data-booking-id="' + Number(row.id) + '" value="1" placeholder="groups" aria-label="Groups for booking ' + Number(row.id) + '">';
+    }
+
+    async function persistMissingSizingForSelected(selectedBookingIds) {
+      const ids = (selectedBookingIds || []).map((n) => Number(n)).filter(Number.isInteger);
+      const updates = [];
+
+      ids.forEach((id) => {
+        const row = rowById(id);
+        if (!row) return;
+
+        const classSizeInput = document.querySelector('.sp-class-size-input[data-booking-id="' + id + '"]');
+        const groupsInput = document.querySelector('.sp-groups-input[data-booking-id="' + id + '"]');
+
+        const classSize = hasValue(row.class_size)
+          ? Number(row.class_size)
+          : Number((classSizeInput && classSizeInput.value) || '');
+        const groups = hasValue(row.groups)
+          ? Number(row.groups)
+          : Number((groupsInput && groupsInput.value) || '');
+
+        if (!Number.isFinite(classSize) || classSize <= 0) {
+          throw new Error('Booking ' + id + ' is missing Class Size. Enter it in Class Snapshot before creating the draft.');
+        }
+        if (!Number.isFinite(groups) || groups <= 0) {
+          throw new Error('Booking ' + id + ' is missing No of Groups. Enter it in Class Snapshot before creating the draft.');
+        }
+
+        const needsClassSizeUpdate = !hasValue(row.class_size);
+        const needsGroupsUpdate = !hasValue(row.groups);
+        if (!needsClassSizeUpdate && !needsGroupsUpdate) return;
+
+        const payload = {
+          staff_id: row.staff_id || null,
+          staff_name: row.staff_name || null,
+          class_name: row.class_name || null,
+          booking_date: row.booking_date || null,
+          period: row.period || null,
+          recipe: row.recipe || null,
+          recipe_url: row.recipe_url || null,
+          recipe_id: row.recipe_id || null,
+          class_size: classSize,
+          planner_stream: row.planner_stream || null,
+          cook_mode: row.cook_mode || null,
+          partner_student_name: row.partner_student_name || null,
+          partner_student_id: row.partner_student_id || null,
+          groups: groups
+        };
+
+        updates.push({ id, payload, classSize, groups });
+      });
+
+      if (!updates.length) return 0;
+
+      const results = await Promise.all(updates.map((u) =>
+        fetch('/api/bookings/' + u.id, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(u.payload)
+        }).then(async (resp) => {
+          const payload = await resp.json().catch(() => ({}));
+          if (!resp.ok) throw new Error(payload.error || ('Failed to update booking ' + u.id));
+          return u;
+        })
+      ));
+
+      // Keep in-memory rows in sync so subsequent actions use the newly entered values.
+      results.forEach((u) => {
+        const row = rowById(u.id);
+        if (!row) return;
+        row.class_size = u.classSize;
+        row.groups = u.groups;
+      });
+
+      return results.length;
+    }
+
     const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
     function renderRows(rows) {
@@ -225,8 +331,8 @@
             '<td>' + esc(row.class_name || '') + '</td>' +
             '<td>' + esc(row.staff_name || '') + '</td>' +
             '<td>' + esc(row.recipe || '') + '</td>' +
-            '<td>' + esc(row.class_size || '') + '</td>' +
-            '<td>' + esc(row.groups || '') + '</td>' +
+            '<td>' + inlineClassSizeCell(row) + '</td>' +
+            '<td>' + inlineGroupsCell(row) + '</td>' +
           '</tr>';
         });
       });
@@ -282,6 +388,11 @@
       createPlanBtn.disabled = true;
       setStatus(createStatus, 'Creating plan...', '');
       try {
+        const persistedCount = await persistMissingSizingForSelected(ids);
+        if (persistedCount > 0) {
+          setStatus(createStatus, 'Saved class size/groups for ' + persistedCount + ' booking(s). Creating plan...', '');
+        }
+
         const createResp = await fetch('/api/shopping-plan/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

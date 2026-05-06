@@ -227,11 +227,11 @@ function classGroupKeyForPrefill(classToken) {
 
 // Update a booking by ID
 router.put('/:id', async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id } = req.body;
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id, groups } = req.body;
   try {
     await ensureSchema();
     await pool.query(
-      "UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9, planner_stream=COALESCE($10, planner_stream, 'Middle'), cook_mode=$11, partner_student_name=$12, partner_student_id=$13 WHERE id=$14",
+      "UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9, planner_stream=COALESCE($10, planner_stream, 'Middle'), cook_mode=$11, partner_student_name=$12, partner_student_id=$13, groups=$14 WHERE id=$15",
       [
         staff_id,
         staff_name,
@@ -246,6 +246,7 @@ router.put('/:id', async (req, res) => {
         cook_mode || null,
         partner_student_name || null,
         partner_student_id || null,
+        groups || null,
         req.params.id
       ]
     );
