@@ -19,26 +19,28 @@ Acceptance
 
 ---
 
-## Phase 1 - Data Model (MVP)
+## Phase 1 - Data Model (MVP) ✅
+
+**Completed 6 May 2026** — files: `backend/shopping_plan_migration.sql`, `backend/run_shopping_plan_migration.js`
 
 ### 1.1 New Tables
-- [ ] Create migration for `shopping_plan`.
+- [x] Create migration for `shopping_plan`.
   - Fields: `id`, `week_ending`, `status`, `version`, `created_by`, `created_at`, `finalized_by`, `finalized_at`, `notes`.
-- [ ] Create migration for `shopping_plan_classes`.
+- [x] Create migration for `shopping_plan_classes`.
   - Fields: `id`, `plan_id`, `booking_id`, `class_name`, `teacher_name`, `recipe_id`, `planned_servings`, `included`, `sort_order`.
-- [ ] Create migration for `shopping_plan_items`.
+- [x] Create migration for `shopping_plan_items`.
   - Fields: `id`, `plan_id`, `category`, `item_name`, `normalized_item_key`, `base_unit`, `calculated_qty`, `teacher_qty`, `final_qty`, `source_type`, `source_detail_json`, `notes`, `sort_order`, `edited_by`, `edited_at`.
-- [ ] Create migration for `shopping_plan_item_audit`.
+- [x] Create migration for `shopping_plan_item_audit`.
   - Fields: `id`, `plan_item_id`, `field_name`, `old_value`, `new_value`, `reason`, `changed_by`, `changed_at`.
 
 ### 1.2 Constraints + Indexes
-- [ ] Add unique key on (`week_ending`, `version`) for `shopping_plan`.
-- [ ] Add index on `shopping_plan_items(plan_id, category, sort_order)`.
-- [ ] Add index on `shopping_plan_classes(plan_id, sort_order)`.
+- [x] Add unique key on (`week_ending`, `version`) for `shopping_plan`.
+- [x] Add index on `shopping_plan_items(plan_id, category, sort_order)`.
+- [x] Add index on `shopping_plan_classes(plan_id, sort_order)`.
 
 Acceptance
-- [ ] Migrations run successfully on local and Render.
-- [ ] Rollback path documented.
+- [ ] **Run migration on Neon:** `node backend/run_shopping_plan_migration.js` (requires DATABASE_URL in env)
+- [ ] Rollback: `DROP TABLE shopping_plan_item_audit, shopping_plan_items, shopping_plan_classes, shopping_plan CASCADE;`
 
 ---
 
