@@ -776,4 +776,93 @@ router.get('/:id/technician-view', async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// POST /api/shopping-plan/smoke-seed  (admin only)
+// Creates minimal test recipes, bookings, and desired_servings_ingredients
+// rows for Phase 4 guardrail smoke tests.  Returns the created IDs so the
+// smoke script can reference them without a direct DB connection.
+// ---------------------------------------------------------------------------
+router.post('/smoke-seed', requireAdmin, async (req, res) => {
+  const stamp = Date.now();
+  try {
+    const r1 = await pool.query(
+      `INSERT INTO recipes (name, description, ingredients, serving_size, url)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [`Phase4 Smoke Recipe A ${stamp}`, 'phase4 smoke', 'sugar', null, 'https://example.com/a']
+    );
+    const r2 = await pool.query(
+      `INSERT INTO recipes (name, description, ingredients, serving_size, url)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [`Phase4 Smoke Recipe B ${stamp}`, 'phase4 smoke', 'sugar', 8, 'https://example.com/b']
+    );
+    const recipeIdA = Number(r1.rows[0].id);
+    const recipeIdB = Number(r2.rows[0].id);
+
+    // Determine next Friday for the booking date
+    const d = new Date();
+    const day = d.getUTCDay();
+    const add = day <= 5 ? 5 - day : 12 - day;
+    d.setUTCDate(d.getUTCDate() + add);
+    const friday = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+
+    const b1 = await pool.query(
+      `INSERT INTO bookings (staff_name, class_name, booking_date, period, recipe, recipe_id, class_size, planner_stream)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      ['Phase4 Teacher', `PH4-A-${stamp}`, friday, 'P1', `Phase4 Smoke Recipe A ${stamp}`, recipeIdA, 20, 'Middle']
+    );
+    const b2 = await pool.query(
+      `INSERT INTO bookings (staff_name, class_name, booking_date, period, recipe, recipe_id, class_size, planner_stream)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      ['Phase4 Teacher', `PH4-B-${stamp}`, friday, 'P2', `Phase4 Smoke Recipe B ${stamp}`, recipeIdB, 20, 'Middle']
+    );
+    const bookingId1 = Number(b1.rows[0].id);
+    const bookingId2 = Number(b2.rows[0].id);
+
+    await pool.query(
+      `INSERT INTO desired_servings_ingredients
+         (booking_id, ingredient_name, fooditem, stripfooditem, measure_qty, measure_unit, calculated_qty)
+       VALUES
+         ($1, 'Sugar', 'Sugar', 'Sugar', 1, 'tbsp', 1),
+         ($2, 'Sugar', 'Sugar', 'Sugar', 2, 'tsp', 2),
+         ($1, 'Flour', 'Flour', 'Flour', 1, 'kg', 1),
+         ($2, 'Flour', 'Flour', 'Flour', 500, 'g', 500)`,
+      [bookingId1, bookingId2]
+    );
+
+    return res.json({
+      success: true,
+      recipeIds: [recipeIdA, recipeIdB],
+      bookingIds: [bookingId1, bookingId2],
+      friday
+    });
+  } catch (err) {
+    console.error('[shopping-plan] smoke-seed error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/shopping-plan/smoke-cleanup  (admin only)
+// Deletes data created by smoke-seed. Expects { planIds, bookingIds, recipeIds }
+// ---------------------------------------------------------------------------
+router.post('/smoke-cleanup', requireAdmin, async (req, res) => {
+  const { planIds = [], bookingIds = [], recipeIds = [] } = req.body || {};
+  try {
+    if (planIds.length) {
+      await pool.query('DELETE FROM shopping_plan WHERE id = ANY($1::int[])', [planIds]);
+    }
+    if (bookingIds.length) {
+      await pool.query('DELETE FROM desired_servings_ingredients WHERE booking_id = ANY($1::int[])', [bookingIds]);
+      await pool.query('DELETE FROM bookings WHERE id = ANY($1::int[])', [bookingIds]);
+    }
+    if (recipeIds.length) {
+      await pool.query('DELETE FROM recipes WHERE id = ANY($1::int[])', [recipeIds]);
+    }
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[shopping-plan] smoke-cleanup error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
