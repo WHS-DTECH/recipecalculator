@@ -1622,7 +1622,8 @@ app.get('/api/timetable/all', async (req, res) => {
 
     app.post('/api/recipes/sync-from-uploads', async (req, res) => {
       try {
-        const uploadsResult = await pool.query('SELECT * FROM uploads');
+        // Only fetch the columns needed for sync — raw_data blobs are not needed here
+        const uploadsResult = await pool.query('SELECT id, recipe_title, source_url FROM uploads');
         const uploads = uploadsResult.rows;
         let inserted = 0;
         let duplicates = 0;

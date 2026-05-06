@@ -113,9 +113,12 @@ router.post('/pdf', async (req, res) => {
 });
 
 // GET /api/uploads
+// Excludes raw_data (full HTML blobs) — fetch individual record to get raw_data
 router.get('/', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM uploads ORDER BY id DESC');
+    const result = await pool.query(
+      'SELECT id, recipe_title, upload_type, source_url, uploaded_by, upload_date FROM uploads ORDER BY id DESC'
+    );
     res.json(result.rows);
   } catch (err) {
     res.status(500).json({ error: err.message });
