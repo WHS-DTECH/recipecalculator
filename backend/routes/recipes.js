@@ -687,6 +687,19 @@ router.post('/:id/display', async (req, res) => {
       row.id
     ]);
     console.log('[DISPLAY][DEBUG] Upsert result:', upsertResult.command, upsertResult.rowCount);
+
+    // Clear raw_data blob now that the recipe is published — it's no longer needed
+    // and was a major source of Neon egress when fetched via SELECT *
+    try {
+      await pool.query(
+        'UPDATE uploads SET raw_data = NULL WHERE id = (SELECT uploaded_recipe_id FROM recipes WHERE id = $1 AND uploaded_recipe_id IS NOT NULL)',
+        [recipeId]
+      );
+    } catch (cleanupErr) {
+      // Non-fatal: log but don't fail the publish
+      console.warn('[DISPLAY] Could not clear raw_data for recipe', recipeId, cleanupErr.message);
+    }
+
     return res.json({ success: true });
   } catch (err) {
     console.error('[DISPLAY][ERROR] Exception during upsert:', err);
@@ -1332,6 +1345,16 @@ router.post('/:id/food-truck/approve', requireFoodTruckTeacher, async (req, res)
         WHERE id = $3`,
       [normalizeEmail(req.authUserEmail), authUserName(req), recipeId]
     );
+
+    // Clear raw_data blob now that the recipe is approved — no longer needed
+    try {
+      await pool.query(
+        'UPDATE uploads SET raw_data = NULL WHERE id = (SELECT uploaded_recipe_id FROM recipes WHERE id = $1 AND uploaded_recipe_id IS NOT NULL)',
+        [recipeId]
+      );
+    } catch (cleanupErr) {
+      console.warn('[APPROVE] Could not clear raw_data for recipe', recipeId, cleanupErr.message);
+    }
 
     res.json({ success: true, message: 'Recipe approved and published.' });
   } catch (err) {
