@@ -816,55 +816,77 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       [startDate, endDate]
     );
 
-    // Build class-size fallback maps so planner-prefilled bookings can inherit
-    // known class sizes from recent matching bookings.
-    const classSizeHistoryResult = await pool.query(
-      `SELECT class_name, staff_id, staff_name, class_size
-       FROM bookings
-       WHERE class_size IS NOT NULL
-         AND trim(class_size::text) <> ''
-       ORDER BY booking_date DESC, id DESC`
+    // Build class-size lookup from the current student timetable only.
+    // This intentionally avoids historical booking sizes.
+    const studentPeriodColumns = [
+      'mon_p1_1','mon_p1_2','mon_p2','mon_i','mon_p3','mon_p4','mon_l','mon_p5',
+      'tue_p1_1','tue_p1_2','tue_p2','tue_i','tue_p3','tue_p4','tue_l','tue_p5',
+      'wed_p1_1','wed_p1_2','wed_p2','wed_i','wed_p3','wed_p4','wed_l','wed_p5',
+      'thu_p1_1','thu_p1_2','thu_p2','thu_i','thu_p3','thu_p4','thu_l','thu_p5',
+      'fri_p1_1','fri_p1_2','fri_p2','fri_i','fri_p3','fri_p4','fri_l','fri_p5'
+    ];
+    const studentTimetableResult = await pool.query(
+      `SELECT id_number, ${studentPeriodColumns.join(', ')}
+       FROM student_timetable
+       WHERE COALESCE(status, 'Current') = 'Current'`
     );
-    const classSizeByClassAndStaffId = new Map();
-    const classSizeByClassAndStaffName = new Map();
-    const classSizeByClass = new Map();
-    for (const row of classSizeHistoryResult.rows) {
-      const classKey = normalizeClassToken(row.class_name);
-      if (!classKey) continue;
-      const parsedSize = parseInt(String(row.class_size || '').trim(), 10);
-      if (!Number.isFinite(parsedSize) || parsedSize <= 0) continue;
+    const studentIdsByClassToken = new Map();
 
-      const staffIdKey = String(row.staff_id || '').trim();
-      const staffNameKey = normalizeClassToken(row.staff_name);
-      if (staffIdKey) {
-        const key = `${classKey}|${staffIdKey}`;
-        if (!classSizeByClassAndStaffId.has(key)) classSizeByClassAndStaffId.set(key, parsedSize);
-      }
-      if (staffNameKey) {
-        const key = `${classKey}|${staffNameKey}`;
-        if (!classSizeByClassAndStaffName.has(key)) classSizeByClassAndStaffName.set(key, parsedSize);
-      }
-      if (!classSizeByClass.has(classKey)) classSizeByClass.set(classKey, parsedSize);
+    function addStudentToken(token, studentId) {
+      const key = normalizeClassToken(token);
+      const id = String(studentId || '').trim();
+      if (!key || !id) return;
+      if (!studentIdsByClassToken.has(key)) studentIdsByClassToken.set(key, new Set());
+      studentIdsByClassToken.get(key).add(id);
     }
 
-    function resolvePrefillClassSize(className, staffId, staffName) {
+    for (const row of studentTimetableResult.rows) {
+      const studentId = row.id_number;
+      for (const col of studentPeriodColumns) {
+        const parts = String(row[col] || '')
+          .split(/[;|]/g)
+          .map((v) => String(v || '').trim())
+          .filter(Boolean);
+        for (const token of parts) addStudentToken(token, studentId);
+      }
+    }
+
+    function studentCountForToken(token) {
+      const set = studentIdsByClassToken.get(normalizeClassToken(token));
+      return set ? set.size : 0;
+    }
+
+    function resolvePrefillClassSize(className, teacherCode) {
       const classKey = normalizeClassToken(className);
       if (!classKey) return null;
 
-      const staffIdKey = String(staffId || '').trim();
-      if (staffIdKey) {
-        const byId = classSizeByClassAndStaffId.get(`${classKey}|${staffIdKey}`);
-        if (Number.isFinite(byId) && byId > 0) return byId;
+      // Match strategy mirrors the student by-class route token triangulation.
+      const firstDash = classKey.indexOf('-');
+      const coreSuffix = (firstDash > 0 && firstDash < classKey.length - 1)
+        ? classKey.slice(firstDash + 1)
+        : null;
+      const useCore = coreSuffix && coreSuffix.includes('-') && coreSuffix.length >= 4;
+      const normalizedTeacherCode = normalizeClassToken(teacherCode);
+
+      if (normalizedTeacherCode && useCore) {
+        const exactStudentToken = `${normalizedTeacherCode}-${coreSuffix}`;
+        const exactCount = studentCountForToken(exactStudentToken);
+        if (exactCount > 0) return exactCount;
       }
 
-      const staffNameKey = normalizeClassToken(staffName);
-      if (staffNameKey) {
-        const byName = classSizeByClassAndStaffName.get(`${classKey}|${staffNameKey}`);
-        if (Number.isFinite(byName) && byName > 0) return byName;
+      const fullTokenCount = studentCountForToken(classKey);
+      if (fullTokenCount > 0) return fullTokenCount;
+
+      if (useCore) {
+        const coreCount = studentCountForToken(coreSuffix);
+        if (coreCount > 0) return coreCount;
       }
 
-      const byClass = classSizeByClass.get(classKey);
-      if (Number.isFinite(byClass) && byClass > 0) return byClass;
+      const groupedKey = classGroupKeyForPrefill(classKey);
+      if (groupedKey && groupedKey !== classKey) {
+        const groupedCount = studentCountForToken(groupedKey);
+        if (groupedCount > 0) return groupedCount;
+      }
 
       return null;
     }
@@ -970,7 +992,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 stats.multiPeriodCandidates += 1;
               }
               const slotKey = `${dateIso}|${period}|${classTokenForBooking}`;
-              const resolvedClassSize = resolvePrefillClassSize(classTokenForBooking, staffId, staffName);
+              const resolvedClassSize = resolvePrefillClassSize(classTokenForBooking, teacherCode);
               if (existingSlots.has(slotKey)) {
                 const existingBooking = existingBookingBySlot.get(slotKey);
                 const hasClassSize = existingBooking && String(existingBooking.class_size || '').trim() !== '';
