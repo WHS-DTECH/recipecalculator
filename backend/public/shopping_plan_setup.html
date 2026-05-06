@@ -103,11 +103,12 @@
               <th>Class</th>
               <th>Teacher</th>
               <th>Recipe</th>
-              <th style="width:95px;">Size</th>
+              <th style="width:95px;">Class Size</th>
+              <th style="width:100px;">No of Groups</th>
             </tr>
           </thead>
           <tbody id="bookingBody">
-            <tr><td colspan="7" class="sp-muted">Load a Friday week to preview classes.</td></tr>
+            <tr><td colspan="8" class="sp-muted">Load a Friday week to preview classes.</td></tr>
           </tbody>
         </table>
       </div>
@@ -197,7 +198,7 @@
       currentRows = (rows || []).filter((r) => String(r.period || '').toLowerCase() !== 'planner');
 
       if (!currentRows.length) {
-        bookingBody.innerHTML = '<tr><td colspan="7" class="sp-muted">No bookings found for that week.</td></tr>';
+        bookingBody.innerHTML = '<tr><td colspan="8" class="sp-muted">No bookings found for that week.</td></tr>';
         updateSelectionCount();
         return;
       }
@@ -215,7 +216,7 @@
       groups.forEach((g) => {
         const utcDate = new Date(g.date + 'T00:00:00Z');
         const dayName = DAY_NAMES[utcDate.getUTCDay()] || g.date;
-        html += '<tr style="background:#e8f0f8;"><td colspan="7" style="padding:0.4rem 0.55rem;font-weight:700;color:#1a3f5e;font-size:0.88rem;">' + esc(dayName) + ' — ' + esc(g.date) + '</td></tr>';
+        html += '<tr style="background:#e8f0f8;"><td colspan="8" style="padding:0.4rem 0.55rem;font-weight:700;color:#1a3f5e;font-size:0.88rem;">' + esc(dayName) + ' — ' + esc(g.date) + '</td></tr>';
         g.rows.forEach((row) => {
           html += '<tr>' +
             '<td><input class="sp-booking-check" type="checkbox" checked value="' + Number(row.id) + '" aria-label="Select booking ' + Number(row.id) + '"></td>' +
@@ -225,6 +226,7 @@
             '<td>' + esc(row.staff_name || '') + '</td>' +
             '<td>' + esc(row.recipe || '') + '</td>' +
             '<td>' + esc(row.class_size || '') + '</td>' +
+            '<td>' + esc(row.groups || '') + '</td>' +
           '</tr>';
         });
       });
