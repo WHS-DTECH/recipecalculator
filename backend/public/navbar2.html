@@ -137,7 +137,6 @@
         <div class="nb2-panel-sublinks">
           <a href="recipe_display.html?scope=food_truck" class="nb2-panel-sublink">Browse FT Recipes</a>
           <a href="add_food_truck_booking.html" class="nb2-panel-sublink">Student Booking</a>
-          <a href="quick_add.html" class="nb2-panel-sublink">Add Recipe</a>
           <a href="food_truck_manual_recipe.html" class="nb2-panel-sublink">Add Recipe Manually</a>
           <a href="food_truck_recipe_photos.html" class="nb2-panel-sublink">Recipe Photos</a>
         </div>
@@ -149,43 +148,47 @@
     </section>
 
     <!-- ── PLANNING ── (admin + lead_teacher) -->
-    <section class="nb2-panel-section" data-role="planning">
-      <h2 class="nb2-section-hd">Planning</h2>
-      <a href="recipe_calendar_upload.html" class="nb2-panel-link" data-route="planning">Upload Planners</a>
-      <a href="admin_match_recipes.html"    class="nb2-panel-link" data-route="planning">Match Planner Recipes</a>
-      <a href="admin_prefill_planner.html"  class="nb2-panel-link" data-route="planning">Planner Prefill</a>
-      <a href="add_recipe.html"             class="nb2-panel-link" data-route="planning">Add Recipe (Publish)</a>
-      <a href="add_recipe_manually.html"    class="nb2-panel-link" data-route="planning">Add Recipe Manually</a>
-    </section>
+    <details class="nb2-panel-section nb2-main-group" data-role="planning">
+      <summary class="nb2-section-hd nb2-section-hd--toggle">Planning</summary>
+      <div class="nb2-main-group-body">
+        <a href="recipe_calendar_upload.html" class="nb2-panel-link" data-route="planning">Upload Planners</a>
+        <a href="admin_match_recipes.html"    class="nb2-panel-link" data-route="planning">Match Planner Recipes</a>
+        <a href="admin_prefill_planner.html"  class="nb2-panel-link" data-route="planning">Planner Prefill</a>
+        <a href="add_recipe_manually.html"    class="nb2-panel-link" data-route="planning">Add Recipe Manually</a>
+      </div>
+    </details>
 
     <!-- ── SHOPPING ── (admin + lead_teacher) -->
-    <section class="nb2-panel-section" data-role="planning">
-      <h2 class="nb2-section-hd">Shopping</h2>
-      <a href="book_the_shopping.html"          class="nb2-panel-link">Book Shopping</a>
-      <a href="shopping_list_upload.html"        class="nb2-panel-link">Upload Shopping List</a>
-      <a href="shopping_extras.html"             class="nb2-panel-link">Shopping Extras</a>
-      <div class="nb2-panel-inner-rule"></div>
-      <a href="shopping_plan_setup.html"         class="nb2-panel-link">Shopping Plan Setup</a>
-      <a href="shopping_plan_editor.html"        class="nb2-panel-link">Shopping Plan Editor</a>
-      <a href="shopping_plan_technician.html"    class="nb2-panel-link">Technician Shopping View</a>
-    </section>
+    <details class="nb2-panel-section nb2-main-group" data-role="planning">
+      <summary class="nb2-section-hd nb2-section-hd--toggle">Shopping</summary>
+      <div class="nb2-main-group-body">
+        <a href="book_the_shopping.html"          class="nb2-panel-link">Book Shopping</a>
+        <a href="shopping_list_upload.html"        class="nb2-panel-link">Upload Shopping List</a>
+        <a href="shopping_extras.html"             class="nb2-panel-link">Shopping Extras</a>
+        <div class="nb2-panel-inner-rule"></div>
+        <a href="shopping_plan_setup.html"         class="nb2-panel-link">Shopping Plan Setup</a>
+        <a href="shopping_plan_editor.html"        class="nb2-panel-link">Shopping Plan Editor</a>
+        <a href="shopping_plan_technician.html"    class="nb2-panel-link">Technician Shopping View</a>
+      </div>
+    </details>
 
     <!-- ── FT TEACHER ── (admin + lead_teacher + teacher) -->
-    <section class="nb2-panel-section" data-role="ft_teacher">
-      <h2 class="nb2-section-hd">FT Teacher</h2>
-      <a href="add_food_truck_booking.html"      class="nb2-panel-link" data-route="ft_teacher">Add Food Truck Booking</a>
-      <a href="food_truck_teacher_recipes.html"  class="nb2-panel-link" data-route="ft_teacher">Recipe Moderation List</a>
-      <a href="teacher_booking_slots.html"       class="nb2-panel-link" data-route="ft_teacher">Teacher Calendar List</a>
-    </section>
+    <details class="nb2-panel-section nb2-main-group" data-role="ft_teacher">
+      <summary class="nb2-section-hd nb2-section-hd--toggle">FT Teacher</summary>
+      <div class="nb2-main-group-body">
+        <a href="add_food_truck_booking.html"      class="nb2-panel-link" data-route="ft_teacher">Add Food Truck Booking</a>
+        <a href="food_truck_teacher_recipes.html"  class="nb2-panel-link" data-route="ft_teacher">Recipe Moderation List</a>
+        <a href="teacher_booking_slots.html"       class="nb2-panel-link" data-route="ft_teacher">Teacher Calendar List</a>
+      </div>
+    </details>
 
     <!-- ── MANAGEMENT ── (admin only, collapsible sub-groups) -->
-    <section class="nb2-panel-section" data-role="admin">
-      <details class="nb2-mgmt-group" open>
+    <details class="nb2-panel-section nb2-main-group nb2-mgmt-group" data-role="admin">
         <summary class="nb2-section-hd nb2-section-hd--toggle">Management</summary>
 
         <details class="nb2-subgroup">
           <summary class="nb2-subgroup-hd">Recipes</summary>
-          <a href="add_recipe.html"                   class="nb2-panel-link">Load Recipe</a>
+          <a href="quick_add.html"                    class="nb2-panel-link">Add Recipe</a>
           <a href="add_recipe_manually.html"           class="nb2-panel-link">Add Recipe Manually</a>
           <a href="recipe_setup_main.html"             class="nb2-panel-link">Recipe Setup</a>
           <a href="calculate_servings.html"            class="nb2-panel-link">Calculate Servings</a>
@@ -201,7 +204,6 @@
 
         <details class="nb2-subgroup">
           <summary class="nb2-subgroup-hd">Food Truck</summary>
-          <a href="quick_add.html"               class="nb2-panel-link">Add Recipe</a>
           <a href="food_truck_manual_recipe.html"  class="nb2-panel-link">Add Recipe Manually</a>
           <a href="food_truck_recipe_photos.html"  class="nb2-panel-link">Recipe Photos</a>
         </details>
@@ -248,8 +250,7 @@
           <a href="ops_data_health.html"           class="nb2-panel-link">Data Health</a>
         </details>
 
-      </details><!-- /.nb2-mgmt-group -->
-    </section>
+    </details><!-- /.nb2-mgmt-group -->
 
   </div><!-- /.nb2-panel-body -->
 </aside>

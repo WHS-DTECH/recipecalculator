@@ -419,6 +419,21 @@
 }
 .nb2-panel-section:last-child { border-bottom: 0; }
 
+.nb2-main-group {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.nb2-main-group > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.nb2-main-group > summary::-webkit-details-marker { display: none; }
+
+.nb2-main-group-body {
+  padding-bottom: 0.35rem;
+}
+
 .nb2-section-hd {
   display: block;
   font-size: 0.7rem;
@@ -497,6 +512,7 @@
   font-size: 0.7rem;
   color: #7090b0;
 }
+.nb2-main-group:not([open]) > .nb2-section-hd--toggle::after,
 .nb2-mgmt-group:not([open]) > .nb2-section-hd--toggle::after { content: '▸'; }
 
 /* Sub-groups */

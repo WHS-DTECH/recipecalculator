@@ -376,6 +376,8 @@
       if (hrefBase && hrefBase === currentBase) {
         a.classList.add('is-active');
         a.setAttribute('aria-current', 'page');
+        var mgMain = a.closest('.nb2-main-group');
+        if (mgMain) mgMain.open = true;
         // Open parent subgroup if in Management panel
         var sg = a.closest('.nb2-subgroup');
         if (sg) sg.open = true;
@@ -427,6 +429,16 @@
     if (panel) {
       panel.querySelectorAll('a[href]').forEach(function(a) {
         a.addEventListener('click', function() { closePanel(null); });
+      });
+
+      // Accordion behavior for top-level menu groups.
+      panel.querySelectorAll('.nb2-main-group').forEach(function(group) {
+        group.addEventListener('toggle', function() {
+          if (!group.open) return;
+          panel.querySelectorAll('.nb2-main-group').forEach(function(other) {
+            if (other !== group) other.open = false;
+          });
+        });
       });
     }
 
