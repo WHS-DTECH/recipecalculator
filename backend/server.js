@@ -823,6 +823,9 @@ app.use('/api/user_roles', userRolesRouter);
 const subscriptionsRouter = require('./routes/subscriptions');
 app.use('/api/subscriptions', subscriptionsRouter);
 
+const weeklyDigestRouter = require('./routes/weekly_digest');
+app.use('/api/weekly-digest', weeklyDigestRouter);
+
 const savedShoppingListsRouter = require('./routes/saved_shopping_lists');
 app.use('/api/saved-shopping-lists', savedShoppingListsRouter);
 
@@ -2660,4 +2663,37 @@ app.listen(PORT, () => {
   logSuggestionMailerHealthCheck().catch((err) => {
     console.error('[SUGGESTIONS] SMTP health check error:', err.message);
   });
+
+  // ── Weekly Digest Scheduler ──────────────────────────────────────────────
+  // Fires every Monday at 07:00 NZT (UTC+13 NZDT / UTC+12 NZST).
+  // Uses node-cron if available; logs a warning if not installed.
+  try {
+    const cron = require('node-cron');
+    const { sendWeeklyDigest, fetchDigestRecipients } = require('./routes/weekly_digest');
+
+    // Monday 7 am UTC-11 = Monday 7 am in NZ (accounts for UTC+12/13 by using a
+    // slightly-early UTC time; adjust WEEKLY_DIGEST_CRON env var if needed).
+    // Default: "0 19 * * 0"  = Sunday 19:00 UTC = Monday 07:00 NZST (UTC+12).
+    const cronExpr = String(process.env.WEEKLY_DIGEST_CRON || '0 19 * * 0').trim();
+    cron.schedule(cronExpr, async () => {
+      console.log('[DIGEST] Weekly cron triggered');
+      try {
+        const recipients = await fetchDigestRecipients();
+        if (!recipients.length) { console.log('[DIGEST] No recipients — skipping.'); return; }
+        const results = await sendWeeklyDigest({ recipients, isTest: false });
+        const ok = results.filter(r => r.status === 'sent').length;
+        const fail = results.filter(r => r.status !== 'sent').length;
+        console.log(`[DIGEST] Sent ${ok}, failed ${fail}`);
+      } catch (err) {
+        console.error('[DIGEST] Cron send failed:', err.message);
+      }
+    }, { timezone: 'Pacific/Auckland' });
+    console.log(`[DIGEST] Weekly cron scheduled (${cronExpr}) Pacific/Auckland`);
+  } catch (cronErr) {
+    if (cronErr.code === 'MODULE_NOT_FOUND') {
+      console.warn('[DIGEST] node-cron not installed — weekly digest will not auto-send. Run: npm install node-cron');
+    } else {
+      console.error('[DIGEST] Failed to start cron scheduler:', cronErr.message);
+    }
+  }
 });
