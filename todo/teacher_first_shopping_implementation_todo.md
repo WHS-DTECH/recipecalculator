@@ -133,24 +133,26 @@ Acceptance
 
 ## Phase 6 - Test Checklist
 
+**In progress 6 May 2026** — evidence script: `scripts/phase6_checklist_smoke.js` (live run: `PHASE6_SMOKE_PASS` against Render)
+
 ### Functional
-- [ ] Create draft for selected week.
-- [ ] Edit teacher quantities and add manual extras.
-- [ ] Finalize locks data.
-- [ ] Technician view reflects finalized values exactly.
-- [ ] Reopen creates a new version and preserves history.
+- [x] Create draft for selected week.
+- [x] Edit teacher quantities and add manual extras.
+- [x] Finalize locks data.
+- [x] Technician view reflects finalized values exactly.
+- [x] Reopen creates a new version and preserves history.
 
 ### Accuracy
 - [ ] Scaling formula verified for at least 5 recipes with different serving sizes.
-- [ ] Duplicate ingredient merge verified across multiple classes.
-- [ ] Unit conversion checks pass for tsp/tbsp and g/kg.
+- [x] Duplicate ingredient merge verified across multiple classes.
+- [x] Unit conversion checks pass for tsp/tbsp and g/kg.
 
 ### Permissions
-- [ ] Non-admin cannot finalize.
-- [ ] Technician cannot edit finalized quantities.
+- [x] Non-admin cannot finalize.
+- [x] Technician cannot edit finalized quantities.
 
 ### Deployment
-- [ ] Render deploy passes.
+- [x] Render deploy passes.
 - [ ] DB migration logs clean.
 
 ---
