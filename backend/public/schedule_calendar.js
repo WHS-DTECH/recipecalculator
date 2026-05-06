@@ -1388,6 +1388,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   renderScheduleCalendar();
+  checkAndShowGroupsPopup();
   // Add click handler for compare button
   const compareBtn = document.getElementById('compareStripFoodItemBtn');
   if (compareBtn) {
@@ -1856,4 +1857,188 @@ async function printBookingInfoSheet(bookingId) {
   if (!tab) showInfoToast('Could not open print window — please allow pop-ups for this site.');
   // Revoke the object URL after a delay to free memory
   setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
+// ─── Groups Confirmation Popup ────────────────────────────────────────────────
+// Shows on Browse Practicals when the week 2 weeks ahead has bookings missing groups.
+
+async function checkAndShowGroupsPopup() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = getStartOfWeek(today);
+  target.setDate(target.getDate() + 14);
+  const targetEnd = new Date(target);
+  targetEnd.setDate(target.getDate() + 6);
+  const startStr = toLocalIsoDate(target);
+  const endStr = toLocalIsoDate(targetEnd);
+
+  const sessionKey = 'groups_popup_' + startStr;
+  if (sessionStorage.getItem(sessionKey)) return;
+
+  try {
+    const [bookingsData, meData] = await Promise.all([
+      fetch('/api/bookings/all?start=' + startStr + '&end=' + endStr).then(r => r.json()),
+      fetch('/api/auth/me').then(r => r.ok ? r.json() : {}).catch(() => ({}))
+    ]);
+
+    const allBookings = Array.isArray(bookingsData.bookings) ? bookingsData.bookings : [];
+    const unconfirmed = allBookings.filter(b =>
+      !isPlannerLikeBooking(b) &&
+      (b.groups == null || String(b.groups).trim() === '')
+    );
+
+    if (!unconfirmed.length) { sessionStorage.setItem(sessionKey, '1'); return; }
+
+    const firstName = (meData && meData.user && meData.user.name)
+      ? String(meData.user.name).split(' ')[0]
+      : 'Teacher';
+
+    await showGroupsConfirmationPopup(unconfirmed, firstName, startStr);
+    sessionStorage.setItem(sessionKey, '1');
+  } catch (_) { /* non-critical */ }
+}
+
+async function showGroupsConfirmationPopup(bookings, firstName, weekStart) {
+  return new Promise((resolve) => {
+    const selections = {};
+    bookings.forEach(b => { selections[b.id] = null; });
+
+    const weekLabel = (() => {
+      try { return new Date(weekStart + 'T00:00:00').toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' }); }
+      catch (_) { return weekStart; }
+    })();
+
+    const btnBase = 'padding:0.22rem 0.55rem;border:1px solid #d1d5db;border-radius:999px;background:#f9fafb;font-size:0.8rem;cursor:pointer;white-space:nowrap;transition:background 0.15s,color 0.15s;';
+
+    const rowsHtml = bookings.map(b => {
+      const id = b.id;
+      const cs = Number(b.class_size) || 0;
+      const pairsN = cs ? Math.ceil(cs / 2) : '?';
+      const threesN = cs ? Math.ceil(cs / 3) : '?';
+      const indiN = cs || '?';
+      const dateLabel = (() => {
+        try { return new Date(String(b.booking_date || '').slice(0, 10) + 'T00:00:00').toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' }); }
+        catch (_) { return String(b.booking_date || '').slice(0, 10); }
+      })();
+      return '<tr data-booking-id="' + id + '" class="grp-row" style="border-bottom:1px solid #f1f5f9;">' +
+        '<td style="padding:0.55rem 0.6rem;font-size:0.88rem;font-weight:700;color:#1f2937;white-space:nowrap;">' + escHtml(String(b.class_name || '')) + '</td>' +
+        '<td style="padding:0.55rem 0.4rem;font-size:0.82rem;color:#4b5563;">' + escHtml(String(b.staff_name || '')) + '</td>' +
+        '<td style="padding:0.55rem 0.4rem;font-size:0.82rem;color:#4b5563;white-space:nowrap;">' + dateLabel + ' P' + escHtml(String(b.period || '')) + '</td>' +
+        '<td style="padding:0.55rem 0.4rem;font-size:0.82rem;text-align:center;color:#374151;">' + (cs || '?') + '</td>' +
+        '<td style="padding:0.4rem 0.4rem;"><div style="display:flex;flex-wrap:wrap;gap:0.3rem;align-items:center;">' +
+          '<button type="button" class="grp-btn" data-id="' + id + '" data-count="' + pairsN + '" style="' + btnBase + '" title="Groups of 2">Pairs (' + pairsN + ')</button>' +
+          '<button type="button" class="grp-btn" data-id="' + id + '" data-count="' + indiN + '" style="' + btnBase + '" title="Each student individually">Individuals (' + indiN + ')</button>' +
+          '<button type="button" class="grp-btn" data-id="' + id + '" data-count="' + threesN + '" style="' + btnBase + '" title="Groups of 3">Threes (' + threesN + ')</button>' +
+          '<span style="display:inline-flex;align-items:center;gap:0.25rem;font-size:0.8rem;color:#6b7280;">Custom: <input type="number" class="grp-custom" data-id="' + id + '" min="1" max="99" placeholder="#" style="width:48px;padding:0.18rem 0.3rem;border:1px solid #d1d5db;border-radius:4px;font-size:0.8rem;" /></span>' +
+        '</div></td>' +
+        '<td style="padding:0.4rem 0.5rem;text-align:center;"><span class="grp-result" data-id="' + id + '" style="font-size:0.95rem;font-weight:700;color:#9ca3af;">--</span></td>' +
+      '</tr>';
+    }).join('');
+
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);display:flex;align-items:flex-start;justify-content:center;z-index:10100;padding:1.5rem 0.5rem;box-sizing:border-box;overflow-y:auto;';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#fff;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,0.28);width:min(98vw,820px);';
+    modal.innerHTML =
+      '<div style="background:linear-gradient(135deg,#1e40af 0%,#1976d2 100%);padding:1.1rem 1.3rem 0.9rem;color:#fff;border-radius:12px 12px 0 0;">' +
+        '<div style="font-size:1.2rem;font-weight:800;margin-bottom:0.25rem;">Hi ' + escHtml(firstName) + '! Groups confirmation needed</div>' +
+        '<div style="font-size:0.88rem;opacity:0.9;">You have <strong>' + bookings.length + '</strong> class' + (bookings.length !== 1 ? 'es' : '') + ' in the week of <strong>' + escHtml(weekLabel) + '</strong> without group sizes set. ' +
+        'The Lead Teacher needs this to generate shopping lists. Please confirm the group type for each class.</div>' +
+      '</div>' +
+      '<div style="padding:0.75rem 1rem 0.25rem;overflow-x:auto;">' +
+        '<table style="width:100%;border-collapse:collapse;min-width:580px;">' +
+          '<thead><tr style="background:#f8fafc;font-size:0.75rem;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.05em;">' +
+            '<th style="padding:0.4rem 0.6rem;text-align:left;">Class</th>' +
+            '<th style="padding:0.4rem 0.4rem;text-align:left;">Teacher</th>' +
+            '<th style="padding:0.4rem 0.4rem;text-align:left;">Date / Period</th>' +
+            '<th style="padding:0.4rem 0.4rem;text-align:center;">Size</th>' +
+            '<th style="padding:0.4rem 0.4rem;text-align:left;">Group Type</th>' +
+            '<th style="padding:0.4rem 0.5rem;text-align:center;">No. of Groups</th>' +
+          '</tr></thead>' +
+          '<tbody>' + rowsHtml + '</tbody>' +
+        '</table>' +
+      '</div>' +
+      '<div id="grpStatus" style="min-height:1.1rem;padding:0.15rem 1.1rem;font-size:0.82rem;color:#dc2626;"></div>' +
+      '<div style="padding:0.7rem 1.1rem 1rem;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">' +
+        '<div style="font-size:0.78rem;color:#6b7280;">Rows left blank will be skipped. Reopen this page to confirm later.</div>' +
+        '<div style="display:flex;gap:0.5rem;">' +
+          '<button type="button" id="grpSkipBtn" style="padding:0.45rem 1rem;border:1px solid #d1d5db;background:#f8fafc;border-radius:6px;cursor:pointer;font-size:0.9rem;">Skip for Now</button>' +
+          '<button type="button" id="grpSaveBtn" style="padding:0.45rem 1.15rem;border:none;background:#1976d2;color:#fff;border-radius:6px;cursor:pointer;font-size:0.9rem;font-weight:700;">Save Groups</button>' +
+        '</div>' +
+      '</div>';
+
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    const cleanup = () => overlay.remove();
+
+    function setSelection(bookingId, count, sourceBtn) {
+      const n = Number(count);
+      const valid = Number.isFinite(n) && n > 0;
+      selections[bookingId] = valid ? n : null;
+      const row = modal.querySelector('tr[data-booking-id="' + bookingId + '"]');
+      if (!row) return;
+      row.querySelectorAll('.grp-btn').forEach(b => {
+        if (b === sourceBtn) { b.style.background = '#1976d2'; b.style.color = '#fff'; b.style.borderColor = '#1976d2'; }
+        else { b.style.background = '#f9fafb'; b.style.color = ''; b.style.borderColor = '#d1d5db'; }
+      });
+      const el = row.querySelector('.grp-result[data-id="' + bookingId + '"]');
+      if (el) { el.textContent = valid ? String(n) : '--'; el.style.color = valid ? '#059669' : '#9ca3af'; }
+    }
+
+    modal.addEventListener('click', (e) => {
+      const btn = e.target.closest('.grp-btn');
+      if (!btn) return;
+      const bookingId = btn.dataset.id;
+      const count = Number(btn.dataset.count);
+      if (!bookingId || !Number.isFinite(count) || count <= 0) return;
+      const row = modal.querySelector('tr[data-booking-id="' + bookingId + '"]');
+      if (row) { const ci = row.querySelector('.grp-custom'); if (ci) ci.value = ''; }
+      setSelection(bookingId, count, btn);
+    });
+
+    modal.addEventListener('input', (e) => {
+      if (!e.target.classList.contains('grp-custom')) return;
+      const bookingId = e.target.dataset.id;
+      const val = parseInt(e.target.value, 10);
+      const row = modal.querySelector('tr[data-booking-id="' + bookingId + '"]');
+      if (row) row.querySelectorAll('.grp-btn').forEach(b => { b.style.background = '#f9fafb'; b.style.color = ''; b.style.borderColor = '#d1d5db'; });
+      setSelection(bookingId, val, null);
+    });
+
+    modal.querySelector('#grpSkipBtn').onclick = () => { cleanup(); resolve(false); };
+
+    modal.querySelector('#grpSaveBtn').onclick = async () => {
+      const toSave = Object.entries(selections).filter(([, v]) => v != null && Number.isFinite(Number(v)) && Number(v) > 0);
+      if (!toSave.length) {
+        const s = modal.querySelector('#grpStatus');
+        if (s) s.textContent = 'Select a group type for at least one class, or use Skip for Now.';
+        return;
+      }
+      const saveBtn = modal.querySelector('#grpSaveBtn');
+      saveBtn.disabled = true; saveBtn.textContent = 'Saving...';
+      modal.querySelector('#grpStatus').textContent = '';
+
+      let saved = 0, failed = 0;
+      await Promise.all(toSave.map(async ([bookingId, groupCount]) => {
+        try {
+          const r = await fetch('/api/bookings/' + bookingId + '/groups', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ groups: groupCount })
+          });
+          if (r.ok) saved++; else failed++;
+        } catch (_) { failed++; }
+      }));
+
+      cleanup();
+      if (saved > 0) {
+        showInfoToast('Groups saved for ' + saved + ' booking' + (saved !== 1 ? 's' : '') + '.');
+        renderScheduleCalendar();
+      }
+      if (failed > 0) showInfoToast(failed + ' update(s) failed - try editing those bookings manually.');
+      resolve(true);
+    };
+
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); resolve(false); } });
+  });
 }
