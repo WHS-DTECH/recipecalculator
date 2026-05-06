@@ -97,6 +97,14 @@
           <label for="planSelect">Plan</label>
           <select id="planSelect"></select>
         </div>
+        <div class="spe-field" style="min-width:170px;">
+          <label for="defaultBufferInput">Default safety buffer %</label>
+          <input id="defaultBufferInput" type="number" min="0" step="0.1" placeholder="Optional">
+        </div>
+        <div class="spe-field" style="min-width:260px;">
+          <label for="categoryBufferInput">Category buffer map (JSON)</label>
+          <input id="categoryBufferInput" type="text" placeholder='{"Produce":5,"Dairy":3}'>
+        </div>
         <button id="loadPlanBtn" class="spe-btn primary" type="button">Load Plan</button>
         <button id="generateDraftBtn" class="spe-btn secondary" type="button">Regenerate Draft</button>
         <button id="addRowBtn" class="spe-btn secondary" type="button">Add Manual Row</button>
@@ -149,6 +157,8 @@
     const warningPanel = document.getElementById('warningPanel');
     const warningList = document.getElementById('warningList');
     const planMeta = document.getElementById('planMeta');
+    const defaultBufferInput = document.getElementById('defaultBufferInput');
+    const categoryBufferInput = document.getElementById('categoryBufferInput');
 
     let currentPlan = null;
     let rowsModel = [];
@@ -327,6 +337,9 @@
       });
       const payload = await resp.json().catch(() => ({}));
       if (!resp.ok) throw new Error(payload.error || 'Generate draft failed.');
+      if (Array.isArray(payload.warnings) && payload.warnings.length) {
+        renderWarnings(payload.warnings);
+      }
       setStatus('Draft totals regenerated: ' + (payload.items_generated || 0) + ' item(s).', 'ok');
       await loadPlan(currentPlan.id);
     }
@@ -334,10 +347,35 @@
     async function finalizePlan() {
       if (!currentPlan) return;
       if (!confirm('Finalize this shopping plan? This locks the final quantities for technician view.')) return;
+
+      const categoryBufferRaw = String(categoryBufferInput.value || '').trim();
+      let categoryBuffer = {};
+      if (categoryBufferRaw) {
+        try {
+          const parsed = JSON.parse(categoryBufferRaw);
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            throw new Error('Category buffer JSON must be an object like {"Produce":5}.');
+          }
+          categoryBuffer = parsed;
+        } catch (err) {
+          throw new Error('Invalid category buffer JSON: ' + err.message);
+        }
+      }
+
+      const defaultBufferRaw = String(defaultBufferInput.value || '').trim();
+      const hasDefaultBuffer = defaultBufferRaw !== '' && Number.isFinite(Number(defaultBufferRaw)) && Number(defaultBufferRaw) >= 0;
+      const hasCategoryBuffer = Object.keys(categoryBuffer).length > 0;
+
       setStatus('Finalizing...', '');
       const resp = await fetch('/api/shopping-plan/' + currentPlan.id + '/finalize', {
         method: 'POST',
-        credentials: 'include'
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          use_safety_buffer: hasDefaultBuffer || hasCategoryBuffer,
+          default_safety_buffer_percent: hasDefaultBuffer ? Number(defaultBufferRaw) : null,
+          safety_buffer_by_category: categoryBuffer
+        })
       });
       const payload = await resp.json().catch(() => ({}));
       if (!resp.ok) {
@@ -346,6 +384,9 @@
           throw new Error('Finalize blocked by validation errors.');
         }
         throw new Error(payload.error || 'Finalize failed.');
+      }
+      if (Array.isArray(payload.warnings) && payload.warnings.length) {
+        renderWarnings(payload.warnings);
       }
       setStatus('Plan finalized. Technician view is now ready.', 'ok');
       await loadPlan(currentPlan.id);

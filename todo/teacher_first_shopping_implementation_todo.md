@@ -103,14 +103,17 @@ Acceptance
 
 ---
 
-## Phase 4 - Quantity Accuracy Guardrails
-- [ ] Add canonical unit conversions for common units (`tsp`, `tbsp`, `g`, `kg`, `ml`, `l`).
-- [ ] Add incompatible unit detection and finalize blocker.
-- [ ] Add optional safety buffer setting by category.
-- [ ] Add missing-recipe-yield warning for classes using incomplete recipes.
+## Phase 4 - Quantity Accuracy Guardrails ✅
+
+**Completed 6 May 2026** — files: `backend/routes/shopping_plan.js`, `backend/public/shopping_plan_editor.html`
+
+- [x] Add canonical unit conversions for common units (`tsp`, `tbsp`, `g`, `kg`, `ml`, `l`).
+- [x] Add incompatible unit detection and finalize blocker.
+- [x] Add optional safety buffer setting by category.
+- [x] Add missing-recipe-yield warning for classes using incomplete recipes.
 
 Acceptance
-- [ ] Test cases show consistent totals for mixed unit inputs.
+- [ ] Test cases show consistent totals for mixed unit inputs (pending live smoke tests).
 
 ---
 

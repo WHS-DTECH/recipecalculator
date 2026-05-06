@@ -32,6 +32,91 @@ function normalizeKey(value) {
     .replace(/\s+/g, ' ');
 }
 
+function normalizeUnit(value) {
+  const u = String(value || '').trim().toLowerCase();
+  if (!u) return '';
+  if (['teaspoon', 'teaspoons', 'tsp'].includes(u)) return 'tsp';
+  if (['tablespoon', 'tablespoons', 'tbsp', 'tbs', 'tblsp'].includes(u)) return 'tbsp';
+  if (['gram', 'grams', 'g'].includes(u)) return 'g';
+  if (['kilogram', 'kilograms', 'kg'].includes(u)) return 'kg';
+  if (['milliliter', 'milliliters', 'millilitre', 'millilitres', 'ml'].includes(u)) return 'ml';
+  if (['liter', 'liters', 'litre', 'litres', 'l'].includes(u)) return 'l';
+  return u;
+}
+
+function unitFamily(unit) {
+  const normalized = normalizeUnit(unit);
+  if (!normalized) return 'none';
+  if (normalized === 'tsp' || normalized === 'tbsp') return 'spoon';
+  if (normalized === 'g' || normalized === 'kg') return 'weight';
+  if (normalized === 'ml' || normalized === 'l') return 'volume';
+  return 'other';
+}
+
+function toCanonicalQty(qtyValue, unitValue) {
+  const qty = Number(qtyValue);
+  const unit = normalizeUnit(unitValue);
+  const family = unitFamily(unit);
+
+  if (!Number.isFinite(qty)) {
+    return { qty: NaN, unit, family, wasConverted: false };
+  }
+
+  if (unit === 'tbsp') return { qty: qty * 3, unit: 'tsp', family: 'spoon', wasConverted: true };
+  if (unit === 'tsp') return { qty, unit: 'tsp', family: 'spoon', wasConverted: false };
+  if (unit === 'kg') return { qty: qty * 1000, unit: 'g', family: 'weight', wasConverted: true };
+  if (unit === 'g') return { qty, unit: 'g', family: 'weight', wasConverted: false };
+  if (unit === 'l') return { qty: qty * 1000, unit: 'ml', family: 'volume', wasConverted: true };
+  if (unit === 'ml') return { qty, unit: 'ml', family: 'volume', wasConverted: false };
+
+  return { qty, unit, family, wasConverted: false };
+}
+
+function buildUnitCompatibilityDiagnostics(items) {
+  const byIngredient = new Map();
+
+  for (const item of items || []) {
+    const ingredientKey = `${normalizeKey(item.normalized_item_key || item.item_name)}||${normalizeKey(item.category)}`;
+    if (!byIngredient.has(ingredientKey)) {
+      byIngredient.set(ingredientKey, {
+        item_name: item.item_name,
+        category: item.category || 'Uncategorised',
+        units: new Set(),
+        families: new Set()
+      });
+    }
+    const unit = normalizeUnit(item.base_unit);
+    const family = unitFamily(unit);
+    if (unit) byIngredient.get(ingredientKey).units.add(unit);
+    if (family !== 'none') byIngredient.get(ingredientKey).families.add(family);
+  }
+
+  const warnings = [];
+  const errors = [];
+
+  byIngredient.forEach((entry) => {
+    const units = Array.from(entry.units);
+    const families = Array.from(entry.families);
+
+    if (units.length <= 1) return;
+
+    const hasMultipleFamilies = families.length > 1;
+    const sameConvertibleFamily = families.length === 1 && ['spoon', 'weight', 'volume'].includes(families[0]);
+    const allSameOtherFamily = families.length === 1 && families[0] === 'other' && units.length === 1;
+
+    if (hasMultipleFamilies || (!sameConvertibleFamily && !allSameOtherFamily)) {
+      errors.push(`"${entry.item_name}" in category "${entry.category}" uses incompatible units (${units.join(', ')}). Split into separate lines or standardize units before finalizing.`);
+      return;
+    }
+
+    if (sameConvertibleFamily && units.length > 1) {
+      warnings.push(`"${entry.item_name}" combines units (${units.join(', ')}) and is auto-converted to canonical ${families[0]} units.`);
+    }
+  });
+
+  return { warnings, errors };
+}
+
 // ---------------------------------------------------------------------------
 // Helper: validate that a date string falls on a Friday
 // ---------------------------------------------------------------------------
@@ -164,15 +249,19 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       [bookingIds]
     );
 
-    // Group by normalised ingredient key + category, summing quantities
+    // Group by normalised ingredient key + category + canonical unit.
+    // This allows tsp/tbsp, g/kg, ml/l to combine safely while keeping
+    // incompatible units separated for explicit review.
     const itemMap = new Map();
     const classLookup = new Map(classesRes.rows.map(r => [r.booking_id, r]));
 
     for (const row of dsiRes.rows) {
       const rawName = row.stripfooditem || row.fooditem || row.ingredient_name || '';
-      const key = normalizeKey(rawName) + '||' + normalizeKey(row.category);
-      const qty = parseFloat(row.calculated_qty) || 0;
       const unit = String(row.measure_unit || '').trim();
+      const canonical = toCanonicalQty(row.calculated_qty, unit);
+      const canonicalUnit = canonical.unit || normalizeUnit(unit) || '';
+      const key = normalizeKey(rawName) + '||' + normalizeKey(row.category) + '||' + normalizeKey(canonicalUnit);
+      const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
       const cls = classLookup.get(row.booking_id);
 
       if (!itemMap.has(key)) {
@@ -180,7 +269,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
           category: row.category,
           item_name: rawName,
           normalized_item_key: normalizeKey(rawName),
-          base_unit: unit,
+          base_unit: canonicalUnit,
           calculated_qty: 0,
           sources: []
         });
@@ -191,8 +280,11 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         booking_id: row.booking_id,
         class_name: cls ? cls.class_name : null,
         teacher_name: cls ? cls.teacher_name : null,
-        qty,
-        unit
+        qty: Number.isFinite(Number(row.calculated_qty)) ? Number(row.calculated_qty) : null,
+        unit,
+        canonical_qty: Number.isFinite(canonical.qty) ? canonical.qty : null,
+        canonical_unit: canonicalUnit,
+        was_converted: canonical.wasConverted
       });
     }
 
@@ -234,7 +326,12 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     }
 
     const itemCount = itemMap.size;
-    return res.json({ success: true, items_generated: itemCount });
+    const diagnostics = buildUnitCompatibilityDiagnostics(Array.from(itemMap.values()));
+    return res.json({
+      success: true,
+      items_generated: itemCount,
+      warnings: diagnostics.warnings
+    });
   } catch (err) {
     console.error('[shopping-plan] POST /:id/generate-draft error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
@@ -303,6 +400,30 @@ router.get('/:id', requireAdmin, async (req, res) => {
     const itemsMissingUnit = itemsRes.rows.filter(item => !item.base_unit && item.calculated_qty > 0);
     if (itemsMissingUnit.length > 0) {
       warnings.push(`${itemsMissingUnit.length} item(s) are missing a unit. Review before finalizing.`);
+    }
+
+    const unitDiagnostics = buildUnitCompatibilityDiagnostics(itemsRes.rows);
+    warnings.push(...unitDiagnostics.warnings);
+    if (unitDiagnostics.errors.length > 0) {
+      warnings.push(`${unitDiagnostics.errors.length} unit compatibility issue(s) must be fixed before finalizing.`);
+    }
+
+    const recipeIds = classesRes.rows
+      .filter((c) => c.included && Number.isInteger(Number(c.recipe_id)) && Number(c.recipe_id) > 0)
+      .map((c) => Number(c.recipe_id));
+
+    if (recipeIds.length > 0) {
+      const yieldCheck = await pool.query(
+        `SELECT id
+         FROM recipes
+         WHERE id = ANY($1::int[])
+           AND (serving_size IS NULL OR serving_size <= 0)`,
+        [recipeIds]
+      );
+
+      if (yieldCheck.rowCount > 0) {
+        warnings.push(`${yieldCheck.rowCount} class recipe(s) have missing or zero serving size. Quantity scaling may be inaccurate.`);
+      }
     }
 
     return res.json({
@@ -460,10 +581,29 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
       [planId]
     );
 
+    const body = req.body || {};
+    const useSafetyBuffer = body.use_safety_buffer === true;
+    const defaultSafetyBufferPercent = Number(body.default_safety_buffer_percent);
+    const rawCategoryBuffer = body.safety_buffer_by_category && typeof body.safety_buffer_by_category === 'object'
+      ? body.safety_buffer_by_category
+      : {};
+    const categoryBuffer = {};
+    Object.keys(rawCategoryBuffer).forEach((k) => {
+      const parsed = Number(rawCategoryBuffer[k]);
+      if (Number.isFinite(parsed) && parsed >= 0) {
+        categoryBuffer[normalizeKey(k)] = parsed;
+      }
+    });
+
     // Validation: block on bad quantities
     const errors = [];
+    const unitDiagnostics = buildUnitCompatibilityDiagnostics(itemsRes.rows);
+    errors.push(...unitDiagnostics.errors);
     for (const item of itemsRes.rows) {
       const effective = item.teacher_qty !== null ? parseFloat(item.teacher_qty) : parseFloat(item.calculated_qty);
+      if (!item.base_unit && Number.isFinite(effective) && effective > 0) {
+        errors.push(`"${item.item_name}" has quantity ${effective} but no unit.`);
+      }
       if (item.base_unit && (isNaN(effective) || effective === null)) {
         errors.push(`"${item.item_name}" has a unit but no valid quantity.`);
       }
@@ -477,12 +617,24 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
 
     // Compute and store final_qty for each item
     for (const item of itemsRes.rows) {
-      const finalQty = item.teacher_qty !== null
+      const baseFinalQty = item.teacher_qty !== null
         ? parseFloat(item.teacher_qty)
         : (item.calculated_qty !== null ? parseFloat(item.calculated_qty) : null);
+
+      let finalQty = baseFinalQty;
+      if (useSafetyBuffer && Number.isFinite(baseFinalQty)) {
+        const categoryKey = normalizeKey(item.category || '');
+        const categoryPercent = Number(categoryBuffer[categoryKey]);
+        const fallbackPercent = Number.isFinite(defaultSafetyBufferPercent) && defaultSafetyBufferPercent >= 0
+          ? defaultSafetyBufferPercent
+          : 0;
+        const bufferPercent = Number.isFinite(categoryPercent) ? categoryPercent : fallbackPercent;
+        finalQty = baseFinalQty * (1 + (bufferPercent / 100));
+      }
+
       await pool.query(
         'UPDATE shopping_plan_items SET final_qty = $1 WHERE id = $2',
-        [finalQty !== null && Number.isFinite(finalQty) ? finalQty : null, item.id]
+        [finalQty !== null && Number.isFinite(finalQty) ? Math.round(finalQty * 10000) / 10000 : null, item.id]
       );
     }
 
@@ -494,7 +646,12 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
       [email, planId]
     );
 
-    return res.json({ success: true, message: 'Plan finalized.' });
+    return res.json({
+      success: true,
+      message: 'Plan finalized.',
+      safety_buffer_applied: useSafetyBuffer === true,
+      warnings: unitDiagnostics.warnings
+    });
   } catch (err) {
     console.error('[shopping-plan] POST /:id/finalize error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
