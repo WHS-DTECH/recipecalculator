@@ -818,7 +818,7 @@ const OpsPages = (() => {
         { label: 'Teacher', render: (booking) => escape(booking.staff_name || 'Not set') },
         { label: 'Recipe', render: (booking) => booking.recipe ? escape(booking.recipe) : Ops.tag('Missing recipe', 'danger') },
         { label: 'Readiness', render: (booking) => booking.readiness === 'Ready' ? Ops.tag('Ready', 'success') : Ops.tag('Check', 'warning') },
-        { label: 'Actions', render: (booking) => booking.recipe_id ? recipeActions({ id: booking.recipe_id, name: booking.recipe }) : actionRow([actionLink('book_a_class.html', 'Open Booking')]) }
+        { label: 'Actions', render: (booking) => booking.recipe_id ? recipeActions({ id: booking.recipe_id, name: booking.recipe }) : actionRow([actionLink('quick_add.html', 'Quick Add'), actionLink('book_a_class.html', 'Open Booking')]) }
       ],
       soon,
       'No upcoming bookings found in the next 30 days.'
