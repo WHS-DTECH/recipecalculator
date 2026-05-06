@@ -808,6 +808,9 @@ app.use('/api/recipe_calendar_pdf', recipeCalendarPdfRouter);
 const studentUploadRouter = require('./routes/student_upload');
 app.use('/api/student_upload', studentUploadRouter);
 
+const mfoodUploadRouter = require('./routes/mfood_upload');
+app.use('/api/mfood_upload', mfoodUploadRouter);
+
 const departmentRouter = require('./routes/department');
 app.use('/api/department', departmentRouter);
 
