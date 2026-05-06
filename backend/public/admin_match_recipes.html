@@ -806,6 +806,7 @@
         <option value="">All Status</option>
         <option value="matched">Matched</option>
         <option value="unmatched">Needs Review</option>
+        <option value="unmatched_with_url">Needs Review + Has URL</option>
       </select>
       <select id="filterSchool">
         <option value="">All School</option>
@@ -1246,10 +1247,14 @@
     function applyFilters() {
       let filtered = allBookings;
 
+      const hasSourceUrl = (booking) => String((booking && booking.recipe_url) || '').trim().length > 0;
+
       if (filterStatus === 'matched') {
         filtered = filtered.filter(b => b.recipe_id);
       } else if (filterStatus === 'unmatched') {
         filtered = filtered.filter(b => !b.recipe_id);
+      } else if (filterStatus === 'unmatched_with_url') {
+        filtered = filtered.filter(b => !b.recipe_id && hasSourceUrl(b));
       }
 
       if (filterSchool) {
