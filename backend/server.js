@@ -1,8 +1,10 @@
 
 
 const express = require('express');
+const compression = require('compression');
 const app = express();
 const cookieParser = require('cookie-parser');
+app.use(compression());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 app.use(cookieParser());
@@ -2626,8 +2628,9 @@ app.get('/RawDataTXT/:file', (req, res, next) => {
 
 
 // Serve static files from backend/public
-app.use('/SavedPDFs', express.static(path.join(__dirname, 'SavedPDFs')));
-app.use(express.static(path.join(__dirname, 'public')));
+// maxAge caches assets in browsers for 1 day, reducing repeat downloads
+app.use('/SavedPDFs', express.static(path.join(__dirname, 'SavedPDFs'), { maxAge: '1d' }));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '1d' }));
 
 // 404 Handler (should be last middleware)
 app.use((req, res) => {
