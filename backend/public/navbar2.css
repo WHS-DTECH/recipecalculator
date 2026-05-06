@@ -9,7 +9,7 @@
 [hidden] { display: none !important; }
 
 /* ── CSS custom properties ──────────────────────────────── */
-.nb2-bar {
+:root {
   --nb2-blue:        #1a8fd1;
   --nb2-blue-dark:   #146faa;
   --nb2-white:       #ffffff;
@@ -130,7 +130,7 @@
   top: calc(100% + 5px);
   left: 0;
   min-width: 205px;
-  background: var(--nb2-white);
+  background: var(--nb2-white, #ffffff);
   border: 1px solid var(--nb2-border);
   border-radius: 9px;
   box-shadow: 0 8px 26px rgba(15,23,42,0.17);
@@ -236,7 +236,7 @@
   top: calc(100% + 7px);
   right: 0;
   min-width: 195px;
-  background: var(--nb2-white);
+  background: var(--nb2-white, #ffffff);
   border: 1px solid var(--nb2-border);
   border-radius: 10px;
   box-shadow: 0 8px 28px rgba(15,23,42,0.18);
@@ -338,7 +338,8 @@
   left: auto;
   width: min(380px, 88vw);
   height: 100dvh;
-  background: var(--nb2-white);
+  background: var(--nb2-white, #ffffff);
+  opacity: 1;
   z-index: 1199;
   display: flex !important; /* keep for CSS transition even when [hidden] */
   flex-direction: column;
@@ -363,7 +364,7 @@
   padding: 0.88rem 1rem;
   border-bottom: 1px solid #dde8f5;
   flex-shrink: 0;
-  background: var(--nb2-white);
+  background: var(--nb2-white, #ffffff);
   position: sticky;
   top: 0;
   z-index: 1;
