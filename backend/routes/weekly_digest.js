@@ -115,7 +115,7 @@ async function fetchCurrentWeekRecipes(start, end) {
      FROM bookings b
      JOIN recipes r ON r.id = b.recipe_id
      WHERE b.booking_date >= $1 AND b.booking_date <= $2
-       AND b.period IN ('1','2','3','4','5')
+       AND b.period IN (1,2,3,4,5)
        AND b.recipe_id IS NOT NULL
      ORDER BY r.name`,
     [start, end]
