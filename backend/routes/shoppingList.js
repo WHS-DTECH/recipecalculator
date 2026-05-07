@@ -170,6 +170,103 @@ router.get('/by_category', async function(req, res) {
   }
 });
 
+// Generate shopping list by category from ingredients_inventory only (no DSI/calculated quantities)
+router.get('/by_category_inventory', async function(req, res) {
+  let bookingIds = req.query.booking_ids;
+  if (!bookingIds) {
+    return res.status(400).json({ success: false, error: 'No booking_ids provided.' });
+  }
+  if (typeof bookingIds === 'string') {
+    bookingIds = bookingIds.split(',').map(id => id.trim()).filter(Boolean);
+  }
+  const placeholders = bookingIds.map((_, i) => `$${i + 1}`).join(',');
+  const inventorySql = `
+    WITH selected_bookings AS (
+      SELECT
+        b.id AS booking_id,
+        b.recipe_id
+      FROM bookings b
+      WHERE b.id IN (${placeholders})
+    )
+    SELECT
+      inv.ingredient_name,
+      inv.fooditem,
+      inv.measure_qty,
+      inv.measure_unit,
+      inv.stripfooditem,
+      COALESCE(ac.name, '') AS aisle_category_name
+    FROM selected_bookings sb
+    INNER JOIN ingredients_inventory inv
+      ON btrim(COALESCE(inv.recipe_id::text, '')) = btrim(COALESCE(sb.recipe_id::text, ''))
+    LEFT JOIN aisle_category ac ON ac.id::text = inv.aisle_category_id::text
+  `;
+
+  try {
+    const inventoryResult = await pool.query(inventorySql, bookingIds);
+    const rows = inventoryResult.rows || [];
+    const brandsResult = await pool.query('SELECT brand_name FROM food_brands');
+    const brands = (brandsResult.rows || []).map(b => b.brand_name);
+
+    function stripFoodItemBackend(name) {
+      let stripped = (name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+      brands.forEach(brand => {
+        const re = new RegExp('^' + brand.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
+        stripped = stripped.replace(re, '');
+      });
+      return stripped.trim();
+    }
+
+    const categories = {
+      'Produce': ['apple', 'cauliflower', 'pepper', 'carrot', 'lettuce', 'onion', 'potato', 'tomato', 'fruit', 'vegetable'],
+      'Dairy': ['milk', 'cheese', 'butter', 'cream', 'yogurt'],
+      'Pantry': ['flour', 'sugar', 'salt', 'baking', 'chocolate', 'oats', 'breadcrumbs', 'vanilla', 'spice', 'oil', 'vinegar', 'yeast', 'rice', 'pasta'],
+      'Other': []
+    };
+
+    function categorize(item) {
+      const aisleName = String(item.aisle_category_name || '').trim();
+      if (aisleName) {
+        const normalizedAisle = aisleName.toLowerCase();
+        if (normalizedAisle === 'produce') return 'Produce';
+        if (normalizedAisle === 'dairy') return 'Dairy';
+        if (normalizedAisle === 'pantry') return 'Pantry';
+        if (normalizedAisle === 'other') return 'Other';
+      }
+
+      const name = String(item.stripfooditem || item.fooditem || item.ingredient_name || '').toLowerCase();
+      for (const [cat, keywords] of Object.entries(categories)) {
+        if (keywords.some(word => name.includes(word))) return cat;
+      }
+      return 'Other';
+    }
+
+    const combined = {};
+    rows.forEach(row => {
+      if (String(row.aisle_category_name || '').trim().toLowerCase() === 'action') return;
+      const cat = categorize(row);
+      if (!combined[cat]) combined[cat] = {};
+      const key = stripFoodItemBackend(row.stripfooditem || row.fooditem || row.ingredient_name || '').trim();
+      if (!key) return;
+      if (!combined[cat][key]) {
+        combined[cat][key] = { qty: 0, unit: row.measure_unit || '', display: key };
+      }
+      const addQty = parseFloat(row.measure_qty) || 0;
+      if (!isNaN(addQty)) combined[cat][key].qty += addQty;
+      if (row.measure_unit && !combined[cat][key].unit) combined[cat][key].unit = row.measure_unit;
+    });
+
+    const result = {};
+    for (const cat of Object.keys(categories)) {
+      result[cat] = Object.values(combined[cat] || {})
+        .map(item => ({ display: item.display, qty: item.qty, unit: item.unit }))
+        .sort((a, b) => String(a.display || '').localeCompare(String(b.display || ''), undefined, { sensitivity: 'base' }));
+    }
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Generate shopping list grouped by teacher for selected bookings
 router.get('/by_teacher', async (req, res) => {
   let bookingIds = req.query.booking_ids;

@@ -529,3 +529,82 @@
     height: 28px;
   }
 }
+
+/* ── Responsive: collapse drawer buttons into hamburger menu at ≤900px ─── */
+@media (max-width: 900px) {
+  /* Remove drawer toggle buttons from the top bar row */
+  .navbar-shell > .navbar-admin-toggle {
+    display: none;
+  }
+
+  /* Slim account row so it doesn't overflow at narrow widths */
+  .navbar-account {
+    flex-wrap: nowrap;
+  }
+
+  /* Clip long usernames so they can't push buttons off screen */
+  .navbar-user-name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Container for drawer buttons injected inside the hamburger menu */
+  .navbar-mobile-drawer-btns {
+    display: none;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.3rem 0 0.2rem;
+    border-top: 1px solid rgba(255,255,255,0.2);
+    margin-top: 0.25rem;
+    width: 100%;
+  }
+
+  .navbar-mobile-drawer-btns.is-open {
+    display: flex;
+  }
+
+  .navbar-mobile-drawer-btn {
+    display: block;
+    text-align: left;
+    width: 100%;
+    border: 0;
+    border-radius: 5px;
+    background: rgba(255,255,255,0.12);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.88rem;
+    padding: 0.55rem 0.65rem;
+    cursor: pointer;
+  }
+
+  .navbar-mobile-drawer-btn:hover,
+  .navbar-mobile-drawer-btn:focus-visible {
+    background: rgba(255,255,255,0.22);
+  }
+}
+
+/* At ≤600px: shrink Preferences link to icon only to save space */
+@media (max-width: 600px) {
+  .navbar-account {
+    gap: 0.28rem;
+  }
+
+  a[href="subscription_preferences.html"].navbar-user-link {
+    font-size: 0;
+    padding: 0.28rem 0.5rem;
+    min-width: 36px;
+    justify-content: center;
+  }
+  a[href="subscription_preferences.html"].navbar-user-link::before {
+    content: '⚙';
+    font-size: 1rem;
+    display: block;
+  }
+
+  .navbar-logout-btn {
+    padding: 0.28rem 0.55rem;
+    font-size: 0.76rem;
+  }
+}

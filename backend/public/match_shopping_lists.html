@@ -1005,7 +1005,7 @@
         setStatus(bookingsStatus, 'Running comparison...', '');
         try {
           const qs = new URLSearchParams({ booking_ids: bookingIds.join(',') });
-          const bookData = await requestJson('/api/ingredients/shopping_list/by_category?' + qs.toString());
+          const bookData = await requestJson('/api/ingredients/shopping_list/by_category_inventory?' + qs.toString());
 
           const bookItems = flattenBookItems(bookData);
           const teacherItems = flattenTeacherItems(selectedSavedList);

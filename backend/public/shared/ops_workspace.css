@@ -14,7 +14,7 @@
 }
 
 body.ops-body {
-  font-family: 'Nunito', sans-serif;
+  font-family: var(--font-family-base);
   color: var(--ops-text);
   background:
     radial-gradient(1200px 420px at 0% -20%, #dce9f8 0%, transparent 60%),
