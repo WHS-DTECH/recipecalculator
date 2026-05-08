@@ -220,6 +220,47 @@
   letter-spacing: 0.01em;
 }
 
+/* Guest state: style the user pill like a Google login button */
+.nb2-user-btn.nb2-user-btn--guest {
+  background: #ffffff;
+  color: #1f1f1f;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  padding: 0.28rem 0.62rem;
+  min-height: 34px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
+}
+.nb2-user-btn.nb2-user-btn--guest:hover,
+.nb2-user-btn.nb2-user-btn--guest:focus-visible,
+.nb2-user-btn.nb2-user-btn--guest[aria-expanded="true"] {
+  background: #f8f9fa;
+  border-color: #c7cfd7;
+}
+.nb2-user-btn.nb2-user-btn--guest .nb2-initials {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #1f1f1f;
+  letter-spacing: 0.01em;
+}
+.nb2-user-btn.nb2-user-btn--guest .nb2-initials::before {
+  content: 'G';
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: conic-gradient(from 210deg, #ea4335 0 25%, #fbbc05 25% 50%, #34a853 50% 75%, #4285f4 75% 100%);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
 .nb2-role-badge {
   font-size: 0.63rem;
   font-weight: 700;

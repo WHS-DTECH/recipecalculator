@@ -209,6 +209,7 @@
 
   /* ══ USER DISPLAY ═══════════════════════════════════════════ */
   function renderUser(user) {
+    var userBtn      = document.getElementById('nb2UserBtn');
     var initialsEl  = document.getElementById('nb2Initials');
     var badgeEl     = document.getElementById('nb2RoleBadge');
     var fullnameEl  = document.getElementById('nb2UserFullname');
@@ -222,6 +223,7 @@
       var roleLabel   = roleLabelText(role);
 
       if (initialsEl)  initialsEl.textContent = initials;
+      if (userBtn) userBtn.classList.remove('nb2-user-btn--guest');
       if (badgeEl) {
         if (roleLabel) {
           badgeEl.textContent = roleLabel;
@@ -246,7 +248,8 @@
       if (logoutBtn) setVisible(logoutBtn, true);
     } else {
       // Not authenticated — show login hint
-      if (initialsEl)  initialsEl.textContent = '?';
+      if (initialsEl)  initialsEl.textContent = 'Google Login';
+      if (userBtn) userBtn.classList.add('nb2-user-btn--guest');
       if (badgeEl)     badgeEl.hidden = true;
       if (fullnameEl)  fullnameEl.textContent = 'Not logged in';
       if (emailEl)     emailEl.textContent    = '';
@@ -450,6 +453,10 @@
     if (userBtn) {
       userBtn.addEventListener('click', function(e) {
         e.stopPropagation();
+        if (userBtn.classList.contains('nb2-user-btn--guest')) {
+          window.location.href = 'google_login.html';
+          return;
+        }
         if (_userDropOpen) { closeUserDrop(); } else { openUserDrop(); }
       });
     }
