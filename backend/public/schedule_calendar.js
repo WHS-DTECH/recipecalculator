@@ -1177,7 +1177,9 @@ async function renderScheduleCalendar() {
       html += `<td style='vertical-align:top;text-align:center;padding:0.2rem 0.1rem;'>` +
         plannerEntries.map(entry => {
           const style = plannerChipStyle(normalizePlannerStream(entry));
-          const safeRecipe = escHtml(entry.recipe);
+          const classCode = String(entry.class_name || '').trim().toUpperCase();
+          const label = `${classCode ? `${classCode}: ` : ''}${String(entry.recipe || '').trim()}`;
+          const safeRecipe = escHtml(label);
           return `<div class='planner-chip' data-booking-id='${entry.id}' title='Click to choose a linked recipe version' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;cursor:pointer;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div>`;
         }).join('') +
         `</td>`;

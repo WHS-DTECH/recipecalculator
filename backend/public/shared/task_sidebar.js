@@ -101,12 +101,11 @@
       #tsb-tab {
         position: fixed;
         left: 0;
-        top: 50%;
-        transform: translateY(-50%);
+        top: 74px;
         z-index: 9501;
         writing-mode: vertical-rl;
         text-orientation: mixed;
-        transform: translateY(-50%) rotate(180deg);
+        transform: rotate(180deg);
         background: #1976d2;
         color: #fff;
         border: none;
@@ -152,8 +151,8 @@
       #tsb-panel {
         position: fixed;
         left: -320px;
-        top: 50%;
-        transform: translateY(-50%);
+        top: 126px;
+        transform: none;
         z-index: 9500;
         width: 308px;
         background: #fff;
@@ -161,7 +160,7 @@
         box-shadow: 4px 0 28px rgba(0,0,0,0.18);
         border: 1px solid #e2e8f0;
         border-left: none;
-        max-height: min(80vh, 620px);
+        max-height: calc(100vh - 144px);
         overflow-y: auto;
         transition: left 0.25s cubic-bezier(0.4, 0, 0.2, 1);
       }
@@ -271,6 +270,15 @@
         color: #6b7280;
         margin-top: 0.12rem;
         line-height: 1.4;
+      }
+
+      @media (max-width: 720px) {
+        #tsb-tab { top: 66px; }
+        #tsb-panel {
+          top: 112px;
+          max-height: calc(100vh - 126px);
+          width: min(308px, calc(100vw - 44px));
+        }
       }
 
       /* Hide when printing */
