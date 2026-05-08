@@ -1436,7 +1436,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   renderScheduleCalendar();
-  checkAndShowGroupsPopup();
+  // Group confirmation is now handled via the task sidebar + group_confirmation.html
   // Add click handler for compare button
   const compareBtn = document.getElementById('compareStripFoodItemBtn');
   if (compareBtn) {
