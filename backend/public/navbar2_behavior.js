@@ -330,6 +330,9 @@
     document.querySelectorAll('[data-role="authenticated"]').forEach(function(el) {
       setVisible(el, isAuth);
     });
+    document.querySelectorAll('[data-role="guest"]').forEach(function(el) {
+      setVisible(el, !isAuth);
+    });
 
     // Route-scoped links (inline nav + panel)
     var permRow = getPermRow(norm);
