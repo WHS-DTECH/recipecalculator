@@ -191,6 +191,24 @@ function inferStreamFromClassToken(classToken) {
   return '';
 }
 
+// Extract a planner class code that can uniquely identify stream variants,
+// for example 11HOSP vs 13HOSP, or JFOOD vs MFOOD.
+function inferPlannerClassCode(classToken) {
+  const value = normalizeClassToken(classToken);
+  if (!value) return '';
+
+  const hospMatch = value.match(/(?:^|[-_])((?:\d{2,3})HOSP)(?:[-_]|$)/);
+  if (hospMatch && hospMatch[1]) return hospMatch[1];
+
+  for (const code of JUNIOR_FOOD_CODES) {
+    if (value.includes(code)) return code;
+  }
+
+  if (value.includes('MFOOD')) return 'MFOOD';
+  if (value.includes('HOSP')) return 'HOSP';
+  return '';
+}
+
 function buildTeacherName(staffRow, fallbackCode) {
   if (!staffRow) return fallbackCode || '';
   const first = String(staffRow.first_name || '').trim();
@@ -781,6 +799,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
     );
 
     const plannerByDateAndStream = new Map();
+    const plannerByDateAndClassCode = new Map();
     for (const row of plannerResult.rows) {
       const storedStream = String(row.planner_stream || '').trim();
       const stream = (storedStream && storedStream !== 'Other')
@@ -788,17 +807,27 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
         : String(inferStreamFromClassToken(row.class_name) || inferPlannerStreamFromCode(row.class_name) || '').trim();
       if (!stream || stream === 'Other') continue;
       const date = String(row.booking_date || '').slice(0, 10);
-      const key = `${date}|${stream}`;
-      if (!plannerByDateAndStream.has(key)) {
-        plannerByDateAndStream.set(key, {
-          id: row.id,
-          booking_date: row.booking_date,
-          class_name: row.class_name,
-          planner_stream: row.planner_stream,
-          recipe: row.recipe,
-          recipe_url: row.recipe_url,
-          recipe_id: normalizeRecipeId(row.recipe_id)
-        });
+      const plannerRow = {
+        id: row.id,
+        booking_date: row.booking_date,
+        class_name: row.class_name,
+        planner_stream: row.planner_stream,
+        recipe: row.recipe,
+        recipe_url: row.recipe_url,
+        recipe_id: normalizeRecipeId(row.recipe_id)
+      };
+
+      const streamKey = `${date}|${stream}`;
+      if (!plannerByDateAndStream.has(streamKey)) {
+        plannerByDateAndStream.set(streamKey, plannerRow);
+      }
+
+      const classCode = inferPlannerClassCode(row.class_name);
+      if (classCode) {
+        const classCodeKey = `${date}|${classCode}`;
+        if (!plannerByDateAndClassCode.has(classCodeKey)) {
+          plannerByDateAndClassCode.set(classCodeKey, plannerRow);
+        }
       }
     }
 
@@ -1004,13 +1033,20 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
 
             const isSinglePeriodClass = uniquePeriods.length === 1;
 
+            const classCode = inferPlannerClassCode(classGroupKey);
+            const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
+            const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
+
             const plannerKey = `${dateIso}|${stream}`;
             const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
-            const planner = plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
+            const planner = (classCode
+              ? (plannerByDateAndClassCode.get(classPlannerKey) || plannerByDateAndClassCode.get(classWeekKey))
+              : null
+            ) || plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
             if (!planner) {
               stats.skippedNoPlanner += uniquePeriods.length;
               if (dryRun && diagNoPlanner.length < 20) {
-                diagNoPlanner.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, stream, periods: uniquePeriods });
+                diagNoPlanner.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, classCode, stream, periods: uniquePeriods });
               }
               continue;
             }
