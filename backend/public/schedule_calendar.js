@@ -728,6 +728,50 @@ function normalizePlannerStream(booking) {
   return 'Middle';
 }
 
+// --- Planner mismatch helpers ---
+
+// Build a map of { "weekMonday|stream" => { recipe: string, lc: string } }
+// from all planner entries in the bookings list.
+function buildPlannerMap(bookings) {
+  const map = new Map();
+  for (const b of bookings) {
+    if (String(b.period || '').trim().toLowerCase() !== 'planner') continue;
+    const recipe = String(b.recipe || '').trim();
+    if (!recipe) continue;
+    const stream = normalizePlannerStream(b);
+    const date = String(b.booking_date || '').slice(0, 10);
+    const d = parseLocalIsoDate(date);
+    if (!d) continue;
+    const monday = toLocalIsoDate(getStartOfWeek(d));
+    const key = `${monday}|${stream}`;
+    if (!map.has(key)) {
+      map.set(key, { recipe, lc: recipe.toLowerCase() });
+    }
+  }
+  return map;
+}
+
+// Return the planner recipe entry for a class booking, or null if none.
+function getPlannerRecipeForBooking(booking, plannerMap) {
+  const date = String(booking && booking.booking_date ? booking.booking_date : '').slice(0, 10);
+  if (!date) return null;
+  const d = parseLocalIsoDate(date);
+  if (!d) return null;
+  const monday = toLocalIsoDate(getStartOfWeek(d));
+  const stream = normalizePlannerStream(booking);
+  return plannerMap.get(`${monday}|${stream}`) || null;
+}
+
+// Return true if a class booking has a recipe that differs from the planner recipe.
+function hasPlannerMismatch(booking, plannerMap) {
+  if (isPlannerLikeBooking(booking)) return false;
+  const bookingRecipe = String(booking && booking.recipe ? booking.recipe : '').trim();
+  if (!bookingRecipe) return false;
+  const plannerEntry = getPlannerRecipeForBooking(booking, plannerMap);
+  if (!plannerEntry) return false;
+  return plannerEntry.lc !== bookingRecipe.toLowerCase();
+}
+
 function plannerChipStyle(stream) {
   if (stream === 'Junior') return { bg: '#dcfce7', border: '#86efac', text: '#166534' };
   if (stream === 'Senior') return { bg: '#ffedd5', border: '#fdba74', text: '#9a3412' };
@@ -1109,6 +1153,7 @@ async function renderScheduleCalendar() {
   const bookings = await fetchBookingsForWeek(currentMonday);
   window.currentScheduleBookings = bookings;
   buildTeacherColourMap(bookings);
+  const plannerMap = buildPlannerMap(bookings);
 
   const grid = buildPrintGrid(bookings, weekDates);
 
@@ -1155,9 +1200,12 @@ async function renderScheduleCalendar() {
             const bookingId = `booking-${booking.id}`;
             const cellLabel = `${escHtml(getCellPrimaryText(booking))}, Teacher: ${escHtml(booking.staff_name)}`;
             const slotHref = `teacher_booking_slots.html?booking_id=${encodeURIComponent(String(booking.id || ''))}&source=${encodeURIComponent(window.location.pathname.split('/').pop() || 'add_booking.html')}`;
+            const mismatch = hasPlannerMismatch(booking, plannerMap);
+            const mismatchEntry = mismatch ? getPlannerRecipeForBooking(booking, plannerMap) : null;
             html += `<div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${booking.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.4rem 0.28rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;${idx > 0 ? 'margin-top:0.3rem;' : ''}'>
               <div style='font-weight:bold;font-size:1.08em;color:${cellStyle.text};'>${escHtml(getCellPrimaryText(booking))}</div>
               <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:1.05em;'>Teacher: ${escHtml(booking.staff_name)}</div>
+              ${mismatch && mismatchEntry ? `<div title="Planner recipe: ${escHtml(mismatchEntry.recipe)}" style='display:inline-flex;align-items:center;gap:0.2rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:0.1rem 0.35rem;font-size:0.73rem;color:#c2410c;margin-top:0.22rem;cursor:help;'>&#9888; Planner mismatch</div>` : ''}
               ${scheduleViewMode === 'class' && booking.class_size != null && booking.class_size !== '' ? `<div style='font-size:0.95em;color:${cellStyle.text};'>Class Size: ${escHtml(String(booking.class_size))}</div>` : ''}
               ${scheduleViewMode === 'recipe' && booking.groups != null && booking.groups !== '' ? `<div style='font-size:0.95em;color:${cellStyle.text};'>Groups: ${escHtml(String(booking.groups))}</div>` : ''}
               <div style='margin-top:0.24rem;display:flex;gap:0.22rem;justify-content:center;flex-wrap:wrap;'>${window.bookingPageLabel === 'Add Food Truck Booking' ? `<a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.82rem;text-decoration:none;font-weight:700;'>Slots</a>` : ''}${booking.recipe_id ? `<button onclick='event.stopPropagation();handleBookedCellRecipeClick(${Number(booking.id)})' style='padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.82rem;cursor:pointer;font-weight:700;'>Recipes</button>` : ''}<button onclick='event.stopPropagation();printBookingInfoSheet(${Number(booking.id)})' title='Print class info sheet' style='padding:0.12rem 0.42rem;border-radius:999px;border:1px solid #7c3aed;background:#f5f3ff;color:#5b21b6;font-size:0.82rem;cursor:pointer;font-weight:700;'>&#128438; Print</button></div>
@@ -1434,6 +1482,48 @@ document.addEventListener('DOMContentLoaded', () => {
       const chosenMonday = await askWeekToPrint(currentMonday);
       if (!chosenMonday) return;
       await printScheduleForWeek(chosenMonday, showWeekends, scheduleViewMode);
+    };
+  }
+
+  const syncFromPlannerBtn = document.getElementById('syncFromPlannerBtn');
+  if (syncFromPlannerBtn) {
+    syncFromPlannerBtn.onclick = async () => {
+      syncFromPlannerBtn.disabled = true;
+      syncFromPlannerBtn.textContent = 'Syncing\u2026';
+      try {
+        // Find the earliest planner entry date so we sync all weeks, not just current
+        let startDate = toLocalIsoDate(currentMonday);
+        try {
+          const rangeRes = await fetch('/api/bookings/planner-range', { credentials: 'include' });
+          if (rangeRes.ok) {
+            const rangeData = await rangeRes.json();
+            if (rangeData.minDate) startDate = rangeData.minDate.slice(0, 10);
+          }
+        } catch { /* use current week as fallback */ }
+
+        const endDate = `${new Date().getFullYear()}-12-31`;
+        const res = await fetch('/api/bookings/prefill-from-planner', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ startDate, endDate, force_update_recipe: true })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+          showInfoToast((data && data.error) || 'Sync failed');
+          return;
+        }
+        const s = data.summary || {};
+        showInfoToast(
+          `Sync complete: ${s.inserted || 0} new bookings, ${s.recipesUpdated || 0} recipes updated, ${s.skippedExisting || 0} unchanged`
+        );
+        await renderScheduleCalendar();
+      } catch (err) {
+        showInfoToast('Sync error: ' + (err && err.message ? err.message : 'Unknown error'));
+      } finally {
+        syncFromPlannerBtn.disabled = false;
+        syncFromPlannerBtn.textContent = '\u21ba Sync from Planner';
+      }
     };
   }
 

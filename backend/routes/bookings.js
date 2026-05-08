@@ -743,13 +743,14 @@ router.get('/admin/resave-candidates', requirePlanningRole, async (req, res) => 
 
 // POST /api/bookings/prefill-from-planner
 // Admin-only utility: creates class bookings for Food/HOSP periods from planner recipes (single or double).
-// Body (optional): { startDate, endDate, dryRun }
+// Body (optional): { startDate, endDate, dryRun, force_update_recipe }
 router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
   try {
     await ensureSchema();
 
     const body = req.body || {};
     const dryRun = body.dryRun === true || String(body.dryRun || '').toLowerCase() === 'true';
+    const forceUpdateRecipe = body.force_update_recipe === true;
 
     const startDateObj = parseIsoDate(body.startDate) || new Date();
     const yearEnd = new Date(startDateObj.getFullYear(), 11, 31);
@@ -840,7 +841,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
     );
 
     const existingResult = await pool.query(
-      `SELECT id, booking_date, period, class_name, staff_id, staff_name, class_size
+      `SELECT id, booking_date, period, class_name, staff_id, staff_name, class_size, recipe, recipe_url, recipe_id
        FROM bookings
        WHERE booking_date >= $1
          AND booking_date <= $2
@@ -933,6 +934,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
 
     const inserts = [];
     const updates = [];
+    const recipeUpdates = [];
     const stats = {
       plannerRecipesFound: plannerByDateAndStream.size,
       candidates: 0,
@@ -940,6 +942,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       multiPeriodCandidates: 0,
       inserted: 0,
       skippedExisting: 0,
+      recipesUpdated: 0,
       skippedNoPlanner: 0,
       skippedNonFood: 0,
       skippedNotDouble: 0,
@@ -1035,6 +1038,19 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                   });
                   stats.classSizeBackfilled += 1;
                 }
+                if (forceUpdateRecipe && !dryRun) {
+                  const existingRecipe = String(existingBooking && existingBooking.recipe ? existingBooking.recipe : '').trim().toLowerCase();
+                  const plannerRecipeName = String(planner && planner.recipe ? planner.recipe : '').trim().toLowerCase();
+                  if (plannerRecipeName && existingRecipe !== plannerRecipeName) {
+                    recipeUpdates.push({
+                      id: Number(existingBooking.id),
+                      recipe: planner.recipe,
+                      recipe_url: planner.recipe_url || '',
+                      recipe_id: planner.recipe_id || null
+                    });
+                    stats.recipesUpdated += 1;
+                  }
+                }
                 stats.skippedExisting += 1;
                 if (dryRun && diagExisting.length < 30) {
                   diagExisting.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: planner.recipe });
@@ -1071,7 +1087,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       cursor.setDate(cursor.getDate() + 1);
     }
 
-    if (!dryRun && (inserts.length || updates.length)) {
+    if (!dryRun && (inserts.length || updates.length || recipeUpdates.length)) {
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
@@ -1080,6 +1096,13 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
           await client.query(
             'UPDATE bookings SET class_size = $1 WHERE id = $2 AND (class_size IS NULL OR trim(class_size::text) = \'\')',
             [u.class_size, u.id]
+          );
+        }
+
+        for (const u of recipeUpdates) {
+          await client.query(
+            'UPDATE bookings SET recipe = $1, recipe_url = $2, recipe_id = $3 WHERE id = $4',
+            [u.recipe, u.recipe_url, u.recipe_id, u.id]
           );
         }
 
@@ -1118,7 +1141,8 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       summary: {
         startDate,
         endDate,
-        ...stats
+        ...stats,
+        recipesUpdated: recipeUpdates.length
       },
       preview: inserts.slice(0, 25),
       ...(dryRun ? {
@@ -1135,6 +1159,28 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
   } catch (err) {
     console.error('Failed to prefill bookings from planner:', err.message);
     return res.status(500).json({ success: false, error: 'Failed to prefill bookings from planner.' });
+  }
+});
+
+// Return the min/max booking_date of all planner entries (period = 'Planner')
+// Used by the "Sync from Planner" button to determine the date range to sync
+router.get('/planner-range', async (req, res) => {
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      `SELECT MIN(booking_date)::text AS min_date, MAX(booking_date)::text AS max_date
+       FROM bookings
+       WHERE period = 'Planner' AND trim(coalesce(recipe, '')) <> ''`
+    );
+    const row = result.rows[0] || {};
+    res.json({
+      success: true,
+      minDate: row.min_date || null,
+      maxDate: row.max_date || null
+    });
+  } catch (err) {
+    console.error('Failed to fetch planner range:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch planner range.' });
   }
 });
 
