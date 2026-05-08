@@ -1032,23 +1032,36 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             }
 
             const isSinglePeriodClass = uniquePeriods.length === 1;
+            const isSeniorSingleTheory = stream === 'Senior' && isSinglePeriodClass;
 
             const classCode = inferPlannerClassCode(classGroupKey);
             const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
             const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
 
-            const plannerKey = `${dateIso}|${stream}`;
-            const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
-            const planner = (classCode
-              ? (plannerByDateAndClassCode.get(classPlannerKey) || plannerByDateAndClassCode.get(classWeekKey))
-              : null
-            ) || plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
-            if (!planner) {
-              stats.skippedNoPlanner += uniquePeriods.length;
-              if (dryRun && diagNoPlanner.length < 20) {
-                diagNoPlanner.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, classCode, stream, periods: uniquePeriods });
+            let targetRecipe = '';
+            let targetRecipeUrl = '';
+            let targetRecipeId = null;
+
+            if (isSeniorSingleTheory) {
+              targetRecipe = 'Theory';
+            } else {
+              const plannerKey = `${dateIso}|${stream}`;
+              const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
+              const planner = (classCode
+                ? (plannerByDateAndClassCode.get(classPlannerKey) || plannerByDateAndClassCode.get(classWeekKey))
+                : null
+              ) || plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
+              if (!planner) {
+                stats.skippedNoPlanner += uniquePeriods.length;
+                if (dryRun && diagNoPlanner.length < 20) {
+                  diagNoPlanner.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, classCode, stream, periods: uniquePeriods });
+                }
+                continue;
               }
-              continue;
+
+              targetRecipe = String(planner.recipe || '').trim();
+              targetRecipeUrl = planner.recipe_url || '';
+              targetRecipeId = planner.recipe_id || null;
             }
 
             const staffRow = staffByCode.get(teacherCode);
@@ -1078,29 +1091,29 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 }
                 if (forceUpdateRecipe && !dryRun) {
                   const existingRecipe = String(existingBooking && existingBooking.recipe ? existingBooking.recipe : '').trim().toLowerCase();
-                  const plannerRecipeName = String(planner && planner.recipe ? planner.recipe : '').trim().toLowerCase();
-                  if (plannerRecipeName && existingRecipe !== plannerRecipeName) {
+                  const targetRecipeName = String(targetRecipe || '').trim().toLowerCase();
+                  if (targetRecipeName && existingRecipe !== targetRecipeName) {
                     recipeUpdates.push({
                       id: Number(existingBooking.id),
-                      recipe: planner.recipe,
-                      recipe_url: planner.recipe_url || '',
-                      recipe_id: planner.recipe_id || null
+                      recipe: targetRecipe,
+                      recipe_url: targetRecipeUrl,
+                      recipe_id: targetRecipeId
                     });
                     stats.recipesUpdated += 1;
                   }
                 }
                 stats.skippedExisting += 1;
                 if (dryRun && diagExisting.length < 30) {
-                  diagExisting.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: planner.recipe });
+                  diagExisting.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: targetRecipe });
                 }
                 if (dryRun && isSinglePeriodClass && diagSingleMatches.length < 50) {
-                  diagSingleMatches.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: planner.recipe, status: 'already-booked' });
+                  diagSingleMatches.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: targetRecipe, status: 'already-booked' });
                 }
                 continue;
               }
 
               if (dryRun && isSinglePeriodClass && diagSingleMatches.length < 50) {
-                diagSingleMatches.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: planner.recipe, status: 'will-book' });
+                diagSingleMatches.push({ date: dateIso, period: String(period), class: classTokenForBooking, teacher: teacherCode, stream, recipe: targetRecipe, status: 'will-book' });
               }
 
               const booking = {
@@ -1109,9 +1122,9 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 class_name: classTokenForBooking,
                 booking_date: dateIso,
                 period: String(period),
-                recipe: planner.recipe,
-                recipe_url: planner.recipe_url || '',
-                recipe_id: planner.recipe_id || null,
+                recipe: targetRecipe,
+                recipe_url: targetRecipeUrl,
+                recipe_id: targetRecipeId,
                 class_size: resolvedClassSize,
                 planner_stream: stream
               };
