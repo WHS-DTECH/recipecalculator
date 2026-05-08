@@ -176,6 +176,12 @@ function normalizeClassToken(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function normalizeRecipeId(value) {
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) return null;
+  return parsed;
+}
+
 function inferStreamFromClassToken(classToken) {
   const value = normalizeClassToken(classToken);
   if (!value) return '';
@@ -764,10 +770,8 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
     const endDate = toIsoDate(endDateObj);
 
     const plannerResult = await pool.query(
-      `SELECT b.id, b.booking_date, b.class_name, b.planner_stream, b.recipe, b.recipe_url, b.recipe_id,
-              r.name as recipe_current_name
+      `SELECT b.id, b.booking_date, b.class_name, b.planner_stream, b.recipe, b.recipe_url, b.recipe_id
        FROM bookings b
-       LEFT JOIN recipes r ON r.id = b.recipe_id
        WHERE b.period = 'Planner'
          AND b.booking_date >= $1
          AND b.booking_date <= $2
@@ -786,16 +790,14 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
       const date = String(row.booking_date || '').slice(0, 10);
       const key = `${date}|${stream}`;
       if (!plannerByDateAndStream.has(key)) {
-        // Use fresh recipe name from recipes table if available, otherwise use stored name
-        const recipeName = row.recipe_current_name || row.recipe;
         plannerByDateAndStream.set(key, {
           id: row.id,
           booking_date: row.booking_date,
           class_name: row.class_name,
           planner_stream: row.planner_stream,
-          recipe: recipeName,
+          recipe: row.recipe,
           recipe_url: row.recipe_url,
-          recipe_id: row.recipe_id
+          recipe_id: normalizeRecipeId(row.recipe_id)
         });
       }
     }
