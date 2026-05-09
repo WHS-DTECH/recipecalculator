@@ -1313,6 +1313,9 @@ router.get('/all', async (req, res) => {
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(4000, Math.floor(limitRaw))) : 1500;
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    
+    console.log('[BOOKINGS /all] Query params:', { start, end, staff_id, planner_stream, limit });
+    
     if ((start && !dateRe.test(start)) || (end && !dateRe.test(end))) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
@@ -1379,14 +1382,18 @@ router.get('/all', async (req, res) => {
 
     params.push(limit);
     query += ` ORDER BY booking_date DESC, period LIMIT $${params.length}`;
+    
+    console.log('[BOOKINGS /all] Executing query:', query);
+    console.log('[BOOKINGS /all] With params:', params);
+    
     const result = await pool.query(query, params);
     const payload = { bookings: result.rows };
     const userLabel = req.authUserEmail || 'public';
     logJsonTransfer('GET /api/bookings/all', payload, `rows=${result.rows.length} user=${userLabel} start=${boundedStart || '-'} end=${boundedEnd || '-'} limit=${limit}`);
     res.json(payload);
   } catch (err) {
-    console.error('Failed to fetch bookings:', err.message);
-    res.status(500).json({ error: 'Failed to fetch bookings.' });
+    console.error('[BOOKINGS] Failed to fetch bookings:', err.message, err.stack);
+    res.status(500).json({ error: 'Failed to fetch bookings.', details: err.message });
   }
 });
 
