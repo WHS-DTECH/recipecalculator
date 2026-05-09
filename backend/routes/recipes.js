@@ -719,6 +719,34 @@ router.post('/:id/display', async (req, res) => {
   }
 });
 
+// POST /api/recipes/:id/verify - Mark recipe ingredients as verified with timestamp
+router.post('/:id/verify', async (req, res) => {
+  const recipeId = req.params.id;
+  try {
+    // Check if recipe exists
+    const recipeResult = await pool.query('SELECT id FROM recipes WHERE id = $1', [recipeId]);
+    if (recipeResult.rows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Recipe not found' });
+    }
+
+    // Update verified_date to current timestamp
+    const updateResult = await pool.query(
+      'UPDATE recipes SET verified_date = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, verified_date',
+      [recipeId]
+    );
+
+    if (updateResult.rows.length === 0) {
+      return res.status(500).json({ success: false, error: 'Failed to update verified_date' });
+    }
+
+    console.log(`[VERIFY][DEBUG] Recipe ${recipeId} marked as verified at`, updateResult.rows[0].verified_date);
+    return res.json({ success: true, verified_date: updateResult.rows[0].verified_date });
+  } catch (err) {
+    console.error('[VERIFY][ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // DELETE /api/recipes/display-table/:id - Unpublish a recipe from recipe_display (by id)
 router.delete('/display-table/:id', async (req, res) => {
   let displayId = req.params.id;

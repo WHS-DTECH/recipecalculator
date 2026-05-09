@@ -137,6 +137,16 @@ function getRecipeColumnValue(recipe, col) {
 		}
 		return `<button class="publish-recipe-btn" data-id="${recipe.id}" style="background:#1976d2;color:#fff;border:none;padding:0.35rem 0.7rem;border-radius:4px;cursor:pointer;">Publish</button>`;
 	}
+	if (col === 'verified_date') {
+		const verifiedDate = recipe.verified_date;
+		if (!verifiedDate) return 'Not verified';
+		try {
+			const date = new Date(verifiedDate);
+			return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+		} catch {
+			return verifiedDate;
+		}
+	}
 	if (col === 'ingredients_display') {
 		return recipe.ingredients_display ?? recipe.Ingredients_display ?? '';
 	}
@@ -207,6 +217,7 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 		'instructions_extracted',
 		'instructions_display',
 		'extracted_ingredients', 'ingredients_display',
+		'verified_date',
 		'actions'
 	];
 	let filtered = safeRecipes;
@@ -271,6 +282,7 @@ let allRecipesCache = [];
 		const selectedStatusFilter = setPublishStatusFilterSelection(persistedStatusFilter);
 		const selectedRecipeId = persistedRecipeId ? (setRecipeFilterSelection(persistedRecipeId) || '') : '';
 		filterAndRenderRecipesById(recipes, selectedRecipeId, selectedStatusFilter);
+		renderBulkReVerifyTable();
 		if (error) {
 			console.error('[DEBUG] /api/recipes error:', error);
 			renderRecipesTableMessage(error);
@@ -499,6 +511,164 @@ let allRecipesCache = [];
 		btn.disabled = false;
 	});
 
+	// Bulk re-verification functionality
+	let selectedBulkRecipes = new Set();
+
+	function renderBulkReVerifyTable() {
+		const tableBody = document.getElementById('bulkReVerifyTableBody');
+		if (!tableBody) return;
+		
+		tableBody.innerHTML = '';
+		const publishedRecipes = (allRecipesCache || []).filter(r => publishedRecipeIds.has(Number(r.id)));
+		
+		if (publishedRecipes.length === 0) {
+			tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:15px;color:#999;">No published recipes to re-verify.</td></tr>';
+			return;
+		}
+
+		publishedRecipes.forEach(recipe => {
+			const tr = document.createElement('tr');
+			
+			const checkboxTd = document.createElement('td');
+			const checkbox = document.createElement('input');
+			checkbox.type = 'checkbox';
+			checkbox.value = recipe.id;
+			checkbox.addEventListener('change', (e) => {
+				if (e.target.checked) {
+					selectedBulkRecipes.add(Number(recipe.id));
+				} else {
+					selectedBulkRecipes.delete(Number(recipe.id));
+				}
+			});
+			checkboxTd.appendChild(checkbox);
+			tr.appendChild(checkboxTd);
+
+			const idTd = document.createElement('td');
+			idTd.textContent = recipe.id;
+			tr.appendChild(idTd);
+
+			const nameTd = document.createElement('td');
+			nameTd.textContent = recipe.name || '';
+			tr.appendChild(nameTd);
+
+			const verifiedTd = document.createElement('td');
+			if (recipe.verified_date) {
+				try {
+					const date = new Date(recipe.verified_date);
+					verifiedTd.textContent = date.toLocaleDateString();
+				} catch {
+					verifiedTd.textContent = recipe.verified_date;
+				}
+			} else {
+				verifiedTd.textContent = 'Not verified';
+			}
+			tr.appendChild(verifiedTd);
+
+			const statusTd = document.createElement('td');
+			statusTd.textContent = 'Published';
+			tr.appendChild(statusTd);
+
+			tableBody.appendChild(tr);
+		});
+	}
+
+	const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+	if (selectAllCheckbox) {
+		selectAllCheckbox.addEventListener('change', (e) => {
+			const tableBody = document.getElementById('bulkReVerifyTableBody');
+			if (tableBody) {
+				const checkboxes = tableBody.querySelectorAll('input[type="checkbox"]');
+				checkboxes.forEach(cb => {
+					cb.checked = e.target.checked;
+					if (e.target.checked) {
+						selectedBulkRecipes.add(Number(cb.value));
+					} else {
+						selectedBulkRecipes.delete(Number(cb.value));
+					}
+				});
+			}
+		});
+	}
+
+	const selectAllBtn = document.getElementById('selectAllRecipesBtn');
+	if (selectAllBtn) {
+		selectAllBtn.addEventListener('click', () => {
+			if (selectAllCheckbox) selectAllCheckbox.checked = true;
+			const tableBody = document.getElementById('bulkReVerifyTableBody');
+			if (tableBody) {
+				const checkboxes = tableBody.querySelectorAll('input[type="checkbox"]');
+				checkboxes.forEach(cb => {
+					cb.checked = true;
+					selectedBulkRecipes.add(Number(cb.value));
+				});
+			}
+		});
+	}
+
+	const clearAllBtn = document.getElementById('clearAllRecipesBtn');
+	if (clearAllBtn) {
+		clearAllBtn.addEventListener('click', () => {
+			if (selectAllCheckbox) selectAllCheckbox.checked = false;
+			const tableBody = document.getElementById('bulkReVerifyTableBody');
+			if (tableBody) {
+				const checkboxes = tableBody.querySelectorAll('input[type="checkbox"]');
+				checkboxes.forEach(cb => {
+					cb.checked = false;
+					selectedBulkRecipes.delete(Number(cb.value));
+				});
+			}
+		});
+	}
+
+	const bulkReVerifyBtn = document.getElementById('bulkReVerifyBtn');
+	if (bulkReVerifyBtn) {
+		bulkReVerifyBtn.addEventListener('click', async () => {
+			if (selectedBulkRecipes.size === 0) {
+				notify('Please select at least one recipe to re-verify.', 'warning');
+				return;
+			}
+
+			const recipeIds = Array.from(selectedBulkRecipes).sort((a, b) => a - b);
+			if (!confirm(`Re-verify ingredients for ${recipeIds.length} recipe(s)?\n\nThis will process each recipe through the confirmation workflow.\n\nRecipe IDs: ${recipeIds.slice(0, 5).join(', ')}${recipeIds.length > 5 ? '...' : ''}`)) {
+				return;
+			}
+
+			bulkReVerifyBtn.disabled = true;
+			let completed = 0;
+			let failed = 0;
+
+			for (const recipeId of recipeIds) {
+				try {
+					// Redirect to confirmation page for each recipe
+					// Since we can't easily do async navigation, we'll queue them
+					sessionStorage.setItem(`bulkReVerifyQueue`, JSON.stringify({
+						ids: recipeIds,
+						current: recipeId,
+						completed: completed,
+						total: recipeIds.length
+					}));
+
+					// Redirect to confirmation page
+					window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${recipeId}&bulk_mode=true`;
+					return; // Will continue on return from confirmation page
+				} catch (err) {
+					console.warn(`Failed to re-verify recipe ${recipeId}:`, err);
+					failed++;
+				}
+			}
+
+			bulkReVerifyBtn.disabled = false;
+			renderBulkReVerifyTable();
+			notify(`Re-verification queued for ${completed} recipe(s). ${failed > 0 ? failed + ' failed.' : ''}`, failed > 0 ? 'warning' : 'success');
+		});
+	}
+
+	// Initial render of bulk re-verify table
+	async function initBulkReVerifyTable() {
+		await refreshPublishedRecipeIds();
+		renderBulkReVerifyTable();
+	}
+
 	async function refreshRecipesFromApi(preferredRecipeId = '', preferredStatusFilter = '') {
 		try {
 			const filter = document.getElementById('recipeIdFilter');
@@ -521,6 +691,7 @@ let allRecipesCache = [];
 			const selectedStatusFilter = setPublishStatusFilterSelection(targetStatusFilter);
 
 			filterAndRenderRecipesById(allRecipesCache, selectedId, selectedStatusFilter);
+			renderBulkReVerifyTable();
 			if (error) {
 				console.error('[DEBUG] Failed to refresh recipes from API:', error);
 				renderRecipesTableMessage(error);

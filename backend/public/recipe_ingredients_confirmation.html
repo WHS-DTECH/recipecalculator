@@ -186,6 +186,8 @@
 		const API_BASE = '/api';
 		let currentRecipeId = null;
 		let currentRecipeData = null;
+		let bulkQueue = null;
+		let isBulkMode = false;
 
 		function showStatus(message, type = 'info') {
 			const statusEl = document.getElementById('statusMessage');
@@ -199,10 +201,26 @@
 			statusEl.style.display = 'none';
 		}
 
+		async function markRecipeVerified(recipeId) {
+			try {
+				const response = await fetch(`${API_BASE}/recipes/${recipeId}/verify`, {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ verified: true })
+				});
+				if (!response.ok) {
+					console.warn(`Failed to mark recipe ${recipeId} as verified`);
+				}
+			} catch (err) {
+				console.warn(`Error marking recipe as verified:`, err);
+			}
+		}
+
 		async function loadRecipeDetails() {
 			try {
 				const params = new URLSearchParams(window.location.search);
 				currentRecipeId = params.get('recipe_id');
+				isBulkMode = params.get('bulk_mode') === 'true';
 				
 				if (!currentRecipeId) {
 					showStatus('No recipe ID provided. Please use the publish workflow.', 'error');
@@ -222,6 +240,17 @@
 				}
 
 				currentRecipeData = data.recipe;
+				
+				// Check if there's a bulk queue
+				const queueStr = sessionStorage.getItem('bulkReVerifyQueue');
+				if (queueStr && isBulkMode) {
+					try {
+						bulkQueue = JSON.parse(queueStr);
+					} catch (e) {
+						console.warn('Could not parse bulk queue');
+					}
+				}
+
 				renderRecipeDetails();
 				hideStatus();
 			} catch (err) {
@@ -235,7 +264,12 @@
 
 			document.getElementById('recipeName').textContent = currentRecipeData.name || 'Unnamed Recipe';
 			document.getElementById('recipeId').textContent = currentRecipeData.id;
-			document.getElementById('recipeStatus').textContent = 'Review Before Publish';
+			
+			let statusText = 'Review Before Publish';
+			if (isBulkMode && bulkQueue) {
+				statusText = `Bulk Re-Verify (${bulkQueue.completed + 1} of ${bulkQueue.total})`;
+			}
+			document.getElementById('recipeStatus').textContent = statusText;
 			document.getElementById('recipeDetails').style.display = 'block';
 
 			const ingredientsList = document.getElementById('ingredientsList');
@@ -274,11 +308,29 @@
 				confirmBtn.disabled = true;
 				confirmBtn.textContent = 'Processing...';
 
-				// Store the confirmation in sessionStorage for recipe_publish.js to pick up
-				sessionStorage.setItem('ingredientsConfirmed_' + currentRecipeId, 'true');
+				// Mark recipe as verified with timestamp
+				await markRecipeVerified(currentRecipeId);
 
-				// Redirect back to recipe_publish.html with the recipe ID to complete the publish
-				window.location.href = `/recipe_publish.html?resume_publish=${currentRecipeId}`;
+				if (isBulkMode && bulkQueue) {
+					// Move to next recipe in queue
+					const nextIndex = bulkQueue.ids.indexOf(bulkQueue.current) + 1;
+					if (nextIndex < bulkQueue.ids.length) {
+						const nextRecipeId = bulkQueue.ids[nextIndex];
+						bulkQueue.completed++;
+						sessionStorage.setItem('bulkReVerifyQueue', JSON.stringify(bulkQueue));
+						// Go to next recipe
+						window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
+						return;
+					} else {
+						// All recipes processed, return to recipe_publish
+						sessionStorage.removeItem('bulkReVerifyQueue');
+						window.location.href = `/recipe_publish.html`;
+						return;
+					}
+				} else {
+					// Single recipe mode - go to recipe_publish.html to complete publish
+					window.location.href = `/recipe_publish.html?resume_publish=${currentRecipeId}`;
+				}
 			} catch (err) {
 				showStatus(`Error confirming ingredients: ${err.message}`, 'error');
 				document.getElementById('confirmBtn').disabled = false;

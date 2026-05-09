@@ -46,6 +46,31 @@
 				<div id="cleanupIngredientsProgressFill" style="width:0%;height:100%;background:#2e7d32;transition:width 0.2s ease;"></div>
 			</div>
 		</div>
+
+		<!-- Bulk Re-Verification Section -->
+		<div class="setup-section" style="margin-top:20px;">
+			<div class="setup-section-title">Bulk Re-Verify Existing Recipes</div>
+			<div class="setup-section-desc">Select published recipes to re-verify their ingredients and run through the confirmation process:</div>
+			<div style="margin:15px 0;display:flex;gap:10px;flex-wrap:wrap;">
+				<button id="selectAllRecipesBtn" style="background:#1976d2;color:#fff;border:none;padding:0.45rem 0.9rem;border-radius:4px;cursor:pointer;">Select All</button>
+				<button id="clearAllRecipesBtn" style="background:#666;color:#fff;border:none;padding:0.45rem 0.9rem;border-radius:4px;cursor:pointer;">Clear All</button>
+				<button id="bulkReVerifyBtn" style="background:#ff9800;color:#fff;border:none;padding:0.45rem 0.9rem;border-radius:4px;cursor:pointer;font-weight:600;">Re-Verify Selected Recipes</button>
+			</div>
+			<table id="bulkReVerifyTable" style="width:100%;margin-top:1rem;border-collapse:collapse;border:1px solid #ddd;">
+				<thead>
+					<tr style="background:#f5f5f5;">
+						<th style="width:40px;"><input type="checkbox" id="selectAllCheckbox"></th>
+						<th>ID</th>
+						<th>Recipe Name</th>
+						<th>Verified Date</th>
+						<th>Status</th>
+					</tr>
+				</thead>
+				<tbody id="bulkReVerifyTableBody">
+					<!-- Populated by JS -->
+				</tbody>
+			</table>
+		</div>
 		<!-- Filter selector for RecipeID sorting -->
 		<div class="setup-card" style="max-width:1100px;margin:20px auto 0 auto;text-align:left;">
 			<label for="recipeIdFilter" style="font-weight:bold;margin-right:0.5em;">Filter/Sort by RecipeID:</label>
@@ -78,6 +103,7 @@
 						<th>Instructions Display</th>
 						<th>Extracted Ingredients</th>
 						<th>Ingredients Display</th>
+						<th>Verified Date</th>
 						<th>Actions</th>
 						<!-- <th>Ingredients Inventories</th> -->
 					</tr>
