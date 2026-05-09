@@ -1096,10 +1096,9 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
               continue;
             }
 
-            const isSinglePeriodClass = uniquePeriods.length === 1;
-            const isSeniorSingleTheory = stream === 'Senior' && isSinglePeriodClass;
-
             const classCode = inferPlannerClassCode(classGroupKey);
+            const isSinglePeriodClass = uniquePeriods.length === 1;
+            const isSeniorSingleTheory = isSinglePeriodClass && ['11HOSP', '12HOSP', '13HOSP'].includes(String(classCode || '').toUpperCase());
             const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
             const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
 
