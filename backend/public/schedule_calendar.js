@@ -1146,6 +1146,327 @@ function formatDateLong(date) {
   return longDateFormatter.format(date);
 }
 
+function canViewRecentPlannerSidebar(roleName) {
+  const normalized = String(roleName || '').trim().toLowerCase();
+  return normalized === 'admin' || normalized === 'lead_teacher';
+}
+
+function formatPlannerUploadDate(value) {
+  if (!value) return '-';
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return d.toLocaleString(userLocale || undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function ensureRecentPlannerSidebarStyles() {
+  if (document.getElementById('recentPlannerSidebarStyles')) return;
+  const style = document.createElement('style');
+  style.id = 'recentPlannerSidebarStyles';
+  style.textContent = `
+    .planner-quick-open-btn {
+      border: 1px solid #1d4ed8;
+      background: #eff6ff;
+      color: #1e3a8a;
+      border-radius: 8px;
+      padding: 0.42rem 0.72rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.88rem;
+    }
+    .planner-quick-open-btn:hover { background: #dbeafe; }
+    .planner-recent-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.35);
+      z-index: 10050;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.18s ease;
+    }
+    .planner-recent-backdrop.open {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .planner-recent-sidebar {
+      position: fixed;
+      top: 0;
+      right: 0;
+      width: min(92vw, 390px);
+      height: 100vh;
+      background: #fff;
+      box-shadow: -10px 0 28px rgba(15, 23, 42, 0.2);
+      z-index: 10051;
+      transform: translateX(102%);
+      transition: transform 0.2s ease;
+      display: flex;
+      flex-direction: column;
+    }
+    .planner-recent-sidebar.open {
+      transform: translateX(0);
+    }
+    .planner-recent-header {
+      padding: 0.85rem 0.95rem;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.6rem;
+    }
+    .planner-recent-title {
+      font-size: 1rem;
+      font-weight: 800;
+      color: #1e3a8a;
+    }
+    .planner-recent-close {
+      border: 1px solid #d1d5db;
+      background: #f8fafc;
+      color: #374151;
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 0.22rem 0.45rem;
+      font-size: 0.85rem;
+    }
+    .planner-recent-body {
+      padding: 0.85rem 0.95rem 1rem;
+      overflow: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .planner-recent-section {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 0.7rem;
+      background: #fff;
+    }
+    .planner-recent-section h3 {
+      margin: 0 0 0.45rem;
+      font-size: 0.86rem;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .planner-recent-item {
+      border: 1px solid #e2e8f0;
+      border-radius: 7px;
+      padding: 0.5rem 0.55rem;
+      margin-bottom: 0.45rem;
+      background: #f8fafc;
+    }
+    .planner-recent-item:last-child { margin-bottom: 0; }
+    .planner-recent-file {
+      font-size: 0.84rem;
+      font-weight: 700;
+      color: #111827;
+      word-break: break-word;
+      margin-bottom: 0.18rem;
+    }
+    .planner-recent-meta {
+      font-size: 0.76rem;
+      color: #6b7280;
+      margin-bottom: 0.35rem;
+    }
+    .planner-recent-actions {
+      display: flex;
+      gap: 0.4rem;
+      flex-wrap: wrap;
+    }
+    .planner-recent-open {
+      border: 1px solid #1d4ed8;
+      background: #1d4ed8;
+      color: #fff;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.17rem 0.62rem;
+      cursor: pointer;
+    }
+    .planner-recent-clear {
+      border: 1px solid #9ca3af;
+      background: #fff;
+      color: #374151;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      padding: 0.17rem 0.62rem;
+      cursor: pointer;
+    }
+    .planner-recent-status {
+      font-size: 0.8rem;
+      color: #64748b;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+function normalizeUploadStream(value) {
+  const v = String(value || '').trim();
+  if (!v) return 'Middle';
+  if (/^junior$/i.test(v)) return 'Junior';
+  if (/^senior$/i.test(v)) return 'Senior';
+  if (/^middle$/i.test(v)) return 'Middle';
+  return v;
+}
+
+function setPlannerStreamFilter(stream) {
+  const normalized = normalizeUploadStream(stream);
+  if (!normalized || /^all$/i.test(normalized)) {
+    delete scheduleCalendarFilters.plannerStream;
+    showInfoToast('Showing all planner streams.');
+  } else {
+    scheduleCalendarFilters.plannerStream = normalized;
+    showInfoToast(`Showing ${normalized} planner stream.`);
+  }
+  renderScheduleCalendar();
+}
+
+async function initRecentPlannerSidebar() {
+  if (bookingPageLabel !== 'Browse Practicals') return;
+
+  let authData = null;
+  try {
+    const res = await fetch('/api/auth/me', { credentials: 'include' });
+    authData = await res.json().catch(() => null);
+    if (!res.ok || !authData || !authData.authenticated || !authData.user) return;
+  } catch (_) {
+    return;
+  }
+
+  if (!canViewRecentPlannerSidebar(authData.user.role)) return;
+
+  ensureRecentPlannerSidebarStyles();
+  const toolbar = document.querySelector('.browse-practicals-toolbar');
+  if (!toolbar) return;
+
+  const openBtn = document.createElement('button');
+  openBtn.type = 'button';
+  openBtn.className = 'planner-quick-open-btn';
+  openBtn.textContent = '\u2630 Recent Planners';
+  toolbar.appendChild(openBtn);
+
+  const backdrop = document.createElement('div');
+  backdrop.className = 'planner-recent-backdrop';
+  const sidebar = document.createElement('aside');
+  sidebar.className = 'planner-recent-sidebar';
+  sidebar.innerHTML = `
+    <div class="planner-recent-header">
+      <div class="planner-recent-title">Recent Planner Uploads</div>
+      <button type="button" class="planner-recent-close" id="plannerRecentCloseBtn">Close</button>
+    </div>
+    <div class="planner-recent-body" id="plannerRecentBody">
+      <div class="planner-recent-status">Loading recent planner uploads...</div>
+    </div>
+  `;
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(sidebar);
+
+  const closeBtn = sidebar.querySelector('#plannerRecentCloseBtn');
+  const body = sidebar.querySelector('#plannerRecentBody');
+
+  function openSidebar() {
+    backdrop.classList.add('open');
+    sidebar.classList.add('open');
+  }
+
+  function closeSidebar() {
+    backdrop.classList.remove('open');
+    sidebar.classList.remove('open');
+  }
+
+  async function loadRecentUploads() {
+    body.innerHTML = '<div class="planner-recent-status">Loading recent planner uploads...</div>';
+    try {
+      const res = await fetch('/api/bookings/planner-upload-history?limit=120', { credentials: 'include' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data || !Array.isArray(data.uploads)) {
+        body.innerHTML = '<div class="planner-recent-status">Could not load planner uploads.</div>';
+        return;
+      }
+
+      const uploads = data.uploads;
+      if (!uploads.length) {
+        body.innerHTML = '<div class="planner-recent-status">No planner uploads found yet.</div>';
+        return;
+      }
+
+      const latestByStream = new Map();
+      uploads.forEach((item) => {
+        const stream = normalizeUploadStream(item && item.planner_stream);
+        if (!latestByStream.has(stream)) latestByStream.set(stream, item);
+      });
+
+      const quickItems = [...latestByStream.entries()].map(([stream, item]) => {
+        const fileName = escHtml(String(item && item.file_name ? item.file_name : 'Uploaded planner'));
+        const uploadedAt = escHtml(formatPlannerUploadDate(item && item.uploaded_at));
+        return `
+          <div class="planner-recent-item">
+            <div class="planner-recent-file">${stream}: ${fileName}</div>
+            <div class="planner-recent-meta">Latest upload: ${uploadedAt}</div>
+            <div class="planner-recent-actions">
+              <button type="button" class="planner-recent-open" data-stream="${escHtml(stream)}">Open ${stream}</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      const recentItems = uploads.slice(0, 14).map((item) => {
+        const stream = normalizeUploadStream(item && item.planner_stream);
+        const fileName = escHtml(String(item && item.file_name ? item.file_name : 'Uploaded planner'));
+        const uploadedAt = escHtml(formatPlannerUploadDate(item && item.uploaded_at));
+        const savedRows = Number(item && item.bookings_saved || 0);
+        return `
+          <div class="planner-recent-item">
+            <div class="planner-recent-file">${fileName}</div>
+            <div class="planner-recent-meta">${stream} • ${uploadedAt} • ${savedRows} row${savedRows === 1 ? '' : 's'}</div>
+            <div class="planner-recent-actions">
+              <button type="button" class="planner-recent-open" data-stream="${escHtml(stream)}">Open ${stream}</button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      body.innerHTML = `
+        <section class="planner-recent-section">
+          <h3>Quick Open By Stream</h3>
+          ${quickItems}
+          <div class="planner-recent-actions" style="margin-top:0.45rem;">
+            <button type="button" class="planner-recent-clear" data-stream="All">Show All Streams</button>
+            <a href="recipe_calendar_upload.html" class="planner-recent-clear" style="text-decoration:none;display:inline-flex;align-items:center;">Open Upload Planners</a>
+          </div>
+        </section>
+        <section class="planner-recent-section">
+          <h3>Most Recent Uploads</h3>
+          ${recentItems}
+        </section>
+      `;
+
+      body.querySelectorAll('[data-stream]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const stream = btn.getAttribute('data-stream') || '';
+          setPlannerStreamFilter(stream);
+          closeSidebar();
+        });
+      });
+    } catch (_) {
+      body.innerHTML = '<div class="planner-recent-status">Could not load planner uploads.</div>';
+    }
+  }
+
+  openBtn.addEventListener('click', () => {
+    openSidebar();
+    loadRecentUploads();
+  });
+  closeBtn.addEventListener('click', closeSidebar);
+  backdrop.addEventListener('click', closeSidebar);
+}
+
 // Track the current week start (Monday)
 let currentMonday = (() => {
   return getStartOfWeek(new Date());
@@ -1447,6 +1768,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   renderScheduleCalendar();
+  initRecentPlannerSidebar();
   // Group confirmation is now handled via the task sidebar + group_confirmation.html
   // Add click handler for compare button
   const compareBtn = document.getElementById('compareStripFoodItemBtn');
