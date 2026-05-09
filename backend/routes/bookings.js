@@ -1350,7 +1350,7 @@ router.get('/all', async (req, res) => {
       SELECT
         id, staff_id, staff_name, class_name, booking_date, period,
         recipe, recipe_url, recipe_id, class_size, planner_stream,
-        cook_mode, partner_student_name, partner_student_id, groups
+        cook_mode, partner_student_name, partner_student_id
       FROM bookings`;
     const params = [];
     const where = [];
