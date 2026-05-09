@@ -269,6 +269,7 @@
               <th>Teacher</th>
               <th>Date / Period</th>
               <th style="text-align:center;">Size</th>
+              <th style="text-align:center;">Auto-Set Groups</th>
               <th>Group Type</th>
               <th style="text-align:center;">No. of Groups</th>
             </tr>
@@ -373,11 +374,13 @@
             dateLabel = new Date(String(b.booking_date || '').slice(0, 10) + 'T00:00:00')
               .toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
           } catch (_) { dateLabel = String(b.booking_date || '').slice(0, 10); }
+          const autoGroups = b.groups ? escHtml(String(b.groups)) : '--';
           return `<tr data-booking-id="${id}">
             <td class="gc-class-name">${escHtml(String(b.class_name || ''))}</td>
             <td class="gc-teacher">${escHtml(String(b.staff_name || ''))}</td>
             <td class="gc-date">${escHtml(dateLabel)} P${escHtml(String(b.period || ''))}</td>
             <td class="gc-size">${cs || '?'}</td>
+            <td style="text-align:center;font-weight:600;color:#059669;">${autoGroups}</td>
             <td>
               <div class="gc-btns">
                 <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${pairsN}" title="Groups of 2">Pairs (${pairsN})</button>
