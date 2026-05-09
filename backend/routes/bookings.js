@@ -436,7 +436,7 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
     await ensurePlannerUploadSchema();
 
     // Upsert planner rows: insert new, update if recipe changed, skip if unchanged.
-    // Key: booking_date|planner_stream (one recipe per week per stream).
+    // Key: booking_date|planner_stream|class_name (one recipe per class per week per stream).
     const incomingDates = [...new Set(items.map((b) => String(b.booking_date || '').slice(0, 10)).filter(Boolean))];
     // existingPlannerMap: dedupKey -> { id, recipe, recipe_url, recipe_id }
     const existingPlannerMap = new Map();
@@ -452,7 +452,7 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
         [minDate, maxDate]
       );
       for (const row of existingRes.rows) {
-        const key = `${String(row.booking_date || '').slice(0, 10)}|${String(row.planner_stream || '').trim()}`;
+        const key = `${String(row.booking_date || '').slice(0, 10)}|${String(row.planner_stream || '').trim()}|${String(row.class_name || '').trim().toUpperCase()}`;
         existingPlannerMap.set(key, row);
       }
     }
@@ -464,7 +464,8 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
       const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
       const streamVal = planner_stream || 'Middle';
       const dateVal = String(booking_date || '').slice(0, 10);
-      const dedupKey = `${dateVal}|${streamVal}`;
+      const classKey = String(class_name || '').trim().toUpperCase();
+      const dedupKey = `${dateVal}|${streamVal}|${classKey}`;
 
       const existing = existingPlannerMap.get(dedupKey);
       if (existing) {
