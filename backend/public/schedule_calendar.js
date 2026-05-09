@@ -965,36 +965,16 @@ function askWeekToPrint(defaultMonday) {
 
 function buildPrintGrid(bookings, weekDates) {
   const grid = Array.from({ length: periods.length }, () => Array(weekDates.length).fill(null).map(() => []));
-  let plannersSkipped = 0;
-  let nonMatchingDates = 0;
-  let nonMatchingPeriods = 0;
-  let bookingsAdded = 0;
-  
   bookings.forEach(b => {
     if (isPlannerLikeBooking(b)) {
-      plannersSkipped++;
       return;
     }
     const dayIdx = weekDates.findIndex(wd => wd.iso === b.booking_date);
     const periodIdx = periods.indexOf(Number(b.period));
-    if (dayIdx === -1) {
-      nonMatchingDates++;
-    } else if (periodIdx === -1) {
-      nonMatchingPeriods++;
-    } else {
+    if (dayIdx !== -1 && periodIdx !== -1) {
       grid[periodIdx][dayIdx].push(b);
-      bookingsAdded++;
     }
   });
-  
-  console.log('[SCHEDULE] Grid build summary:', {
-    total: bookings.length,
-    plannersSkipped,
-    nonMatchingDates,
-    nonMatchingPeriods,
-    bookingsAdded
-  });
-  
   return grid;
 }
 
@@ -1149,18 +1129,11 @@ async function fetchBookingsForWeek(monday) {
   try {
     const res = await fetch(`/api/bookings/all?${params.toString()}`);
     if (!res.ok) {
-      console.error('[SCHEDULE] API error:', res.status, res.statusText);
       return [];
     }
     const data = await res.json();
-    const bookings = Array.isArray(data.bookings) ? data.bookings : [];
-    console.log('[SCHEDULE] Fetched bookings:', bookings.length, 'for week', start, 'to', end);
-    if (bookings.length > 0) {
-      console.log('[SCHEDULE] Sample booking:', bookings[0]);
-    }
-    return bookings;
+    return Array.isArray(data.bookings) ? data.bookings : [];
   } catch (err) {
-    console.error('[SCHEDULE] Fetch error:', err);
     return [];
   }
 }
