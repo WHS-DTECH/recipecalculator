@@ -258,6 +258,28 @@
 			return numericIds[currentIndex + 1];
 		}
 
+		function parseIngredientsToList(ingredientsText) {
+			const raw = String(ingredientsText || '').trim();
+			if (!raw) return [];
+
+			// Convert common HTML break markers to line breaks before extracting text.
+			const normalizedHtml = raw
+				.replace(/<br\s*\/?>/gi, '\n')
+				.replace(/<\/p>/gi, '\n')
+				.replace(/<p[^>]*>/gi, '')
+				.replace(/<\/li>/gi, '\n')
+				.replace(/<li[^>]*>/gi, '');
+
+			const temp = document.createElement('div');
+			temp.innerHTML = normalizedHtml;
+			const plainText = String(temp.textContent || temp.innerText || '');
+
+			return plainText
+				.split(/\r?\n/)
+				.map(line => line.trim())
+				.filter(line => line.length > 0);
+		}
+
 		async function markRecipeVerified(recipeId) {
 			try {
 				const response = await fetch(`${API_BASE}/recipes/${recipeId}/verify`, {
@@ -342,11 +364,7 @@
 
 			noIngredientsMsg.style.display = 'none';
 
-			// Parse ingredients (assuming one per line)
-			const ingredients = ingredientsText
-				.split('\n')
-				.map(line => line.trim())
-				.filter(line => line.length > 0);
+			const ingredients = parseIngredientsToList(ingredientsText);
 
 			ingredients.forEach(ingredient => {
 				const li = document.createElement('li');
