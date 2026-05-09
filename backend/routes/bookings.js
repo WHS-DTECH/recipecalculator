@@ -1099,6 +1099,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             const classCode = inferPlannerClassCode(classGroupKey);
             const isSinglePeriodClass = uniquePeriods.length === 1;
             const isSeniorSingleTheory = isSinglePeriodClass && ['11HOSP', '12HOSP', '13HOSP'].includes(String(classCode || '').toUpperCase());
+            const isMiddleSingleTheory = isSinglePeriodClass && String(classCode || '').toUpperCase() === 'MFOOD';
             const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
             const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
 
@@ -1106,7 +1107,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             let targetRecipeUrl = '';
             let targetRecipeId = null;
 
-            if (isSeniorSingleTheory) {
+            if (isSeniorSingleTheory || isMiddleSingleTheory) {
               targetRecipe = 'Theory';
             } else {
               const plannerKey = `${dateIso}|${stream}`;
