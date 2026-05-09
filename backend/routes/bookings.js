@@ -445,7 +445,7 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
       const minDate = sortedDates[0];
       const maxDate = sortedDates[sortedDates.length - 1];
       const existingRes = await pool.query(
-        `SELECT id, booking_date, planner_stream, recipe, recipe_url, recipe_id FROM bookings
+        `SELECT id, booking_date, planner_stream, class_name, recipe, recipe_url, recipe_id FROM bookings
          WHERE period = 'Planner'
            AND booking_date >= $1
            AND booking_date <= $2`,
@@ -472,17 +472,18 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
         const sameRecipe = String(existing.recipe || '').trim() === String(recipe || '').trim();
         const sameUrl = String(existing.recipe_url || '').trim() === String(recipe_url || '').trim();
         const sameId = String(existing.recipe_id || '') === String(recipe_id || '');
-        if (sameRecipe && sameUrl && sameId) {
+        const sameClassName = String(existing.class_name || '').trim() === String(class_name || '').trim();
+        if (sameRecipe && sameUrl && sameId && sameClassName) {
           skipped += 1;
         } else {
-          // Recipe changed — update the existing row.
+          // Planner details changed — update the existing row so the chip label stays in sync.
           await pool.query(
-            `UPDATE bookings SET recipe=$1, recipe_url=$2, recipe_id=$3 WHERE id=$4`,
-            [recipe, recipe_url || '', recipe_id || null, existing.id]
+            `UPDATE bookings SET class_name=$1, recipe=$2, recipe_url=$3, recipe_id=$4 WHERE id=$5`,
+            [class_name, recipe, recipe_url || '', recipe_id || null, existing.id]
           );
           ids.push(existing.id);
           updated += 1;
-          existingPlannerMap.set(dedupKey, { ...existing, recipe, recipe_url, recipe_id });
+          existingPlannerMap.set(dedupKey, { ...existing, class_name, recipe, recipe_url, recipe_id });
         }
         continue;
       }
