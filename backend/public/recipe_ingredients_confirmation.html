@@ -201,6 +201,63 @@
 			statusEl.style.display = 'none';
 		}
 
+		async function fetchRecipeById(recipeId) {
+			const candidateUrls = [
+				`${API_BASE}/recipes/${recipeId}`,
+				`${API_BASE}/recipes/recipes/${recipeId}`
+			];
+
+			let lastError = 'Recipe not found';
+			for (const url of candidateUrls) {
+				try {
+					const response = await fetch(url);
+					let payload = null;
+					try {
+						payload = await response.json();
+					} catch (_) {
+						payload = null;
+					}
+
+					if (!response.ok) {
+						lastError = (payload && (payload.error || payload.message))
+							? String(payload.error || payload.message)
+							: `Failed to load recipe (${response.status})`;
+						continue;
+					}
+
+					// Supports both response shapes:
+					// 1) { success: true, recipe: {...} }
+					// 2) { ...recipeFields }
+					if (payload && typeof payload === 'object') {
+						if (payload.success === true && payload.recipe) {
+							return payload.recipe;
+						}
+						if (payload.id || payload.name || payload.ingredients_display || payload.ingredients_extracted) {
+							return payload;
+						}
+					}
+
+					lastError = (payload && (payload.error || payload.message))
+						? String(payload.error || payload.message)
+						: 'Recipe not found';
+				} catch (err) {
+					lastError = err && err.message ? err.message : 'Network error while loading recipe';
+				}
+			}
+
+			throw new Error(lastError);
+		}
+
+		function getNextBulkRecipeIdAfter(currentId) {
+			if (!bulkQueue || !Array.isArray(bulkQueue.ids) || !bulkQueue.ids.length) return null;
+			const numericIds = bulkQueue.ids.map(id => Number(id)).filter(id => Number.isInteger(id) && id > 0);
+			const currentNum = Number(currentId);
+			const currentIndex = numericIds.indexOf(currentNum);
+			if (currentIndex < 0) return numericIds.length ? numericIds[0] : null;
+			if (currentIndex + 1 >= numericIds.length) return null;
+			return numericIds[currentIndex + 1];
+		}
+
 		async function markRecipeVerified(recipeId) {
 			try {
 				const response = await fetch(`${API_BASE}/recipes/${recipeId}/verify`, {
@@ -221,26 +278,7 @@
 				const params = new URLSearchParams(window.location.search);
 				currentRecipeId = params.get('recipe_id');
 				isBulkMode = params.get('bulk_mode') === 'true';
-				
-				if (!currentRecipeId) {
-					showStatus('No recipe ID provided. Please use the publish workflow.', 'error');
-					return;
-				}
 
-				showStatus('Loading recipe ingredients...');
-				const response = await fetch(`${API_BASE}/recipes/${currentRecipeId}`);
-				
-				if (!response.ok) {
-					throw new Error(`Failed to load recipe (${response.status})`);
-				}
-
-				const data = await response.json();
-				if (!data.success || !data.recipe) {
-					throw new Error(data.error || 'Recipe not found');
-				}
-
-				currentRecipeData = data.recipe;
-				
 				// Check if there's a bulk queue
 				const queueStr = sessionStorage.getItem('bulkReVerifyQueue');
 				if (queueStr && isBulkMode) {
@@ -250,11 +288,28 @@
 						console.warn('Could not parse bulk queue');
 					}
 				}
+				
+				if (!currentRecipeId) {
+					showStatus('No recipe ID provided. Please use the publish workflow.', 'error');
+					return;
+				}
+
+				showStatus('Loading recipe ingredients...');
+				currentRecipeData = await fetchRecipeById(currentRecipeId);
 
 				renderRecipeDetails();
 				hideStatus();
 			} catch (err) {
-				showStatus(`Error loading recipe: ${err.message}`, 'error');
+				if (isBulkMode && bulkQueue) {
+					const nextRecipeId = getNextBulkRecipeIdAfter(currentRecipeId);
+					if (nextRecipeId) {
+						showStatus(`Recipe ${currentRecipeId} could not be loaded (${err.message}). Skipping to ${nextRecipeId}...`, 'info');
+						window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
+						return;
+					}
+				}
+
+				showStatus(`Error loading recipe ${currentRecipeId}: ${err.message}`, 'error');
 				console.error('Load error:', err);
 			}
 		}
@@ -313,12 +368,11 @@
 
 				if (isBulkMode && bulkQueue) {
 					// Move to next recipe in queue
-					const nextIndex = bulkQueue.ids.indexOf(bulkQueue.current) + 1;
-					if (nextIndex < bulkQueue.ids.length) {
-						const nextRecipeId = bulkQueue.ids[nextIndex];
-						bulkQueue.completed++;
+					const nextRecipeId = getNextBulkRecipeIdAfter(currentRecipeId);
+					if (nextRecipeId) {
+						bulkQueue.completed = Number(bulkQueue.completed || 0) + 1;
+						bulkQueue.current = Number(nextRecipeId);
 						sessionStorage.setItem('bulkReVerifyQueue', JSON.stringify(bulkQueue));
-						// Go to next recipe
 						window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
 						return;
 					} else {
