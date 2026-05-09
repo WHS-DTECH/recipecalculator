@@ -228,6 +228,31 @@
       color: #1f2937;
       min-width: 180px;
     }
+    .gc-filter-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+      flex-wrap: wrap;
+    }
+    .gc-filter-wrap label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #374151;
+    }
+    .gc-filter-btn {
+      padding: 0.35rem 0.85rem;
+      border: 1px solid #d1d5db;
+      border-radius: 5px;
+      background: #f9fafb;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .gc-filter-btn:hover { border-color: #1976d2; color: #1976d2; }
+    .gc-filter-btn.active { background: #1976d2; color: #fff; border-color: #1976d2; }
   </style>
 </head>
 <body>
@@ -251,6 +276,13 @@
       <button type="button" class="gc-week-btn" id="gcNextWeekBtn">Later →</button>
     </div>
 
+    <div class="gc-filter-wrap" id="gcFilters" style="display:none">
+      <label>View:</label>
+      <button type="button" class="gc-filter-btn active" data-filter="unassigned">Unassigned Groups</button>
+      <button type="button" class="gc-filter-btn" data-filter="all">All Groups</button>
+      <button type="button" class="gc-filter-btn" data-filter="byclass">All by School/Class</button>
+    </div>
+
     <div id="gcLoading" class="gc-loading">Loading bookings…</div>
 
     <div id="gcEmpty" class="gc-empty" style="display:none">
@@ -268,7 +300,7 @@
               <th>Class</th>
               <th>Teacher</th>
               <th>Date / Period</th>
-              <th style="text-align:center;">Size</th>
+              <th style="text-align:center;">Class Size</th>
               <th style="text-align:center;">Auto-Set Groups</th>
               <th>Group Type</th>
               <th style="text-align:center;">No. of Groups</th>
@@ -326,6 +358,7 @@
       })();
 
       const selections = {};
+      let currentFilter = 'unassigned';
 
       function formatWeekLabel(monday) {
         const friday = new Date(monday);
@@ -339,6 +372,7 @@
       function renderTable(bookings, firstName) {
         document.getElementById('gcLoading').style.display = 'none';
         document.getElementById('gcWeekLabel').textContent = formatWeekLabel(targetMonday);
+        document.getElementById('gcFilters').style.display = '';
 
         if (!bookings.length) {
           document.getElementById('gcEmpty').style.display = '';
@@ -353,13 +387,16 @@
         const banner = document.getElementById('gcBanner');
         banner.style.display = '';
         const weekLabel = targetMonday.toLocaleDateString('en-NZ', { day: 'numeric', month: 'long', year: 'numeric' });
+        const bannerText = currentFilter === 'unassigned' 
+          ? `You have <strong>${bookings.length}</strong> class${bookings.length !== 1 ? 'es' : ''} in the week of <strong>${escHtml(weekLabel)}</strong> without group sizes set.`
+          : `You are viewing <strong>${bookings.length}</strong> class${bookings.length !== 1 ? 'es' : ''} in the week of <strong>${escHtml(weekLabel)}</strong>.`;
         banner.innerHTML = `
-          <div class="gc-banner-title">Hi, ${escHtml(firstName)}! Groups confirmation needed</div>
-          <div class="gc-banner-sub">You have <strong>${bookings.length}</strong> class${bookings.length !== 1 ? 'es' : ''} in the week of <strong>${escHtml(weekLabel)}</strong> without group sizes set.
+          <div class="gc-banner-title">Hi, ${escHtml(firstName)}! ${currentFilter === 'unassigned' ? 'Groups confirmation needed' : 'Group overview'}</div>
+          <div class="gc-banner-sub">${bannerText}
           The Lead Teacher needs this to generate shopping lists. Please confirm the group type for each class.</div>
         `;
 
-        bookings.forEach(b => { selections[b.id] = null; });
+        bookings.forEach(b => { if (selections[b.id] === undefined) selections[b.id] = b.groups ? Number(b.groups) : null; });
 
         const btnBase = 'gc-btn';
         const tbody = document.getElementById('gcTbody');
@@ -375,6 +412,7 @@
               .toLocaleDateString('en-NZ', { weekday: 'short', day: 'numeric', month: 'short' });
           } catch (_) { dateLabel = String(b.booking_date || '').slice(0, 10); }
           const autoGroups = b.groups ? escHtml(String(b.groups)) : '--';
+          const isDisabled = currentFilter !== 'unassigned' && b.groups;
           return `<tr data-booking-id="${id}">
             <td class="gc-class-name">${escHtml(String(b.class_name || ''))}</td>
             <td class="gc-teacher">${escHtml(String(b.staff_name || ''))}</td>
@@ -382,14 +420,14 @@
             <td class="gc-size">${cs || '?'}</td>
             <td style="text-align:center;font-weight:600;color:#059669;">${autoGroups}</td>
             <td>
-              <div class="gc-btns">
-                <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${pairsN}" title="Groups of 2">Pairs (${pairsN})</button>
-                <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${indiN}" title="Each student individually">Individuals (${indiN})</button>
-                <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${threesN}" title="Groups of 3">Threes (${threesN})</button>
-                <span class="gc-custom-wrap">Custom: <input type="number" class="gc-custom-input" data-id="${id}" min="1" max="99" placeholder="#"></span>
+              <div class="gc-btns" ${isDisabled ? 'style="opacity:0.5;pointer-events:none;"' : ''}>
+                <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${pairsN}" title="Groups of 2" ${isDisabled ? 'disabled' : ''}>Pairs (${pairsN})</button>
+                <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${indiN}" title="Each student individually" ${isDisabled ? 'disabled' : ''}>Individuals (${indiN})</button>
+                <button type="button" class="${btnBase} gc-preset-btn" data-id="${id}" data-count="${threesN}" title="Groups of 3" ${isDisabled ? 'disabled' : ''}>Threes (${threesN})</button>
+                <span class="gc-custom-wrap">Custom: <input type="number" class="gc-custom-input" data-id="${id}" min="1" max="99" placeholder="#" ${isDisabled ? 'disabled' : ''}></span>
               </div>
             </td>
-            <td><span class="gc-result" data-id="${id}">--</span></td>
+            <td><span class="gc-result" data-id="${id}" ${b.groups ? 'style="color:#059669;font-weight:600;"' : ''}>${b.groups ? escHtml(String(b.groups)) : '--'}</span></td>
           </tr>`;
         }).join('');
       }
@@ -431,16 +469,27 @@
           ]);
 
           const allBookings = Array.isArray(bookingsData.bookings) ? bookingsData.bookings : [];
-          const unconfirmed = allBookings.filter(b =>
-            String(b.period || '').toLowerCase() !== 'planner' &&
-            (b.groups == null || String(b.groups).trim() === '')
-          );
+          const nonPlannerBookings = allBookings.filter(b => String(b.period || '').toLowerCase() !== 'planner');
+          
+          let filtered = [];
+          if (currentFilter === 'unassigned') {
+            filtered = nonPlannerBookings.filter(b => b.groups == null || String(b.groups).trim() === '');
+          } else if (currentFilter === 'all') {
+            filtered = nonPlannerBookings;
+          } else if (currentFilter === 'byclass') {
+            filtered = nonPlannerBookings.sort((a, b) => {
+              const aClass = String(a.class_name || '');
+              const bClass = String(b.class_name || '');
+              if (aClass !== bClass) return aClass.localeCompare(bClass);
+              return (a.booking_date || '').localeCompare(b.booking_date || '');
+            });
+          }
 
           const firstName = (meData && meData.user && meData.user.name)
             ? String(meData.user.name).split(' ')[0]
             : 'Teacher';
 
-          renderTable(unconfirmed, firstName);
+          renderTable(filtered, firstName);
         } catch (err) {
           document.getElementById('gcLoading').style.display = 'none';
           document.getElementById('gcStatus').textContent = 'Error loading bookings: ' + (err.message || 'Unknown error');
@@ -461,6 +510,18 @@
           targetMonday.setDate(targetMonday.getDate() + 7);
           loadBookings();
         };
+
+        document.querySelectorAll('.gc-filter-btn').forEach(btn => {
+          btn.onclick = () => {
+            const filter = btn.dataset.filter;
+            if (filter && filter !== currentFilter) {
+              currentFilter = filter;
+              document.querySelectorAll('.gc-filter-btn').forEach(b => b.classList.remove('active'));
+              btn.classList.add('active');
+              loadBookings();
+            }
+          };
+        });
 
         document.getElementById('gcTable').addEventListener('click', (e) => {
           const btn = e.target.closest('.gc-preset-btn');
