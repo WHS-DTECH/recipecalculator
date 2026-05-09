@@ -1325,7 +1325,10 @@
         html += `
           <div class="recipe-card ${cardClass}">
             <div class="recipe-header">
-              <h3 class="recipe-name${suggestions.length > 1 && !isMatched ? ' recipe-name-clickable' : ''}" ${suggestions.length > 1 && !isMatched ? `onclick="openCompareModal(${booking.id})" title="Click to compare all versions"` : ''}>${escapeHtml(booking.recipe || 'Unknown')}</h3>
+               <div style="display:flex;align-items:center;gap:10px;flex:1;">
+                 <h3 class="recipe-name${suggestions.length > 1 && !isMatched ? ' recipe-name-clickable' : ''}" ${suggestions.length > 1 && !isMatched ? `onclick="openCompareModal(${booking.id})" title="Click to compare all versions"` : ''} style="margin:0;">${escapeHtml(booking.recipe || 'Unknown')}</h3>
+                 <a href="${isMatched && booking.recipe_id ? `/recipe_display.html?recipe_id=${booking.recipe_id}` : '#'}" target="_blank" ${isMatched && booking.recipe_id ? '' : 'style="opacity:0.5;cursor:not-allowed;"'} title="${isMatched && booking.recipe_id ? 'Edit recipe' : 'Link a recipe first'}" style="font-size:12px;color:#1976d2;text-decoration:none;padding:4px 8px;border:1px solid #1976d2;border-radius:4px;white-space:nowrap;">✎ Edit</a>
+               </div>
               <div style="display:flex;align-items:center;gap:6px;">${multiVersionBadge}${badge}</div>
             </div>
             <div class="recipe-info">
@@ -1361,6 +1364,7 @@
               <div class="action-row" style="margin-top: 10px;">
                 <button class="btn btn-primary btn-sm" onclick="openLinkModal(${booking.id}, null, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Link to existing recipe">Link Existing</button>
                 <button class="btn btn-success btn-sm" onclick="openCreateModal(${booking.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Create new recipe">Create New</button>
+                 <button class="btn btn-secondary btn-sm" onclick="openLinkModal(${booking.id}, null, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Search and load existing recipe">Load Recipe Manually</button>
               </div>
             ` : ''}
           </div>
