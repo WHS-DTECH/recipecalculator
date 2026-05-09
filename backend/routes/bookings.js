@@ -1302,7 +1302,11 @@ router.get('/planner-range', async (req, res) => {
 // ?start=YYYY-MM-DD&end=YYYY-MM-DD (date range)
 // ?staff_id=<id> (staff-scoped)
 // ?planner_stream=<stream label>
-router.get('/all', requireSignedIn, async (req, res) => {
+// NOTE: This endpoint is public (read-only) because it now has built-in guards:
+//   - Default date window: ±120 days
+//   - Row limit: 1500 default, 4000 max
+//   - Transfer logging enabled
+router.get('/all', async (req, res) => {
   try {
     await ensureSchema();
     const { start, end, staff_id, planner_stream } = req.query;
@@ -1377,7 +1381,8 @@ router.get('/all', requireSignedIn, async (req, res) => {
     query += ` ORDER BY booking_date DESC, period LIMIT $${params.length}`;
     const result = await pool.query(query, params);
     const payload = { bookings: result.rows };
-    logJsonTransfer('GET /api/bookings/all', payload, `rows=${result.rows.length} user=${req.authUserEmail || 'unknown'} start=${boundedStart || '-'} end=${boundedEnd || '-'} limit=${limit}`);
+    const userLabel = req.authUserEmail || 'public';
+    logJsonTransfer('GET /api/bookings/all', payload, `rows=${result.rows.length} user=${userLabel} start=${boundedStart || '-'} end=${boundedEnd || '-'} limit=${limit}`);
     res.json(payload);
   } catch (err) {
     console.error('Failed to fetch bookings:', err.message);
