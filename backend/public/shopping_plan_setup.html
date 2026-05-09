@@ -105,6 +105,10 @@
       <div class="sp-toolbar">
         <strong>Class snapshot</strong>
         <span class="sp-muted" id="selectionCount">0 selected</span>
+        <label style="display:flex;align-items:center;gap:0.4rem;margin-left:auto;font-size:0.92rem;color:#2a4052;">
+          <input type="checkbox" id="hideTheoryCheckbox" style="width:16px;height:16px;cursor:pointer;accent-color:#1f6fb2;">
+          <span>Hide Theory</span>
+        </label>
       </div>
       <div class="sp-table-wrap">
         <table class="sp-table" aria-label="Week bookings">
@@ -156,6 +160,7 @@
     const rangeLabel = document.getElementById('rangeLabel');
 
     let currentRows = [];
+    let allRows = [];
 
     function setStatus(el, msg, type) {
       el.textContent = msg || '';
@@ -301,7 +306,12 @@
 
     function renderRows(rows) {
       // Exclude Planner-stream rows entirely
-      currentRows = (rows || []).filter((r) => String(r.period || '').toLowerCase() !== 'planner');
+      const hideTheory = document.getElementById('hideTheoryCheckbox').checked;
+      currentRows = (rows || []).filter((r) => {
+        if (String(r.period || '').toLowerCase() === 'planner') return false;
+        if (hideTheory && String(r.recipe || '').trim().toLowerCase() === 'theory') return false;
+        return true;
+      });
 
       if (!currentRows.length) {
         bookingBody.innerHTML = '<tr><td colspan="8" class="sp-muted">No bookings found for that week.</td></tr>';
@@ -429,6 +439,11 @@
       }
     }
 
+    const hideTheoryCheckbox = document.getElementById('hideTheoryCheckbox');
+    if (hideTheoryCheckbox) {
+      hideTheoryCheckbox.addEventListener('change', () => renderRows(allRows));
+    }
+
     loadBookingsBtn.addEventListener('click', loadWeekBookings);
     createPlanBtn.addEventListener('click', createAndGenerate);
     selectAllBtn.addEventListener('click', function () {
@@ -446,3 +461,8 @@
   </script>
 </body>
 </html>
+
+
+
+
+
