@@ -1124,7 +1124,7 @@ async function fetchBookingsForWeek(monday) {
     params.set('staff_id', selectedStaffId);
   }
 
-  const res = await fetch(`/api/bookings/all?${params.toString()}`);
+  const res = await fetch(`/api/bookings/all?${params.toString()}`, { credentials: 'include' });
   const data = await res.json();
   return Array.isArray(data.bookings) ? data.bookings : [];
 }
@@ -1969,7 +1969,7 @@ async function checkAndShowGroupsPopup() {
 
   try {
     const [bookingsData, meData] = await Promise.all([
-      fetch('/api/bookings/all?start=' + startStr + '&end=' + endStr).then(r => r.json()),
+      fetch('/api/bookings/all?start=' + startStr + '&end=' + endStr, { credentials: 'include' }).then(r => r.json()),
       fetch('/api/auth/me').then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
