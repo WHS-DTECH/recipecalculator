@@ -11,6 +11,17 @@ const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorize
 
 let foodTruckModerationColumnsEnsured = false;
 
+function logJsonTransfer(routeLabel, payload, details) {
+  let bytes = 0;
+  try {
+    bytes = Buffer.byteLength(JSON.stringify(payload || {}), 'utf8');
+  } catch (_) {
+    bytes = 0;
+  }
+  const suffix = details ? ` ${details}` : '';
+  console.log(`[TRANSFER] ${routeLabel} bytes=${bytes}${suffix}`);
+}
+
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
 }
@@ -564,6 +575,7 @@ router.get('/display-table', async (req, res) => {
        )
        ORDER BY rd.id DESC`;
     const result = await pool.query(sql, [scope]);
+    logJsonTransfer('GET /api/recipes/display-table', result.rows, `rows=${result.rows.length} scope=${scope || 'all'}`);
     res.json(result.rows);
   } catch (err) {
     console.error('[ERROR][GET /api/recipes/display-table]', err);

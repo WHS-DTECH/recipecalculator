@@ -13,13 +13,33 @@ const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorize
 
 const matchEngine = require('../recipeMatchEngine');
 
+function normalizeEmail(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function getRequestEmail(req) {
+  return normalizeEmail(
+    (req && req.authUserEmail) ||
+    (req && req.headers && (req.headers['x-user-email'] || req.headers['x-staff-email']))
+  );
+}
+
+function requireSignedIn(req, res, next) {
+  const email = getRequestEmail(req);
+  if (!email) {
+    return res.status(401).json({ success: false, error: 'Sign in required.' });
+  }
+  req.authUserEmail = email;
+  return next();
+}
+
 /**
  * POST /api/recipe-matching/auto-match
  * Automatically match planner bookings to recipes
  * Body: { bookings: [...] }
  * Returns: { matched: [...], unmatched: [...], summary: {...} }
  */
-router.post('/auto-match', async (req, res) => {
+router.post('/auto-match', requireSignedIn, async (req, res) => {
   try {
     const { bookings, bookingIds } = req.body || {};
 
@@ -106,7 +126,7 @@ router.post('/auto-match', async (req, res) => {
  * GET /api/recipe-matching/suggestions/:bookingId
  * Get recipe suggestions for a specific unmatched booking
  */
-router.get('/suggestions/:bookingId', async (req, res) => {
+router.get('/suggestions/:bookingId', requireSignedIn, async (req, res) => {
   try {
     const { bookingId } = req.params;
 
@@ -150,7 +170,7 @@ router.get('/suggestions/:bookingId', async (req, res) => {
  * Manually link a booking to a recipe or mark for new recipe creation
  * Body: { bookingId: number, recipeId?: number, createNew?: boolean }
  */
-router.post('/link-recipe', async (req, res) => {
+router.post('/link-recipe', requireSignedIn, async (req, res) => {
   try {
     const { bookingId, recipeId, createNew } = req.body;
 

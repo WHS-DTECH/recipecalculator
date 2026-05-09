@@ -1038,6 +1038,7 @@
       let saved = 0;
       let failed = 0;
       let savedIds = [];
+      let summaryNote = '';
       try {
         const authUser = await getCurrentAuthUser();
         const fileName = String((pdfFileInput.files && pdfFileInput.files[0] && pdfFileInput.files[0].name) || '').trim();
@@ -1066,7 +1067,7 @@
           if (saved > 0) parts.push(`${saved} new`);
           if (updatedCount > 0) parts.push(`${updatedCount} updated`);
           if (skippedDupes > 0) parts.push(`${skippedDupes} unchanged`);
-          const summaryNote = parts.length ? `(${parts.join(', ')})` : '';
+          summaryNote = parts.length ? `(${parts.join(', ')})` : '';
 
           // Auto-match recipes after successful save
           const hasChanges = saved + updatedCount > 0;

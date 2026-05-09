@@ -12,10 +12,28 @@ function normalizeEmail(value) {
 function getRequestEmail(req) {
   return normalizeEmail(
     (req && req.authUserEmail) ||
-    (req && req.headers && (req.headers['x-user-email'] || req.headers['x-staff-email'])) ||
-    (req && req.query && req.query.userEmail) ||
-    (req && req.body && req.body.userEmail)
+    (req && req.headers && (req.headers['x-user-email'] || req.headers['x-staff-email']))
   );
+}
+
+function logJsonTransfer(routeLabel, payload, details) {
+  let bytes = 0;
+  try {
+    bytes = Buffer.byteLength(JSON.stringify(payload || {}), 'utf8');
+  } catch (_) {
+    bytes = 0;
+  }
+  const suffix = details ? ` ${details}` : '';
+  console.log(`[TRANSFER] ${routeLabel} bytes=${bytes}${suffix}`);
+}
+
+function requireSignedIn(req, res, next) {
+  const email = getRequestEmail(req);
+  if (!email) {
+    return res.status(401).json({ success: false, error: 'Sign in required.' });
+  }
+  req.authUserEmail = email;
+  return next();
 }
 
 function getBootstrapAdminEmails() {
@@ -250,7 +268,7 @@ function classGroupKeyForPrefill(classToken) {
 }
 
 // Update a booking by ID
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireSignedIn, async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id, groups } = req.body;
   try {
     await ensureSchema();
@@ -282,7 +300,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // PATCH /api/bookings/:id/groups — lightweight update of just the groups field
-router.patch('/:id/groups', async (req, res) => {
+router.patch('/:id/groups', requireSignedIn, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     return res.status(400).json({ success: false, error: 'Invalid booking id.' });
@@ -303,7 +321,7 @@ router.patch('/:id/groups', async (req, res) => {
 
 // DELETE /api/bookings/clear-planners - Clear planner bookings (admin function)
 // Optional query params: stream=Middle|Junior|Senior|All, className=<TT code>
-router.delete('/clear-planners', async (req, res) => {
+router.delete('/clear-planners', requirePlanningRole, async (req, res) => {
   try {
     await ensureSchema();
     const requestedStream = String(req.query.stream || 'All').trim();
@@ -367,7 +385,7 @@ router.delete('/clear-planners', async (req, res) => {
 });
 
 // Delete a booking by ID
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireSignedIn, async (req, res) => {
   try {
     await pool.query('DELETE FROM bookings WHERE id=$1', [req.params.id]);
     res.json({ success: true });
@@ -377,7 +395,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // Create a new booking
-router.post('/', async (req, res) => {
+router.post('/', requireSignedIn, async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id } = req.body;
   try {
     await ensureSchema();
@@ -407,7 +425,7 @@ router.post('/', async (req, res) => {
 });
 
 // Batch create bookings (used by Upload Planners page)
-router.post('/batch', async (req, res) => {
+router.post('/batch', requirePlanningRole, async (req, res) => {
   const items = req.body && Array.isArray(req.body.bookings) ? req.body.bookings : null;
   const meta = req.body && req.body.meta ? req.body.meta : {};
   if (!items || !items.length) {
@@ -522,7 +540,7 @@ router.post('/batch', async (req, res) => {
 
 // GET /api/bookings/planner-upload-history
 // Optional query params: email=<uploader email>, limit=<n>
-router.get('/planner-upload-history', async (req, res) => {
+router.get('/planner-upload-history', requirePlanningRole, async (req, res) => {
   try {
     await ensurePlannerUploadSchema();
     const email = normalizeEmail(req.query.email || '');
@@ -551,7 +569,7 @@ router.get('/planner-upload-history', async (req, res) => {
 });
 
 // GET /api/bookings/planner-class-options - current Upload Subjects TT codes ranked by usage
-router.get('/planner-class-options', async (req, res) => {
+router.get('/planner-class-options', requirePlanningRole, async (req, res) => {
   try {
     await ensureSchema();
     const result = await pool.query(
@@ -1239,31 +1257,61 @@ router.get('/planner-range', async (req, res) => {
 // ?start=YYYY-MM-DD&end=YYYY-MM-DD (date range)
 // ?staff_id=<id> (staff-scoped)
 // ?planner_stream=<stream label>
-router.get('/all', async (req, res) => {
+router.get('/all', requireSignedIn, async (req, res) => {
   try {
     await ensureSchema();
     const { start, end, staff_id, planner_stream } = req.query;
+    const limitRaw = Number(req.query.limit);
+    const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(4000, Math.floor(limitRaw))) : 1500;
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
     if ((start && !dateRe.test(start)) || (end && !dateRe.test(end))) {
       return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
     }
 
+    const today = new Date();
+    const defaultStartDate = new Date(today);
+    defaultStartDate.setDate(defaultStartDate.getDate() - 120);
+    const defaultEndDate = new Date(today);
+    defaultEndDate.setDate(defaultEndDate.getDate() + 120);
+
+    const hasExplicitDateFilter = Boolean(start || end);
+    const boundedStart = start || (!hasExplicitDateFilter ? toIsoDate(defaultStartDate) : '');
+    const boundedEnd = end || (!hasExplicitDateFilter ? toIsoDate(defaultEndDate) : '');
+
+    if (boundedStart && boundedEnd) {
+      const startDateObj = parseIsoDate(boundedStart);
+      const endDateObj = parseIsoDate(boundedEnd);
+      if (!startDateObj || !endDateObj) {
+        return res.status(400).json({ error: 'Invalid date format. Use YYYY-MM-DD.' });
+      }
+      const spanMs = endDateObj.getTime() - startDateObj.getTime();
+      const maxSpanMs = 370 * 24 * 60 * 60 * 1000;
+      if (spanMs > maxSpanMs) {
+        return res.status(400).json({ error: 'Date range too large. Limit requests to about one year.' });
+      }
+    }
+
     const normalizedStaffId = String(staff_id || '').trim();
     const normalizedPlannerStream = String(planner_stream || '').trim();
 
-    let query = 'SELECT * FROM bookings';
+    let query = `
+      SELECT
+        id, staff_id, staff_name, class_name, booking_date, period,
+        recipe, recipe_url, recipe_id, class_size, planner_stream,
+        cook_mode, partner_student_name, partner_student_id, groups
+      FROM bookings`;
     const params = [];
     const where = [];
 
-    if (start && end) {
+    if (boundedStart && boundedEnd) {
       where.push(`booking_date >= $${params.length + 1} AND booking_date <= $${params.length + 2}`);
-      params.push(start, end);
-    } else if (start) {
+      params.push(boundedStart, boundedEnd);
+    } else if (boundedStart) {
       where.push(`booking_date >= $${params.length + 1}`);
-      params.push(start);
-    } else if (end) {
+      params.push(boundedStart);
+    } else if (boundedEnd) {
       where.push(`booking_date <= $${params.length + 1}`);
-      params.push(end);
+      params.push(boundedEnd);
     }
 
     if (normalizedStaffId) {
@@ -1280,9 +1328,12 @@ router.get('/all', async (req, res) => {
       query += ` WHERE ${where.join(' AND ')}`;
     }
 
-    query += ' ORDER BY booking_date DESC, period';
+    params.push(limit);
+    query += ` ORDER BY booking_date DESC, period LIMIT $${params.length}`;
     const result = await pool.query(query, params);
-    res.json({ bookings: result.rows });
+    const payload = { bookings: result.rows };
+    logJsonTransfer('GET /api/bookings/all', payload, `rows=${result.rows.length} user=${req.authUserEmail || 'unknown'} start=${boundedStart || '-'} end=${boundedEnd || '-'} limit=${limit}`);
+    res.json(payload);
   } catch (err) {
     console.error('Failed to fetch bookings:', err.message);
     res.status(500).json({ error: 'Failed to fetch bookings.' });
