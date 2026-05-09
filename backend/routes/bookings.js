@@ -783,6 +783,51 @@ router.get('/admin/resave-candidates', requirePlanningRole, async (req, res) => 
   }
 });
 
+// GET /api/bookings/admin/transfer-metrics
+// Admin-only endpoint to fetch transfer cost metrics for Dashboard
+router.get('/admin/transfer-metrics', requirePlanningRole, async (req, res) => {
+  try {
+    // Calculate transfer metrics
+    const neonMonthlyGB = 1076; // Documented overage from Neon
+    const neonRate = 0.09; // $/GB
+    const neonFreeAllowance = 100; // GB
+    const neonCost = Math.max(0, (neonMonthlyGB - neonFreeAllowance) * neonRate);
+
+    // Railway estimation - with auth guards in place
+    const railwayMonthlyGB = 75; // Conservative estimate with auth/bounded queries
+    const railwayRate = 0.05; // $/GB
+    const railwayFreeAllowance = 10; // GB
+    const railwayCost = Math.max(0, (railwayMonthlyGB - railwayFreeAllowance) * railwayRate);
+
+    const monthlySavings = neonCost - railwayCost;
+    const yearlySavings = monthlySavings * 12;
+
+    res.json({
+      success: true,
+      neon: {
+        monthlyGB: neonMonthlyGB,
+        ratePerGB: neonRate,
+        freeAllowance: neonFreeAllowance,
+        monthlyCost: parseFloat(neonCost.toFixed(2))
+      },
+      railway: {
+        monthlyGB: railwayMonthlyGB,
+        ratePerGB: railwayRate,
+        freeAllowance: railwayFreeAllowance,
+        monthlyCost: parseFloat(railwayCost.toFixed(2))
+      },
+      savings: {
+        monthlyAmount: parseFloat(monthlySavings.toFixed(2)),
+        yearlyAmount: parseFloat(yearlySavings.toFixed(2)),
+        percentReduction: parseFloat(((neonCost - railwayCost) / neonCost * 100).toFixed(1))
+      }
+    });
+  } catch (err) {
+    console.error('Failed to fetch transfer metrics:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch transfer metrics.' });
+  }
+});
+
 // POST /api/bookings/prefill-from-planner
 // Admin-only utility: creates class bookings for Food/HOSP periods from planner recipes (single or double).
 // Body (optional): { startDate, endDate, dryRun, force_update_recipe }
