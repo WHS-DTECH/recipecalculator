@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Confirm Recipe Ingredients</title>
+	<link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+	<link rel="stylesheet" href="shared/design_tokens.css">
+	<link rel="stylesheet" href="shared/base.css">
+	<link rel="stylesheet" href="shared/components.css">
+	<link rel="stylesheet" href="admin_styles.css">
+	<style>
+		.confirmation-container {
+			max-width: 800px;
+			margin: 20px auto;
+			padding: 20px;
+		}
+		.ingredient-list {
+			list-style-type: none;
+			padding: 0;
+			margin: 15px 0;
+		}
+		.ingredient-list li {
+			padding: 8px 12px;
+			margin: 4px 0;
+			background: #f5f5f5;
+			border-left: 4px solid #2e7d32;
+			border-radius: 2px;
+		}
+		.ingredient-list li:hover {
+			background: #e8e8e8;
+		}
+		.header-section {
+			margin-bottom: 25px;
+		}
+		.recipe-title {
+			font-size: 28px;
+			font-weight: 600;
+			color: #1b1b1b;
+			margin: 10px 0;
+		}
+		.recipe-info {
+			font-size: 14px;
+			color: #666;
+			margin: 5px 0;
+		}
+		.ingredients-section {
+			background: #fafafa;
+			padding: 20px;
+			border-radius: 6px;
+			border: 1px solid #e0e0e0;
+			margin: 20px 0;
+		}
+		.section-title {
+			font-size: 18px;
+			font-weight: 600;
+			color: #1b1b1b;
+			margin-bottom: 15px;
+		}
+		.action-buttons {
+			display: flex;
+			gap: 10px;
+			margin-top: 25px;
+			justify-content: center;
+		}
+		.btn-confirm {
+			background: #2e7d32;
+			color: white;
+			border: none;
+			padding: 10px 24px;
+			border-radius: 4px;
+			font-size: 14px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+		.btn-confirm:hover {
+			background: #1b5e20;
+		}
+		.btn-reject {
+			background: #e53935;
+			color: white;
+			border: none;
+			padding: 10px 24px;
+			border-radius: 4px;
+			font-size: 14px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+		.btn-reject:hover {
+			background: #b71c1c;
+		}
+		.btn-edit {
+			background: #1976d2;
+			color: white;
+			border: none;
+			padding: 8px 16px;
+			border-radius: 4px;
+			font-size: 13px;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+		.btn-edit:hover {
+			background: #1565c0;
+		}
+		.status-message {
+			padding: 12px;
+			border-radius: 4px;
+			margin: 15px 0;
+			font-size: 14px;
+		}
+		.status-success {
+			background: #e8f5e9;
+			color: #1b5e20;
+			border: 1px solid #81c784;
+		}
+		.status-error {
+			background: #ffebee;
+			color: #b71c1c;
+			border: 1px solid #e57373;
+		}
+		.status-info {
+			background: #e3f2fd;
+			color: #1565c0;
+			border: 1px solid #64b5f6;
+		}
+		.loading-spinner {
+			display: inline-block;
+			width: 16px;
+			height: 16px;
+			border: 2px solid rgba(0,0,0,0.1);
+			border-top: 2px solid #1976d2;
+			border-radius: 50%;
+			animation: spin 0.6s linear infinite;
+		}
+		@keyframes spin {
+			to { transform: rotate(360deg); }
+		}
+		.no-ingredients {
+			text-align: center;
+			color: #999;
+			padding: 30px;
+			font-style: italic;
+		}
+	</style>
+</head>
+<body>
+	<div id="navbar-include"></div>
+	<script src="../shared/navbar_loader.js"></script>
+	
+	<div class="confirmation-container">
+		<div class="header-section">
+			<h1>Confirm Recipe Ingredients</h1>
+			<div class="recipe-info">
+				Please review the loaded ingredients for this recipe. Confirm they are correct before publishing.
+			</div>
+		</div>
+
+		<div id="statusMessage" style="display: none;"></div>
+
+		<div id="recipeDetails" style="display: none;">
+			<div class="recipe-title" id="recipeName"></div>
+			<div class="recipe-info">
+				<strong>Recipe ID:</strong> <span id="recipeId"></span>
+			</div>
+			<div class="recipe-info">
+				<strong>Status:</strong> <span id="recipeStatus" style="display: inline-block; padding: 2px 8px; background: #fff3cd; border-radius: 3px;"></span>
+			</div>
+
+			<div class="ingredients-section">
+				<div class="section-title">Ingredients</div>
+				<button id="editIngredientsBtn" class="btn-edit">Edit Ingredients</button>
+				<ul id="ingredientsList" class="ingredient-list"></ul>
+				<div id="noIngredientsMsg" class="no-ingredients"></div>
+			</div>
+
+			<div class="action-buttons">
+				<button id="confirmBtn" class="btn-confirm">✓ Ingredients Correct - Proceed to Publish</button>
+				<button id="rejectBtn" class="btn-reject">✗ Fix Ingredients</button>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		const API_BASE = '/api';
+		let currentRecipeId = null;
+		let currentRecipeData = null;
+
+		function showStatus(message, type = 'info') {
+			const statusEl = document.getElementById('statusMessage');
+			statusEl.textContent = message;
+			statusEl.className = `status-message status-${type}`;
+			statusEl.style.display = 'block';
+		}
+
+		function hideStatus() {
+			const statusEl = document.getElementById('statusMessage');
+			statusEl.style.display = 'none';
+		}
+
+		async function loadRecipeDetails() {
+			try {
+				const params = new URLSearchParams(window.location.search);
+				currentRecipeId = params.get('recipe_id');
+				
+				if (!currentRecipeId) {
+					showStatus('No recipe ID provided. Please use the publish workflow.', 'error');
+					return;
+				}
+
+				showStatus('Loading recipe ingredients...');
+				const response = await fetch(`${API_BASE}/recipes/${currentRecipeId}`);
+				
+				if (!response.ok) {
+					throw new Error(`Failed to load recipe (${response.status})`);
+				}
+
+				const data = await response.json();
+				if (!data.success || !data.recipe) {
+					throw new Error(data.error || 'Recipe not found');
+				}
+
+				currentRecipeData = data.recipe;
+				renderRecipeDetails();
+				hideStatus();
+			} catch (err) {
+				showStatus(`Error loading recipe: ${err.message}`, 'error');
+				console.error('Load error:', err);
+			}
+		}
+
+		function renderRecipeDetails() {
+			if (!currentRecipeData) return;
+
+			document.getElementById('recipeName').textContent = currentRecipeData.name || 'Unnamed Recipe';
+			document.getElementById('recipeId').textContent = currentRecipeData.id;
+			document.getElementById('recipeStatus').textContent = 'Review Before Publish';
+			document.getElementById('recipeDetails').style.display = 'block';
+
+			const ingredientsList = document.getElementById('ingredientsList');
+			const noIngredientsMsg = document.getElementById('noIngredientsMsg');
+			ingredientsList.innerHTML = '';
+
+			// Get ingredients from ingredients_display (cleaned) or ingredients_extracted
+			const ingredientsText = currentRecipeData.ingredients_display || currentRecipeData.ingredients_extracted || '';
+			
+			if (!ingredientsText.trim()) {
+				noIngredientsMsg.textContent = 'No ingredients loaded for this recipe.';
+				noIngredientsMsg.style.display = 'block';
+				return;
+			}
+
+			noIngredientsMsg.style.display = 'none';
+
+			// Parse ingredients (assuming one per line)
+			const ingredients = ingredientsText
+				.split('\n')
+				.map(line => line.trim())
+				.filter(line => line.length > 0);
+
+			ingredients.forEach(ingredient => {
+				const li = document.createElement('li');
+				li.textContent = ingredient;
+				ingredientsList.appendChild(li);
+			});
+		}
+
+		document.getElementById('confirmBtn').addEventListener('click', async () => {
+			if (!currentRecipeId) return;
+
+			try {
+				const confirmBtn = document.getElementById('confirmBtn');
+				confirmBtn.disabled = true;
+				confirmBtn.textContent = 'Processing...';
+
+				// Store the confirmation in sessionStorage for recipe_publish.js to pick up
+				sessionStorage.setItem('ingredientsConfirmed_' + currentRecipeId, 'true');
+
+				// Redirect back to recipe_publish.html with the recipe ID to complete the publish
+				window.location.href = `/recipe_publish.html?resume_publish=${currentRecipeId}`;
+			} catch (err) {
+				showStatus(`Error confirming ingredients: ${err.message}`, 'error');
+				document.getElementById('confirmBtn').disabled = false;
+				document.getElementById('confirmBtn').textContent = '✓ Ingredients Correct - Proceed to Publish';
+			}
+		});
+
+		document.getElementById('rejectBtn').addEventListener('click', () => {
+			if (!currentRecipeId) return;
+			
+			// User wants to fix ingredients, navigate to recipe_display.html to edit
+			window.location.href = `/recipe_display.html?recipe_id=${currentRecipeId}`;
+		});
+
+		document.getElementById('editIngredientsBtn').addEventListener('click', () => {
+			if (!currentRecipeId) return;
+			
+			// Navigate to recipe_display.html for editing
+			window.location.href = `/recipe_display.html?recipe_id=${currentRecipeId}`;
+		});
+
+		// Load recipe details on page load
+		window.addEventListener('load', loadRecipeDetails);
+	</script>
+</body>
+</html>

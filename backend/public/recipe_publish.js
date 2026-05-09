@@ -35,6 +35,19 @@ document.addEventListener('DOMContentLoaded', () => {
 		alert(message);
 	}
 
+	function showAutoPublishComplete(recipeId) {
+		const autoPublishReviewBox = document.getElementById('autoPublishReviewBox');
+		const autoPublishReviewText = document.getElementById('autoPublishReviewText');
+		if (autoPublishReviewText) {
+			autoPublishReviewText.textContent = `RecipeID ${recipeId} published successfully!`;
+		}
+		if (autoPublishReviewBox) {
+			autoPublishReviewBox.style.display = 'block';
+			autoPublishReviewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		}
+		notify(`RecipeID ${recipeId} published.`, 'success');
+	}
+
 	function renderApiErrorCallout(message) {
 		const safeMessage = escapeHtml(message || 'Unknown error');
 		tbody.innerHTML = `<tr><td colspan="7"><div class="ui-error-callout"><strong>Error loading recipes.</strong><span>${safeMessage}</span></div></td></tr>`;
@@ -402,14 +415,9 @@ let allRecipesCache = [];
 				await new Promise(resolve => setTimeout(resolve, 250));
 				await refreshRecipesFromApi(String(recipeId));
 
+				// Redirect to ingredients confirmation page instead of showing review box
 				pendingAutoPublishRecipeId = recipeId;
-				if (autoPublishReviewText) {
-					autoPublishReviewText.textContent = `RecipeID ${recipeId} cleanup complete. Choose Accept to publish or Decline to return.`;
-				}
-				if (autoPublishReviewBox) {
-					autoPublishReviewBox.style.display = 'block';
-					autoPublishReviewBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-				}
+				window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${recipeId}`;
 			} catch (err) {
 				if (instructionsProgressBar && instructionsProgressFill) {
 					instructionsProgressBar.style.display = 'none';
@@ -688,6 +696,26 @@ let allRecipesCache = [];
 				cleanupIngredientsBtnActive.disabled = false;
 			}
 		});
+	}
+
+	// Handle resuming publish after ingredients confirmation
+	const resumePublishId = new URLSearchParams(window.location.search).get('resume_publish');
+	if (resumePublishId) {
+		const recipeId = Number(resumePublishId);
+		if (Number.isInteger(recipeId) && recipeId > 0) {
+			// Remove the URL parameter so page reloads don't trigger this again
+			window.history.replaceState({}, document.title, '/recipe_publish.html');
+			
+			// Auto-complete the publish
+			(async () => {
+				try {
+					await publishRecipeById(recipeId);
+					showAutoPublishComplete(recipeId);
+				} catch (err) {
+					notify('Publish failed: ' + err.message, 'error', 6500);
+				}
+			})();
+		}
 	}
 
 	// Stop here: legacy code below this point is kept for reference only and must not run on recipe_publish.html.
