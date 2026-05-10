@@ -2260,6 +2260,71 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
       }
     });
 
+    // Refresh recipe: sync recipe info to display table and all dependent data
+    app.post('/api/recipes/:id/refresh', requireAdmin, async (req, res) => {
+      const recipeId = parseInt(req.params.id, 10);
+      if (!Number.isInteger(recipeId) || recipeId <= 0) {
+        return res.status(400).json({ success: false, error: 'Invalid recipe ID.' });
+      }
+
+      try {
+        await ensureRecipeDisplayImageColumn();
+
+        // 1. Fetch the recipe
+        const recipeResult = await pool.query('SELECT * FROM recipes WHERE id = $1', [recipeId]);
+        if (recipeResult.rowCount === 0) {
+          return res.status(404).json({ success: false, error: 'Recipe not found.' });
+        }
+        const recipe = recipeResult.rows[0];
+
+        // 2. Update recipe_display table with latest recipe data
+        const upsertSql = `
+          INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid, image_url)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (recipeid) DO UPDATE SET
+            name = EXCLUDED.name,
+            description = EXCLUDED.description,
+            ingredients = EXCLUDED.ingredients,
+            serving_size = EXCLUDED.serving_size,
+            url = EXCLUDED.url,
+            instructions = EXCLUDED.instructions,
+            image_url = COALESCE(recipe_display.image_url, EXCLUDED.image_url),
+            updated_at = NOW()
+          RETURNING id`;
+        
+        const displayResult = await pool.query(upsertSql, [
+          recipe.name,
+          recipe.description,
+          recipe.ingredients_display,
+          recipe.serving_size,
+          recipe.url,
+          recipe.instructions,
+          recipe.id,
+          recipe.image_url || null
+        ]);
+
+        // 3. Mark all bookings referencing this recipe as "dirty" (optionally set a flag)
+        // This could be used by shopping plan generation to know the recipe was updated
+        const bookingsResult = await pool.query(
+          'UPDATE bookings SET updated_at = NOW() WHERE recipe_id = $1 RETURNING id',
+          [recipeId]
+        );
+
+        // 4. Note: existing finalized shopping plans are locked and won't change.
+        // Only new shopping plans generated after this refresh will use the updated recipe.
+
+        return res.json({ 
+          success: true, 
+          message: `Recipe ${recipeId} refreshed successfully.`,
+          display_id: displayResult.rows[0].id,
+          bookings_marked: bookingsResult.rowCount
+        });
+      } catch (err) {
+        console.error('[RECIPE_REFRESH][ERROR]', err.message);
+        return res.status(500).json({ success: false, error: err.message });
+      }
+    });
+
     // Admin: update recipe_display fields (name, serving_size, url, ingredients, instructions)
     app.put('/api/admin/recipe-display/:id', requireAdmin, async (req, res) => {
       const { id } = req.params;

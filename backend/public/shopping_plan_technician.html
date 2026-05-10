@@ -88,7 +88,7 @@
         <button id="loadBtn" class="spt-btn primary" type="button">Load Finalized Plan</button>
         <button id="printBtn" class="spt-btn secondary" type="button">Print</button>
         <button id="csvBtn" class="spt-btn secondary" type="button">Export CSV</button>
-        <button id="refreshBrandBtn" class="spt-btn secondary" type="button" style="background:#b66e19;" title="Re-apply food brand normalization to strip brand names from items">Refresh Brand Names</button>
+        <button id="refreshBtn" class="spt-btn secondary" type="button" title="Re-apply food brand normalization to retroactively update item names">Refresh Brand Names</button>
       </div>
       <div class="spt-meta" id="planMeta"></div>
       <div class="spt-status" id="status"></div>
@@ -108,7 +108,7 @@
     const loadBtn = document.getElementById('loadBtn');
     const printBtn = document.getElementById('printBtn');
     const csvBtn = document.getElementById('csvBtn');
-    const refreshBrandBtn = document.getElementById('refreshBrandBtn');
+    const refreshBtn = document.getElementById('refreshBtn');
     const planMeta = document.getElementById('planMeta');
     const statusEl = document.getElementById('status');
     const categoryGrid = document.getElementById('categoryGrid');
@@ -441,27 +441,30 @@
       URL.revokeObjectURL(link.href);
     });
 
-    refreshBrandBtn.addEventListener('click', async () => {
+    refreshBtn.addEventListener('click', async () => {
       if (!currentPayload || !currentPayload.plan) {
-        setStatus('Load a finalized plan before refreshing brand names.', 'err');
+        setStatus('Load a finalized plan before refreshing.', 'err');
         return;
       }
-      if (!confirm('Re-apply food brand normalization to strip brand names from items in this plan? Items will be reloaded from the database.')) {
-        return;
-      }
-
-      const planId = currentPayload.plan.id;
-      setStatus('Refreshing brand names...', '');
       try {
-        const resp = await fetch('/api/shopping-plan/' + planId + '/reapply-brand-normalization', {
+        setStatus('Refreshing food brand names...', '');
+        const planId = currentPayload.plan.id;
+        const resp = await fetch('/api/shopping-plan/' + planId + '/refresh-brand-names', {
           method: 'POST',
-          credentials: 'include'
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
         });
-        const payload = await resp.json().catch(() => ({}));
-        if (!resp.ok) throw new Error(payload.error || 'Failed to refresh brand names.');
-
-        setStatus(payload.message || 'Brand names refreshed successfully. ' + (payload.updated_count || 0) + ' item(s) updated.', 'ok');
-        await loadPlan(planId);
+        const result = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(result.error || 'Failed to refresh brand names.');
+        setStatus(result.message || 'Brand names refreshed successfully. Reloading plan...', 'ok');
+        // Reload the plan to show updated items
+        setTimeout(async () => {
+          try {
+            await loadPlan(planId);
+          } catch (err) {
+            setStatus(err.message, 'err');
+          }
+        }, 800);
       } catch (err) {
         setStatus(err.message, 'err');
       }

@@ -1322,79 +1322,6 @@ router.get('/:id/technician-view', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/shopping-plan/:id/reapply-brand-normalization (admin only)
-// Retroactively strips food brand names from item_name fields in a finalized plan.
-// Useful when new brands are added and you want to clean existing finalized items.
-// ===========================================================================
-router.post('/:id/reapply-brand-normalization', requireAdmin, async (req, res) => {
-  const planId = parseInt(req.params.id, 10);
-  if (!Number.isInteger(planId) || planId <= 0) {
-    return res.status(400).json({ success: false, error: 'Invalid plan ID.' });
-  }
-
-  try {
-    await ensureSchema();
-
-    // Verify plan exists and is finalized
-    const planRes = await pool.query(
-      'SELECT id, status FROM shopping_plan WHERE id = $1',
-      [planId]
-    );
-    if (planRes.rowCount === 0) {
-      return res.status(404).json({ success: false, error: 'Plan not found.' });
-    }
-    if (planRes.rows[0].status !== 'finalized') {
-      return res.status(409).json({ success: false, error: 'This plan has not been finalized yet.' });
-    }
-
-    // Load all food brands
-    const brandsResult = await pool.query('SELECT brand_name FROM food_brands ORDER BY LENGTH(brand_name) DESC');
-    const brands = (brandsResult.rows || []).map(b => b.brand_name);
-
-    // Helper to strip brand names from a string
-    function stripBrands(name) {
-      let stripped = (name || '').trim();
-      for (const brand of brands) {
-        const re = new RegExp('^' + String(brand || '').replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
-        stripped = stripped.replace(re, '');
-      }
-      return stripped.trim();
-    }
-
-    // Get all items in this plan
-    const itemsRes = await pool.query(
-      'SELECT id, item_name FROM shopping_plan_items WHERE plan_id = $1 ORDER BY id',
-      [planId]
-    );
-
-    let updatedCount = 0;
-    const updates = [];
-
-    for (const item of itemsRes.rows) {
-      const stripped = stripBrands(item.item_name);
-      if (stripped !== item.item_name) {
-        await pool.query(
-          'UPDATE shopping_plan_items SET item_name = $1 WHERE id = $2',
-          [stripped, item.id]
-        );
-        updatedCount++;
-        updates.push({ id: item.id, old_name: item.item_name, new_name: stripped });
-      }
-    }
-
-    return res.json({
-      success: true,
-      message: `Brand normalization applied. ${updatedCount} item(s) updated.`,
-      updated_count: updatedCount,
-      updates: updates
-    });
-  } catch (err) {
-    console.error('[shopping-plan] POST /:id/reapply-brand-normalization error:', err.message);
-    return res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ---------------------------------------------------------------------------
 // POST /api/shopping-plan/smoke-seed  (admin only)
 // Creates minimal test recipes, bookings, and desired_servings_ingredients
 // rows for Phase 4 guardrail smoke tests.  Returns the created IDs so the
@@ -1560,6 +1487,72 @@ router.post('/smoke-seed-scaling', requireAdmin, async (req, res) => {
 // ---------------------------------------------------------------------------
 // POST /api/shopping-plan/smoke-cleanup  (admin only)
 // Deletes data created by smoke-seed. Expects { planIds, bookingIds, recipeIds }
+// ---------------------------------------------------------------------------
+// POST /api/shopping-plan/:id/refresh-brand-names  (admin only)
+// Re-apply brand normalization to items in a finalized plan.
+// Strips brand text from item_name fields retroactively.
+// ---------------------------------------------------------------------------
+router.post('/:id/refresh-brand-names', requireAdmin, async (req, res) => {
+  const planId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(planId) || planId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid plan ID.' });
+  }
+
+  try {
+    await ensureSchema();
+
+    // Fetch the plan to verify it exists and is finalized
+    const planRes = await pool.query(
+      'SELECT id, status FROM shopping_plan WHERE id = $1',
+      [planId]
+    );
+    if (planRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Plan not found.' });
+    }
+    const plan = planRes.rows[0];
+    if (plan.status !== 'finalized') {
+      return res.status(409).json({ success: false, error: 'This plan has not been finalized yet.' });
+    }
+
+    // Load all food brands
+    const brandsResult = await pool.query('SELECT brand_name FROM food_brands ORDER BY brand_name DESC');
+    const brands = (brandsResult.rows || []).map(b => b.brand_name);
+
+    // Helper to strip brand text
+    function stripBrandFromName(name, brandList) {
+      let stripped = (name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+      (brandList || []).forEach(brand => {
+        const re = new RegExp('^' + String(brand || '').replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
+        stripped = stripped.replace(re, '');
+      });
+      return stripped.trim();
+    }
+
+    // Get all items in this plan and update them
+    const itemsRes = await pool.query(
+      'SELECT id, item_name FROM shopping_plan_items WHERE plan_id = $1',
+      [planId]
+    );
+
+    let updated = 0;
+    for (const item of itemsRes.rows) {
+      const stripped = stripBrandFromName(item.item_name, brands);
+      if (stripped !== item.item_name) {
+        await pool.query(
+          'UPDATE shopping_plan_items SET item_name = $1 WHERE id = $2',
+          [stripped, item.id]
+        );
+        updated++;
+      }
+    }
+
+    return res.json({ success: true, message: `Refreshed brand names for plan ${planId}. Updated ${updated} items.`, updated });
+  } catch (err) {
+    console.error('[shopping-plan] POST /:id/refresh-brand-names error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ---------------------------------------------------------------------------
 router.post('/smoke-cleanup', requireAdmin, async (req, res) => {
   const { planIds = [], bookingIds = [], recipeIds = [] } = req.body || {};
