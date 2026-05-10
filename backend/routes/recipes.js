@@ -747,6 +747,32 @@ router.post('/:id/verify', async (req, res) => {
   }
 });
 
+// PUT /api/recipes/:id/ingredients-display - Update editable ingredients content
+router.put('/:id/ingredients-display', async (req, res) => {
+  const recipeId = Number(req.params.id);
+  const ingredientsDisplay = String(req.body?.ingredients_display ?? '').trim();
+
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipe id.' });
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE recipes SET ingredients_display = $1 WHERE id = $2 RETURNING id, ingredients_display',
+      [ingredientsDisplay, recipeId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Recipe not found.' });
+    }
+
+    return res.json({ success: true, recipe: result.rows[0] });
+  } catch (err) {
+    console.error('[INGREDIENTS_DISPLAY][ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // DELETE /api/recipes/display-table/:id - Unpublish a recipe from recipe_display (by id)
 router.delete('/display-table/:id', async (req, res) => {
   let displayId = req.params.id;

@@ -104,6 +104,35 @@
 		.btn-edit:hover {
 			background: #1565c0;
 		}
+		.btn-save {
+			background: #2e7d32;
+			color: white;
+			border: none;
+			padding: 8px 16px;
+			border-radius: 4px;
+			font-size: 13px;
+			cursor: pointer;
+		}
+		.btn-cancel {
+			background: #666;
+			color: white;
+			border: none;
+			padding: 8px 16px;
+			border-radius: 4px;
+			font-size: 13px;
+			cursor: pointer;
+		}
+		.ingredients-editor {
+			width: 100%;
+			box-sizing: border-box;
+			padding: 0.6rem 0.75rem;
+			border: 1px solid #b8c3cc;
+			border-radius: 6px;
+			font-size: 0.95rem;
+			line-height: 1.45;
+			resize: vertical;
+			margin-top: 0.6rem;
+		}
 		.status-message {
 			padding: 12px;
 			border-radius: 4px;
@@ -170,7 +199,12 @@
 
 			<div class="ingredients-section">
 				<div class="section-title">Ingredients</div>
-				<button id="editIngredientsBtn" class="btn-edit">Edit Ingredients</button>
+				<div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+					<button id="editIngredientsBtn" class="btn-edit">Edit Ingredients</button>
+					<button id="saveIngredientsBtn" class="btn-save" style="display:none;">Save Ingredients</button>
+					<button id="cancelIngredientsBtn" class="btn-cancel" style="display:none;">Cancel</button>
+				</div>
+				<textarea id="ingredientsEditor" class="ingredients-editor" rows="10" style="display:none;" placeholder="One ingredient per line"></textarea>
 				<ul id="ingredientsList" class="ingredient-list"></ul>
 				<div id="noIngredientsMsg" class="no-ingredients"></div>
 			</div>
@@ -188,6 +222,7 @@
 		let currentRecipeData = null;
 		let bulkQueue = null;
 		let isBulkMode = false;
+		let isEditingIngredients = false;
 
 		function showStatus(message, type = 'info') {
 			const statusEl = document.getElementById('statusMessage');
@@ -278,6 +313,69 @@
 				.split(/\r?\n/)
 				.map(line => line.trim())
 				.filter(line => line.length > 0);
+		}
+
+		function getCurrentIngredientsText() {
+			return String(currentRecipeData?.ingredients_display || currentRecipeData?.ingredients_extracted || '').trim();
+		}
+
+		function setEditMode(enabled) {
+			isEditingIngredients = enabled;
+			const editBtn = document.getElementById('editIngredientsBtn');
+			const saveBtn = document.getElementById('saveIngredientsBtn');
+			const cancelBtn = document.getElementById('cancelIngredientsBtn');
+			const editor = document.getElementById('ingredientsEditor');
+			const list = document.getElementById('ingredientsList');
+			const noIngredientsMsg = document.getElementById('noIngredientsMsg');
+
+			if (enabled) {
+				const listLines = parseIngredientsToList(getCurrentIngredientsText());
+				editor.value = listLines.join('\n');
+				editor.style.display = 'block';
+				list.style.display = 'none';
+				noIngredientsMsg.style.display = 'none';
+				editBtn.style.display = 'none';
+				saveBtn.style.display = 'inline-block';
+				cancelBtn.style.display = 'inline-block';
+				editor.focus();
+				return;
+			}
+
+			editor.style.display = 'none';
+			list.style.display = 'block';
+			editBtn.style.display = 'inline-block';
+			saveBtn.style.display = 'none';
+			cancelBtn.style.display = 'none';
+		}
+
+		async function saveEditedIngredients() {
+			if (!currentRecipeId || !currentRecipeData) return;
+			const editor = document.getElementById('ingredientsEditor');
+			const saveBtn = document.getElementById('saveIngredientsBtn');
+			const text = String(editor.value || '').trim();
+
+			saveBtn.disabled = true;
+			try {
+				const response = await fetch(`${API_BASE}/recipes/${currentRecipeId}/ingredients-display`, {
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ ingredients_display: text })
+				});
+
+				const payload = await response.json();
+				if (!response.ok || !payload?.success) {
+					throw new Error(payload?.error || `Failed to save ingredients (${response.status})`);
+				}
+
+				currentRecipeData.ingredients_display = payload?.recipe?.ingredients_display ?? text;
+				setEditMode(false);
+				renderRecipeDetails();
+				showStatus('Ingredients saved on this recipe.', 'success');
+			} catch (err) {
+				showStatus(`Could not save ingredients: ${err.message}`, 'error');
+			} finally {
+				saveBtn.disabled = false;
+			}
 		}
 
 		async function markRecipeVerified(recipeId) {
@@ -371,6 +469,10 @@
 				li.textContent = ingredient;
 				ingredientsList.appendChild(li);
 			});
+
+			if (!isEditingIngredients) {
+				setEditMode(false);
+			}
 		}
 
 		document.getElementById('confirmBtn').addEventListener('click', async () => {
@@ -419,9 +521,16 @@
 
 		document.getElementById('editIngredientsBtn').addEventListener('click', () => {
 			if (!currentRecipeId) return;
-			
-			// Navigate to recipe_display.html for editing
-			window.location.href = `/recipe_display.html?recipe_id=${currentRecipeId}`;
+			setEditMode(true);
+		});
+
+		document.getElementById('saveIngredientsBtn').addEventListener('click', async () => {
+			await saveEditedIngredients();
+		});
+
+		document.getElementById('cancelIngredientsBtn').addEventListener('click', () => {
+			setEditMode(false);
+			hideStatus();
 		});
 
 		// Load recipe details on page load
