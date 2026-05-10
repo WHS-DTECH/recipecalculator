@@ -5,18 +5,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const addBtn = document.getElementById('add-brand-btn');
   const formContainer = document.getElementById('brand-form-container');
 
+  async function apiRequest(url, options) {
+    const response = await fetch(url, options);
+    let payload = null;
+
+    try {
+      payload = await response.json();
+    } catch (e) {
+      payload = null;
+    }
+
+    if (!response.ok || (payload && payload.success === false)) {
+      const message = (payload && payload.error) || 'Request failed';
+      throw new Error(message);
+    }
+
+    return payload;
+  }
+
   function fetchBrands() {
-    fetch('/api/food_brands')
-      .then(res => res.json())
+    apiRequest('/api/food_brands')
       .then(data => {
-        if (!data.success || !Array.isArray(data.brands)) {
+        if (!Array.isArray(data.brands)) {
           tableContainer.innerHTML = '<div style="color:red;">Failed to load brands.</div>';
         } else {
           renderTable(data.brands);
         }
       })
-      .catch(() => {
-        tableContainer.innerHTML = '<div style="color:red;">Failed to load brands.</div>';
+      .catch(err => {
+        tableContainer.innerHTML = `<div style="color:red;">${err.message || 'Failed to load brands.'}</div>`;
       });
   }
 
@@ -66,18 +83,25 @@ document.addEventListener('DOMContentLoaded', () => {
       <button id="save-new-brand">Save</button>
       <button id="cancel-add">Cancel</button>
     `;
-    document.getElementById('save-new-brand').onclick = () => {
+
+    document.getElementById('save-new-brand').onclick = async () => {
       const name = document.getElementById('new-brand-name').value.trim();
       if (!name) return alert('Brand name required');
-      fetch('/api/food_brands', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand_name: name })
-      }).then(res => res.json()).then(() => {
+
+      try {
+        await apiRequest('/api/food_brands', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ brand_name: name })
+        });
+
         formContainer.style.display = 'none';
         fetchBrands();
-      });
+      } catch (err) {
+        alert(err.message || 'Failed to add brand');
+      }
     };
+
     document.getElementById('cancel-add').onclick = () => {
       formContainer.style.display = 'none';
     };
@@ -90,18 +114,25 @@ document.addEventListener('DOMContentLoaded', () => {
       <button id="save-edit-brand">Save</button>
       <button id="cancel-edit">Cancel</button>
     `;
-    document.getElementById('save-edit-brand').onclick = () => {
+
+    document.getElementById('save-edit-brand').onclick = async () => {
       const newName = document.getElementById('edit-brand-name').value.trim();
       if (!newName) return alert('Brand name required');
-      fetch(`/api/food_brands/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ brand_name: newName })
-      }).then(res => res.json()).then(() => {
+
+      try {
+        await apiRequest(`/api/food_brands/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ brand_name: newName })
+        });
+
         formContainer.style.display = 'none';
         fetchBrands();
-      });
+      } catch (err) {
+        alert(err.message || 'Failed to update brand');
+      }
     };
+
     document.getElementById('cancel-edit').onclick = () => {
       formContainer.style.display = 'none';
     };
@@ -109,9 +140,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function deleteBrand(id) {
     if (!confirm('Delete this brand?')) return;
-    fetch(`/api/food_brands/${id}`, { method: 'DELETE' })
-      .then(res => res.json())
-      .then(() => fetchBrands());
+
+    apiRequest(`/api/food_brands/${id}`, { method: 'DELETE' })
+      .then(() => fetchBrands())
+      .catch(err => alert(err.message || 'Failed to delete brand'));
   }
 
   fetchBrands();
