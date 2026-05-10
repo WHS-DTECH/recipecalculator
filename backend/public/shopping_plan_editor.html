@@ -106,8 +106,68 @@
     }
     .spe-linkbtn:hover { border-color: #1e6daa; color: #144a75; }
     .spe-kpi { font-size: 1.02rem; font-weight: 800; color: #163a58; }
+    .spe-control-card {
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 100%);
+      border-color: #b8cde0;
+    }
+    .spe-control-layout {
+      display: grid;
+      grid-template-columns: minmax(260px, 1.15fr) minmax(280px, 1.1fr) minmax(280px, 1.35fr);
+      gap: 0.75rem;
+      align-items: start;
+    }
+    .spe-control-block {
+      background: #ffffff;
+      border: 1px solid #d6e3ef;
+      border-radius: 9px;
+      padding: 0.7rem 0.75rem;
+    }
+    .spe-control-title {
+      margin: 0;
+      font-size: 0.84rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #38546b;
+      font-weight: 800;
+    }
+    .spe-control-note {
+      margin: 0.25rem 0 0.6rem;
+      font-size: 0.84rem;
+      color: #5e7689;
+    }
+    .spe-field.tight { min-width: 100%; }
+    .spe-buffer-grid {
+      display: grid;
+      grid-template-columns: minmax(130px, 170px) minmax(180px, 1fr);
+      gap: 0.55rem;
+      align-items: end;
+    }
+    .spe-actions-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(140px, 1fr));
+      gap: 0.45rem;
+    }
+    .spe-actions-grid .spe-btn {
+      width: 100%;
+      text-align: center;
+      padding: 0.5rem 0.65rem;
+    }
+    .spe-actions-grid .spe-btn.warn {
+      grid-column: span 2;
+      font-size: 1rem;
+      padding: 0.62rem 0.7rem;
+    }
+    .spe-top-meta {
+      margin-top: 0.7rem;
+      padding-top: 0.6rem;
+      border-top: 1px dashed #c8d7e5;
+    }
     @media (max-width: 860px) {
       .spe-head { align-items: start; }
+      .spe-control-layout { grid-template-columns: 1fr; }
+      .spe-buffer-grid { grid-template-columns: 1fr; }
+      .spe-actions-grid { grid-template-columns: 1fr; }
+      .spe-actions-grid .spe-btn.warn { grid-column: auto; }
     }
   </style>
 </head>
@@ -125,28 +185,50 @@
       </div>
     </section>
 
-    <section class="spe-card">
-      <div class="spe-row">
-        <div class="spe-field">
-          <label for="planSelect">Plan</label>
-          <select id="planSelect"></select>
+    <section class="spe-card spe-control-card">
+      <div class="spe-control-layout">
+        <div class="spe-control-block">
+          <p class="spe-control-title">1. Select Plan</p>
+          <p class="spe-control-note">Pick the weekly plan, then load it into the editor.</p>
+          <div class="spe-field tight">
+            <label for="planSelect">Plan</label>
+            <select id="planSelect"></select>
+          </div>
+          <div style="margin-top:0.55rem;">
+            <button id="loadPlanBtn" class="spe-btn primary" type="button">Load Plan</button>
+          </div>
         </div>
-        <div class="spe-field" style="min-width:170px;">
-          <label for="defaultBufferInput">Default safety buffer %</label>
-          <input id="defaultBufferInput" type="number" min="0" step="0.1" placeholder="Optional">
+
+        <div class="spe-control-block">
+          <p class="spe-control-title">2. Safety Buffer</p>
+          <p class="spe-control-note">Optional uplift before finalization.</p>
+          <div class="spe-buffer-grid">
+            <div class="spe-field tight">
+              <label for="defaultBufferInput">Default %</label>
+              <input id="defaultBufferInput" type="number" min="0" step="0.1" placeholder="Optional">
+            </div>
+            <div class="spe-field tight">
+              <label for="categoryBufferInput">Category overrides (JSON)</label>
+              <input id="categoryBufferInput" type="text" placeholder='{"Produce":5,"Dairy":3}'>
+            </div>
+          </div>
         </div>
-        <div class="spe-field" style="min-width:260px;">
-          <label for="categoryBufferInput">Category buffer map (JSON)</label>
-          <input id="categoryBufferInput" type="text" placeholder='{"Produce":5,"Dairy":3}'>
+
+        <div class="spe-control-block">
+          <p class="spe-control-title">3. Actions</p>
+          <p class="spe-control-note">Update draft items, then finalize and move to technician view.</p>
+          <div class="spe-actions-grid">
+            <button id="generateDraftBtn" class="spe-btn secondary" type="button">Regenerate Draft</button>
+            <button id="addRowBtn" class="spe-btn secondary" type="button">Add Manual Row</button>
+            <button id="saveBtn" class="spe-btn success" type="button">Save Draft</button>
+            <button id="finalizeBtn" class="spe-btn warn" type="button">Finalize Plan</button>
+          </div>
         </div>
-        <button id="loadPlanBtn" class="spe-btn primary" type="button">Load Plan</button>
-        <button id="generateDraftBtn" class="spe-btn secondary" type="button">Regenerate Draft</button>
-        <button id="addRowBtn" class="spe-btn secondary" type="button">Add Manual Row</button>
-        <button id="saveBtn" class="spe-btn success" type="button">Save Draft</button>
-        <button id="finalizeBtn" class="spe-btn warn" type="button">Finalize Plan</button>
       </div>
-      <div class="spe-status" id="topStatus"></div>
-      <p class="spe-muted" id="planMeta"></p>
+      <div class="spe-top-meta">
+        <div class="spe-status" id="topStatus"></div>
+        <p class="spe-muted" id="planMeta"></p>
+      </div>
     </section>
 
     <section class="spe-card" id="warningPanel">
