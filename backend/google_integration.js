@@ -10,15 +10,50 @@ const TOKEN_PATH = path.join(__dirname, 'token.json');
 
 let oAuth2Client;
 
+function readJsonFile(filePath) {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function loadGoogleCredentials() {
+    const raw = String(process.env.GOOGLE_CREDENTIALS || '').trim();
+    if (raw) {
+        return JSON.parse(raw);
+    }
+    return readJsonFile(CREDENTIALS_PATH);
+}
+
+function loadStoredToken() {
+    const envToken = String(process.env.GOOGLE_TOKEN_JSON || '').trim();
+    if (envToken) {
+        return JSON.parse(envToken);
+    }
+    if (fs.existsSync(TOKEN_PATH)) {
+        return readJsonFile(TOKEN_PATH);
+    }
+    return null;
+}
+
 // Initialize Google OAuth2 client
 async function initializeGoogleClient() {
-    const credentials = JSON.parse(fs.readFileSync(CREDENTIALS_PATH));
-    const { client_secret, client_id, redirect_uris } = credentials.installed;
-    oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirect_uris[0]);
+    const credentials = loadGoogleCredentials();
+    const config = credentials.installed || credentials.web;
+
+    if (!config) {
+        throw new Error('Google credentials must contain an "installed" or "web" object.');
+    }
+
+    const { client_secret, client_id, redirect_uris = [] } = config;
+    const redirectUri = String(process.env.GOOGLE_OAUTH_REDIRECT_URI || '').trim() || redirect_uris[0];
+
+    if (!client_id || !client_secret || !redirectUri) {
+        throw new Error('Missing Google OAuth values: client_id, client_secret, or redirect URI.');
+    }
+
+    oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
 
     // Check if we have previously stored a token
-    if (fs.existsSync(TOKEN_PATH)) {
-        const token = JSON.parse(fs.readFileSync(TOKEN_PATH));
+    const token = loadStoredToken();
+    if (token) {
         oAuth2Client.setCredentials(token);
     } else {
         console.log('No token found. Please authenticate with Google.');
@@ -27,6 +62,10 @@ async function initializeGoogleClient() {
 
 // Generate authentication URL
 router.get('/auth', async (req, res) => {
+    if (!oAuth2Client) {
+        return res.status(500).json({ error: 'Google client is not initialized.' });
+    }
+
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
         scope: [
@@ -39,13 +78,32 @@ router.get('/auth', async (req, res) => {
 
 // Handle OAuth2 callback
 router.get('/oauth2callback', async (req, res) => {
-    const code = req.query.code;
-    const { tokens } = await oAuth2Client.getToken(code);
-    oAuth2Client.setCredentials(tokens);
+    try {
+        if (!oAuth2Client) {
+            return res.status(500).json({ error: 'Google client is not initialized.' });
+        }
 
-    // Store the token to disk for later program executions
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
-    res.send('Authentication successful! You can close this tab.');
+        const code = String(req.query.code || '').trim();
+        if (!code) {
+            return res.status(400).json({ error: 'Missing OAuth code.' });
+        }
+
+        const { tokens } = await oAuth2Client.getToken(code);
+        oAuth2Client.setCredentials(tokens);
+
+        // Store the token to disk for later program executions.
+        // Render instances can be ephemeral, so GOOGLE_TOKEN_JSON can be used instead.
+        try {
+            fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+        } catch (err) {
+            console.warn('Unable to persist token to disk:', err.message);
+        }
+
+        res.send('Authentication successful! You can close this tab.');
+    } catch (err) {
+        console.error('OAuth callback failed:', err.message);
+        res.status(500).json({ error: 'Google OAuth callback failed.' });
+    }
 });
 
 // Webhook to listen for Google Doc updates
