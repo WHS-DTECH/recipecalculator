@@ -43,13 +43,19 @@
     .spt-status { min-height: 1.2rem; margin-top: 0.45rem; font-size: 0.92rem; font-weight: 700; }
     .spt-status.ok { color: #1f7c4c; }
     .spt-status.err { color: #b82f2f; }
-    .spt-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 0.8rem; }
+    .spt-grid { display: flex; flex-direction: column; gap: 0.8rem; }
+    .spt-row-group { display: grid; gap: 0.8rem; }
+    .spt-row-2 { grid-template-columns: repeat(2, minmax(300px, 1fr)); }
+    .spt-row-3 { grid-template-columns: repeat(3, minmax(220px, 1fr)); }
     .spt-cat { border: 1px solid #dbe5ee; border-radius: 8px; overflow: hidden; }
     .spt-cat h3 { margin: 0; background: #245f91; color: #fff; font-size: 0.92rem; padding: 0.5rem 0.6rem; }
     .spt-table { width: 100%; border-collapse: collapse; }
     .spt-table th, .spt-table td { padding: 0.38rem 0.5rem; border-bottom: 1px solid #e6edf4; font-size: 0.9rem; }
     .spt-table th { text-align: left; background: #f5f9fd; color: #365168; }
     .spt-num { text-align: right; font-variant-numeric: tabular-nums; }
+    @media (max-width: 980px) {
+      .spt-row-2, .spt-row-3 { grid-template-columns: 1fr; }
+    }
     @media print {
       body * { visibility: hidden !important; }
       #printArea, #printArea * { visibility: visible !important; }
@@ -248,6 +254,60 @@
       return { qty: formatQty(qty, 4), unit: String(unitValue || '') };
     }
 
+    function canonicalCategoryKey(name) {
+      const value = String(name || '').trim().toLowerCase();
+      if (!value) return 'uncategorised';
+      if (value.includes('meat')) return 'meat';
+      if (value.includes('dairy') || value.includes('pastry')) return 'dairy_pastry';
+      if (value.includes('pantry') || value.includes('dry ingredients') || value.includes('tinned') || value.includes('condiment')) return 'pantry_dry_tinned';
+      if (value.includes('egg')) return 'eggs';
+      if (value.includes('cleaning')) return 'cleaning_products';
+      if (value.includes('produce') || value.includes('fruit') || value.includes('vegetable')) return 'produce_fruit_vegetables';
+      if (value === 'other' || value.startsWith('other')) return 'other_other';
+      if (value.includes('uncategorised') || value.includes('uncategorized')) return 'uncategorised';
+      if (value.includes('action')) return 'action';
+      return 'extra:' + value;
+    }
+
+    function categoryHeading(key) {
+      const labels = {
+        meat: 'Meat',
+        dairy_pastry: 'Dairy & Pastry',
+        pantry_dry_tinned: 'Pantry: Dry Ingredients & Tinned Food',
+        eggs: 'Eggs',
+        cleaning_products: 'Cleaning Products',
+        produce_fruit_vegetables: 'Produce: Fruit & Vegetables',
+        other_other: 'Other: Other',
+        uncategorised: 'Uncategorised',
+        action: 'Action'
+      };
+      if (labels[key]) return labels[key];
+      if (String(key).startsWith('extra:')) {
+        const raw = String(key).slice(6);
+        return raw ? (raw.charAt(0).toUpperCase() + raw.slice(1)) : 'Other';
+      }
+      return String(key || 'Other');
+    }
+
+    function renderCategoryCard(title, rows) {
+      const safeRows = Array.isArray(rows) ? rows : [];
+      return '<section class="spt-cat">' +
+        '<h3>' + esc(title) + '</h3>' +
+        '<table class="spt-table">' +
+          '<thead><tr><th>Item</th><th class="spt-num">Qty</th><th>Unit</th><th>Notes</th></tr></thead>' +
+          '<tbody>' + safeRows.map((r) => {
+            const purchase = toPurchaseUnit(r.final_qty, r.base_unit);
+            return '<tr>' +
+              '<td>' + esc(r.item_name || '') + '</td>' +
+              '<td class="spt-num">' + esc(purchase.qty) + '</td>' +
+              '<td>' + esc(purchase.unit || '') + '</td>' +
+              '<td>' + esc(r.notes || '') + '</td>' +
+            '</tr>';
+          }).join('') + '</tbody>' +
+        '</table>' +
+      '</section>';
+    }
+
     function render(payload) {
       currentPayload = payload;
       const plan = payload.plan || {};
@@ -265,24 +325,37 @@
         return;
       }
 
-      categoryGrid.innerHTML = names.map((cat) => {
+      const grouped = {};
+      names.forEach((cat) => {
+        const key = canonicalCategoryKey(cat);
+        if (!grouped[key]) grouped[key] = [];
         const rows = Array.isArray(categories[cat]) ? categories[cat] : [];
-        return '<section class="spt-cat">' +
-          '<h3>' + esc(cat) + '</h3>' +
-          '<table class="spt-table">' +
-            '<thead><tr><th>Item</th><th class="spt-num">Qty</th><th>Unit</th><th>Notes</th></tr></thead>' +
-            '<tbody>' + rows.map((r) => {
-              const purchase = toPurchaseUnit(r.final_qty, r.base_unit);
-              return '<tr>' +
-                '<td>' + esc(r.item_name || '') + '</td>' +
-                '<td class="spt-num">' + esc(purchase.qty) + '</td>' +
-                '<td>' + esc(purchase.unit || '') + '</td>' +
-                '<td>' + esc(r.notes || '') + '</td>' +
-              '</tr>';
-            }).join('') + '</tbody>' +
-          '</table>' +
-        '</section>';
+        grouped[key] = grouped[key].concat(rows);
+      });
+
+      const rowOrder = [
+        ['meat', 'dairy_pastry'],
+        ['pantry_dry_tinned', 'eggs'],
+        ['cleaning_products', 'produce_fruit_vegetables'],
+        ['other_other', 'uncategorised', 'action']
+      ];
+      const orderedKeys = new Set(rowOrder.flat());
+
+      const rowsHtml = rowOrder.map((keys) => {
+        const present = keys.filter((key) => Array.isArray(grouped[key]) && grouped[key].length);
+        if (!present.length) return '';
+        const rowClass = present.length >= 3 ? 'spt-row-group spt-row-3' : 'spt-row-group spt-row-2';
+        return '<div class="' + rowClass + '">' + present.map((key) => {
+          return renderCategoryCard(categoryHeading(key), grouped[key]);
+        }).join('') + '</div>';
       }).join('');
+
+      const extraKeys = Object.keys(grouped).filter((key) => !orderedKeys.has(key)).sort();
+      const extrasHtml = extraKeys.length
+        ? '<div class="spt-row-group spt-row-2">' + extraKeys.map((key) => renderCategoryCard(categoryHeading(key), grouped[key])).join('') + '</div>'
+        : '';
+
+      categoryGrid.innerHTML = rowsHtml + extrasHtml;
     }
 
     async function loadPlan(id) {
