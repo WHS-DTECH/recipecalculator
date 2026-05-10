@@ -1175,10 +1175,16 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                   });
                   stats.groupsDefaultsApplied += 1;
                 }
-                if (forceUpdateRecipe && !dryRun) {
+                if (!dryRun) {
                   const existingRecipe = String(existingBooking && existingBooking.recipe ? existingBooking.recipe : '').trim().toLowerCase();
                   const targetRecipeName = String(targetRecipe || '').trim().toLowerCase();
-                  if (targetRecipeName && existingRecipe !== targetRecipeName) {
+                  const existingRecipeId = normalizeRecipeId(existingBooking && existingBooking.recipe_id);
+                  const desiredRecipeId = normalizeRecipeId(targetRecipeId);
+
+                  const nameChangedWithForce = forceUpdateRecipe && targetRecipeName && existingRecipe !== targetRecipeName;
+                  const linkedRecipeChanged = desiredRecipeId && existingRecipeId !== desiredRecipeId;
+
+                  if (nameChangedWithForce || linkedRecipeChanged) {
                     recipeUpdates.push({
                       id: Number(existingBooking.id),
                       recipe: targetRecipe,
