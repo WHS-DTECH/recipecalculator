@@ -203,6 +203,149 @@ function getSuggestionNotifyRecipients() {
   return configured;
 }
 
+function getInfraMonitorConfig() {
+  return {
+    renderApiKey: String(process.env.RENDER_API_KEY || '').trim(),
+    renderServiceId: String(process.env.RENDER_SERVICE_ID || '').trim(),
+    railwayToken: String(process.env.RAILWAY_TOKEN || process.env.RAILWAY_API_TOKEN || '').trim(),
+    railwayProjectId: String(process.env.RAILWAY_PROJECT_ID || '').trim()
+  };
+}
+
+async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+
+    const text = await response.text().catch(() => '');
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch (_) {
+      payload = null;
+    }
+
+    if (!response.ok) {
+      const detail = (payload && (payload.error || payload.message))
+        ? String(payload.error || payload.message)
+        : `${response.status} ${response.statusText}`;
+      throw new Error(detail);
+    }
+
+    return payload;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchRenderDeployStatus(config) {
+  if (!config.renderApiKey || !config.renderServiceId) {
+    return {
+      ok: false,
+      state: 'unconfigured',
+      message: 'Set RENDER_API_KEY and RENDER_SERVICE_ID to enable live deploy status.'
+    };
+  }
+
+  try {
+    const headers = {
+      Authorization: `Bearer ${config.renderApiKey}`,
+      Accept: 'application/json'
+    };
+
+    const service = await fetchJsonWithTimeout(
+      `https://api.render.com/v1/services/${encodeURIComponent(config.renderServiceId)}`,
+      { method: 'GET', headers }
+    );
+
+    const deploys = await fetchJsonWithTimeout(
+      `https://api.render.com/v1/services/${encodeURIComponent(config.renderServiceId)}/deploys?limit=1`,
+      { method: 'GET', headers }
+    );
+
+    const latestDeploy = Array.isArray(deploys) ? deploys[0] : (Array.isArray(deploys?.deploys) ? deploys.deploys[0] : null);
+    const deployStatus = String(latestDeploy?.status || '').toLowerCase();
+
+    return {
+      ok: true,
+      state: deployStatus || 'unknown',
+      serviceName: service?.service?.name || service?.name || 'Render Service',
+      serviceType: service?.service?.type || service?.type || '',
+      serviceId: config.renderServiceId,
+      latestDeploy: {
+        id: latestDeploy?.id || '',
+        status: latestDeploy?.status || 'unknown',
+        createdAt: latestDeploy?.createdAt || latestDeploy?.created_at || null,
+        finishedAt: latestDeploy?.finishedAt || latestDeploy?.finished_at || null,
+        commit: latestDeploy?.commit?.id || latestDeploy?.commitId || ''
+      }
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      state: 'error',
+      message: err && err.message ? err.message : 'Failed to query Render API.'
+    };
+  }
+}
+
+async function fetchRailwayTransferStatus(config) {
+  if (!config.railwayToken || !config.railwayProjectId) {
+    return {
+      ok: false,
+      state: 'unconfigured',
+      message: 'Set RAILWAY_TOKEN and RAILWAY_PROJECT_ID to enable live Railway status.'
+    };
+  }
+
+  try {
+    // Keep the query minimal and stable. Usage/transfer fields vary across Railway API versions.
+    const query = `query InfraProject($projectId: String!) { project(id: $projectId) { id name } }`;
+    const payload = await fetchJsonWithTimeout(
+      'https://backboard.railway.com/graphql/v2',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${config.railwayToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          query,
+          variables: { projectId: config.railwayProjectId }
+        })
+      }
+    );
+
+    if (payload?.errors?.length) {
+      throw new Error(String(payload.errors[0]?.message || 'Railway GraphQL error'));
+    }
+
+    const project = payload?.data?.project;
+    const configuredTransfer = String(process.env.RAILWAY_PUBLIC_NETWORK_TRANSFER_GB || '').trim();
+    const configuredCredits = String(process.env.RAILWAY_CREDITS_REMAINING || '').trim();
+
+    return {
+      ok: true,
+      state: 'connected',
+      projectId: project?.id || config.railwayProjectId,
+      projectName: project?.name || 'Railway Project',
+      transferGb: configuredTransfer || null,
+      creditsRemaining: configuredCredits || null,
+      note: 'Live transfer/credits values can be provided via RAILWAY_PUBLIC_NETWORK_TRANSFER_GB and RAILWAY_CREDITS_REMAINING if Railway API metrics are unavailable.'
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      state: 'error',
+      message: err && err.message ? err.message : 'Failed to query Railway API.'
+    };
+  }
+}
+
 async function getSuggestionRoleRecipients() {
   const recipients = new Set();
 
@@ -1018,6 +1161,26 @@ app.get('/api/auth/public-access-audit', requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('[AUTH] public-access-audit failed:', err);
     return res.status(500).json({ success: false, error: err.message || 'Failed to run public access audit.' });
+  }
+});
+
+app.get('/api/admin/infra-status', requireAdmin, async (req, res) => {
+  try {
+    const config = getInfraMonitorConfig();
+    const [render, railway] = await Promise.all([
+      fetchRenderDeployStatus(config),
+      fetchRailwayTransferStatus(config)
+    ]);
+
+    return res.json({
+      success: true,
+      checkedAt: new Date().toISOString(),
+      render,
+      railway
+    });
+  } catch (err) {
+    console.error('[ADMIN][INFRA_STATUS][ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message || 'Failed to load infra status.' });
   }
 });
 
