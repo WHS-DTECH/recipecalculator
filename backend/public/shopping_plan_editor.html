@@ -43,12 +43,12 @@
     .spe-btn.warn { background: #b66e19; color: #fff; }
     .spe-btn.warn:hover { background: #955912; }
     .spe-table-wrap { overflow-x: auto; }
-    .spe-table { width: 100%; border-collapse: collapse; min-width: 1080px; }
+    .spe-table { width: 100%; border-collapse: collapse; min-width: 1120px; }
     .spe-table th { background: #225d8f; color: #fff; text-align: left; padding: 0.48rem 0.5rem; font-size: 0.85rem; }
     .spe-table td { border-bottom: 1px solid #e4ecf3; padding: 0.35rem 0.45rem; vertical-align: top; }
     .spe-table tr:nth-child(even) { background: #f8fbff; }
-    .spe-table th:nth-child(2),
-    .spe-table td:nth-child(2) {
+    .spe-table th:nth-child(3),
+    .spe-table td:nth-child(3) {
       min-width: 320px;
       width: 320px;
     }
@@ -189,12 +189,12 @@
           <thead>
             <tr>
               <th style="width:180px;">Category</th>
+              <th style="width:180px;">Sub Aisle</th>
               <th>Item</th>
               <th style="width:90px;">Unit</th>
               <th style="width:115px;">Calculated Qty</th>
               <th style="width:115px;">Teacher Qty</th>
               <th style="width:110px;">Final Qty</th>
-              <th style="width:95px;">Source</th>
               <th style="width:240px;">Notes</th>
               <th style="width:70px;">Action</th>
             </tr>
@@ -348,12 +348,12 @@
         const previewFinal = teacher !== null && Number.isFinite(teacher) ? teacher : (calculated !== null && Number.isFinite(calculated) ? calculated : '');
         return '<tr data-index="' + i + '">' +
           '<td><input data-f="category" value="' + esc(r.category || 'Uncategorised') + '"></td>' +
+          '<td><input data-f="sub_aisle" value="' + esc(r.sub_aisle || '') + '"></td>' +
           '<td><input data-f="item_name" value="' + esc(r.item_name || '') + '" ' + (r.id ? 'disabled' : '') + '></td>' +
           '<td><input data-f="base_unit" value="' + esc(r.base_unit || '') + '"></td>' +
           '<td class="spe-number">' + (calculated !== null && Number.isFinite(calculated) ? calculated : '') + '</td>' +
           '<td><input class="spe-number" data-f="teacher_qty" value="' + esc(r.teacher_qty !== null && r.teacher_qty !== undefined ? r.teacher_qty : '') + '"></td>' +
           '<td class="spe-number">' + (previewFinal !== '' ? previewFinal : '') + '</td>' +
-          '<td>' + esc(r.source_type || 'recipe_scale') + '</td>' +
           '<td><input data-f="notes" value="' + esc(r.notes || '') + '"></td>' +
           '<td><button class="spe-del" data-action="del">Delete</button></td>' +
         '</tr>';
@@ -444,6 +444,7 @@
       rowsModel.forEach((r) => {
         const payloadRow = {
           category: String(r.category || '').trim() || 'Uncategorised',
+          sub_aisle: String(r.sub_aisle || '').trim() || null,
           base_unit: String(r.base_unit || '').trim() || null,
           teacher_qty: String(r.teacher_qty || '').trim() === '' ? null : numValue(r.teacher_qty),
           notes: String(r.notes || '').trim() || null
@@ -548,6 +549,7 @@
       rowsModel.unshift({
         id: null,
         category: 'Uncategorised',
+        sub_aisle: '',
         item_name: '',
         base_unit: '',
         calculated_qty: null,
