@@ -125,6 +125,7 @@ function normalizeUnit(value) {
   if (['kilogram', 'kilograms', 'kg'].includes(u)) return 'kg';
   if (['milliliter', 'milliliters', 'millilitre', 'millilitres', 'ml'].includes(u)) return 'ml';
   if (['liter', 'liters', 'litre', 'litres', 'l'].includes(u)) return 'l';
+  if (['each', 'ea', 'unit', 'units', 'item', 'items'].includes(u)) return 'each';
   return u;
 }
 
@@ -217,9 +218,9 @@ function extractQuantityUnitFromText(value) {
   if (!source) return { qty: null, unit: '', name: '' };
 
   const leading = extractLeadingQuantityUnit(source);
-  if (leading.matched && (Number.isFinite(leading.qty) || leading.unit)) {
-    return { qty: leading.qty, unit: leading.unit, name: leading.name || source };
-  }
+  let bestQty = leading.matched ? leading.qty : null;
+  let bestUnit = leading.matched ? leading.unit : '';
+  let bestName = leading.matched ? (leading.name || source) : source;
 
   // Reuse trailing quantity/unit pattern used in inventory normalization logic.
   const trailingQtyUnitRegex = /^(.*?)(\(|\s|,)?\s*(\d+(?:\s+\d+\/\d+|\/\d+)?|\d*\.\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])\s*([a-zA-Z]+)\)?\s*$/i;
@@ -229,11 +230,34 @@ function extractQuantityUnitFromText(value) {
     const qty = parseFractionLikeInventory(trailingMatch[3]);
     const unit = normalizeUnit(trailingMatch[4]);
     if (left && (Number.isFinite(qty) || unit)) {
-      return { qty, unit, name: left };
+      // Prefer a trailing explicit unit when leading parse has no unit.
+      if (!bestUnit && unit) bestUnit = unit;
+      // Keep leading quantity if available; otherwise use trailing quantity.
+      if (!Number.isFinite(bestQty) && Number.isFinite(qty)) bestQty = qty;
+      bestName = left;
     }
   }
 
-  return { qty: null, unit: '', name: source };
+  return {
+    qty: Number.isFinite(bestQty) ? bestQty : null,
+    unit: bestUnit || '',
+    name: bestName || source
+  };
+}
+
+function resolveCategoryFromKeywords(nameValue, keywordRows) {
+  const source = String(nameValue || '').trim().toLowerCase();
+  if (!source || !Array.isArray(keywordRows) || !keywordRows.length) return '';
+
+  for (const row of keywordRows) {
+    const keyword = String(row.keyword || '').trim().toLowerCase();
+    const category = String(row.category || '').trim();
+    if (!keyword || !category) continue;
+    const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i');
+    if (re.test(source)) return category;
+  }
+  return '';
 }
 
 function unitFamily(unit) {
@@ -548,6 +572,15 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     // Group by normalised ingredient key + category + canonical unit.
     // This allows tsp/tbsp, g/kg, ml/l to combine safely while keeping
     // incompatible units separated for explicit review.
+    const aisleKeywordRes = await pool.query(
+      `SELECT lower(trim(ak.keyword)) AS keyword, coalesce(ac.name, 'Uncategorised') AS category
+       FROM aisle_keywords ak
+       LEFT JOIN aisle_category ac ON ac.id = ak.aisle_category_id
+       WHERE trim(coalesce(ak.keyword, '')) <> ''
+       ORDER BY length(trim(ak.keyword)) DESC, ak.id ASC`
+    );
+    const aisleKeywords = Array.isArray(aisleKeywordRes.rows) ? aisleKeywordRes.rows : [];
+
     const itemMap = new Map();
     const classLookup = new Map(classesRes.rows.map(r => [r.booking_id, r]));
 
@@ -569,13 +602,18 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       const displayName = (extracted.matched && (Number.isFinite(effectiveQty) || !!unit))
         ? rawName
         : rawSourceName;
-      const key = normalizeKey(displayName) + '||' + normalizeKey(row.category) + '||' + normalizeKey(canonicalUnit);
+      let resolvedCategory = String(row.category || 'Uncategorised').trim() || 'Uncategorised';
+      if (resolvedCategory.toLowerCase() === 'uncategorised') {
+        const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
+        if (matchedCategory) resolvedCategory = matchedCategory;
+      }
+      const key = normalizeKey(displayName) + '||' + normalizeKey(resolvedCategory) + '||' + normalizeKey(canonicalUnit);
       const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
       const cls = classLookup.get(row.booking_id);
 
       if (!itemMap.has(key)) {
         itemMap.set(key, {
-          category: row.category,
+          category: resolvedCategory,
           item_name: displayName,
           normalized_item_key: normalizeKey(displayName),
           base_unit: canonicalUnit,
@@ -595,6 +633,26 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         canonical_unit: canonicalUnit,
         was_converted: canonical.wasConverted
       });
+    }
+
+    // Unit repair pass: if quantity exists but unit is blank, infer from source detail or text.
+    for (const entry of itemMap.values()) {
+      if (entry.base_unit || !(Number(entry.calculated_qty) > 0)) continue;
+
+      const sourceUnit = (Array.isArray(entry.sources)
+        ? entry.sources.map((s) => normalizeUnit(s && s.unit)).find(Boolean)
+        : '') || '';
+      if (sourceUnit) {
+        entry.base_unit = sourceUnit;
+        continue;
+      }
+
+      const parsedFromName = extractQuantityUnitFromText(entry.item_name || '');
+      if (parsedFromName.unit) {
+        entry.base_unit = normalizeUnit(parsedFromName.unit);
+      } else if (Number.isFinite(parsedFromName.qty)) {
+        entry.base_unit = 'each';
+      }
     }
 
     // Delete existing auto-generated items (source_type = 'recipe_scale') for this plan
