@@ -139,6 +139,9 @@ function teacherColorFromName(name) {
 }
 
 function getCalendarCellBaseStyle(booking) {
+  if (isTheoryBooking(booking)) {
+    return theoryBookingStyle();
+  }
   if (scheduleViewMode === 'recipe') {
     const plannerStyle = plannerChipStyle(normalizePlannerStream(booking));
     return {
@@ -801,6 +804,20 @@ function plannerChipStyle(stream) {
   if (stream === 'Junior') return { bg: '#dcfce7', border: '#86efac', text: '#166534' };
   if (stream === 'Senior') return { bg: '#ffedd5', border: '#fdba74', text: '#9a3412' };
   return { bg: '#dbeafe', border: '#93c5fd', text: '#1e40af' };
+}
+
+function isTheoryBooking(booking) {
+  const recipe = String(booking && booking.recipe ? booking.recipe : '').trim().toLowerCase();
+  return recipe === 'theory';
+}
+
+function theoryBookingStyle() {
+  return {
+    bg: '#f3e8ff',
+    border: '#d8b4fe',
+    text: '#6b21a8',
+    teacherText: '#7c3aed'
+  };
 }
 
 function isPlannerLikeBooking(booking) {
@@ -1978,7 +1995,9 @@ async function printBookingInfoSheet(bookingId) {
 
   // Determine stream colour scheme.
   const stream = normalizePlannerStream(booking);
-  const streamScheme = stream === 'Junior'
+  const streamScheme = isTheoryBooking(booking)
+    ? { header: '#6b21a8', headerBg: '#f3e8ff', accent: '#7c3aed', chipBg: '#e9d5ff', chipText: '#581c87', panel: '#faf5ff', label: 'Theory' }
+    : stream === 'Junior'
     ? { header: '#166534', headerBg: '#dcfce7', accent: '#15803d', chipBg: '#bbf7d0', chipText: '#14532d', panel: '#f0fdf4', label: 'Junior Food' }
     : stream === 'Senior'
     ? { header: '#9a3412', headerBg: '#ffedd5', accent: '#c2410c', chipBg: '#fed7aa', chipText: '#7c2d12', panel: '#fff7ed', label: 'Senior Food / Hospitality' }
