@@ -126,6 +126,60 @@ function normalizeUnit(value) {
   return u;
 }
 
+// Reuse the same fraction parsing approach already used in inventory processing.
+function parseFractionLikeInventory(str) {
+  const vulgarMap = {
+    '¼': 0.25, '½': 0.5, '¾': 0.75,
+    '⅐': 1 / 7, '⅑': 1 / 9, '⅒': 0.1, '⅓': 1 / 3, '⅔': 2 / 3,
+    '⅕': 0.2, '⅖': 0.4, '⅗': 0.6, '⅘': 0.8, '⅙': 1 / 6, '⅚': 5 / 6,
+    '⅛': 0.125, '⅜': 0.375, '⅝': 0.625, '⅞': 0.875
+  };
+
+  let value = String(str || '').trim();
+  if (!value) return null;
+  if (Number.isFinite(Number(value))) return Number(value);
+
+  value = value.replace(/[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]/g, (m) => ` ${vulgarMap[m]}`);
+  const parts = value.split(/\s+/).filter(Boolean);
+  let total = 0;
+  let foundNumeric = false;
+
+  for (const part of parts) {
+    if (/^\d+$/.test(part)) {
+      total += parseInt(part, 10);
+      foundNumeric = true;
+      continue;
+    }
+    if (/^\d+\/\d+$/.test(part)) {
+      const [n, d] = part.split('/').map((x) => parseInt(x, 10));
+      if (d) {
+        total += (n / d);
+        foundNumeric = true;
+      }
+      continue;
+    }
+    if (!Number.isNaN(parseFloat(part))) {
+      total += parseFloat(part);
+      foundNumeric = true;
+      continue;
+    }
+  }
+
+  return foundNumeric ? total : null;
+}
+
+function cleanIngredientName(value) {
+  const source = String(value || '').trim();
+  if (!source) return '';
+
+  const qtyPattern = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
+  const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
+  const withUnit = new RegExp(`^\\s*${qtyPattern}\\s*${unitPattern}\\b\\s+`, 'i');
+  const qtyOnly = new RegExp(`^\\s*${qtyPattern}\\s+`, 'i');
+
+  return source.replace(withUnit, '').replace(qtyOnly, '').trim();
+}
+
 function unitFamily(unit) {
   const normalized = normalizeUnit(unit);
   if (!normalized) return 'none';
@@ -136,7 +190,8 @@ function unitFamily(unit) {
 }
 
 function toCanonicalQty(qtyValue, unitValue) {
-  const qty = Number(qtyValue);
+  const parsed = parseFractionLikeInventory(qtyValue);
+  const qty = Number.isFinite(parsed) ? parsed : Number.NaN;
   const unit = normalizeUnit(unitValue);
   const family = unitFamily(unit);
 
@@ -324,7 +379,9 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
          dsi.ingredient_name,
          dsi.fooditem,
          dsi.stripfooditem,
+        dsi.measure_qty,
          dsi.measure_unit,
+        dsi.desired_servings,
          dsi.calculated_qty,
          COALESCE(ac.name, 'Uncategorised') AS category
        FROM desired_servings_ingredients dsi
@@ -388,7 +445,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         );
 
         for (const ing of ingredients) {
-          const baseQty = Number.parseFloat(String(ing.measure_qty || '').trim());
+          const baseQty = parseFractionLikeInventory(ing.measure_qty);
           const calculatedQty = Number.isFinite(baseQty) ? (baseQty * desiredServings) : null;
           await pool.query(
             `INSERT INTO desired_servings_ingredients
@@ -427,7 +484,9 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
            dsi.ingredient_name,
            dsi.fooditem,
            dsi.stripfooditem,
+            dsi.measure_qty,
            dsi.measure_unit,
+            dsi.desired_servings,
            dsi.calculated_qty,
            COALESCE(ac.name, 'Uncategorised') AS category
          FROM desired_servings_ingredients dsi
@@ -444,9 +503,15 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     const classLookup = new Map(classesRes.rows.map(r => [r.booking_id, r]));
 
     for (const row of dsiRes.rows) {
-      const rawName = row.stripfooditem || row.fooditem || row.ingredient_name || '';
+      const rawName = cleanIngredientName(row.stripfooditem || row.fooditem || row.ingredient_name || '');
       const unit = String(row.measure_unit || '').trim();
-      const canonical = toCanonicalQty(row.calculated_qty, unit);
+      const explicitCalculated = parseFractionLikeInventory(row.calculated_qty);
+      const fallbackBase = parseFractionLikeInventory(row.measure_qty);
+      const desiredServings = parseFractionLikeInventory(row.desired_servings);
+      const effectiveQty = Number.isFinite(explicitCalculated)
+        ? explicitCalculated
+        : (Number.isFinite(fallbackBase) && Number.isFinite(desiredServings) ? (fallbackBase * desiredServings) : Number.NaN);
+      const canonical = toCanonicalQty(effectiveQty, unit);
       const canonicalUnit = canonical.unit || normalizeUnit(unit) || '';
       const key = normalizeKey(rawName) + '||' + normalizeKey(row.category) + '||' + normalizeKey(canonicalUnit);
       const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
@@ -468,7 +533,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         booking_id: row.booking_id,
         class_name: cls ? cls.class_name : null,
         teacher_name: cls ? cls.teacher_name : null,
-        qty: Number.isFinite(Number(row.calculated_qty)) ? Number(row.calculated_qty) : null,
+        qty: Number.isFinite(effectiveQty) ? effectiveQty : null,
         unit,
         canonical_qty: Number.isFinite(canonical.qty) ? canonical.qty : null,
         canonical_unit: canonicalUnit,
