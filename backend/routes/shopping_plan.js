@@ -265,6 +265,36 @@ function resolveCategoryFromKeywords(nameValue, keywordRows) {
   return { master: '', sub: '' };
 }
 
+function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
+  const sourceRaw = String(nameValue || '').trim();
+  if (!sourceRaw) {
+    return { master: currentMaster || '', sub: currentSub || '' };
+  }
+
+  const extracted = extractQuantityUnitFromText(sourceRaw);
+  const source = String(cleanIngredientName(extracted.name || sourceRaw) || sourceRaw).toLowerCase();
+
+  const has = (pattern) => pattern.test(source);
+
+  if (has(/\b(cheese|cheddar|mozzarella|parmesan|feta|cream\s*cheese)\b/i)) {
+    return { master: 'Dairy', sub: 'Cheese' };
+  }
+
+  if (has(/\b(spring\s*onion|brown\s*onion|red\s*onion|onion|garlic|potato|potatoes|kumara|tomato|tomatoes)\b/i)) {
+    if (has(/\bgarlic\b/i)) return { master: 'Produce', sub: 'Garlic' };
+    if (has(/\bonion\b/i)) return { master: 'Produce', sub: 'Onions' };
+    if (has(/\b(potato|potatoes|kumara)\b/i)) return { master: 'Produce', sub: 'Potatoes' };
+    if (has(/\b(tomato|tomatoes)\b/i)) return { master: 'Produce', sub: 'Tomatoes' };
+    return { master: 'Produce', sub: 'Produce' };
+  }
+
+  if (has(/\b(aioli|bbq\s*sauce|barbecue\s*sauce|pesto|mayonnaise|mayo)\b/i)) {
+    return { master: 'Condiments', sub: 'Sauces' };
+  }
+
+  return { master: currentMaster || '', sub: currentSub || '' };
+}
+
 function unitFamily(unit) {
   const normalized = normalizeUnit(unit);
   if (!normalized) return 'none';
@@ -279,7 +309,8 @@ function roundFinalQtyForPurchase(qtyValue, unitValue) {
   if (!Number.isFinite(qty)) return null;
 
   const unit = normalizeUnit(unitValue);
-  if (unit === 'each' && qty > 0) {
+  const discreteUnits = new Set(['each', 'clove', 'piece', 'slice', 'can']);
+  if (discreteUnits.has(unit) && qty > 0) {
     // Discrete items should be buyable whole quantities.
     return Math.ceil(qty - 1e-9);
   }
@@ -629,6 +660,11 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
       if (matchedCategory.master) resolvedCategory = matchedCategory.master;
       if (matchedCategory.sub) resolvedSubAisle = matchedCategory.sub;
+
+      const enforcedCategory = enforceCriticalCategory(displayName, resolvedCategory, resolvedSubAisle);
+      if (enforcedCategory.master) resolvedCategory = enforcedCategory.master;
+      if (enforcedCategory.sub) resolvedSubAisle = enforcedCategory.sub;
+
       const key = normalizeKey(displayName) + '||' + normalizeKey(resolvedCategory) + '||' + normalizeKey(resolvedSubAisle) + '||' + normalizeKey(canonicalUnit);
       const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
       const cls = classLookup.get(row.booking_id);
@@ -1033,6 +1069,10 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
       const matchedCategory = resolveCategoryFromKeywords(item.item_name, aisleKeywords);
       if (matchedCategory.master) workingCategory = matchedCategory.master;
       if (matchedCategory.sub) workingSubAisle = matchedCategory.sub;
+
+      const enforcedCategory = enforceCriticalCategory(item.item_name, workingCategory, workingSubAisle);
+      if (enforcedCategory.master) workingCategory = enforcedCategory.master;
+      if (enforcedCategory.sub) workingSubAisle = enforcedCategory.sub;
 
       const baseFinalQty = item.teacher_qty !== null
         ? parseFloat(item.teacher_qty)
