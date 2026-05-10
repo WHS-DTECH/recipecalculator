@@ -276,47 +276,87 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
 
   const has = (pattern) => pattern.test(source);
 
+  // Dairy: cheese, cream, milk, yogurt, butter
   if (has(/\b(cheese|cheddar|mozzarella|parmesan|feta|cream\s*cheese)\b/i)) {
     return { master: 'Dairy', sub: 'Cheese' };
   }
 
-  if (has(/\b(double\s*cream|cream|milk|yoghurt|yogurt|butter)\b/i)) {
+  if (has(/\b(double\s*cream|sour\s*cream|cream|milk|yoghurt|yogurt|butter)\b/i)) {
     return { master: 'Dairy', sub: 'Dairy' };
   }
 
+  // Eggs
   if (has(/\b(egg|eggs)\b/i)) {
     return { master: 'Eggs', sub: 'Eggs' };
   }
 
-  if (has(/\b(spring\s*onion|brown\s*onion|red\s*onion|onion|garlic|potato|potatoes|kumara|tomato|tomatoes)\b/i)) {
+  // Produce: vegetables, fruits, herbs, spices
+  // Includes: onions, garlic, potatoes, tomatoes, peppers, ginger, chillies, herbs,
+  // citrus, pineapple, peas, beans, leafy greens, etc.
+  if (has(/\b(spring\s*onion|brown\s*onion|red\s*onion|white\s*onion|onion|garlic|ginger|turmeric|cumin|coriander)\b/i)) {
     if (has(/\bgarlic\b/i)) return { master: 'Produce', sub: 'Garlic' };
+    if (has(/\bginger\b/i)) return { master: 'Produce', sub: 'Ginger' };
     if (has(/\bonion\b/i)) return { master: 'Produce', sub: 'Onions' };
-    if (has(/\b(potato|potatoes|kumara)\b/i)) return { master: 'Produce', sub: 'Potatoes' };
-    if (has(/\b(tomato|tomatoes)\b/i)) return { master: 'Produce', sub: 'Tomatoes' };
     return { master: 'Produce', sub: 'Produce' };
   }
 
-  if (has(/\b(chilli|chilies|chillies|capsicum|coriander|parsley|lime|lemon|herbs?)\b/i)) {
+  if (has(/\b(potato|potatoes|kumara|sweet\s*potato|yam|parsnip)\b/i)) {
+    return { master: 'Produce', sub: 'Potatoes' };
+  }
+
+  if (has(/\b(tomato|tomatoes|cherry\s*tomato)\b/i)) {
+    return { master: 'Produce', sub: 'Tomatoes' };
+  }
+
+  if (has(/\b(chilli|chilies|chillies|capsicum|bell\s*pepper|pepper|red\s*pepper|green\s*pepper)\b/i)) {
     return { master: 'Produce', sub: 'Produce' };
   }
 
-  if (has(/\b(chicken|beef|pork|lamb|mince|sausage|bacon|ham|prawn|prawns|fish|salmon|tuna)\b/i)) {
+  if (has(/\b(broccoli|cauliflower|cabbage|lettuce|spinach|kale|bok\s*choy|celery|carrot|carrots|cucumber|zucchini|courgette|eggplant|aubergine)\b/i)) {
+    return { master: 'Produce', sub: 'Produce' };
+  }
+
+  if (has(/\b(peas?|beans?|legume|lentil|chickpea|corn|sweetcorn)\b/i)) {
+    return { master: 'Produce', sub: 'Produce' };
+  }
+
+  if (has(/\b(apple|apples|orange|oranges|banana|bananas|pineapple|strawberry|blueberry|raspberry|grape|grapes|kiwi|mango|pear|peach|lemon|lime|citrus)\b/i)) {
+    return { master: 'Produce', sub: 'Produce' };
+  }
+
+  if (has(/\b(parsley|basil|coriander|cilantro|thyme|rosemary|oregano|mint|dill|chives|sage|herbs?)\b/i)) {
+    return { master: 'Produce', sub: 'Produce' };
+  }
+
+  // Meat & Seafood: chicken, beef, pork, lamb, fish, prawns, etc.
+  if (has(/\b(chicken|beef|pork|lamb|mince|ground\s*beef|ground\s*pork|sausage|bacon|ham|prosciutto)\b/i)) {
     return { master: 'Meat', sub: 'Meat' };
   }
 
-  if (has(/\b(aioli|bbq\s*sauce|barbecue\s*sauce|pesto|mayonnaise|mayo)\b/i)) {
+  if (has(/\b(prawn|prawns|shrimp|fish|salmon|tuna|trout|cod|snapper|flathead|barramundi|seafood|scallop|squid|calamari|crab|lobster)\b/i)) {
+    return { master: 'Meat', sub: 'Meat' };
+  }
+
+  // Condiments & Sauces
+  if (has(/\b(aioli|bbq\s*sauce|barbecue\s*sauce|pesto|mayonnaise|mayo|tomato\s*sauce|soy\s*sauce|oyster\s*sauce|hoisin|sriracha|hot\s*sauce|worcestershire|vinegar)\b/i)) {
     return { master: 'Condiments', sub: 'Sauces' };
   }
 
-  // Last-pass rescue: if item is currently in Action, try to map known food-like rows.
+  // Last-pass rescue: if item is currently in Action or Uncategorised, try to map known food-like rows
   const current = String(currentMaster || '').trim().toLowerCase();
-  if (current === 'action') {
+  if (current === 'action' || current === 'uncategorised') {
     if (has(/\b(egg|eggs)\b/i)) return { master: 'Eggs', sub: 'Eggs' };
-    if (has(/\b(chilli|chilies|chillies|capsicum|onion|garlic|tomato|potato|kumara|coriander|lime|lemon|herbs?)\b/i)) {
+    
+    if (has(/\b(ginger|chilli|chilies|chillies|capsicum|pepper|onion|garlic|pea|peas|bean|beans|pineapple|broccoli|carrot|cucumber|tomato|potato|kumara|coriander|cilantro|lime|lemon|herbs?|parsley|basil)\b/i)) {
       return { master: 'Produce', sub: 'Produce' };
     }
-    if (has(/\b(chicken|beef|pork|lamb|mince|sausage|bacon|ham|prawn|prawns|fish|salmon|tuna)\b/i)) {
+    
+    if (has(/\b(chicken|beef|pork|lamb|mince|sausage|bacon|ham|prawn|prawns|shrimp|fish|salmon|tuna|seafood)\b/i)) {
       return { master: 'Meat', sub: 'Meat' };
+    }
+
+    if (has(/\b(cheese|milk|yogurt|butter|cream|dairy)\b/i)) {
+      return { master: 'Dairy', sub: 'Dairy' };
     }
   }
 
