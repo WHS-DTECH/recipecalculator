@@ -77,6 +77,35 @@
       font-size: 0.9rem;
     }
     .spe-muted { color: #62788a; font-size: 0.9rem; }
+    .spe-workflow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.65rem;
+      margin-top: 0.6rem;
+    }
+    .spe-chip {
+      border: 1px solid #d5e1ec;
+      border-radius: 8px;
+      background: #f8fbff;
+      padding: 0.55rem 0.6rem;
+      font-size: 0.86rem;
+      color: #294356;
+    }
+    .spe-chip strong { display: block; color: #173852; margin-bottom: 0.2rem; }
+    .spe-linkrow { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.6rem; }
+    .spe-linkbtn {
+      display: inline-block;
+      padding: 0.35rem 0.65rem;
+      border: 1px solid #b9cadc;
+      border-radius: 999px;
+      text-decoration: none;
+      color: #1b4f7a;
+      background: #fff;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+    .spe-linkbtn:hover { border-color: #1e6daa; color: #144a75; }
+    .spe-kpi { font-size: 1.02rem; font-weight: 800; color: #163a58; }
     @media (max-width: 860px) {
       .spe-head { align-items: start; }
     }
@@ -125,6 +154,28 @@
       <div id="warningList" style="margin-top:0.45rem;"></div>
     </section>
 
+    <section class="spe-card" id="workflowPanel">
+      <div class="spe-row" style="justify-content:space-between;align-items:center;">
+        <strong>Shopping Workflow Health</strong>
+        <button id="preflightBtn" class="spe-btn secondary" type="button">Run Preflight</button>
+      </div>
+      <div class="spe-workflow" id="workflowCards">
+        <div class="spe-chip"><strong>Plan Classes</strong><span class="spe-kpi" id="wfClasses">-</span></div>
+        <div class="spe-chip"><strong>Missing Groups</strong><span class="spe-kpi" id="wfGroups">-</span></div>
+        <div class="spe-chip"><strong>Missing Class Size</strong><span class="spe-kpi" id="wfClassSize">-</span></div>
+        <div class="spe-chip"><strong>Missing Recipe Link</strong><span class="spe-kpi" id="wfRecipe">-</span></div>
+        <div class="spe-chip"><strong>Missing Desired Servings</strong><span class="spe-kpi" id="wfDesired">-</span></div>
+      </div>
+      <div class="spe-linkrow">
+        <a class="spe-linkbtn" href="group_confirmation.html" target="_blank" rel="noopener">Group Confirmation</a>
+        <a class="spe-linkbtn" href="calculate_servings.html" target="_blank" rel="noopener">Calculate Servings</a>
+        <a class="spe-linkbtn" href="calculate_qty.html" target="_blank" rel="noopener">Calculate Qty</a>
+        <a class="spe-linkbtn" href="admin_aisle_category.html" target="_blank" rel="noopener">Load Aisle Categories</a>
+        <a class="spe-linkbtn" href="admin_aisle_keywords.html" target="_blank" rel="noopener">Load Aisle Keywords</a>
+        <a class="spe-linkbtn" href="ingredients_directory.html" target="_blank" rel="noopener">Ingredients Directory</a>
+      </div>
+    </section>
+
     <section class="spe-card">
       <div class="spe-table-wrap">
         <table class="spe-table" aria-label="Shopping plan items editor">
@@ -164,9 +215,11 @@
     const planMeta = document.getElementById('planMeta');
     const defaultBufferInput = document.getElementById('defaultBufferInput');
     const categoryBufferInput = document.getElementById('categoryBufferInput');
+    const preflightBtn = document.getElementById('preflightBtn');
 
     let currentPlan = null;
     let rowsModel = [];
+    let planClassesModel = [];
     const deletedIds = new Set();
 
     function getQueryPlanId() {
@@ -201,6 +254,67 @@
         return;
       }
       warningList.innerHTML = list.map((w) => '<div class="spe-warning">' + esc(w) + '</div>').join('');
+    }
+
+    function setWorkflowKpi(id, value) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.textContent = String(value);
+    }
+
+    function weekWindowFromFriday(fridayStr) {
+      const friday = new Date(String(fridayStr || '').slice(0, 10) + 'T00:00:00');
+      if (Number.isNaN(friday.getTime())) return null;
+      const monday = new Date(friday);
+      monday.setDate(friday.getDate() - 4);
+      const iso = (d) => {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      };
+      return { start: iso(monday), end: iso(friday) };
+    }
+
+    async function runPreflight() {
+      if (!currentPlan) return;
+      const week = weekWindowFromFriday(currentPlan.week_ending);
+      if (!week) {
+        setStatus('Cannot compute week range for preflight.', 'err');
+        return;
+      }
+
+      setStatus('Running preflight checks...', '');
+      const bookingIds = new Set((planClassesModel || []).map((c) => Number(c.booking_id)).filter(Number.isInteger));
+      setWorkflowKpi('wfClasses', bookingIds.size);
+
+      let bookings = [];
+      try {
+        const bResp = await fetch('/api/bookings/all?start=' + week.start + '&end=' + week.end + '&fields=calendar', { credentials: 'include' });
+        const bPayload = await bResp.json().catch(() => ({}));
+        bookings = Array.isArray(bPayload.bookings) ? bPayload.bookings : [];
+      } catch (_) { bookings = []; }
+
+      const inPlan = bookings.filter((b) => bookingIds.has(Number(b.id)));
+      const missingGroups = inPlan.filter((b) => b.groups == null || String(b.groups).trim() === '').length;
+      const missingClassSize = inPlan.filter((b) => b.class_size == null || String(b.class_size).trim() === '').length;
+      const missingRecipe = inPlan.filter((b) => !String(b.recipe_id || '').trim()).length;
+
+      setWorkflowKpi('wfGroups', missingGroups);
+      setWorkflowKpi('wfClassSize', missingClassSize);
+      setWorkflowKpi('wfRecipe', missingRecipe);
+
+      let missingDesiredServings = 0;
+      try {
+        const rResp = await fetch('/api/bookings/admin/resave-candidates?startDate=' + week.start + '&endDate=' + week.end + '&limit=1000', { credentials: 'include' });
+        const rPayload = await rResp.json().catch(() => ({}));
+        const candidates = Array.isArray(rPayload.candidates) ? rPayload.candidates : [];
+        missingDesiredServings = candidates.filter((c) => bookingIds.has(Number(c.booking_id))).length;
+      } catch (_) {
+        missingDesiredServings = 0;
+      }
+      setWorkflowKpi('wfDesired', missingDesiredServings);
+      setStatus('Preflight complete.', 'ok');
     }
 
     function renderItems() {
@@ -277,6 +391,7 @@
       if (!resp.ok) throw new Error(payload.error || 'Failed to load plan.');
 
       currentPlan = payload.plan;
+      planClassesModel = Array.isArray(payload.classes) ? payload.classes : [];
       deletedIds.clear();
       rowsModel = (Array.isArray(payload.items) ? payload.items : []).map((r) => Object.assign({}, r));
       renderWarnings(payload.warnings || []);
@@ -294,6 +409,8 @@
       } else {
         setStatus('Draft loaded.', 'ok');
       }
+
+      try { await runPreflight(); } catch (_) { /* non-blocking */ }
     }
 
     async function saveDraft() {
@@ -444,6 +561,9 @@
       try { await finalizePlan(); } catch (err) { setStatus(err.message, 'err'); }
     });
     addRowBtn.addEventListener('click', addManualRow);
+    preflightBtn.addEventListener('click', async () => {
+      try { await runPreflight(); } catch (err) { setStatus(err.message || 'Preflight failed.', 'err'); }
+    });
 
     (async function init() {
       try {

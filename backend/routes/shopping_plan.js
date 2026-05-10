@@ -212,6 +212,30 @@ function extractLeadingQuantityUnit(value) {
   return { matched: false, qty: null, unit: '', name: source };
 }
 
+function extractQuantityUnitFromText(value) {
+  const source = String(value || '').trim();
+  if (!source) return { qty: null, unit: '', name: '' };
+
+  const leading = extractLeadingQuantityUnit(source);
+  if (leading.matched && (Number.isFinite(leading.qty) || leading.unit)) {
+    return { qty: leading.qty, unit: leading.unit, name: leading.name || source };
+  }
+
+  // Reuse trailing quantity/unit pattern used in inventory normalization logic.
+  const trailingQtyUnitRegex = /^(.*?)(\(|\s|,)?\s*(\d+(?:\s+\d+\/\d+|\/\d+)?|\d*\.\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])\s*([a-zA-Z]+)\)?\s*$/i;
+  const trailingMatch = source.match(trailingQtyUnitRegex);
+  if (trailingMatch) {
+    const left = String(trailingMatch[1] || '').trim().replace(/[\(\),;:\-]+$/, '').trim();
+    const qty = parseFractionLikeInventory(trailingMatch[3]);
+    const unit = normalizeUnit(trailingMatch[4]);
+    if (left && (Number.isFinite(qty) || unit)) {
+      return { qty, unit, name: left };
+    }
+  }
+
+  return { qty: null, unit: '', name: source };
+}
+
 function unitFamily(unit) {
   const normalized = normalizeUnit(unit);
   if (!normalized) return 'none';
@@ -529,8 +553,8 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
 
     for (const row of dsiRes.rows) {
       const rawSourceName = String(row.stripfooditem || row.fooditem || row.ingredient_name || '').trim();
-      const extracted = extractLeadingQuantityUnit(rawSourceName);
-      const rawName = cleanIngredientName(rawSourceName);
+      const extracted = extractQuantityUnitFromText(rawSourceName);
+      const rawName = cleanIngredientName(extracted.name || rawSourceName);
       const unit = normalizeUnit(String(row.measure_unit || extracted.unit || '').trim());
       const explicitCalculated = parseFractionLikeInventory(row.calculated_qty);
       const fallbackBase = parseFractionLikeInventory(row.measure_qty);
