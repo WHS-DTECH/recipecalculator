@@ -2288,8 +2288,7 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
             serving_size = EXCLUDED.serving_size,
             url = EXCLUDED.url,
             instructions = EXCLUDED.instructions,
-            image_url = COALESCE(recipe_display.image_url, EXCLUDED.image_url),
-            updated_at = NOW()
+            image_url = COALESCE(recipe_display.image_url, EXCLUDED.image_url)
           RETURNING id`;
         
         const displayResult = await pool.query(upsertSql, [
@@ -2303,10 +2302,9 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
           recipe.image_url || null
         ]);
 
-        // 3. Mark all bookings referencing this recipe as "dirty" (optionally set a flag)
-        // This could be used by shopping plan generation to know the recipe was updated
+        // 3. Count bookings referencing this recipe (for visibility only)
         const bookingsResult = await pool.query(
-          'UPDATE bookings SET updated_at = NOW() WHERE recipe_id = $1 RETURNING id',
+          'SELECT COUNT(*)::int AS total FROM bookings WHERE recipe_id = $1',
           [recipeId]
         );
 
@@ -2317,7 +2315,7 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
           success: true, 
           message: `Recipe ${recipeId} refreshed successfully.`,
           display_id: displayResult.rows[0].id,
-          bookings_marked: bookingsResult.rowCount
+          bookings_linked: Number((bookingsResult.rows[0] && bookingsResult.rows[0].total) || 0)
         });
       } catch (err) {
         console.error('[RECIPE_REFRESH][ERROR]', err.message);
