@@ -359,6 +359,118 @@
 
       const selections = {};
       let currentFilter = 'unassigned';
+      let currentBookingsById = new Map();
+
+      function asNumber(value) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : null;
+      }
+
+      function buildDesiredServingsIngredients(rows, desiredServings) {
+        return (Array.isArray(rows) ? rows : []).map((row) => {
+          const baseQty = Number.parseFloat(String(row.measure_qty || '').trim());
+          const calculatedQty = Number.isFinite(baseQty) ? (baseQty * desiredServings).toString() : String(row.measure_qty || '');
+          return {
+            ingredient_id: row.id,
+            ingredient_name: row.ingredient_name,
+            measure_qty: row.measure_qty,
+            measure_unit: row.measure_unit,
+            fooditem: row.fooditem,
+            calculated_qty: calculatedQty,
+            stripFoodItem: row.stripfooditem || row.strip_fooditem || row.fooditem || row.ingredient_name || '',
+            aisle_category_id: row.aisle_category_id || ''
+          };
+        });
+      }
+
+      async function triggerDesiredServingsForBookings(savedEntries) {
+        const result = { generated: 0, skipped: 0, failed: 0 };
+        const validEntries = (Array.isArray(savedEntries) ? savedEntries : []).filter((entry) => {
+          const booking = currentBookingsById.get(String(entry.bookingId));
+          if (!booking) return false;
+          const recipeId = asNumber(booking.recipe_id);
+          const classSize = asNumber(booking.class_size);
+          const groups = asNumber(entry.groupCount);
+          return Number.isInteger(recipeId) && recipeId > 0 && Number.isFinite(classSize) && classSize > 0 && Number.isFinite(groups) && groups > 0;
+        });
+
+        if (!validEntries.length) {
+          result.skipped = (Array.isArray(savedEntries) ? savedEntries.length : 0);
+          return result;
+        }
+
+        const uniqueRecipeIds = Array.from(new Set(validEntries
+          .map((entry) => {
+            const booking = currentBookingsById.get(String(entry.bookingId));
+            return Number(booking && booking.recipe_id);
+          })
+          .filter((id) => Number.isInteger(id) && id > 0)
+        ));
+
+        await Promise.all(uniqueRecipeIds.map(async (recipeId) => {
+          try {
+            await fetch('/api/ingredients/inventory/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ recipeId, reseed: true })
+            });
+          } catch (_) {
+            // Best effort. Save can still work if inventory is already available.
+          }
+        }));
+
+        let inventoryRows = [];
+        try {
+          const inventoryRes = await fetch('/api/ingredients/inventory/all');
+          const inventoryPayload = await inventoryRes.json().catch(() => ({}));
+          inventoryRows = Array.isArray(inventoryPayload)
+            ? inventoryPayload
+            : (Array.isArray(inventoryPayload.data) ? inventoryPayload.data : (Array.isArray(inventoryPayload.ingredients) ? inventoryPayload.ingredients : []));
+        } catch (_) {
+          inventoryRows = [];
+        }
+
+        for (const entry of validEntries) {
+          const booking = currentBookingsById.get(String(entry.bookingId));
+          const recipeId = Number(booking.recipe_id);
+          const classSize = Number(booking.class_size);
+          const groups = Number(entry.groupCount);
+          const desiredServings = Math.ceil(classSize / groups);
+          const recipeIngredients = inventoryRows.filter((row) => Number(row.recipe_id) === recipeId);
+
+          if (!recipeIngredients.length) {
+            result.skipped += 1;
+            continue;
+          }
+
+          try {
+            const saveRes = await fetch('/api/ingredients/desired_servings_ingredients/save', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                booking_id: booking.id,
+                teacher: booking.staff_name || '',
+                staff_id: booking.staff_id || '',
+                class_name: booking.class_name || '',
+                class_date: booking.booking_date || '',
+                class_size: classSize,
+                groups,
+                desired_servings: desiredServings,
+                recipe_id: recipeId,
+                ingredients: buildDesiredServingsIngredients(recipeIngredients, desiredServings)
+              })
+            });
+            const payload = await saveRes.json().catch(() => ({}));
+            if (saveRes.ok && payload && payload.success) result.generated += 1;
+            else result.failed += 1;
+          } catch (_) {
+            result.failed += 1;
+          }
+        }
+
+        result.skipped += ((Array.isArray(savedEntries) ? savedEntries.length : 0) - validEntries.length);
+        return result;
+      }
 
       function formatWeekLabel(monday) {
         const friday = new Date(monday);
@@ -470,6 +582,7 @@
 
           const allBookings = Array.isArray(bookingsData.bookings) ? bookingsData.bookings : [];
           const nonPlannerBookings = allBookings.filter(b => String(b.period || '').toLowerCase() !== 'planner');
+          currentBookingsById = new Map(nonPlannerBookings.map((b) => [String(b.id), b]));
           
           let filtered = [];
           if (currentFilter === 'unassigned') {
@@ -556,6 +669,7 @@
           statusEl.textContent = '';
 
           let saved = 0, failed = 0;
+          const savedEntries = [];
           await Promise.all(toSave.map(async ([bookingId, groupCount]) => {
             try {
               const r = await fetch(`/api/bookings/${bookingId}/groups`, {
@@ -563,22 +677,34 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ groups: groupCount })
               });
-              if (r.ok) saved++; else failed++;
+              if (r.ok) {
+                saved++;
+                savedEntries.push({ bookingId, groupCount: Number(groupCount) });
+              } else {
+                failed++;
+              }
             } catch (_) { failed++; }
           }));
+
+          const calcSummary = savedEntries.length ? await triggerDesiredServingsForBookings(savedEntries) : { generated: 0, skipped: 0, failed: 0 };
 
           saveBtn.disabled = false;
           saveBtn.textContent = 'Save Groups';
 
           if (saved > 0) {
             statusEl.style.color = '#059669';
-            statusEl.textContent = `✓ Groups saved for ${saved} booking${saved !== 1 ? 's' : ''}.`;
+            statusEl.textContent = `✓ Groups saved for ${saved} booking${saved !== 1 ? 's' : ''}. ` +
+              `Desired servings generated for ${calcSummary.generated}.` +
+              (calcSummary.skipped > 0 ? ` Skipped ${calcSummary.skipped} (missing recipe/class size/inventory).` : '');
             // Reload to reflect saved state
             await loadBookings();
           }
           if (failed > 0) {
             statusEl.style.color = '#dc2626';
             statusEl.textContent += ` ${failed} update${failed !== 1 ? 's' : ''} failed — try again.`;
+          } else if (calcSummary.failed > 0) {
+            statusEl.style.color = '#dc2626';
+            statusEl.textContent += ` ${calcSummary.failed} desired-servings save${calcSummary.failed !== 1 ? 's' : ''} failed.`;
           }
         };
       });
