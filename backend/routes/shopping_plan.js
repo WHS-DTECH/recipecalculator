@@ -54,6 +54,7 @@ async function ensureSchema() {
       id                   SERIAL PRIMARY KEY,
       plan_id              INTEGER        NOT NULL REFERENCES shopping_plan(id) ON DELETE CASCADE,
       category             TEXT           NOT NULL DEFAULT 'Uncategorised',
+      sub_aisle            TEXT,
       item_name            TEXT           NOT NULL,
       normalized_item_key  TEXT,
       base_unit            TEXT,
@@ -68,6 +69,7 @@ async function ensureSchema() {
       edited_at            TIMESTAMPTZ
     )
   `);
+  await pool.query('ALTER TABLE shopping_plan_items ADD COLUMN IF NOT EXISTS sub_aisle TEXT');
   await pool.query(`
     CREATE INDEX IF NOT EXISTS idx_spi_plan_cat_sort
       ON shopping_plan_items (plan_id, category, sort_order)
@@ -88,6 +90,8 @@ async function ensureSchema() {
     CREATE INDEX IF NOT EXISTS idx_spia_plan_item
       ON shopping_plan_item_audit (plan_item_id, changed_at)
   `);
+  await pool.query('ALTER TABLE aisle_category ADD COLUMN IF NOT EXISTS master_category TEXT');
+  await pool.query("UPDATE aisle_category SET master_category = COALESCE(NULLIF(trim(master_category), ''), name)");
   _schemaReady = true;
 }
 
@@ -177,8 +181,8 @@ function cleanIngredientName(value) {
 
   const qtyPattern = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
   const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
-  const withUnit = new RegExp(`^\\s*${qtyPattern}\\s*${unitPattern}\\b\\s+`, 'i');
-  const qtyOnly = new RegExp(`^\\s*${qtyPattern}\\s+`, 'i');
+  const withUnit = new RegExp(`^\\s*${qtyPattern}\\s*${unitPattern}\\b\\s*[,;:-]?\\s*`, 'i');
+  const qtyOnly = new RegExp(`^\\s*${qtyPattern}\\s*[,;:-]?\\s*`, 'i');
 
   return source.replace(withUnit, '').replace(qtyOnly, '').trim();
 }
@@ -190,7 +194,7 @@ function extractLeadingQuantityUnit(value) {
   const qtyPattern = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
   const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
 
-  const withUnit = source.match(new RegExp(`^\\s*(${qtyPattern})\\s*(${unitPattern})\\b\\s+(.+)$`, 'i'));
+  const withUnit = source.match(new RegExp(`^\\s*(${qtyPattern})\\s*(${unitPattern})\\b\\s*[,;:-]?\\s*(.+)$`, 'i'));
   if (withUnit) {
     return {
       matched: true,
@@ -200,7 +204,7 @@ function extractLeadingQuantityUnit(value) {
     };
   }
 
-  const qtyOnly = source.match(new RegExp(`^\\s*(${qtyPattern})\\s+(.+)$`, 'i'));
+  const qtyOnly = source.match(new RegExp(`^\\s*(${qtyPattern})\\s*[,;:-]?\\s*(.+)$`, 'i'));
   if (qtyOnly) {
     return {
       matched: true,
@@ -247,17 +251,18 @@ function extractQuantityUnitFromText(value) {
 
 function resolveCategoryFromKeywords(nameValue, keywordRows) {
   const source = String(nameValue || '').trim().toLowerCase();
-  if (!source || !Array.isArray(keywordRows) || !keywordRows.length) return '';
+  if (!source || !Array.isArray(keywordRows) || !keywordRows.length) return { master: '', sub: '' };
 
   for (const row of keywordRows) {
     const keyword = String(row.keyword || '').trim().toLowerCase();
-    const category = String(row.category || '').trim();
+    const category = String(row.master_category || '').trim();
+    const subAisle = String(row.sub_aisle || '').trim();
     if (!keyword || !category) continue;
     const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const re = new RegExp(`(^|[^a-z0-9])${escaped}([^a-z0-9]|$)`, 'i');
-    if (re.test(source)) return category;
+    if (re.test(source)) return { master: category, sub: subAisle || category };
   }
-  return '';
+  return { master: '', sub: '' };
 }
 
 function unitFamily(unit) {
@@ -267,6 +272,19 @@ function unitFamily(unit) {
   if (normalized === 'g' || normalized === 'kg') return 'weight';
   if (normalized === 'ml' || normalized === 'l') return 'volume';
   return 'other';
+}
+
+function roundFinalQtyForPurchase(qtyValue, unitValue) {
+  const qty = Number(qtyValue);
+  if (!Number.isFinite(qty)) return null;
+
+  const unit = normalizeUnit(unitValue);
+  if (unit === 'each' && qty > 0) {
+    // Discrete items should be buyable whole quantities.
+    return Math.ceil(qty - 1e-9);
+  }
+
+  return Math.round(qty * 10000) / 10000;
 }
 
 function toCanonicalQty(qtyValue, unitValue) {
@@ -463,7 +481,8 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
          dsi.measure_unit,
         dsi.desired_servings,
          dsi.calculated_qty,
-         COALESCE(ac.name, 'Uncategorised') AS category
+         COALESCE(ac.name, 'Uncategorised') AS category,
+         COALESCE(NULLIF(trim(ac.master_category), ''), ac.name, 'Uncategorised') AS master_category
        FROM desired_servings_ingredients dsi
        LEFT JOIN aisle_category ac ON ac.id = dsi.aisle_category_id
        WHERE dsi.booking_id = ANY($1::int[])`,
@@ -561,7 +580,8 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
            dsi.measure_unit,
             dsi.desired_servings,
            dsi.calculated_qty,
-           COALESCE(ac.name, 'Uncategorised') AS category
+           COALESCE(ac.name, 'Uncategorised') AS category,
+           COALESCE(NULLIF(trim(ac.master_category), ''), ac.name, 'Uncategorised') AS master_category
          FROM desired_servings_ingredients dsi
          LEFT JOIN aisle_category ac ON ac.id = dsi.aisle_category_id
          WHERE dsi.booking_id = ANY($1::int[])`,
@@ -573,7 +593,9 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     // This allows tsp/tbsp, g/kg, ml/l to combine safely while keeping
     // incompatible units separated for explicit review.
     const aisleKeywordRes = await pool.query(
-      `SELECT lower(trim(ak.keyword)) AS keyword, coalesce(ac.name, 'Uncategorised') AS category
+      `SELECT lower(trim(ak.keyword)) AS keyword,
+              coalesce(nullif(trim(ac.master_category), ''), ac.name, 'Uncategorised') AS master_category,
+              coalesce(ac.name, 'Uncategorised') AS sub_aisle
        FROM aisle_keywords ak
        LEFT JOIN aisle_category ac ON ac.id = ak.aisle_category_id
        WHERE trim(coalesce(ak.keyword, '')) <> ''
@@ -602,18 +624,19 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       const displayName = (extracted.matched && (Number.isFinite(effectiveQty) || !!unit))
         ? rawName
         : rawSourceName;
-      let resolvedCategory = String(row.category || 'Uncategorised').trim() || 'Uncategorised';
-      if (resolvedCategory.toLowerCase() === 'uncategorised') {
-        const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
-        if (matchedCategory) resolvedCategory = matchedCategory;
-      }
-      const key = normalizeKey(displayName) + '||' + normalizeKey(resolvedCategory) + '||' + normalizeKey(canonicalUnit);
+      let resolvedSubAisle = String(row.category || 'Uncategorised').trim() || 'Uncategorised';
+      let resolvedCategory = String(row.master_category || resolvedSubAisle || 'Uncategorised').trim() || 'Uncategorised';
+      const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
+      if (matchedCategory.master) resolvedCategory = matchedCategory.master;
+      if (matchedCategory.sub) resolvedSubAisle = matchedCategory.sub;
+      const key = normalizeKey(displayName) + '||' + normalizeKey(resolvedCategory) + '||' + normalizeKey(resolvedSubAisle) + '||' + normalizeKey(canonicalUnit);
       const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
       const cls = classLookup.get(row.booking_id);
 
       if (!itemMap.has(key)) {
         itemMap.set(key, {
           category: resolvedCategory,
+          sub_aisle: resolvedSubAisle,
           item_name: displayName,
           normalized_item_key: normalizeKey(displayName),
           base_unit: canonicalUnit,
@@ -665,14 +688,15 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     if (itemMap.size > 0) {
       const entries = Array.from(itemMap.values());
       const valueClauses = entries.map((_, i) => {
-        const b = i * 7;
-        return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5}, $${b+6}, $${b+7})`;
+        const b = i * 8;
+        return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5}, $${b+6}, $${b+7}, $${b+8})`;
       });
       const flatParams = [];
       entries.forEach((e, i) => {
         flatParams.push(
           planId,
           e.category,
+          e.sub_aisle || null,
           e.item_name,
           e.normalized_item_key,
           e.base_unit || null,
@@ -682,11 +706,11 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       });
       await pool.query(
         `INSERT INTO shopping_plan_items
-           (plan_id, category, item_name, normalized_item_key, base_unit, calculated_qty, source_type, source_detail_json, sort_order)
+           (plan_id, category, sub_aisle, item_name, normalized_item_key, base_unit, calculated_qty, source_type, source_detail_json, sort_order)
          VALUES ${valueClauses.map((v, i) => {
            // re-map to include source_type literal and sort_order
-           const b = i * 7;
-           return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5}, $${b+6}, 'recipe_scale', $${b+7}, ${i})`;
+           const b = i * 8;
+           return `($${b+1}, $${b+2}, $${b+3}, $${b+4}, $${b+5}, $${b+6}, $${b+7}, 'recipe_scale', $${b+8}, ${i})`;
          }).join(', ')}`,
         flatParams
       );
@@ -815,8 +839,8 @@ router.get('/:id', requireAdmin, async (req, res) => {
 // Save teacher edits: update teacher_qty, base_unit, category, notes per item.
 // Also supports adding new manual rows and deleting rows (by item id).
 // Body: {
-//   updates?: [{ id, teacher_qty?, base_unit?, category?, notes? }],
-//   adds?:    [{ category, item_name, base_unit, teacher_qty, notes }],
+//   updates?: [{ id, teacher_qty?, base_unit?, category?, sub_aisle?, notes? }],
+//   adds?:    [{ category, sub_aisle, item_name, base_unit, teacher_qty, notes }],
 //   deletes?: [id]
 // }
 // Writes audit records for any changed numeric/text field.
@@ -878,6 +902,7 @@ router.put('/:id/items', requireAdmin, async (req, res) => {
       if (upd.teacher_qty !== undefined) trackField('teacher_qty', upd.teacher_qty !== '' ? upd.teacher_qty : null);
       if (upd.base_unit !== undefined)   trackField('base_unit', upd.base_unit || null);
       if (upd.category !== undefined)    trackField('category', upd.category || 'Uncategorised');
+      if (upd.sub_aisle !== undefined)   trackField('sub_aisle', upd.sub_aisle || null);
       if (upd.notes !== undefined)       trackField('notes', upd.notes || null);
 
       if (setClauses.length > 0) {
@@ -906,11 +931,12 @@ router.put('/:id/items', requireAdmin, async (req, res) => {
       if (!itemName) continue;
       await pool.query(
         `INSERT INTO shopping_plan_items
-           (plan_id, category, item_name, normalized_item_key, base_unit, teacher_qty, source_type, notes, edited_by, edited_at)
-         VALUES ($1, $2, $3, $4, $5, $6, 'manual', $7, $8, NOW())`,
+           (plan_id, category, sub_aisle, item_name, normalized_item_key, base_unit, teacher_qty, source_type, notes, edited_by, edited_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'manual', $8, $9, NOW())`,
         [
           planId,
           add.category || 'Uncategorised',
+          add.sub_aisle || null,
           itemName,
           normalizeKey(itemName),
           add.base_unit || null,
@@ -988,15 +1014,33 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
       return res.status(422).json({ success: false, errors });
     }
 
+    const aisleKeywordRes = await pool.query(
+      `SELECT lower(trim(ak.keyword)) AS keyword,
+              coalesce(nullif(trim(ac.master_category), ''), ac.name, 'Uncategorised') AS master_category,
+              coalesce(ac.name, 'Uncategorised') AS sub_aisle
+       FROM aisle_keywords ak
+       LEFT JOIN aisle_category ac ON ac.id = ak.aisle_category_id
+       WHERE trim(coalesce(ak.keyword, '')) <> ''
+       ORDER BY length(trim(ak.keyword)) DESC, ak.id ASC`
+    );
+    const aisleKeywords = Array.isArray(aisleKeywordRes.rows) ? aisleKeywordRes.rows : [];
+
     // Compute and store final_qty for each item
     for (const item of itemsRes.rows) {
+      let workingCategory = String(item.category || 'Uncategorised').trim() || 'Uncategorised';
+      let workingSubAisle = String(item.sub_aisle || '').trim() || null;
+
+      const matchedCategory = resolveCategoryFromKeywords(item.item_name, aisleKeywords);
+      if (matchedCategory.master) workingCategory = matchedCategory.master;
+      if (matchedCategory.sub) workingSubAisle = matchedCategory.sub;
+
       const baseFinalQty = item.teacher_qty !== null
         ? parseFloat(item.teacher_qty)
         : (item.calculated_qty !== null ? parseFloat(item.calculated_qty) : null);
 
       let finalQty = baseFinalQty;
       if (useSafetyBuffer && Number.isFinite(baseFinalQty)) {
-        const categoryKey = normalizeKey(item.category || '');
+        const categoryKey = normalizeKey(workingCategory || '');
         const categoryPercent = Number(categoryBuffer[categoryKey]);
         const fallbackPercent = Number.isFinite(defaultSafetyBufferPercent) && defaultSafetyBufferPercent >= 0
           ? defaultSafetyBufferPercent
@@ -1005,9 +1049,11 @@ router.post('/:id/finalize', requireAdmin, async (req, res) => {
         finalQty = baseFinalQty * (1 + (bufferPercent / 100));
       }
 
+      const roundedFinalQty = roundFinalQtyForPurchase(finalQty, item.base_unit);
+
       await pool.query(
-        'UPDATE shopping_plan_items SET final_qty = $1 WHERE id = $2',
-        [finalQty !== null && Number.isFinite(finalQty) ? Math.round(finalQty * 10000) / 10000 : null, item.id]
+        'UPDATE shopping_plan_items SET category = $1, sub_aisle = $2, final_qty = $3 WHERE id = $4',
+        [workingCategory, workingSubAisle, roundedFinalQty, item.id]
       );
     }
 
@@ -1083,10 +1129,10 @@ router.post('/:id/reopen', requireAdmin, async (req, res) => {
     // Copy items (reset final_qty; preserve teacher overrides)
     await pool.query(
       `INSERT INTO shopping_plan_items
-         (plan_id, category, item_name, normalized_item_key, base_unit,
-          calculated_qty, teacher_qty, source_type, source_detail_json, notes, sort_order)
-       SELECT $1, category, item_name, normalized_item_key, base_unit,
-              calculated_qty, teacher_qty, source_type, source_detail_json, notes, sort_order
+        (plan_id, category, sub_aisle, item_name, normalized_item_key, base_unit,
+         calculated_qty, teacher_qty, source_type, source_detail_json, notes, sort_order)
+       SELECT $1, category, sub_aisle, item_name, normalized_item_key, base_unit,
+            calculated_qty, teacher_qty, source_type, source_detail_json, notes, sort_order
        FROM shopping_plan_items
        WHERE plan_id = $2`,
       [newPlan.id, planId]
@@ -1124,7 +1170,7 @@ router.get('/:id/technician-view', async (req, res) => {
     }
 
     const itemsRes = await pool.query(
-      `SELECT category, item_name, base_unit, final_qty, notes
+      `SELECT category, sub_aisle, item_name, base_unit, final_qty, notes
        FROM shopping_plan_items
        WHERE plan_id = $1
        ORDER BY category, sort_order, id`,
@@ -1137,6 +1183,7 @@ router.get('/:id/technician-view', async (req, res) => {
       const cat = item.category || 'Uncategorised';
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push({
+        sub_aisle: item.sub_aisle,
         item_name: item.item_name,
         base_unit: item.base_unit,
         final_qty: item.final_qty,
