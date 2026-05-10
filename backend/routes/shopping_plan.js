@@ -210,6 +210,43 @@ function cleanIngredientName(value) {
   return source.replace(withUnit, '').replace(qtyOnly, '').trim();
 }
 
+function normalizedMergeIngredientName(value) {
+  const source = String(value || '').trim();
+  if (!source) return '';
+
+  let name = source;
+
+  // Remove leading quantity/unit fragments including loose variants like "1t of ...".
+  name = name.replace(/^\s*\d+(?:\s*[-/]\s*\d+)?\s*(?:t\b|tsp\b|tbsp\b|cups?\b|g\b|kg\b|ml\b|l\b)?\s*(?:of\s+)?/i, '');
+
+  // Drop trailing prep notes after commas and remove common prep words.
+  name = name.replace(/,.*$/, '');
+  name = name.replace(/\b(finely|thinly|roughly|lightly|fresh|frozen|drained|reserved|optional|seeded|removed|intact|peeled|beaten|chopped|sliced|diced|crushed|grated|julienned|minced)\b/gi, ' ');
+  name = name.replace(/\b(with|and|or|the|a|an)\b/gi, ' ');
+
+  name = cleanIngredientName(name)
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Canonical merge aliases for common duplicate patterns.
+  name = name
+    .replace(/\bspring onions\b/g, 'spring onion')
+    .replace(/\beggs\b/g, 'egg')
+    .replace(/\bonions\b/g, 'onion');
+
+  return name;
+}
+
+function displayNameFromMergeName(mergeName, fallbackName) {
+  const key = String(mergeName || '').trim().toLowerCase();
+  if (!key) return String(fallbackName || '').trim();
+  if (key === 'egg') return 'Eggs';
+  if (key === 'spring onion') return 'Spring onion';
+  if (key === 'oil') return 'Oil';
+  return key.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 function extractLeadingQuantityUnit(value) {
   const source = String(value || '').trim();
   if (!source) return { matched: false, qty: null, unit: '', name: '' };
@@ -772,7 +809,9 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       if (enforcedCategory.master) resolvedCategory = enforcedCategory.master;
       if (enforcedCategory.sub) resolvedSubAisle = enforcedCategory.sub;
 
-      const key = normalizeKey(displayName) + '||' + normalizeKey(resolvedCategory) + '||' + normalizeKey(resolvedSubAisle) + '||' + normalizeKey(canonicalUnit);
+      const mergeName = normalizedMergeIngredientName(displayName) || normalizeKey(displayName);
+      const itemDisplayName = displayNameFromMergeName(mergeName, displayName);
+      const key = normalizeKey(mergeName) + '||' + normalizeKey(resolvedCategory) + '||' + normalizeKey(resolvedSubAisle) + '||' + normalizeKey(canonicalUnit);
       const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
       const cls = classLookup.get(row.booking_id);
 
@@ -780,8 +819,8 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         itemMap.set(key, {
           category: resolvedCategory,
           sub_aisle: resolvedSubAisle,
-          item_name: displayName,
-          normalized_item_key: normalizeKey(displayName),
+          item_name: itemDisplayName,
+          normalized_item_key: normalizeKey(mergeName),
           base_unit: canonicalUnit,
           calculated_qty: 0,
           sources: []
