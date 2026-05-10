@@ -171,6 +171,34 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  function normalizeRecipeSourceUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return '';
+
+    const normalizedSlashes = raw.replace(/\\/g, '/');
+
+    const malformedSavedPdf = normalizedSlashes.match(/^https?:\/\/+(.+)$/i);
+    if (malformedSavedPdf) {
+      const remainder = String(malformedSavedPdf[1] || '').replace(/^\/+/, '');
+      if (/^SavedPDFs\//i.test(remainder)) {
+        return new URL('/' + remainder, window.location.origin).toString();
+      }
+    }
+
+    if (/^\/?SavedPDFs\//i.test(normalizedSlashes)) {
+      const path = '/' + normalizedSlashes.replace(/^\/+/, '');
+      return new URL(path, window.location.origin).toString();
+    }
+
+    if (/^https?:\/\//i.test(normalizedSlashes)) return normalizedSlashes;
+
+    if (normalizedSlashes.startsWith('/')) {
+      return new URL(normalizedSlashes, window.location.origin).toString();
+    }
+
+    return `https://${normalizedSlashes}`;
+  }
+
   const params = new URLSearchParams(window.location.search);
   let id = params.get('id');
   const scope = String(params.get('scope') || '').trim().toLowerCase();
@@ -278,7 +306,15 @@ document.addEventListener('DOMContentLoaded', function() {
   function sourceFromAnyUrl(url) {
     const value = String(url || '').trim();
     if (!value) return '-';
-    return sourceFromUrl(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    const normalized = normalizeRecipeSourceUrl(value);
+    if (!normalized) return '-';
+    try {
+      const parsed = new URL(normalized);
+      if (/\/SavedPDFs\//i.test(parsed.pathname)) return 'savedpdfs';
+    } catch (_) {
+      // Continue with host parse fallback.
+    }
+    return sourceFromUrl(normalized);
   }
 
   function findDisplayRowByRecipeId(recipeId) {
@@ -429,7 +465,7 @@ document.addEventListener('DOMContentLoaded', function() {
           if (recipeIdEl) recipeIdEl.textContent = `RecipeID: ${recipeNumber}`;
           if (categoryEl) categoryEl.textContent = category;
           if (servingsEl) servingsEl.textContent = `Serving Size: ${recipe.serving_size || '-'}`;
-          if (sourceEl) sourceEl.textContent = `Source: ${sourceFromUrl(recipe.url)}`;
+          if (sourceEl) sourceEl.textContent = `Source: ${sourceFromAnyUrl(recipe.url)}`;
           if (imgEl) {
             imgEl.src = imageUrl;
             imgEl.onerror = function() {
@@ -437,9 +473,14 @@ document.addEventListener('DOMContentLoaded', function() {
             };
           }
 
-          if (urlEl && recipe.url) {
-            urlEl.href = String(recipe.url);
-            urlEl.style.display = 'inline-flex';
+          if (urlEl) {
+            const normalizedUrl = normalizeRecipeSourceUrl(recipe.url);
+            if (normalizedUrl) {
+              urlEl.href = normalizedUrl;
+              urlEl.style.display = 'inline-flex';
+            } else {
+              urlEl.style.display = 'none';
+            }
           }
 
           document.title = `${title} | Recipe Details`;
@@ -524,9 +565,10 @@ document.addEventListener('DOMContentLoaded', function() {
                   Object.assign(recipe, data.recipe);
                   if (titleEl) titleEl.textContent = recipe.name || '(No Name)';
                   if (servingsEl) servingsEl.textContent = `Serving Size: ${recipe.serving_size || '-'}`;
-                  if (sourceEl) sourceEl.textContent = `Source: ${sourceFromUrl(recipe.url)}`;
+                  if (sourceEl) sourceEl.textContent = `Source: ${sourceFromAnyUrl(recipe.url)}`;
                   if (urlEl) {
-                    if (recipe.url) { urlEl.href = String(recipe.url); urlEl.style.display = 'inline-flex'; }
+                    const normalizedUrl = normalizeRecipeSourceUrl(recipe.url);
+                    if (normalizedUrl) { urlEl.href = normalizedUrl; urlEl.style.display = 'inline-flex'; }
                     else urlEl.style.display = 'none';
                   }
                   document.title = `${recipe.name || '(No Name)'} | Recipe Details`;

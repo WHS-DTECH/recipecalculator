@@ -386,8 +386,31 @@ document.addEventListener('DOMContentLoaded', function() {
   function safeRecipeUrl(value) {
     const raw = String(value || '').trim();
     if (!raw) return '';
-    if (/^https?:\/\//i.test(raw)) return raw;
-    return `https://${raw}`;
+
+    const normalizedSlashes = raw.replace(/\\/g, '/');
+
+    // Repair malformed values such as https:///SavedPDFs/file.pdf.
+    const malformedSavedPdf = normalizedSlashes.match(/^https?:\/\/+(.+)$/i);
+    if (malformedSavedPdf) {
+      const remainder = String(malformedSavedPdf[1] || '').replace(/^\/+/, '');
+      if (/^SavedPDFs\//i.test(remainder)) {
+        return new URL('/' + remainder, window.location.origin).toString();
+      }
+    }
+
+    // Local files should resolve against this app's domain.
+    if (/^\/?SavedPDFs\//i.test(normalizedSlashes)) {
+      const path = '/' + normalizedSlashes.replace(/^\/+/, '');
+      return new URL(path, window.location.origin).toString();
+    }
+
+    if (/^https?:\/\//i.test(normalizedSlashes)) return normalizedSlashes;
+
+    if (normalizedSlashes.startsWith('/')) {
+      return new URL(normalizedSlashes, window.location.origin).toString();
+    }
+
+    return `https://${normalizedSlashes}`;
   }
 
   function isLikelyImagePath(value) {
@@ -450,6 +473,19 @@ document.addEventListener('DOMContentLoaded', function() {
         label: 'Source',
         monogram: 'SR'
       };
+    }
+
+    try {
+      const parsed = new URL(href);
+      if (/\/SavedPDFs\//i.test(parsed.pathname)) {
+        return {
+          href,
+          label: 'SavedPDFs',
+          monogram: 'SA'
+        };
+      }
+    } catch (_) {
+      // Fall through to generic host handling.
     }
 
     const host = hostFromUrl(href);
