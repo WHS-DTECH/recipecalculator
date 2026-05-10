@@ -182,6 +182,36 @@ function cleanIngredientName(value) {
   return source.replace(withUnit, '').replace(qtyOnly, '').trim();
 }
 
+function extractLeadingQuantityUnit(value) {
+  const source = String(value || '').trim();
+  if (!source) return { matched: false, qty: null, unit: '', name: '' };
+
+  const qtyPattern = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
+  const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
+
+  const withUnit = source.match(new RegExp(`^\\s*(${qtyPattern})\\s*(${unitPattern})\\b\\s+(.+)$`, 'i'));
+  if (withUnit) {
+    return {
+      matched: true,
+      qty: parseFractionLikeInventory(withUnit[1]),
+      unit: normalizeUnit(withUnit[2]),
+      name: String(withUnit[3] || '').trim()
+    };
+  }
+
+  const qtyOnly = source.match(new RegExp(`^\\s*(${qtyPattern})\\s+(.+)$`, 'i'));
+  if (qtyOnly) {
+    return {
+      matched: true,
+      qty: parseFractionLikeInventory(qtyOnly[1]),
+      unit: '',
+      name: String(qtyOnly[2] || '').trim()
+    };
+  }
+
+  return { matched: false, qty: null, unit: '', name: source };
+}
+
 function unitFamily(unit) {
   const normalized = normalizeUnit(unit);
   if (!normalized) return 'none';
@@ -498,25 +528,32 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     const classLookup = new Map(classesRes.rows.map(r => [r.booking_id, r]));
 
     for (const row of dsiRes.rows) {
-      const rawName = cleanIngredientName(row.stripfooditem || row.fooditem || row.ingredient_name || '');
-      const unit = String(row.measure_unit || '').trim();
+      const rawSourceName = String(row.stripfooditem || row.fooditem || row.ingredient_name || '').trim();
+      const extracted = extractLeadingQuantityUnit(rawSourceName);
+      const rawName = cleanIngredientName(rawSourceName);
+      const unit = normalizeUnit(String(row.measure_unit || extracted.unit || '').trim());
       const explicitCalculated = parseFractionLikeInventory(row.calculated_qty);
       const fallbackBase = parseFractionLikeInventory(row.measure_qty);
       const desiredServings = parseFractionLikeInventory(row.desired_servings);
       const effectiveQty = Number.isFinite(explicitCalculated)
         ? explicitCalculated
-        : (Number.isFinite(fallbackBase) && Number.isFinite(desiredServings) ? (fallbackBase * desiredServings) : Number.NaN);
+        : (Number.isFinite(fallbackBase) && Number.isFinite(desiredServings)
+          ? (fallbackBase * desiredServings)
+          : (Number.isFinite(extracted.qty) ? extracted.qty : Number.NaN));
       const canonical = toCanonicalQty(effectiveQty, unit);
       const canonicalUnit = canonical.unit || normalizeUnit(unit) || '';
-      const key = normalizeKey(rawName) + '||' + normalizeKey(row.category) + '||' + normalizeKey(canonicalUnit);
+      const displayName = (extracted.matched && (Number.isFinite(effectiveQty) || !!unit))
+        ? rawName
+        : rawSourceName;
+      const key = normalizeKey(displayName) + '||' + normalizeKey(row.category) + '||' + normalizeKey(canonicalUnit);
       const qty = Number.isFinite(canonical.qty) ? canonical.qty : 0;
       const cls = classLookup.get(row.booking_id);
 
       if (!itemMap.has(key)) {
         itemMap.set(key, {
           category: row.category,
-          item_name: rawName,
-          normalized_item_key: normalizeKey(rawName),
+          item_name: displayName,
+          normalized_item_key: normalizeKey(displayName),
           base_unit: canonicalUnit,
           calculated_qty: 0,
           sources: []
