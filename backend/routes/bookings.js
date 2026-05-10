@@ -1343,6 +1343,7 @@ router.get('/all', async (req, res) => {
   try {
     await ensureSchema();
     const { start, end, staff_id, planner_stream } = req.query;
+    const fieldsMode = String(req.query.fields || '').trim().toLowerCase();
     const limitRaw = Number(req.query.limit);
     const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(4000, Math.floor(limitRaw))) : 1500;
     const dateRe = /^\d{4}-\d{2}-\d{2}$/;
@@ -1375,6 +1376,24 @@ router.get('/all', async (req, res) => {
 
     const normalizedStaffId = String(staff_id || '').trim();
     const normalizedPlannerStream = String(planner_stream || '').trim();
+
+    const fieldSet = new Set([
+      'id',
+      'staff_id',
+      'staff_name',
+      'class_name',
+      'booking_date',
+      'period',
+      'recipe',
+      'recipe_url',
+      'recipe_id',
+      'class_size',
+      'planner_stream',
+      'cook_mode',
+      'partner_student_name',
+      'partner_student_id',
+      'groups'
+    ]);
 
     let query = `
       SELECT
@@ -1413,9 +1432,34 @@ router.get('/all', async (req, res) => {
     params.push(limit);
     query += ` ORDER BY booking_date DESC, period LIMIT $${params.length}`;
     const result = await pool.query(query, params);
-    const payload = { bookings: result.rows };
+
+    let rows = result.rows;
+    if (fieldsMode === 'calendar' || fieldsMode === 'summary') {
+      rows = result.rows.map((row) => {
+        const summaryRow = {
+          id: row.id,
+          staff_id: row.staff_id,
+          staff_name: row.staff_name,
+          class_name: row.class_name,
+          booking_date: row.booking_date,
+          period: row.period,
+          recipe: row.recipe,
+          recipe_url: row.recipe_url,
+          recipe_id: row.recipe_id,
+          class_size: row.class_size,
+          planner_stream: row.planner_stream,
+          groups: row.groups
+        };
+        if (fieldsMode === 'summary') {
+          return summaryRow;
+        }
+        return summaryRow;
+      });
+    }
+
+    const payload = { bookings: rows };
     const userLabel = req.authUserEmail || 'public';
-    logJsonTransfer('GET /api/bookings/all', payload, `rows=${result.rows.length} user=${userLabel} start=${boundedStart || '-'} end=${boundedEnd || '-'} limit=${limit}`);
+    logJsonTransfer('GET /api/bookings/all', payload, `rows=${rows.length} user=${userLabel} start=${boundedStart || '-'} end=${boundedEnd || '-'} limit=${limit} fields=${fieldsMode || 'full'}`);
     res.json(payload);
   } catch (err) {
     console.error('[BOOKINGS] Failed to fetch bookings:', err.message, err.stack);

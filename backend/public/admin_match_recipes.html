@@ -1355,6 +1355,7 @@
                       <div class="linked-recipe-name">${escapeHtml(r.name || 'Unknown')}${Number(r.recipe_id) === Number(booking.recipe_id) && booking.linked_recipes.length > 1 ? '<span class="linked-recipe-primary-label"> primary</span>' : ''}</div>
                       <div class="linked-recipe-source">${formatLinkedRecipeSource(r.url)}</div>
                     </div>
+                    <button class="remove-link" onclick="unlinkLinkedRecipe(${booking.id}, ${r.recipe_id}, '${encodeURIComponent(r.name || '')}')" title="Unlink this recipe from planner item">Unlink</button>
                   </div>
                 `).join('')}
               </div>
@@ -1652,6 +1653,35 @@
         if (b) b.recipe_id = recipeId;
         renderRecipes();
         showToast('Primary recipe updated.');
+      } catch (err) {
+        showToast(`Error: ${err.message}`, 'error');
+      }
+    }
+
+    async function unlinkLinkedRecipe(bookingId, recipeId, encodedName) {
+      const recipeName = decodeURIComponent(String(encodedName || '')).trim() || 'this recipe';
+      if (!confirm(`Unlink "${recipeName}" from this planner item?`)) return;
+
+      try {
+        const response = await fetch('/api/recipe-matching/link-multi', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ bookingId, recipeId })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Failed to unlink recipe');
+
+        const booking = allBookings.find(b => b.id === bookingId);
+        if (booking) {
+          booking.linked_recipes = Array.isArray(data.linked)
+            ? data.linked.map(r => ({ recipe_id: r.recipe_id, name: r.name, url: r.url }))
+            : [];
+          booking.recipe_id = data.primaryRecipeId || null;
+        }
+
+        updateStats();
+        renderRecipes();
+        showToast(`Unlinked ${recipeName}.`);
       } catch (err) {
         showToast(`Error: ${err.message}`, 'error');
       }

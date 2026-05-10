@@ -566,13 +566,47 @@ router.get('/linked-recipes/:bookingId', async (req, res) => {
  * Remove a specific recipe link from a booking
  * Body: { bookingId: number, recipeId: number }
  */
-router.delete('/link-multi', async (req, res) => {
+router.delete('/link-multi', requireSignedIn, async (req, res) => {
   try {
-    const { bookingId, recipeId } = req.body;
-    if (!bookingId || !recipeId) return res.status(400).json({ error: 'bookingId and recipeId required' });
+    const bookingId = Number(req.body && req.body.bookingId);
+    const recipeId = Number(req.body && req.body.recipeId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0 || !Number.isInteger(recipeId) || recipeId <= 0) {
+      return res.status(400).json({ error: 'Valid bookingId and recipeId are required' });
+    }
+
     await ensureBookingRecipesTable();
+
     await pool.query('DELETE FROM booking_recipes WHERE booking_id = $1 AND recipe_id = $2', [bookingId, recipeId]);
-    res.json({ success: true });
+
+    const linkedResult = await pool.query(
+      `SELECT br.recipe_id, r.name, r.url
+       FROM booking_recipes br
+       JOIN recipes r ON r.id = br.recipe_id
+       WHERE br.booking_id = $1
+       ORDER BY br.linked_at`,
+      [bookingId]
+    );
+
+    const currentBooking = await pool.query('SELECT recipe_id FROM bookings WHERE id = $1', [bookingId]);
+    if (!currentBooking.rowCount) {
+      return res.status(404).json({ error: 'Booking not found' });
+    }
+
+    const currentPrimary = Number(currentBooking.rows[0].recipe_id);
+    let nextPrimary = Number.isInteger(currentPrimary) ? currentPrimary : null;
+    const linkedIds = linkedResult.rows.map((row) => Number(row.recipe_id)).filter((id) => Number.isInteger(id) && id > 0);
+
+    if (!linkedIds.includes(nextPrimary)) {
+      nextPrimary = linkedIds.length ? linkedIds[0] : null;
+      await pool.query('UPDATE bookings SET recipe_id = $1 WHERE id = $2', [nextPrimary, bookingId]);
+    }
+
+    res.json({
+      success: true,
+      bookingId,
+      primaryRecipeId: nextPrimary,
+      linked: linkedResult.rows
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
