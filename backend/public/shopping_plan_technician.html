@@ -118,6 +118,39 @@
       return Number.isInteger(id) && id > 0 ? id : null;
     }
 
+    function normalizeUnit(u) {
+      const value = String(u || '').trim().toLowerCase();
+      if (!value) return '';
+      if (['gram', 'grams', 'g'].includes(value)) return 'g';
+      if (['kilogram', 'kilograms', 'kg'].includes(value)) return 'kg';
+      if (['milliliter', 'milliliters', 'millilitre', 'millilitres', 'ml'].includes(value)) return 'ml';
+      if (['liter', 'liters', 'litre', 'litres', 'l'].includes(value)) return 'l';
+      return value;
+    }
+
+    function formatQty(value, decimals) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return '';
+      return n.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+    }
+
+    function toPurchaseUnit(qtyValue, unitValue) {
+      const qty = Number(qtyValue);
+      const unit = normalizeUnit(unitValue);
+      if (!Number.isFinite(qty)) {
+        return { qty: '', unit: String(unitValue || '') };
+      }
+
+      if (unit === 'g' && Math.abs(qty) >= 1000) {
+        return { qty: formatQty(qty / 1000, 3), unit: 'kg' };
+      }
+      if (unit === 'ml' && Math.abs(qty) >= 1000) {
+        return { qty: formatQty(qty / 1000, 3), unit: 'l' };
+      }
+
+      return { qty: formatQty(qty, 4), unit: String(unitValue || '') };
+    }
+
     function render(payload) {
       currentPayload = payload;
       const plan = payload.plan || {};
@@ -142,10 +175,11 @@
           '<table class="spt-table">' +
             '<thead><tr><th>Item</th><th class="spt-num">Qty</th><th>Unit</th><th>Notes</th></tr></thead>' +
             '<tbody>' + rows.map((r) => {
+              const purchase = toPurchaseUnit(r.final_qty, r.base_unit);
               return '<tr>' +
                 '<td>' + esc(r.item_name || '') + '</td>' +
-                '<td class="spt-num">' + esc(r.final_qty !== null && r.final_qty !== undefined ? r.final_qty : '') + '</td>' +
-                '<td>' + esc(r.base_unit || '') + '</td>' +
+                '<td class="spt-num">' + esc(purchase.qty) + '</td>' +
+                '<td>' + esc(purchase.unit || '') + '</td>' +
                 '<td>' + esc(r.notes || '') + '</td>' +
               '</tr>';
             }).join('') + '</tbody>' +
@@ -169,11 +203,12 @@
       Object.keys(currentPayload.categories).forEach((cat) => {
         const rows = currentPayload.categories[cat] || [];
         rows.forEach((r) => {
+          const purchase = toPurchaseUnit(r.final_qty, r.base_unit);
           const vals = [
             cat,
             r.item_name || '',
-            r.final_qty !== null && r.final_qty !== undefined ? String(r.final_qty) : '',
-            r.base_unit || '',
+            purchase.qty,
+            purchase.unit || '',
             r.notes || ''
           ].map((v) => '"' + String(v).replace(/"/g, '""') + '"');
           lines.push(vals.join(','));
