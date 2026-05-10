@@ -464,10 +464,18 @@ async function syncPlannerDocument(documentId) {
     }
 
     await ensureGooglePlannerSyncSchema();
-    await pool.query(
-        "DELETE FROM bookings WHERE period = 'Planner' AND coalesce(source_document_id, '') = $1",
+
+    // Load existing planner bookings to preserve manual recipe links
+    const existing = await pool.query(
+        `SELECT id, booking_date, planner_stream, class_name, recipe_id, recipe_url FROM bookings 
+         WHERE period = 'Planner' AND coalesce(source_document_id, '') = $1`,
         [documentId]
     );
+    const existingByKey = new Map();
+    for (const row of existing.rows) {
+        const key = `${row.booking_date}|${row.planner_stream || 'Middle'}|${row.class_name}`.toLowerCase();
+        existingByKey.set(key, row);
+    }
 
     let inserted = 0;
     const seenKeys = new Set();
@@ -478,29 +486,74 @@ async function syncPlannerDocument(documentId) {
         }
         seenKeys.add(dedupeKey);
 
-        await pool.query(
-            `INSERT INTO bookings (
-                staff_id, staff_name, class_name, booking_date, period,
-                recipe, recipe_url, recipe_id, class_size, planner_stream,
-                source_document_id, source_document_title, source_document_revision_id, source_document_synced_at
-            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())`,
-            [
-                row.staff_id || null,
-                row.staff_name || null,
-                row.class_name,
-                row.booking_date,
-                row.period || 'Planner',
-                row.recipe,
-                row.recipe_url || '',
-                row.recipe_id || null,
-                row.class_size || null,
-                row.planner_stream || 'Middle',
-                row.source_document_id,
-                row.source_document_title || null,
-                row.source_document_revision_id || null
-            ]
-        );
-        inserted += 1;
+        const existingRow = existingByKey.get(dedupeKey);
+
+        if (existingRow) {
+            // Update existing row, preserving manual recipe link if present
+            await pool.query(
+                `UPDATE bookings SET
+                    staff_id = $1,
+                    staff_name = $2,
+                    class_size = $3,
+                    recipe = CASE WHEN recipe_id IS NOT NULL THEN recipe ELSE $4 END,
+                    recipe_url = CASE WHEN recipe_id IS NOT NULL THEN recipe_url ELSE $5 END,
+                    recipe_id = CASE WHEN recipe_id IS NOT NULL THEN recipe_id ELSE $6 END,
+                    source_document_id = $7,
+                    source_document_title = $8,
+                    source_document_revision_id = $9,
+                    source_document_synced_at = NOW()
+                 WHERE id = $10`,
+                [
+                    row.staff_id || null,
+                    row.staff_name || null,
+                    row.class_size || null,
+                    row.recipe,
+                    row.recipe_url || '',
+                    row.recipe_id || null,
+                    documentId,
+                    document && document.title ? String(document.title) : null,
+                    row.source_document_revision_id || null,
+                    existingRow.id
+                ]
+            );
+        } else {
+            // Insert new row
+            await pool.query(
+                `INSERT INTO bookings (
+                    staff_id, staff_name, class_name, booking_date, period,
+                    recipe, recipe_url, recipe_id, class_size, planner_stream,
+                    source_document_id, source_document_title, source_document_revision_id, source_document_synced_at
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,NOW())`,
+                [
+                    row.staff_id || null,
+                    row.staff_name || null,
+                    row.class_name,
+                    row.booking_date,
+                    row.period || 'Planner',
+                    row.recipe,
+                    row.recipe_url || '',
+                    row.recipe_id || null,
+                    row.class_size || null,
+                    row.planner_stream || 'Middle',
+                    documentId,
+                    document && document.title ? String(document.title) : null,
+                    row.source_document_revision_id || null
+                ]
+            );
+            inserted += 1;
+        }
+    }
+
+    // Delete any planner rows from this document that weren't in the new sync (cleanup stale entries)
+    const syncedKeys = new Set();
+    for (const row of parsedRows) {
+        const key = `${row.booking_date}|${row.planner_stream || 'Middle'}|${row.class_name}`.toLowerCase();
+        syncedKeys.add(key);
+    }
+    for (const [key, row] of existingByKey) {
+        if (!syncedKeys.has(key)) {
+            await pool.query('DELETE FROM bookings WHERE id = $1', [row.id]);
+        }
     }
 
     return {
