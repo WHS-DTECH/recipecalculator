@@ -88,7 +88,7 @@
         <button id="loadBtn" class="spt-btn primary" type="button">Load Finalized Plan</button>
         <button id="printBtn" class="spt-btn secondary" type="button">Print</button>
         <button id="csvBtn" class="spt-btn secondary" type="button">Export CSV</button>
-        <button id="refreshBtn" class="spt-btn secondary" type="button" title="Re-apply food brand normalization to retroactively update item names">Refresh Brand Names</button>
+        <button id="refreshBtn" class="spt-btn secondary" type="button" title="Create a refreshed finalized version from latest recipe and inventory data">Refresh Plan Data</button>
       </div>
       <div class="spt-meta" id="planMeta"></div>
       <div class="spt-status" id="status"></div>
@@ -446,27 +446,65 @@
         setStatus('Load a finalized plan before refreshing.', 'err');
         return;
       }
+
+      const originalPlanId = Number(currentPayload.plan.id);
+      if (!Number.isInteger(originalPlanId) || originalPlanId <= 0) {
+        setStatus('Invalid plan selected.', 'err');
+        return;
+      }
+
+      refreshBtn.disabled = true;
+      refreshBtn.textContent = 'Refreshing...';
+
       try {
-        setStatus('Refreshing food brand names...', '');
-        const planId = currentPayload.plan.id;
-        const resp = await fetch('/api/shopping-plan/' + planId + '/refresh-brand-names', {
+        setStatus('Creating refreshed draft version...', '');
+
+        const reopenResp = await fetch('/api/shopping-plan/' + originalPlanId + '/reopen', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' }
         });
-        const result = await resp.json().catch(() => ({}));
-        if (!resp.ok) throw new Error(result.error || 'Failed to refresh brand names.');
-        setStatus(result.message || 'Brand names refreshed successfully. Reloading plan...', 'ok');
-        // Reload the plan to show updated items
-        setTimeout(async () => {
-          try {
-            await loadPlan(planId);
-          } catch (err) {
-            setStatus(err.message, 'err');
-          }
-        }, 800);
+        const reopenData = await reopenResp.json().catch(() => ({}));
+        if (!reopenResp.ok || !reopenData.success || !reopenData.plan || !reopenData.plan.id) {
+          throw new Error(reopenData.error || 'Failed to create refreshed draft version.');
+        }
+
+        const newPlanId = Number(reopenData.plan.id);
+        setStatus('Regenerating items from latest source data...', '');
+
+        const generateResp = await fetch('/api/shopping-plan/' + newPlanId + '/generate-draft', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_from_inventory: true })
+        });
+        const generateData = await generateResp.json().catch(() => ({}));
+        if (!generateResp.ok || !generateData.success) {
+          throw new Error(generateData.error || 'Failed to regenerate refreshed draft.');
+        }
+
+        setStatus('Finalizing refreshed plan version...', '');
+        const finalizeResp = await fetch('/api/shopping-plan/' + newPlanId + '/finalize', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const finalizeData = await finalizeResp.json().catch(() => ({}));
+        if (!finalizeResp.ok || !finalizeData.success) {
+          throw new Error(finalizeData.error || 'Failed to finalize refreshed plan.');
+        }
+
+        await loadFinalizedPlanOptions(newPlanId);
+        planIdInput.value = String(newPlanId);
+        planSelect.value = String(newPlanId);
+        await loadPlan(newPlanId);
+
+        setStatus('Refreshed to new finalized version: Plan #' + newPlanId + '.', 'ok');
       } catch (err) {
-        setStatus(err.message, 'err');
+        setStatus(err.message || 'Refresh failed.', 'err');
+      } finally {
+        refreshBtn.disabled = false;
+        refreshBtn.textContent = 'Refresh Plan Data';
       }
     });
 

@@ -580,6 +580,8 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     return res.status(400).json({ success: false, error: 'Invalid plan ID.' });
   }
 
+  const refreshFromInventory = !!(req.body && req.body.refresh_from_inventory);
+
   try {
     await ensureSchema();
     // Confirm plan exists and is still a draft
@@ -628,15 +630,16 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     // This removes the manual "Calculate Servings" bottleneck for shopping draft generation.
     const existingDsiBookingIds = new Set(dsiRes.rows.map((r) => Number(r.booking_id)).filter(Number.isInteger));
     const missingBookingIds = bookingIds.filter((id) => !existingDsiBookingIds.has(Number(id)));
+    const bookingIdsForAutofill = refreshFromInventory ? bookingIds : missingBookingIds;
     let autofilledClasses = 0;
     let skippedAutofillClasses = 0;
 
-    if (missingBookingIds.length > 0) {
+    if (bookingIdsForAutofill.length > 0) {
       const bookingsForAutofillRes = await pool.query(
         `SELECT id AS booking_id, staff_name, staff_id, class_name, booking_date, class_size, groups, recipe_id
          FROM bookings
          WHERE id = ANY($1::int[])`,
-        [missingBookingIds]
+        [bookingIdsForAutofill]
       );
 
       const recipeIds = Array.from(new Set(
