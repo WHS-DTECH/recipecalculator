@@ -1322,6 +1322,79 @@ router.get('/:id/technician-view', async (req, res) => {
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/shopping-plan/:id/reapply-brand-normalization (admin only)
+// Retroactively strips food brand names from item_name fields in a finalized plan.
+// Useful when new brands are added and you want to clean existing finalized items.
+// ===========================================================================
+router.post('/:id/reapply-brand-normalization', requireAdmin, async (req, res) => {
+  const planId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(planId) || planId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid plan ID.' });
+  }
+
+  try {
+    await ensureSchema();
+
+    // Verify plan exists and is finalized
+    const planRes = await pool.query(
+      'SELECT id, status FROM shopping_plan WHERE id = $1',
+      [planId]
+    );
+    if (planRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Plan not found.' });
+    }
+    if (planRes.rows[0].status !== 'finalized') {
+      return res.status(409).json({ success: false, error: 'This plan has not been finalized yet.' });
+    }
+
+    // Load all food brands
+    const brandsResult = await pool.query('SELECT brand_name FROM food_brands ORDER BY LENGTH(brand_name) DESC');
+    const brands = (brandsResult.rows || []).map(b => b.brand_name);
+
+    // Helper to strip brand names from a string
+    function stripBrands(name) {
+      let stripped = (name || '').trim();
+      for (const brand of brands) {
+        const re = new RegExp('^' + String(brand || '').replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
+        stripped = stripped.replace(re, '');
+      }
+      return stripped.trim();
+    }
+
+    // Get all items in this plan
+    const itemsRes = await pool.query(
+      'SELECT id, item_name FROM shopping_plan_items WHERE plan_id = $1 ORDER BY id',
+      [planId]
+    );
+
+    let updatedCount = 0;
+    const updates = [];
+
+    for (const item of itemsRes.rows) {
+      const stripped = stripBrands(item.item_name);
+      if (stripped !== item.item_name) {
+        await pool.query(
+          'UPDATE shopping_plan_items SET item_name = $1 WHERE id = $2',
+          [stripped, item.id]
+        );
+        updatedCount++;
+        updates.push({ id: item.id, old_name: item.item_name, new_name: stripped });
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: `Brand normalization applied. ${updatedCount} item(s) updated.`,
+      updated_count: updatedCount,
+      updates: updates
+    });
+  } catch (err) {
+    console.error('[shopping-plan] POST /:id/reapply-brand-normalization error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/shopping-plan/smoke-seed  (admin only)
 // Creates minimal test recipes, bookings, and desired_servings_ingredients
 // rows for Phase 4 guardrail smoke tests.  Returns the created IDs so the
