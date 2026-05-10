@@ -848,6 +848,26 @@ router.delete('/display-table/:id', async (req, res) => {
   }
 });
 
+// DELETE /api/recipes/display-by-recipe/:recipeId - Unpublish using recipeid key
+router.delete('/display-by-recipe/:recipeId', async (req, res) => {
+  const recipeId = parseInt(req.params.recipeId, 10);
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipeId.' });
+  }
+
+  try {
+    const result = await pool.query('DELETE FROM recipe_display WHERE recipeid = $1', [recipeId]);
+    if (!result.rowCount) {
+      return res.status(404).json({ success: false, error: 'Recipe not found in display table.' });
+    }
+
+    return res.json({ success: true, deleted: result.rowCount, recipeId });
+  } catch (err) {
+    console.error('[UNPUBLISH_BY_RECIPE][ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // --- Stepwise Cleanup Ingredients API with Progress ---
 
 let cleanupIngredientsProgress = { total: 0, current: 0, running: false };

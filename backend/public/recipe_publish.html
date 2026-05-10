@@ -51,6 +51,22 @@
 		<div class="setup-section" style="margin-top:20px;">
 			<div class="setup-section-title">Bulk Re-Verify Existing Recipes</div>
 			<div class="setup-section-desc">Select published recipes to re-verify their ingredients and run through the confirmation process:</div>
+			<div style="margin:10px 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+				<label for="bulkReverifyFilter" style="font-weight:600;">Show:</label>
+				<select id="bulkReverifyFilter" style="min-width:220px;">
+					<option value="all">All Published Recipes</option>
+					<option value="not-verified">Yet To Reverify</option>
+					<option value="verified">Already Reverified</option>
+				</select>
+				<span id="bulkReverifySummary" style="font-size:0.9rem;color:#444;">Loading...</span>
+			</div>
+			<div style="margin:6px 0 8px 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+				<label for="rangeStartId" style="font-weight:600;">Range:</label>
+				<input id="rangeStartId" type="number" min="1" placeholder="Start ID" style="width:110px;padding:0.35rem 0.5rem;border:1px solid #ccc;border-radius:4px;">
+				<span>to</span>
+				<input id="rangeEndId" type="number" min="1" placeholder="End ID" style="width:110px;padding:0.35rem 0.5rem;border:1px solid #ccc;border-radius:4px;">
+				<button id="selectRangeRecipesBtn" style="background:#00897b;color:#fff;border:none;padding:0.45rem 0.9rem;border-radius:4px;cursor:pointer;">Select Range</button>
+			</div>
 			<div style="margin:15px 0;display:flex;gap:10px;flex-wrap:wrap;">
 				<button id="selectAllRecipesBtn" style="background:#1976d2;color:#fff;border:none;padding:0.45rem 0.9rem;border-radius:4px;cursor:pointer;">Select All</button>
 				<button id="clearAllRecipesBtn" style="background:#666;color:#fff;border:none;padding:0.45rem 0.9rem;border-radius:4px;cursor:pointer;">Clear All</button>

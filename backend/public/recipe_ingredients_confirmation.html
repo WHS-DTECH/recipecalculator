@@ -91,6 +91,20 @@
 		.btn-reject:hover {
 			background: #b71c1c;
 		}
+		.btn-unpublish {
+			background: #6d4c41;
+			color: white;
+			border: none;
+			padding: 10px 24px;
+			border-radius: 4px;
+			font-size: 14px;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+		.btn-unpublish:hover {
+			background: #4e342e;
+		}
 		.btn-edit {
 			background: #1976d2;
 			color: white;
@@ -212,6 +226,7 @@
 			<div class="action-buttons">
 				<button id="confirmBtn" class="btn-confirm">✓ Ingredients Correct - Proceed to Publish</button>
 				<button id="rejectBtn" class="btn-reject">✗ Fix Ingredients</button>
+				<button id="unpublishBtn" class="btn-unpublish">Unpublish Recipe</button>
 			</div>
 		</div>
 	</div>
@@ -407,6 +422,42 @@
 			}
 		}
 
+		async function unpublishCurrentRecipe() {
+			if (!currentRecipeId) return;
+			const unpublishBtn = document.getElementById('unpublishBtn');
+			unpublishBtn.disabled = true;
+
+			try {
+				const response = await fetch(`${API_BASE}/recipes/display-by-recipe/${currentRecipeId}`, {
+					method: 'DELETE'
+				});
+				const payload = await response.json().catch(() => ({}));
+				if (!response.ok || !payload?.success) {
+					throw new Error(payload?.error || `Failed to unpublish recipe (${response.status})`);
+				}
+
+				showStatus(`Recipe ${currentRecipeId} unpublished from published recipes.`, 'success');
+
+				if (isBulkMode && bulkQueue) {
+					const nextRecipeId = getNextBulkRecipeIdAfter(currentRecipeId);
+					if (nextRecipeId) {
+						bulkQueue.completed = Number(bulkQueue.completed || 0) + 1;
+						bulkQueue.current = Number(nextRecipeId);
+						sessionStorage.setItem('bulkReVerifyQueue', JSON.stringify(bulkQueue));
+						window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
+						return;
+					}
+					sessionStorage.removeItem('bulkReVerifyQueue');
+					window.location.href = '/recipe_publish.html';
+					return;
+				}
+			} catch (err) {
+				showStatus(`Could not unpublish recipe: ${err.message}`, 'error');
+			} finally {
+				unpublishBtn.disabled = false;
+			}
+		}
+
 		async function markRecipeVerified(recipeId) {
 			try {
 				const response = await fetch(`${API_BASE}/recipes/${recipeId}/verify`, {
@@ -567,6 +618,14 @@
 			hasPendingIngredientSave = false;
 			setEditMode(false);
 			hideStatus();
+		});
+
+		document.getElementById('unpublishBtn').addEventListener('click', async () => {
+			if (!currentRecipeId) return;
+			if (!confirm(`Unpublish Recipe ID ${currentRecipeId}?\n\nThis removes it from published recipes so it can be re-entered from scratch.`)) {
+				return;
+			}
+			await unpublishCurrentRecipe();
 		});
 
 		// Load recipe details on page load

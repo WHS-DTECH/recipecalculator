@@ -513,6 +513,13 @@ let allRecipesCache = [];
 
 	// Bulk re-verification functionality
 	let selectedBulkRecipes = new Set();
+	let visibleBulkRecipeIds = [];
+
+	function getBulkReverifyFilterValue() {
+		const filter = document.getElementById('bulkReverifyFilter');
+		const value = String(filter?.value || 'all');
+		return ['all', 'not-verified', 'verified'].includes(value) ? value : 'all';
+	}
 
 	function renderBulkReVerifyTable() {
 		const tableBody = document.getElementById('bulkReVerifyTableBody');
@@ -520,19 +527,37 @@ let allRecipesCache = [];
 		
 		tableBody.innerHTML = '';
 		const publishedRecipes = (allRecipesCache || []).filter(r => publishedRecipeIds.has(Number(r.id)));
+		const bulkFilter = getBulkReverifyFilterValue();
+		const filteredRecipes = publishedRecipes.filter((recipe) => {
+			const hasVerifiedDate = Boolean(recipe?.verified_date);
+			if (bulkFilter === 'not-verified') return !hasVerifiedDate;
+			if (bulkFilter === 'verified') return hasVerifiedDate;
+			return true;
+		});
+
+		visibleBulkRecipeIds = filteredRecipes.map(r => Number(r.id)).filter(id => Number.isInteger(id) && id > 0);
+		selectedBulkRecipes = new Set(Array.from(selectedBulkRecipes).filter(id => visibleBulkRecipeIds.includes(id)));
+
+		const summary = document.getElementById('bulkReverifySummary');
+		if (summary) {
+			const verifiedCount = publishedRecipes.filter(r => Boolean(r?.verified_date)).length;
+			const unverifiedCount = Math.max(0, publishedRecipes.length - verifiedCount);
+			summary.textContent = `Published: ${publishedRecipes.length} | Reverified: ${verifiedCount} | Yet to Reverify: ${unverifiedCount}`;
+		}
 		
-		if (publishedRecipes.length === 0) {
+		if (filteredRecipes.length === 0) {
 			tableBody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:15px;color:#999;">No published recipes to re-verify.</td></tr>';
 			return;
 		}
 
-		publishedRecipes.forEach(recipe => {
+		filteredRecipes.forEach(recipe => {
 			const tr = document.createElement('tr');
 			
 			const checkboxTd = document.createElement('td');
 			const checkbox = document.createElement('input');
 			checkbox.type = 'checkbox';
 			checkbox.value = recipe.id;
+			checkbox.checked = selectedBulkRecipes.has(Number(recipe.id));
 			checkbox.addEventListener('change', (e) => {
 				if (e.target.checked) {
 					selectedBulkRecipes.add(Number(recipe.id));
@@ -590,6 +615,14 @@ let allRecipesCache = [];
 		});
 	}
 
+	const bulkReverifyFilter = document.getElementById('bulkReverifyFilter');
+	if (bulkReverifyFilter) {
+		bulkReverifyFilter.addEventListener('change', () => {
+			if (selectAllCheckbox) selectAllCheckbox.checked = false;
+			renderBulkReVerifyTable();
+		});
+	}
+
 	const selectAllBtn = document.getElementById('selectAllRecipesBtn');
 	if (selectAllBtn) {
 		selectAllBtn.addEventListener('click', () => {
@@ -616,6 +649,42 @@ let allRecipesCache = [];
 					cb.checked = false;
 					selectedBulkRecipes.delete(Number(cb.value));
 				});
+			}
+		});
+	}
+
+	const selectRangeBtn = document.getElementById('selectRangeRecipesBtn');
+	if (selectRangeBtn) {
+		selectRangeBtn.addEventListener('click', () => {
+			const startInput = document.getElementById('rangeStartId');
+			const endInput = document.getElementById('rangeEndId');
+			const startId = Number(String(startInput?.value || '').trim());
+			const endId = Number(String(endInput?.value || '').trim());
+
+			if (!Number.isInteger(startId) || !Number.isInteger(endId) || startId <= 0 || endId <= 0) {
+				notify('Enter valid numeric start and end Recipe IDs.', 'warning');
+				return;
+			}
+
+			const minId = Math.min(startId, endId);
+			const maxId = Math.max(startId, endId);
+			let matched = 0;
+			const tableBody = document.getElementById('bulkReVerifyTableBody');
+			if (!tableBody) return;
+
+			tableBody.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+				const id = Number(cb.value);
+				if (id >= minId && id <= maxId) {
+					cb.checked = true;
+					selectedBulkRecipes.add(id);
+					matched += 1;
+				}
+			});
+
+			if (matched === 0) {
+				notify(`No visible recipes found in range ${minId} to ${maxId}.`, 'warning');
+			} else {
+				notify(`Selected ${matched} recipe(s) in range ${minId} to ${maxId}.`, 'success');
 			}
 		});
 	}
