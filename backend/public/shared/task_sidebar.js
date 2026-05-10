@@ -9,6 +9,11 @@
 (function () {
   'use strict';
 
+  let latestBrowseWeekContext = null;
+  window.addEventListener('browse-practicals-week-context', (event) => {
+    latestBrowseWeekContext = event && event.detail ? event.detail : null;
+  });
+
   // ── Helpers ────────────────────────────────────────────────────────────────
   function escHtml(str) {
     return String(str || '')
@@ -54,6 +59,11 @@
     return `${monday.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })} – ${friday.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' })}`;
   }
 
+  function isBrowsePracticalsPage() {
+    const path = String((window.location && window.location.pathname) || '').toLowerCase();
+    return path.endsWith('/browse_practicals.html') || path.endsWith('browse_practicals.html');
+  }
+
   // ── Task definitions ───────────────────────────────────────────────────────
   function getTasksForRole(role) {
     const isPlanningRole = role === 'admin' || role === 'lead_teacher';
@@ -87,6 +97,16 @@
       href: 'add_booking.html',
       desc: 'Review and confirm class bookings for the upcoming week'
     });
+
+    if (isBrowsePracticalsPage()) {
+      tasks.push({
+        id: 'missing_recipes_week',
+        label: 'Missing Recipes — Current Week',
+        href: 'browse_practicals.html',
+        desc: 'Loading missing recipes for the week in view...',
+        isDynamicMissingTask: true
+      });
+    }
 
     return tasks;
   }
@@ -271,6 +291,22 @@
         margin-top: 0.12rem;
         line-height: 1.4;
       }
+      .tsb-missing-list {
+        margin: 0.35rem 0 0;
+        padding-left: 1rem;
+        font-size: 0.73rem;
+        color: #475569;
+        line-height: 1.35;
+      }
+      .tsb-missing-list li {
+        margin-bottom: 0.14rem;
+      }
+      .tsb-missing-clear {
+        margin-top: 0.3rem;
+        font-size: 0.73rem;
+        color: #059669;
+        font-weight: 700;
+      }
 
       @media (max-width: 720px) {
         #tsb-tab { top: 66px; }
@@ -296,6 +332,24 @@
     const state = loadState();
     const closedThisSession = sessionStorage.getItem('tsb_closed') === '1';
     const pendingCount = tasks.filter(t => !state[t.id]).length;
+
+    function updatePendingBadge() {
+      const pending = tasks.filter(t => !loadState()[t.id]).length;
+      let badge = tab.querySelector('.tsb-tab-badge');
+      if (pending === 0) {
+        if (badge) badge.remove();
+        tab.title = 'All tasks complete';
+      } else {
+        if (!badge) {
+          badge = document.createElement('span');
+          badge.className = 'tsb-tab-badge';
+          tab.appendChild(badge);
+        }
+        badge.textContent = pending;
+        badge.setAttribute('aria-label', `${pending} pending`);
+        tab.title = `${pending} task${pending !== 1 ? 's' : ''} pending`;
+      }
+    }
 
     // Tab
     const tab = document.createElement('button');
@@ -339,6 +393,7 @@
         `<div class="tsb-content">` +
         `<a class="tsb-link" href="${escHtml(task.href)}">${escHtml(task.label)}</a>` +
         (task.desc ? `<div class="tsb-desc">${escHtml(task.desc)}</div>` : '') +
+        (task.isDynamicMissingTask ? '<ul class="tsb-missing-list" hidden></ul><div class="tsb-missing-clear" hidden>No missing recipes in this week.</div>' : '') +
         `</div>`;
       list.appendChild(li);
     });
@@ -387,23 +442,59 @@
       const task = tasks.find(t => t.id === taskId);
       btn.setAttribute('aria-label', (done ? 'Mark as not done' : 'Mark as done') + ': ' + (task ? task.label : taskId));
 
-      // Update badge
-      const pending = tasks.filter(t => !loadState()[t.id]).length;
-      let badge = tab.querySelector('.tsb-tab-badge');
-      if (pending === 0) {
-        if (badge) badge.remove();
-        tab.title = 'All tasks complete';
-      } else {
-        if (!badge) {
-          badge = document.createElement('span');
-          badge.className = 'tsb-tab-badge';
-          tab.appendChild(badge);
-        }
-        badge.textContent = pending;
-        badge.setAttribute('aria-label', `${pending} pending`);
-        tab.title = `${pending} task${pending !== 1 ? 's' : ''} pending`;
-      }
+      updatePendingBadge();
     });
+
+    return {
+      applyMissingRecipesContext(detail) {
+        const row = list.querySelector('li[data-task-id="missing_recipes_week"]');
+        if (!row || !detail) return;
+
+        const link = row.querySelector('.tsb-link');
+        const desc = row.querySelector('.tsb-desc');
+        const ul = row.querySelector('.tsb-missing-list');
+        const clear = row.querySelector('.tsb-missing-clear');
+        if (!link || !desc || !ul || !clear) return;
+
+        const weekMonday = String(detail.weekMondayIso || '').trim();
+        const missing = Array.isArray(detail.missingRecipes) ? detail.missingRecipes : [];
+        let weekLabel = 'Current Week';
+        if (weekMonday) {
+          const parsed = new Date(`${weekMonday}T00:00:00`);
+          if (!Number.isNaN(parsed.getTime())) {
+            weekLabel = formatWeekRange(parsed);
+          }
+        }
+
+        link.textContent = `Missing Recipes — ${weekLabel}`;
+
+        if (!missing.length) {
+          desc.textContent = 'No missing recipes in the week currently in view.';
+          ul.innerHTML = '';
+          ul.hidden = true;
+          clear.hidden = false;
+          return;
+        }
+
+        desc.textContent = `${missing.length} booking${missing.length === 1 ? '' : 's'} without a recipe in this week.`;
+        clear.hidden = true;
+
+        const maxItems = 8;
+        ul.innerHTML = missing.slice(0, maxItems).map((item) => {
+          const day = String(item.dayLabel || item.bookingDate || '').trim();
+          const period = String(item.period || '').trim();
+          const className = String(item.className || 'Class').trim();
+          const teacher = String(item.teacherName || '').trim();
+          const left = [day, period ? `P${period}` : ''].filter(Boolean).join(' ');
+          const right = teacher ? `${className} (${teacher})` : className;
+          return `<li>${escHtml(left)} — ${escHtml(right)}</li>`;
+        }).join('');
+        if (missing.length > maxItems) {
+          ul.innerHTML += `<li>+${missing.length - maxItems} more</li>`;
+        }
+        ul.hidden = false;
+      }
+    };
   }
 
   // ── Init ───────────────────────────────────────────────────────────────────
@@ -420,7 +511,17 @@
       const tasks = getTasksForRole(role);
       if (!tasks.length) return;
 
-      buildSidebar(tasks, firstName);
+      const sidebarApi = buildSidebar(tasks, firstName);
+      if (sidebarApi && typeof sidebarApi.applyMissingRecipesContext === 'function' && latestBrowseWeekContext) {
+        sidebarApi.applyMissingRecipesContext(latestBrowseWeekContext);
+      }
+
+      window.addEventListener('browse-practicals-week-context', (event) => {
+        latestBrowseWeekContext = event && event.detail ? event.detail : null;
+        if (sidebarApi && typeof sidebarApi.applyMissingRecipesContext === 'function') {
+          sidebarApi.applyMissingRecipesContext(latestBrowseWeekContext);
+        }
+      });
     } catch (_) {
       // Non-critical — sidebar is optional enhancement
     }

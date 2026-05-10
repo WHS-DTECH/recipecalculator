@@ -318,6 +318,30 @@
       </div>
       <div id="googleSyncConfig" style="margin-top:0.65rem;font-size:0.9rem;color:#4b5563;">Checking sync configuration...</div>
       <div class="rcal-status" id="googleSyncStatus" role="status" aria-live="polite"></div>
+
+      <div style="margin-top:0.95rem;border-top:1px solid #e5e7eb;padding-top:0.75rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.45rem;">
+          <strong style="font-size:0.9rem;color:#1f2937;">Recent Sync Runs</strong>
+          <button class="rcal-add-row-btn" id="refreshGoogleSyncHistoryBtn" type="button" style="margin-top:0;background:#334155;">Refresh</button>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="rcal-table" id="googleSyncHistoryTable" style="font-size:0.84rem;">
+            <thead>
+              <tr>
+                <th>Ran At</th>
+                <th>Trigger</th>
+                <th>Document</th>
+                <th>Parsed</th>
+                <th>Inserted</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="googleSyncHistoryBody">
+              <tr><td colspan="6" style="text-align:center;color:#6b7280;">Loading sync history...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Step 2: Review -->
@@ -500,6 +524,8 @@
     const googleSyncNowBtn = document.getElementById('googleSyncNowBtn');
     const googleSyncStatus = document.getElementById('googleSyncStatus');
     const googleSyncConfig = document.getElementById('googleSyncConfig');
+    const googleSyncHistoryBody = document.getElementById('googleSyncHistoryBody');
+    const refreshGoogleSyncHistoryBtn = document.getElementById('refreshGoogleSyncHistoryBtn');
     const classnameInput = document.getElementById('classnameInput');
     const plannerUploadsList = document.getElementById('plannerUploadsList');
     let plannerClassOptions = [];
@@ -658,6 +684,67 @@
       googleSyncStatus.textContent = message || '';
     }
 
+    function formatSyncRunDate(value) {
+      if (!value) return '-';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return String(value);
+      return d.toLocaleString(undefined, {
+        year: 'numeric', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+      });
+    }
+
+    function renderGoogleSyncHistoryRows(rows) {
+      if (!googleSyncHistoryBody) return;
+      if (!Array.isArray(rows) || !rows.length) {
+        googleSyncHistoryBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;">No sync history yet.</td></tr>';
+        return;
+      }
+
+      googleSyncHistoryBody.innerHTML = rows.map((row) => {
+        const ranAt = escHtml(formatSyncRunDate(row.ran_at));
+        const trigger = escHtml(String(row.trigger_source || '-'));
+        const documentName = escHtml(String(row.document_title || row.document_id || '-'));
+        const parsed = Number(row.parsed_rows || 0);
+        const inserted = Number(row.inserted_rows || 0);
+        const success = row.success !== false;
+        const skipped = row.skipped === true;
+        const error = String(row.error_message || '').trim();
+        const status = success
+          ? (skipped ? 'Skipped' : 'Success')
+          : 'Failed';
+        const statusStyle = success
+          ? (skipped ? 'color:#9a3412;font-weight:700;' : 'color:#166534;font-weight:700;')
+          : 'color:#b91c1c;font-weight:700;';
+
+        return `
+          <tr>
+            <td>${ranAt}</td>
+            <td>${trigger}</td>
+            <td title="${documentName}${error ? ' | ' + escHtml(error) : ''}">${documentName}</td>
+            <td>${parsed}</td>
+            <td>${inserted}</td>
+            <td style="${statusStyle}" title="${error ? escHtml(error) : ''}">${status}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    async function loadGoogleSyncHistory() {
+      if (!googleSyncHistoryBody) return;
+      googleSyncHistoryBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;">Loading sync history...</td></tr>';
+      try {
+        const res = await fetch('/google/sync-history?limit=30', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !data || !data.success) {
+          throw new Error((data && data.error) || 'Unable to load sync history.');
+        }
+        renderGoogleSyncHistoryRows(Array.isArray(data.history) ? data.history : []);
+      } catch (err) {
+        googleSyncHistoryBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escHtml(err.message || 'Failed to load sync history.')}</td></tr>`;
+      }
+    }
+
     async function loadGoogleSyncConfig() {
       if (!googleSyncConfig) return;
       googleSyncConfig.textContent = 'Checking sync configuration...';
@@ -717,11 +804,13 @@
       } catch (err) {
         setGoogleSyncStatus(`Google sync error: ${err.message || 'Unknown error'}`, 'error');
       } finally {
-        await loadGoogleSyncConfig();
+        await Promise.all([loadGoogleSyncConfig(), loadGoogleSyncHistory()]);
       }
     });
 
-    loadGoogleSyncConfig();
+    refreshGoogleSyncHistoryBtn.addEventListener('click', loadGoogleSyncHistory);
+
+    Promise.all([loadGoogleSyncConfig(), loadGoogleSyncHistory()]);
 
     function getDefaultClassNameForStream(stream) {
       if (stream === 'Senior') return '11HOSP';

@@ -56,6 +56,62 @@ async function ensureGooglePlannerSyncSchema() {
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source_document_title TEXT");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source_document_revision_id TEXT");
     await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS source_document_synced_at TIMESTAMPTZ");
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS google_planner_sync_history (
+            id BIGSERIAL PRIMARY KEY,
+            ran_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            trigger_source TEXT NOT NULL DEFAULT 'manual',
+            document_id TEXT,
+            document_title TEXT,
+            parsed_rows INTEGER NOT NULL DEFAULT 0,
+            inserted_rows INTEGER NOT NULL DEFAULT 0,
+            skipped BOOLEAN NOT NULL DEFAULT FALSE,
+            success BOOLEAN NOT NULL DEFAULT TRUE,
+            error_message TEXT
+        )
+    `);
+}
+
+async function recordPlannerSyncHistory(result, triggerSource) {
+    await ensureGooglePlannerSyncSchema();
+
+    const success = !(result && result.error);
+    await pool.query(
+        `INSERT INTO google_planner_sync_history (
+            trigger_source,
+            document_id,
+            document_title,
+            parsed_rows,
+            inserted_rows,
+            skipped,
+            success,
+            error_message
+        ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+            String(triggerSource || 'manual').trim() || 'manual',
+            result && result.documentId ? String(result.documentId) : null,
+            result && result.title ? String(result.title) : null,
+            Number(result && result.parsedRows ? result.parsedRows : 0),
+            Number(result && result.inserted ? result.inserted : 0),
+            Boolean(result && result.skipped),
+            success,
+            success ? null : String(result && result.error ? result.error : 'Unknown sync error')
+        ]
+    );
+}
+
+async function getPlannerSyncHistory(limit = 50) {
+    await ensureGooglePlannerSyncSchema();
+    const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 200);
+    const result = await pool.query(
+        `SELECT id, ran_at, trigger_source, document_id, document_title,
+                parsed_rows, inserted_rows, skipped, success, error_message
+           FROM google_planner_sync_history
+          ORDER BY ran_at DESC, id DESC
+          LIMIT $1`,
+        [safeLimit]
+    );
+    return result.rows;
 }
 
 function getConfiguredPlannerDocIds() {
@@ -313,7 +369,7 @@ async function syncPlannerDocument(documentId) {
     };
 }
 
-async function syncConfiguredPlannerDocs() {
+async function syncConfiguredPlannerDocs(triggerSource = 'manual') {
     const documentIds = getConfiguredPlannerDocIds();
     if (!documentIds.length) {
         return { success: true, synced: [], skipped: true, reason: 'No planner document IDs configured.' };
@@ -321,11 +377,26 @@ async function syncConfiguredPlannerDocs() {
 
     const synced = [];
     for (const documentId of documentIds) {
-        const result = await syncPlannerDocument(documentId);
-        synced.push(result);
+        try {
+            const result = await syncPlannerDocument(documentId);
+            synced.push(result);
+            await recordPlannerSyncHistory(result, triggerSource);
+        } catch (error) {
+            const failedResult = {
+                documentId,
+                title: '',
+                parsedRows: 0,
+                inserted: 0,
+                skipped: false,
+                error: error && error.message ? error.message : 'Unknown sync error'
+            };
+            synced.push(failedResult);
+            await recordPlannerSyncHistory(failedResult, triggerSource);
+        }
     }
 
-    return { success: true, synced, skipped: false };
+    const hasErrors = synced.some((entry) => Boolean(entry && entry.error));
+    return { success: !hasErrors, synced, skipped: false };
 }
 
 function startPlannerSyncScheduler() {
@@ -340,7 +411,7 @@ function startPlannerSyncScheduler() {
     }
 
     plannerSyncTask = cron.schedule(cronExpression, () => {
-        syncConfiguredPlannerDocs().catch((err) => {
+        syncConfiguredPlannerDocs('scheduled').catch((err) => {
             console.error('[Google Planner Sync] Scheduled sync failed:', err.message);
         });
     }, {
@@ -465,11 +536,12 @@ router.post('/webhook', async (req, res) => {
             const documentIds = getConfiguredPlannerDocIds();
             if (documentIds.includes(resourceId)) {
                 const result = await syncPlannerDocument(resourceId);
+                await recordPlannerSyncHistory(result, 'webhook');
                 return res.status(200).json({ success: true, result });
             }
         }
 
-        const result = await syncConfiguredPlannerDocs();
+        const result = await syncConfiguredPlannerDocs('webhook');
         res.status(200).json(result);
     } catch (error) {
         console.error('Webhook error:', error);
@@ -483,7 +555,7 @@ router.post('/sync-planners', async (req, res) => {
             return res.status(403).json({ error: 'Forbidden' });
         }
 
-        const result = await syncConfiguredPlannerDocs();
+        const result = await syncConfiguredPlannerDocs('manual-ui');
         res.status(200).json(result);
     } catch (error) {
         console.error('Planner sync error:', error);
@@ -497,6 +569,17 @@ router.get('/sync-config', async (req, res) => {
         res.status(200).json({ success: true, ...summary });
     } catch (error) {
         console.error('Planner sync config error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/sync-history', async (req, res) => {
+    try {
+        const limit = Number(req.query && req.query.limit ? req.query.limit : 50);
+        const history = await getPlannerSyncHistory(limit);
+        res.status(200).json({ success: true, history });
+    } catch (error) {
+        console.error('Planner sync history error:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });

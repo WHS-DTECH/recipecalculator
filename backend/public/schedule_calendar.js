@@ -1152,6 +1152,7 @@ async function fetchBookingsForWeek(monday) {
   }
 
   try {
+    params.set('fields', 'calendar');
     const res = await fetch(`/api/bookings/all?${params.toString()}`);
     if (!res.ok) {
       return [];
@@ -1161,6 +1162,56 @@ async function fetchBookingsForWeek(monday) {
   } catch (err) {
     return [];
   }
+}
+
+function buildMissingRecipeRowsForWeek(bookings) {
+  const rows = (Array.isArray(bookings) ? bookings : []).filter((booking) => {
+    if (isPlannerLikeBooking(booking)) return false;
+    const recipe = String(booking && booking.recipe ? booking.recipe : '').trim();
+    return !recipe;
+  });
+
+  rows.sort((a, b) => {
+    const dateCompare = String(a.booking_date || '').localeCompare(String(b.booking_date || ''));
+    if (dateCompare !== 0) return dateCompare;
+    const periodCompare = Number(a.period || 0) - Number(b.period || 0);
+    if (periodCompare !== 0) return periodCompare;
+    return String(a.class_name || '').localeCompare(String(b.class_name || ''));
+  });
+
+  return rows.map((booking) => {
+    const rawDate = String(booking.booking_date || '').slice(0, 10);
+    let dayLabel = rawDate;
+    try {
+      const parsed = new Date(rawDate + 'T00:00:00');
+      if (!Number.isNaN(parsed.getTime())) {
+        dayLabel = parsed.toLocaleDateString(userLocale || undefined, { weekday: 'short', day: '2-digit', month: '2-digit' });
+      }
+    } catch {
+      // Keep fallback label.
+    }
+
+    return {
+      id: Number(booking.id || 0),
+      bookingDate: rawDate,
+      period: String(booking.period || ''),
+      className: String(booking.class_name || '').trim(),
+      teacherName: String(booking.staff_name || '').trim(),
+      dayLabel
+    };
+  });
+}
+
+function publishBrowsePracticalsWeekContext(monday, bookings) {
+  if (bookingPageLabel !== 'Browse Practicals') return;
+
+  const weekStart = getStartOfWeek(monday);
+  const detail = {
+    weekMondayIso: toLocalIsoDate(weekStart),
+    missingRecipes: buildMissingRecipeRowsForWeek(bookings)
+  };
+
+  window.dispatchEvent(new CustomEvent('browse-practicals-week-context', { detail }));
 }
 
 function formatDateShort(date) {
@@ -1508,6 +1559,7 @@ async function renderScheduleCalendar() {
   const bookings = await fetchBookingsForWeek(currentMonday);
   window.currentScheduleBookings = bookings;
   buildTeacherColourMap(bookings);
+  publishBrowsePracticalsWeekContext(currentMonday, bookings);
   const plannerMap = buildPlannerMap(bookings);
 
   const grid = buildPrintGrid(bookings, weekDates);
@@ -2328,7 +2380,7 @@ async function checkAndShowGroupsPopup() {
 
   try {
     const [bookingsData, meData] = await Promise.all([
-      fetch('/api/bookings/all?start=' + startStr + '&end=' + endStr).then(r => r.json()),
+      fetch('/api/bookings/all?start=' + startStr + '&end=' + endStr + '&fields=calendar').then(r => r.json()),
       fetch('/api/auth/me').then(r => r.ok ? r.json() : {}).catch(() => ({}))
     ]);
 
