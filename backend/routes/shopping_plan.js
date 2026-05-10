@@ -293,10 +293,10 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
   // Produce: vegetables, fruits, herbs, spices
   // Includes: onions, garlic, potatoes, tomatoes, peppers, ginger, chillies, herbs,
   // citrus, pineapple, peas, beans, leafy greens, etc.
-  if (has(/\b(spring\s*onion|brown\s*onion|red\s*onion|white\s*onion|onion|garlic|ginger|turmeric|cumin|coriander)\b/i)) {
+  if (has(/\b(spring\s*onions?|brown\s*onions?|red\s*onions?|white\s*onions?|onions?|garlic|ginger|turmeric|cumin|coriander)\b/i)) {
     if (has(/\bgarlic\b/i)) return { master: 'Produce', sub: 'Garlic' };
     if (has(/\bginger\b/i)) return { master: 'Produce', sub: 'Ginger' };
-    if (has(/\bonion\b/i)) return { master: 'Produce', sub: 'Onions' };
+    if (has(/\bonions?\b/i)) return { master: 'Produce', sub: 'Onions' };
     return { master: 'Produce', sub: 'Produce' };
   }
 
@@ -352,7 +352,7 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
   if (current === 'action' || current === 'uncategorised' || current === 'other') {
     if (has(/\b(egg|eggs)\b/i)) return { master: 'Eggs', sub: 'Eggs' };
     
-    if (has(/\b(ginger|chilli|chilies|chillies|capsicum|pepper|onion|garlic|pea|peas|bean|beans|pineapple|broccoli|carrot|cucumber|tomato|potato|kumara|coriander|cilantro|lime|lemon|herbs?|parsley|basil)\b/i)) {
+    if (has(/\b(ginger|chilli|chilies|chillies|capsicum|pepper|spring\s*onions?|onions?|garlic|pea|peas|bean|beans|pineapple|broccoli|carrot|cucumber|tomato|potato|kumara|coriander|cilantro|lime|lemon|herbs?|parsley|basil)\b/i)) {
       return { master: 'Produce', sub: 'Produce' };
     }
     
