@@ -785,7 +785,13 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       const rawSourceName = String(row.stripfooditem || row.fooditem || row.ingredient_name || '').trim();
       const extracted = extractQuantityUnitFromText(rawSourceName);
       const rawName = cleanIngredientName(extracted.name || rawSourceName);
-      const unit = normalizeUnit(String(row.measure_unit || extracted.unit || '').trim());
+      let unit = normalizeUnit(String(row.measure_unit || extracted.unit || '').trim());
+      if (!unit) {
+        const rawLower = rawSourceName.toLowerCase();
+        if (/^\s*\d+\s*t\s+of\s+oil\b/.test(rawLower) || /^\s*t\s+of\s+oil\b/.test(rawLower)) {
+          unit = 'tbsp';
+        }
+      }
       const explicitCalculated = parseFractionLikeInventory(row.calculated_qty);
       const fallbackBase = parseFractionLikeInventory(row.measure_qty);
       const desiredServings = parseFractionLikeInventory(row.desired_servings);
