@@ -542,6 +542,7 @@
       }
       setStatus('Plan finalized. Technician view is now ready.', 'ok');
       await loadPlan(currentPlan.id);
+      window.location.href = 'shopping_plan_technician.html?plan_id=' + encodeURIComponent(String(currentPlan.id));
     }
 
     function addManualRow() {
