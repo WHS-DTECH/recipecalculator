@@ -88,6 +88,7 @@
         <button id="loadBtn" class="spt-btn primary" type="button">Load Finalized Plan</button>
         <button id="printBtn" class="spt-btn secondary" type="button">Print</button>
         <button id="csvBtn" class="spt-btn secondary" type="button">Export CSV</button>
+        <button id="refreshBrandBtn" class="spt-btn secondary" type="button" style="background:#b66e19;" title="Re-apply food brand normalization to strip brand names from items">Refresh Brand Names</button>
       </div>
       <div class="spt-meta" id="planMeta"></div>
       <div class="spt-status" id="status"></div>
@@ -107,6 +108,7 @@
     const loadBtn = document.getElementById('loadBtn');
     const printBtn = document.getElementById('printBtn');
     const csvBtn = document.getElementById('csvBtn');
+    const refreshBrandBtn = document.getElementById('refreshBrandBtn');
     const planMeta = document.getElementById('planMeta');
     const statusEl = document.getElementById('status');
     const categoryGrid = document.getElementById('categoryGrid');
@@ -437,6 +439,32 @@
       link.click();
       document.body.removeChild(link);
       URL.revokeObjectURL(link.href);
+    });
+
+    refreshBrandBtn.addEventListener('click', async () => {
+      if (!currentPayload || !currentPayload.plan) {
+        setStatus('Load a finalized plan before refreshing brand names.', 'err');
+        return;
+      }
+      if (!confirm('Re-apply food brand normalization to strip brand names from items in this plan? Items will be reloaded from the database.')) {
+        return;
+      }
+
+      const planId = currentPayload.plan.id;
+      setStatus('Refreshing brand names...', '');
+      try {
+        const resp = await fetch('/api/shopping-plan/' + planId + '/reapply-brand-normalization', {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(payload.error || 'Failed to refresh brand names.');
+
+        setStatus(payload.message || 'Brand names refreshed successfully. ' + (payload.updated_count || 0) + ' item(s) updated.', 'ok');
+        await loadPlan(planId);
+      } catch (err) {
+        setStatus(err.message, 'err');
+      }
     });
 
     (async function init() {
