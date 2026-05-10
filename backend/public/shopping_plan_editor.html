@@ -177,6 +177,13 @@
     </section>
 
     <section class="spe-card">
+      <div class="spe-row" style="justify-content:space-between;align-items:center;margin-bottom:0.55rem;">
+        <strong>Draft Items</strong>
+        <label style="display:flex;align-items:center;gap:0.4rem;font-size:0.88rem;color:#2a4254;">
+          <input id="showAllRowsCheckbox" type="checkbox" style="accent-color:#1e6daa;">
+          <span>Show non-actionable rows</span>
+        </label>
+      </div>
       <div class="spe-table-wrap">
         <table class="spe-table" aria-label="Shopping plan items editor">
           <thead>
@@ -215,12 +222,14 @@
     const planMeta = document.getElementById('planMeta');
     const defaultBufferInput = document.getElementById('defaultBufferInput');
     const categoryBufferInput = document.getElementById('categoryBufferInput');
+    const showAllRowsCheckbox = document.getElementById('showAllRowsCheckbox');
     const preflightBtn = document.getElementById('preflightBtn');
 
     let currentPlan = null;
     let rowsModel = [];
     let planClassesModel = [];
     const deletedIds = new Set();
+    const showAllRowsStorageKey = 'shoppingPlanEditorShowAllRows';
 
     function getQueryPlanId() {
       const q = new URLSearchParams(window.location.search);
@@ -318,12 +327,22 @@
     }
 
     function renderItems() {
-      if (!rowsModel.length) {
+      const filteredRows = rowsModel.filter((r) => {
+        if (showAllRowsCheckbox && showAllRowsCheckbox.checked) return true;
+        if (String(r.source_type || '').toLowerCase() === 'manual') return true;
+        const calc = Number(r.calculated_qty);
+        const teacher = Number(r.teacher_qty);
+        const final = Number(r.final_qty);
+        return (Number.isFinite(calc) && calc > 0) || (Number.isFinite(teacher) && teacher > 0) || (Number.isFinite(final) && final > 0);
+      });
+
+      if (!filteredRows.length) {
         itemsBody.innerHTML = '<tr><td colspan="9" class="spe-muted">No rows in this plan yet.</td></tr>';
         return;
       }
 
-      itemsBody.innerHTML = rowsModel.map((r, i) => {
+      itemsBody.innerHTML = filteredRows.map((r) => {
+        const i = rowsModel.indexOf(r);
         const calculated = r.calculated_qty !== null && r.calculated_qty !== undefined ? Number(r.calculated_qty) : null;
         const teacher = r.teacher_qty !== null && r.teacher_qty !== undefined ? Number(r.teacher_qty) : null;
         const previewFinal = teacher !== null && Number.isFinite(teacher) ? teacher : (calculated !== null && Number.isFinite(calculated) ? calculated : '');
@@ -564,6 +583,15 @@
     preflightBtn.addEventListener('click', async () => {
       try { await runPreflight(); } catch (err) { setStatus(err.message || 'Preflight failed.', 'err'); }
     });
+
+    if (showAllRowsCheckbox) {
+      showAllRowsCheckbox.checked = localStorage.getItem(showAllRowsStorageKey) === '1';
+      showAllRowsCheckbox.addEventListener('change', () => {
+        localStorage.setItem(showAllRowsStorageKey, showAllRowsCheckbox.checked ? '1' : '0');
+        renderItems();
+        wireRowEvents();
+      });
+    }
 
     (async function init() {
       try {
