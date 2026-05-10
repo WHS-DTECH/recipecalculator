@@ -1213,6 +1213,7 @@ router.get('/:id/technician-view', async (req, res) => {
       `SELECT category, sub_aisle, item_name, base_unit, final_qty, notes
        FROM shopping_plan_items
        WHERE plan_id = $1
+         AND COALESCE(final_qty, 0) > 0
        ORDER BY category, sort_order, id`,
       [planId]
     );
