@@ -1979,6 +1979,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       let okCount = 0;
       let failCount = 0;
+      let firstError = '';
       try {
         for (const recipeId of recipeIds) {
           try {
@@ -1990,12 +1991,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const payload = await resp.json().catch(() => ({}));
             if (!resp.ok || !payload.success) {
               failCount++;
+              if (!firstError) firstError = String(payload.error || payload.message || '').trim();
               continue;
             }
             _recipeDetailCache.delete(recipeId);
             okCount++;
           } catch (_) {
             failCount++;
+            if (!firstError) firstError = 'Network request failed.';
           }
         }
 
@@ -2004,7 +2007,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (okCount > 0 && failCount > 0) {
           showInfoToast(`Refreshed ${okCount} recipe${okCount === 1 ? '' : 's'}, ${failCount} failed.`);
         } else {
-          showInfoToast('Recipe refresh failed. Check admin access and try again.');
+          showInfoToast(firstError ? `Recipe refresh failed: ${firstError}` : 'Recipe refresh failed. Check admin access and try again.');
         }
 
         await renderScheduleCalendar();
