@@ -437,24 +437,40 @@
 				}
 
 				showStatus(`Recipe ${currentRecipeId} unpublished from published recipes.`, 'success');
-
-				if (isBulkMode && bulkQueue) {
-					const nextRecipeId = getNextBulkRecipeIdAfter(currentRecipeId);
-					if (nextRecipeId) {
-						bulkQueue.completed = Number(bulkQueue.completed || 0) + 1;
-						bulkQueue.current = Number(nextRecipeId);
-						sessionStorage.setItem('bulkReVerifyQueue', JSON.stringify(bulkQueue));
-						window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
-						return;
-					}
-					sessionStorage.removeItem('bulkReVerifyQueue');
-					window.location.href = '/recipe_publish.html';
-					return;
-				}
+				if (advanceBulkQueueIfNeeded()) return;
+				window.location.href = '/recipe_publish.html';
+				return;
 			} catch (err) {
 				showStatus(`Could not unpublish recipe: ${err.message}`, 'error');
 			} finally {
 				unpublishBtn.disabled = false;
+			}
+		}
+
+		function advanceBulkQueueIfNeeded() {
+			if (!isBulkMode || !bulkQueue) return false;
+			const nextRecipeId = getNextBulkRecipeIdAfter(currentRecipeId);
+			if (nextRecipeId) {
+				bulkQueue.completed = Number(bulkQueue.completed || 0) + 1;
+				bulkQueue.current = Number(nextRecipeId);
+				sessionStorage.setItem('bulkReVerifyQueue', JSON.stringify(bulkQueue));
+				window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
+				return true;
+			}
+			sessionStorage.removeItem('bulkReVerifyQueue');
+			window.location.href = '/recipe_publish.html';
+			return true;
+		}
+
+		async function flagRecipeIngredientIssue(recipeId) {
+			const response = await fetch(`${API_BASE}/recipes/${recipeId}/flag-ingredients-issue`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ note: 'Flagged from confirmation screen via Fix Ingredients.' })
+			});
+			const payload = await response.json().catch(() => ({}));
+			if (!response.ok || !payload?.success) {
+				throw new Error(payload?.error || `Failed to flag recipe issue (${response.status})`);
 			}
 		}
 
@@ -566,26 +582,10 @@
 
 				// Mark recipe as verified with timestamp
 				await markRecipeVerified(currentRecipeId);
+				if (advanceBulkQueueIfNeeded()) return;
 
-				if (isBulkMode && bulkQueue) {
-					// Move to next recipe in queue
-					const nextRecipeId = getNextBulkRecipeIdAfter(currentRecipeId);
-					if (nextRecipeId) {
-						bulkQueue.completed = Number(bulkQueue.completed || 0) + 1;
-						bulkQueue.current = Number(nextRecipeId);
-						sessionStorage.setItem('bulkReVerifyQueue', JSON.stringify(bulkQueue));
-						window.location.href = `/recipe_ingredients_confirmation.html?recipe_id=${nextRecipeId}&bulk_mode=true`;
-						return;
-					} else {
-						// All recipes processed, return to recipe_publish
-						sessionStorage.removeItem('bulkReVerifyQueue');
-						window.location.href = `/recipe_publish.html`;
-						return;
-					}
-				} else {
-					// Single recipe mode - go to recipe_publish.html to complete publish
-					window.location.href = `/recipe_publish.html?resume_publish=${currentRecipeId}`;
-				}
+				// Single recipe mode - go to recipe_publish.html to complete publish
+				window.location.href = `/recipe_publish.html?resume_publish=${currentRecipeId}`;
 			} catch (err) {
 				showStatus(`Error confirming ingredients: ${err.message}`, 'error');
 				document.getElementById('confirmBtn').disabled = false;
@@ -593,11 +593,21 @@
 			}
 		});
 
-		document.getElementById('rejectBtn').addEventListener('click', () => {
+		document.getElementById('rejectBtn').addEventListener('click', async () => {
 			if (!currentRecipeId) return;
-			
-			// User wants to fix ingredients, navigate to recipe_display.html to edit
-			window.location.href = `/recipe_display.html?recipe_id=${currentRecipeId}`;
+			const rejectBtn = document.getElementById('rejectBtn');
+			rejectBtn.disabled = true;
+			rejectBtn.textContent = 'Flagging...';
+			try {
+				await flagRecipeIngredientIssue(currentRecipeId);
+				showStatus(`Recipe ${currentRecipeId} flagged for ingredient fixes.`, 'success');
+				if (advanceBulkQueueIfNeeded()) return;
+				window.location.href = '/recipe_publish.html';
+			} catch (err) {
+				showStatus(`Could not flag recipe issue: ${err.message}`, 'error');
+				rejectBtn.disabled = false;
+				rejectBtn.textContent = '✗ Fix Ingredients';
+			}
 		});
 
 		document.getElementById('editIngredientsBtn').addEventListener('click', () => {

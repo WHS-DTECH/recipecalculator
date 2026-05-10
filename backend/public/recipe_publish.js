@@ -50,7 +50,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
 	function renderApiErrorCallout(message) {
 		const safeMessage = escapeHtml(message || 'Unknown error');
-		tbody.innerHTML = `<tr><td colspan="7"><div class="ui-error-callout"><strong>Error loading recipes.</strong><span>${safeMessage}</span></div></td></tr>`;
+		const tableColumnCount = table ? table.querySelectorAll('thead th').length : 8;
+		tbody.innerHTML = `<tr><td colspan="${tableColumnCount}"><div class="ui-error-callout"><strong>Error loading recipes.</strong><span>${safeMessage}</span></div></td></tr>`;
+	}
+
+	function hasIngredientIssueFlag(recipe) {
+		const value = recipe?.ingredients_issue_flag;
+		return value === true || value === 1 || value === '1' || value === 't' || value === 'true';
 	}
 
 function renderRecipesTableMessage(message) {
@@ -147,6 +153,12 @@ function getRecipeColumnValue(recipe, col) {
 			return verifiedDate;
 		}
 	}
+	if (col === 'ingredients_issue_flag') {
+		if (hasIngredientIssueFlag(recipe)) {
+			return 'Needs ingredient fix';
+		}
+		return 'OK';
+	}
 	if (col === 'ingredients_display') {
 		return recipe.ingredients_display ?? recipe.Ingredients_display ?? '';
 	}
@@ -218,6 +230,7 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 		'instructions_display',
 		'extracted_ingredients', 'ingredients_display',
 		'verified_date',
+		'ingredients_issue_flag',
 		'actions'
 	];
 	let filtered = safeRecipes;
@@ -241,6 +254,9 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 	tbody.innerHTML = '';
 	sortedRecipes.forEach(recipe => {
 		const tr = document.createElement('tr');
+		if (hasIngredientIssueFlag(recipe)) {
+			tr.style.backgroundColor = '#fff7f7';
+		}
 		columns.forEach(col => {
 			const td = document.createElement('td');
 			if (col === 'url') {
@@ -263,6 +279,10 @@ function filterAndRenderRecipesById(recipes, selectedId, publishStatus = 'all') 
 				td.innerHTML = getRecipeColumnValue(recipe, col);
 			} else {
 				td.textContent = getRecipeColumnValue(recipe, col);
+				if (col === 'ingredients_issue_flag' && hasIngredientIssueFlag(recipe)) {
+					td.style.color = '#b71c1c';
+					td.style.fontWeight = '700';
+				}
 			}
 			tr.appendChild(td);
 		});

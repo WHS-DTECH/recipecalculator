@@ -10,6 +10,7 @@ const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:pass
 const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
 let foodTruckModerationColumnsEnsured = false;
+let recipeIssueColumnsEnsured = false;
 
 function logJsonTransfer(routeLabel, payload, details) {
   let bytes = 0;
@@ -69,6 +70,14 @@ async function ensureFoodTruckModerationColumns() {
   await pool.query("UPDATE recipes SET moderation_status = 'pending' WHERE submitted_channel = 'food_truck' AND (moderation_status IS NULL OR trim(moderation_status) = '')");
 
   foodTruckModerationColumnsEnsured = true;
+}
+
+async function ensureRecipeIssueColumns() {
+  if (recipeIssueColumnsEnsured) return;
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS ingredients_issue_flag BOOLEAN NOT NULL DEFAULT FALSE');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS ingredients_issue_note TEXT');
+  await pool.query('ALTER TABLE recipes ADD COLUMN IF NOT EXISTS ingredients_issue_updated_at TIMESTAMPTZ');
+  recipeIssueColumnsEnsured = true;
 }
 
 async function hasFoodTruckTeacherAccess(email) {
@@ -779,6 +788,8 @@ router.post('/:id/display', async (req, res) => {
 router.post('/:id/verify', async (req, res) => {
   const recipeId = req.params.id;
   try {
+    await ensureRecipeIssueColumns();
+
     // Check if recipe exists
     const recipeResult = await pool.query('SELECT id FROM recipes WHERE id = $1', [recipeId]);
     if (recipeResult.rows.length === 0) {
@@ -787,7 +798,13 @@ router.post('/:id/verify', async (req, res) => {
 
     // Update verified_date to current timestamp
     const updateResult = await pool.query(
-      'UPDATE recipes SET verified_date = CURRENT_TIMESTAMP WHERE id = $1 RETURNING id, verified_date',
+      `UPDATE recipes
+          SET verified_date = CURRENT_TIMESTAMP,
+              ingredients_issue_flag = FALSE,
+              ingredients_issue_note = NULL,
+              ingredients_issue_updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+        RETURNING id, verified_date`,
       [recipeId]
     );
 
@@ -799,6 +816,41 @@ router.post('/:id/verify', async (req, res) => {
     return res.json({ success: true, verified_date: updateResult.rows[0].verified_date });
   } catch (err) {
     console.error('[VERIFY][ERROR]', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /api/recipes/:id/flag-ingredients-issue - mark recipe as needing ingredient fixes
+router.post('/:id/flag-ingredients-issue', async (req, res) => {
+  const recipeId = Number(req.params.id);
+  const issueNoteRaw = String(req.body?.note || '').trim();
+  const issueNote = issueNoteRaw ? issueNoteRaw.slice(0, 1000) : null;
+
+  if (!Number.isInteger(recipeId) || recipeId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid recipe id.' });
+  }
+
+  try {
+    await ensureRecipeIssueColumns();
+
+    const result = await pool.query(
+      `UPDATE recipes
+          SET ingredients_issue_flag = TRUE,
+              ingredients_issue_note = $1,
+              ingredients_issue_updated_at = CURRENT_TIMESTAMP,
+              verified_date = NULL
+        WHERE id = $2
+        RETURNING id, ingredients_issue_flag, ingredients_issue_note, ingredients_issue_updated_at`,
+      [issueNote, recipeId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Recipe not found.' });
+    }
+
+    return res.json({ success: true, recipe: result.rows[0] });
+  } catch (err) {
+    console.error('[FLAG_INGREDIENTS_ISSUE][ERROR]', err);
     return res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1119,6 +1171,7 @@ router.get('/', async (req, res) => {
     ORDER BY recipes.id DESC
   `;
   try {
+    await ensureRecipeIssueColumns();
     const result = await pool.query(sql);
     console.log('[DEBUG /api/recipes] Number of recipes returned:', result.rows.length);
     res.json(result.rows);
