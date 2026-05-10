@@ -246,6 +246,17 @@
 
         <div>
           <div class="ms-row">
+            <div class="ms-field" style="max-width:250px;">
+              <label class="ms-label" for="compareSourceSelect">Comparison source</label>
+              <select id="compareSourceSelect" class="ms-select">
+                <option value="book" selected>Book Shopping (from selected bookings)</option>
+                <option value="technician">Technician Finalized Plan</option>
+              </select>
+            </div>
+            <div class="ms-field" id="technicianPlanField" style="max-width:180px;display:none;">
+              <label class="ms-label" for="technicianPlanIdInput">Finalized plan ID</label>
+              <input id="technicianPlanIdInput" class="ms-input" type="number" min="1" step="1" placeholder="e.g. 14">
+            </div>
             <div style="padding-top:1.3rem;">
               <button id="loadWeekBookingsBtn" type="button" class="ms-btn">Load Week Bookings</button>
             </div>
@@ -267,13 +278,13 @@
 
     <section class="ms-card ms-results-highlight" id="comparisonCard" hidden>
       <div class="ms-summary">
-        <div class="ms-pill"><span class="k">Book Items</span><span class="v" id="countBook">0</span></div>
+        <div class="ms-pill"><span class="k" id="countSourceLabel">Source Items</span><span class="v" id="countBook">0</span></div>
         <div class="ms-pill"><span class="k">Teacher Items</span><span class="v" id="countTeacher">0</span></div>
         <div class="ms-pill"><span class="k">Matched</span><span class="v" id="countMatched">0</span></div>
         <div class="ms-pill"><span class="k">Different</span><span class="v" id="countDifferent">0</span></div>
       </div>
 
-      <div>
+      <div id="recipeComparisonSection">
         <h3 class="ms-subsection-title">Recipe Like-for-like Comparison</h3>
         <div class="ms-match-list">
           <table class="ms-table">
@@ -315,6 +326,9 @@
       const weekFilterSelect = document.getElementById('weekFilterSelect');
       const dateEndInput = document.getElementById('dateEndInput');
       const clearFiltersBtn = document.getElementById('clearFiltersBtn');
+      const compareSourceSelect = document.getElementById('compareSourceSelect');
+      const technicianPlanField = document.getElementById('technicianPlanField');
+      const technicianPlanIdInput = document.getElementById('technicianPlanIdInput');
       const loadWeekBookingsBtn = document.getElementById('loadWeekBookingsBtn');
       const runCompareBtn = document.getElementById('runCompareBtn');
       const selectAllBookingsBtn = document.getElementById('selectAllBookingsBtn');
@@ -323,12 +337,14 @@
       const bookingsWrap = document.getElementById('bookingsWrap');
       const bookingsStatus = document.getElementById('bookingsStatus');
       const comparisonCard = document.getElementById('comparisonCard');
+      const countSourceLabel = document.getElementById('countSourceLabel');
       const countBook = document.getElementById('countBook');
       const countTeacher = document.getElementById('countTeacher');
       const countMatched = document.getElementById('countMatched');
       const countDifferent = document.getElementById('countDifferent');
       const alignedComparison = document.getElementById('alignedComparison');
       const recipeMatchBody = document.getElementById('recipeMatchBody');
+      const recipeComparisonSection = document.getElementById('recipeComparisonSection');
 
       let savedLists = [];
       let selectedSavedList = null;
@@ -711,6 +727,28 @@
         return out.filter((item) => item.key);
       }
 
+      function flattenTechnicianItems(technicianData) {
+        const out = [];
+        const categories = technicianData && technicianData.categories ? technicianData.categories : {};
+        Object.keys(categories).forEach((category) => {
+          const rows = Array.isArray(categories[category]) ? categories[category] : [];
+          rows.forEach((row) => {
+            const display = String(row && row.item_name || '').trim();
+            if (!display) return;
+            const qty = row && row.final_qty != null ? String(row.final_qty) : '';
+            const unit = String(row && row.base_unit || '').trim();
+            out.push({
+              category,
+              display,
+              qty,
+              unit,
+              key: normalizeIngredientText(display)
+            });
+          });
+        });
+        return out.filter((item) => item.key);
+      }
+
       function buildComparison(bookItems, teacherItems) {
         const bookUnused = bookItems.slice();
         const teacherUnused = teacherItems.slice();
@@ -995,43 +1033,70 @@
           return;
         }
 
+        const source = String(compareSourceSelect.value || 'book');
+        const isTechnician = source === 'technician';
+
         const bookingIds = Array.from(selectedBookingIds).filter((id) => Number.isInteger(id) && id > 0);
-        if (!bookingIds.length) {
+        if (!isTechnician && !bookingIds.length) {
           setStatus(bookingsStatus, 'Select at least one booking before running comparison.', 'error');
           return;
         }
 
+        if (isTechnician) {
+          const planId = Number(technicianPlanIdInput.value || 0);
+          if (!Number.isInteger(planId) || planId <= 0) {
+            setStatus(bookingsStatus, 'Enter a valid finalized plan ID for Technician comparison.', 'error');
+            return;
+          }
+        }
+
         runCompareBtn.disabled = true;
-        setStatus(bookingsStatus, 'Running comparison...', '');
+        setStatus(bookingsStatus, isTechnician ? 'Running Technician vs Teacher comparison...' : 'Running comparison...', '');
         try {
-          const qs = new URLSearchParams({ booking_ids: bookingIds.join(',') });
-          const bookData = await requestJson('/api/ingredients/shopping_list/by_category_inventory?' + qs.toString());
+          let sourceItems = [];
+          if (isTechnician) {
+            const planId = Number(technicianPlanIdInput.value || 0);
+            const technicianData = await requestJson('/api/shopping-plan/' + planId + '/technician-view');
+            sourceItems = flattenTechnicianItems(technicianData);
+          } else {
+            const qs = new URLSearchParams({ booking_ids: bookingIds.join(',') });
+            const bookData = await requestJson('/api/ingredients/shopping_list/by_category_inventory?' + qs.toString());
+            sourceItems = flattenBookItems(bookData);
+          }
 
-          const bookItems = flattenBookItems(bookData);
           const teacherItems = flattenTeacherItems(selectedSavedList);
-          const comparison = buildComparison(bookItems, teacherItems);
+          const comparison = buildComparison(sourceItems, teacherItems);
 
-          const selectedBookingRows = weekBookings.filter((row) => selectedBookingIds.has(Number(row.id || 0)));
-          const bookingRecipes = selectedBookingRows.map((row) => String(row && row.recipe || '').trim()).filter(Boolean);
-          const teacherRecipes = (selectedSavedList && selectedSavedList.state && Array.isArray(selectedSavedList.state.classRecipeRows))
-            ? selectedSavedList.state.classRecipeRows.map((row) => String(row && row.recipe || '').trim()).filter(Boolean)
-            : [];
-          const recipeComparison = buildRecipeComparison(bookingRecipes, teacherRecipes);
-
-          countBook.textContent = String(bookItems.length);
+          countSourceLabel.textContent = isTechnician ? 'Technician Items' : 'Book Items';
+          countBook.textContent = String(sourceItems.length);
           countTeacher.textContent = String(teacherItems.length);
           countMatched.textContent = String(comparison.matched.length);
           countDifferent.textContent = String(comparison.bookOnly.length + comparison.teacherOnly.length);
 
-          renderRecipeMatches(recipeComparison);
+          if (isTechnician) {
+            recipeComparisonSection.hidden = true;
+          } else {
+            const selectedBookingRows = weekBookings.filter((row) => selectedBookingIds.has(Number(row.id || 0)));
+            const bookingRecipes = selectedBookingRows.map((row) => String(row && row.recipe || '').trim()).filter(Boolean);
+            const teacherRecipes = (selectedSavedList && selectedSavedList.state && Array.isArray(selectedSavedList.state.classRecipeRows))
+              ? selectedSavedList.state.classRecipeRows.map((row) => String(row && row.recipe || '').trim()).filter(Boolean)
+              : [];
+            const recipeComparison = buildRecipeComparison(bookingRecipes, teacherRecipes);
+            renderRecipeMatches(recipeComparison);
+            recipeComparisonSection.hidden = false;
+
+            if (recipeComparison.bookingOnly.length || recipeComparison.teacherOnly.length) {
+              setStatus(bookingsStatus, 'Comparison complete. Recipe list has differences between Add Booking and uploaded list.', 'ok');
+            } else {
+              setStatus(bookingsStatus, 'Comparison complete.', 'ok');
+            }
+          }
 
           renderAlignedComparison(teacherItems, comparison);
           comparisonCard.hidden = false;
 
-          if (recipeComparison.bookingOnly.length || recipeComparison.teacherOnly.length) {
-            setStatus(bookingsStatus, 'Comparison complete. Recipe list has differences between Add Booking and uploaded list.', 'ok');
-          } else {
-            setStatus(bookingsStatus, 'Comparison complete.', 'ok');
+          if (isTechnician) {
+            setStatus(bookingsStatus, 'Technician vs Teacher comparison complete.', 'ok');
           }
 
         } catch (err) {
@@ -1063,6 +1128,19 @@
       loadWeekBookingsBtn.addEventListener('click', loadWeekBookings);
       runCompareBtn.addEventListener('click', runComparison);
 
+      compareSourceSelect.addEventListener('change', () => {
+        const isTechnician = compareSourceSelect.value === 'technician';
+        technicianPlanField.style.display = isTechnician ? '' : 'none';
+        loadWeekBookingsBtn.disabled = isTechnician;
+        selectAllBookingsBtn.disabled = isTechnician;
+        clearBookingsBtn.disabled = isTechnician;
+        if (isTechnician) {
+          setStatus(bookingsStatus, 'Technician mode: enter Finalized plan ID, then Run Comparison.', '');
+        } else {
+          setStatus(bookingsStatus, selectedBookingIds.size + ' booking(s) selected.', selectedBookingIds.size ? 'ok' : '');
+        }
+      });
+
       selectAllBookingsBtn.addEventListener('click', () => {
         weekBookings.forEach((row) => selectedBookingIds.add(Number(row.id || 0)));
         renderBookings();
@@ -1079,6 +1157,7 @@
       dateEndInput.value = '';
       renderBookings();
       loadSavedLists();
+      compareSourceSelect.dispatchEvent(new Event('change'));
       document.getElementById('sendToExtrasBtn').addEventListener('click', function () {
         const sendBar = document.getElementById('sendToExtrasBar');
         const items = (sendBar._teacherOnlyItems || []).map((t) => ({
