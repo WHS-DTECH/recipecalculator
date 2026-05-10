@@ -371,6 +371,7 @@
           throw new Error(payload.error || (resp.status + ' ' + resp.statusText));
         }
         const rows = Array.isArray(payload.bookings) ? payload.bookings : [];
+        allRows = rows;
         renderRows(rows);
         const plannerCount = rows.length - (rows.filter((r) => String(r.period || '').toLowerCase() !== 'planner').length);
         const displayCount = rows.length - plannerCount;
