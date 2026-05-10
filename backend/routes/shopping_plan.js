@@ -318,7 +318,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     const bookingIds = classesRes.rows.map(r => r.booking_id);
 
     // Pull scaled ingredients for all included bookings from desired_servings_ingredients
-    const dsiRes = await pool.query(
+    let dsiRes = await pool.query(
       `SELECT
          dsi.booking_id,
          dsi.ingredient_name,
@@ -332,6 +332,110 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
        WHERE dsi.booking_id = ANY($1::int[])`,
       [bookingIds]
     );
+
+    // Auto-fill missing desired-serving rows from recipe ingredients when possible.
+    // This removes the manual "Calculate Servings" bottleneck for shopping draft generation.
+    const existingDsiBookingIds = new Set(dsiRes.rows.map((r) => Number(r.booking_id)).filter(Number.isInteger));
+    const missingBookingIds = bookingIds.filter((id) => !existingDsiBookingIds.has(Number(id)));
+    let autofilledClasses = 0;
+    let skippedAutofillClasses = 0;
+
+    if (missingBookingIds.length > 0) {
+      const bookingsForAutofillRes = await pool.query(
+        `SELECT id AS booking_id, staff_name, staff_id, class_name, booking_date, class_size, groups, recipe_id
+         FROM bookings
+         WHERE id = ANY($1::int[])`,
+        [missingBookingIds]
+      );
+
+      const recipeIds = Array.from(new Set(
+        bookingsForAutofillRes.rows
+          .map((b) => Number(b.recipe_id))
+          .filter((id) => Number.isInteger(id) && id > 0)
+      ));
+
+      const ingredientsByRecipeId = new Map();
+      if (recipeIds.length > 0) {
+        const invRes = await pool.query(
+          `SELECT recipe_id, id, ingredient_name, measure_qty, measure_unit, fooditem, stripfooditem, aisle_category_id
+           FROM ingredients_inventory
+           WHERE recipe_id = ANY($1::int[])`,
+          [recipeIds]
+        );
+        for (const ing of invRes.rows) {
+          const rid = Number(ing.recipe_id);
+          if (!ingredientsByRecipeId.has(rid)) ingredientsByRecipeId.set(rid, []);
+          ingredientsByRecipeId.get(rid).push(ing);
+        }
+      }
+
+      for (const b of bookingsForAutofillRes.rows) {
+        const recipeId = Number(b.recipe_id);
+        const classSize = Number(b.class_size);
+        const groups = Number(b.groups);
+        const ingredients = ingredientsByRecipeId.get(recipeId) || [];
+
+        if (!Number.isInteger(recipeId) || recipeId <= 0 || !Number.isFinite(classSize) || classSize <= 0 || !Number.isFinite(groups) || groups <= 0 || !ingredients.length) {
+          skippedAutofillClasses += 1;
+          continue;
+        }
+
+        const desiredServings = Math.ceil(classSize / groups);
+
+        await pool.query(
+          'DELETE FROM desired_servings_ingredients WHERE booking_id = $1 AND recipe_id = $2',
+          [b.booking_id, recipeId]
+        );
+
+        for (const ing of ingredients) {
+          const baseQty = Number.parseFloat(String(ing.measure_qty || '').trim());
+          const calculatedQty = Number.isFinite(baseQty) ? (baseQty * desiredServings) : null;
+          await pool.query(
+            `INSERT INTO desired_servings_ingredients
+              (booking_id, teacher, staff_id, class_name, class_date, class_size, groups, desired_servings, recipe_id,
+               ingredient_id, ingredient_name, measure_qty, measure_unit, fooditem, calculated_qty, stripfooditem, aisle_category_id)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+            [
+              b.booking_id,
+              b.staff_name || '',
+              b.staff_id || null,
+              b.class_name || '',
+              b.booking_date,
+              classSize,
+              groups,
+              desiredServings,
+              recipeId,
+              ing.id || null,
+              ing.ingredient_name || '',
+              ing.measure_qty || '',
+              ing.measure_unit || '',
+              ing.fooditem || '',
+              calculatedQty,
+              ing.stripfooditem || ing.fooditem || ing.ingredient_name || '',
+              ing.aisle_category_id || null
+            ]
+          );
+        }
+
+        autofilledClasses += 1;
+      }
+
+      // Refresh DSI rows now that missing classes may have been auto-filled.
+      dsiRes = await pool.query(
+        `SELECT
+           dsi.booking_id,
+           dsi.ingredient_name,
+           dsi.fooditem,
+           dsi.stripfooditem,
+           dsi.measure_unit,
+           dsi.calculated_qty,
+           COALESCE(ac.name, 'Uncategorised') AS category
+         FROM desired_servings_ingredients dsi
+         LEFT JOIN aisle_category ac ON ac.id = dsi.aisle_category_id
+         WHERE dsi.booking_id = ANY($1::int[])`,
+        [bookingIds]
+      );
+    }
 
     // Group by normalised ingredient key + category + canonical unit.
     // This allows tsp/tbsp, g/kg, ml/l to combine safely while keeping
@@ -414,6 +518,8 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
     return res.json({
       success: true,
       items_generated: itemCount,
+      autofilled_classes: autofilledClasses,
+      skipped_autofill_classes: skippedAutofillClasses,
       warnings: diagnostics.warnings
     });
   } catch (err) {

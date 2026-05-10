@@ -340,7 +340,17 @@
       if (Array.isArray(payload.warnings) && payload.warnings.length) {
         renderWarnings(payload.warnings);
       }
-      setStatus('Draft totals regenerated: ' + (payload.items_generated || 0) + ' item(s).', 'ok');
+      const generated = Number(payload.items_generated || 0);
+      const autofilled = Number(payload.autofilled_classes || 0);
+      const skippedAutofill = Number(payload.skipped_autofill_classes || 0);
+      let msg = 'Draft totals regenerated: ' + generated + ' item(s).';
+      if (autofilled > 0) {
+        msg += ' Auto-filled desired servings for ' + autofilled + ' class(es).';
+      }
+      if (skippedAutofill > 0) {
+        msg += ' ' + skippedAutofill + ' class(es) still need recipe, class size, groups, or inventory ingredients.';
+      }
+      setStatus(msg, 'ok');
       await loadPlan(currentPlan.id);
     }
 
