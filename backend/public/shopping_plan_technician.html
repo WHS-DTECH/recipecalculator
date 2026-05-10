@@ -224,6 +224,8 @@
     function normalizeUnit(u) {
       const value = String(u || '').trim().toLowerCase();
       if (!value) return '';
+      if (['teaspoon', 'teaspoons', 'tsp'].includes(value)) return 'tsp';
+      if (['tablespoon', 'tablespoons', 'tbsp', 'tbs', 'tblsp'].includes(value)) return 'tbsp';
       if (['gram', 'grams', 'g'].includes(value)) return 'g';
       if (['kilogram', 'kilograms', 'kg'].includes(value)) return 'kg';
       if (['milliliter', 'milliliters', 'millilitre', 'millilitres', 'ml'].includes(value)) return 'ml';
@@ -242,6 +244,10 @@
       const unit = normalizeUnit(unitValue);
       if (!Number.isFinite(qty)) {
         return { qty: '', unit: String(unitValue || '') };
+      }
+
+      if (unit === 'tsp' && Math.abs(qty) >= 3) {
+        return { qty: formatQty(qty / 3, 3), unit: 'tbsp' };
       }
 
       if (unit === 'g' && Math.abs(qty) >= 1000) {
