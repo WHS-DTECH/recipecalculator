@@ -301,7 +301,7 @@ function splitIngredientCommaSafely(line) {
   if (parts.length <= 1) return [source];
 
   const likelyNewIngredientStart = /^(?:\d+(?:\s+\d+\/\d+)?|\d+\/\d+|\d*\.\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|a\b|an\b|one\b|two\b|three\b|four\b|five\b|six\b|seven\b|eight\b|nine\b|ten\b)/i;
-  const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b)/i;
+  const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b|to\s+serve\b|for\s+garnish\b|for\s+serving\b|for\s+dusting\b|for\s+sprinkling\b)/i;
 
   const merged = [parts[0]];
   for (let i = 1; i < parts.length; i += 1) {
@@ -312,6 +312,35 @@ function splitIngredientCommaSafely(line) {
       merged[merged.length - 1] = `${merged[merged.length - 1]}, ${current}`;
     }
   }
+
+  return merged;
+}
+
+function mergeIngredientContinuationLines(lines) {
+  const source = Array.isArray(lines) ? lines : [];
+  const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b|to\s+serve\b|for\s+garnish\b|for\s+serving\b|for\s+dusting\b|for\s+sprinkling\b)/i;
+  const quantityStart = /^(?:\d+(?:\s+\d+\/\d+)?|\d+\/\d+|\d*\.\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|a\b|an\b|one\b|two\b|three\b|four\b|five\b|six\b|seven\b|eight\b|nine\b|ten\b)/i;
+
+  const merged = [];
+  source.forEach((line) => {
+    const current = String(line || '').trim();
+    if (!current) return;
+
+    if (merged.length === 0) {
+      merged.push(current);
+      return;
+    }
+
+    const looksLikeContinuation = continuationPhrase.test(current)
+      || (!quantityStart.test(current) && current.split(/\s+/).length <= 3);
+
+    if (looksLikeContinuation) {
+      merged[merged.length - 1] = `${merged[merged.length - 1]}, ${current}`;
+      return;
+    }
+
+    merged.push(current);
+  });
 
   return merged;
 }
@@ -344,11 +373,11 @@ function isLikelyInstructionToken(line) {
 
 function cleanIngredientsForDisplay(raw) {
   if (Array.isArray(raw)) {
-    return raw
+    const lines = raw
       .flatMap((item) => splitCompressedIngredientText(String(item || '')).split(/\r?\n/))
       .map((item) => normalizeIngredientLine(String(item || '')))
-      .filter(isMeaningfulIngredientLine)
-      .join('\n');
+      .filter(isMeaningfulIngredientLine);
+    return mergeIngredientContinuationLines(lines).join('\n');
   }
 
   if (raw && typeof raw === 'object') {
@@ -381,7 +410,7 @@ function cleanIngredientsForDisplay(raw) {
       .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
 
     if (htmlTokens.length > 0) {
-      return htmlTokens.join('\n');
+      return mergeIngredientContinuationLines(htmlTokens).join('\n');
     }
   }
 
@@ -390,11 +419,11 @@ function cleanIngredientsForDisplay(raw) {
     try {
       const parsed = JSON.parse(source);
       if (Array.isArray(parsed)) {
-        return parsed
+        const lines = parsed
           .flatMap((item) => splitCompressedIngredientText(String(item || '')).split(/\r?\n/))
           .map((item) => normalizeIngredientLine(String(item || '')))
-          .filter(isMeaningfulIngredientLine)
-          .join('\n');
+          .filter(isMeaningfulIngredientLine);
+        return mergeIngredientContinuationLines(lines).join('\n');
       }
     } catch {
       // Continue to the regex/text fallbacks below.
@@ -407,7 +436,7 @@ function cleanIngredientsForDisplay(raw) {
       .map((match) => normalizeIngredientLine(match[1].replace(/<[^>]+>/g, ' ')))
       .filter(isMeaningfulIngredientLine);
     if (htmlLines.length > 0) {
-      return htmlLines.join('\n');
+      return mergeIngredientContinuationLines(htmlLines).join('\n');
     }
   }
 
@@ -425,11 +454,11 @@ function cleanIngredientsForDisplay(raw) {
     .filter((item) => isMeaningfulIngredientLine(item) && !isLikelyInstructionToken(item) && !/^(@type|name|text|recipeIngredient)$/i.test(item));
 
   if (quotedItems.length > 0) {
-    return quotedItems.join('\n');
+    return mergeIngredientContinuationLines(quotedItems).join('\n');
   }
 
   // Fallback cleanup for mixed text/HTML blobs.
-  return source
+  const fallbackLines = source
     .replace(/"?recipeIngredient"?\s*:\s*/gi, '')
     .replace(/[\[\]{}]/g, ' ')
     .replace(/"/g, '')
@@ -437,8 +466,8 @@ function cleanIngredientsForDisplay(raw) {
     .split('\n')
     .flatMap((line) => splitIngredientCommaSafely(line))
     .map(normalizeIngredientLine)
-    .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line))
-    .join('\n');
+    .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
+  return mergeIngredientContinuationLines(fallbackLines).join('\n');
 }
 
 function normalizeMultilineText(value) {

@@ -223,6 +223,7 @@
 		let bulkQueue = null;
 		let isBulkMode = false;
 		let isEditingIngredients = false;
+		let hasPendingIngredientSave = false;
 
 		function showStatus(message, type = 'info') {
 			const statusEl = document.getElementById('statusMessage');
@@ -314,11 +315,14 @@
 				.map(line => line.trim())
 				.filter(line => line.length > 0);
 
-			const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b)/i;
+			const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b|to\s+serve\b|for\s+garnish\b|for\s+serving\b|for\s+dusting\b|for\s+sprinkling\b)/i;
+			const quantityStart = /^(?:\d+(?:\s+\d+\/\d+)?|\d+\/\d+|\d*\.\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|a\b|an\b|one\b|two\b|three\b|four\b|five\b|six\b|seven\b|eight\b|nine\b|ten\b)/i;
 			const merged = [];
 
 			lines.forEach((line) => {
-				if (merged.length > 0 && continuationPhrase.test(line)) {
+				const looksLikeContinuation = continuationPhrase.test(line)
+					|| (!quantityStart.test(line) && line.split(/\s+/).length <= 3);
+				if (merged.length > 0 && looksLikeContinuation) {
 					merged[merged.length - 1] = `${merged[merged.length - 1]}, ${line}`;
 					return;
 				}
@@ -332,6 +336,14 @@
 			return String(currentRecipeData?.ingredients_display || currentRecipeData?.ingredients_extracted || '').trim();
 		}
 
+		function updateConfirmButtonState() {
+			const confirmBtn = document.getElementById('confirmBtn');
+			if (!confirmBtn) return;
+			const shouldDisable = Boolean(isEditingIngredients || hasPendingIngredientSave);
+			confirmBtn.disabled = shouldDisable;
+			confirmBtn.title = shouldDisable ? 'Save Ingredients before confirming.' : '';
+		}
+
 		function setEditMode(enabled) {
 			isEditingIngredients = enabled;
 			const editBtn = document.getElementById('editIngredientsBtn');
@@ -342,6 +354,7 @@
 			const noIngredientsMsg = document.getElementById('noIngredientsMsg');
 
 			if (enabled) {
+				hasPendingIngredientSave = true;
 				const listLines = parseIngredientsToList(getCurrentIngredientsText());
 				editor.value = listLines.join('\n');
 				editor.style.display = 'block';
@@ -351,6 +364,7 @@
 				saveBtn.style.display = 'inline-block';
 				cancelBtn.style.display = 'inline-block';
 				editor.focus();
+				updateConfirmButtonState();
 				return;
 			}
 
@@ -359,6 +373,7 @@
 			editBtn.style.display = 'inline-block';
 			saveBtn.style.display = 'none';
 			cancelBtn.style.display = 'none';
+			updateConfirmButtonState();
 		}
 
 		async function saveEditedIngredients() {
@@ -381,6 +396,7 @@
 				}
 
 				currentRecipeData.ingredients_display = payload?.recipe?.ingredients_display ?? text;
+				hasPendingIngredientSave = false;
 				setEditMode(false);
 				renderRecipeDetails();
 				showStatus('Ingredients saved on this recipe.', 'success');
@@ -486,6 +502,7 @@
 			if (!isEditingIngredients) {
 				setEditMode(false);
 			}
+			updateConfirmButtonState();
 		}
 
 		document.getElementById('confirmBtn').addEventListener('click', async () => {
@@ -541,7 +558,13 @@
 			await saveEditedIngredients();
 		});
 
+		document.getElementById('ingredientsEditor').addEventListener('input', () => {
+			hasPendingIngredientSave = true;
+			updateConfirmButtonState();
+		});
+
 		document.getElementById('cancelIngredientsBtn').addEventListener('click', () => {
+			hasPendingIngredientSave = false;
 			setEditMode(false);
 			hideStatus();
 		});
