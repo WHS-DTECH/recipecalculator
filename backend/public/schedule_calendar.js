@@ -1604,7 +1604,7 @@ async function renderScheduleCalendar() {
           const classCode = String(entry.class_name || '').trim().toUpperCase();
           const label = `${classCode ? `${classCode}: ` : ''}${String(entry.recipe || '').trim()}`;
           const safeRecipe = escHtml(label);
-          return `<div class='planner-chip' data-booking-id='${entry.id}' title='Click to choose a linked recipe version' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;cursor:pointer;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div>`;
+          return `<div class='planner-chip' data-booking-id='${entry.id}' title='Click to choose a linked recipe version' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;cursor:pointer;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><div style='display:flex;align-items:center;gap:2px;flex-shrink:0;'><button class='planner-action-btn' onclick='event.stopPropagation();handlePlannerChipClick(${Number(entry.id)})' style='padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.72rem;cursor:pointer;font-weight:700;'>Recipes</button><button class='planner-action-btn' onclick='event.stopPropagation();printBookingInfoSheet(${Number(entry.id)})' title='Print planner recipe sheet' style='padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #7c3aed;background:#f5f3ff;color:#5b21b6;font-size:0.72rem;cursor:pointer;font-weight:700;'>&#128438; Print</button><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div></div>`;
         }).join('') +
         `</td>`;
     } else {
@@ -1859,6 +1859,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!chip) return;
       if (!chip.closest('#scheduleCalendarTable')) return;
       if (e.target.closest('.planner-delete-btn')) return;
+      if (e.target.closest('.planner-action-btn')) return;
       const bookingId = chip.getAttribute('data-booking-id');
       if (!bookingId) return;
       await handlePlannerChipClick(bookingId);
@@ -1953,6 +1954,63 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         syncFromPlannerBtn.disabled = false;
         syncFromPlannerBtn.textContent = '\u21ba Sync from Planner';
+      }
+    };
+  }
+
+  const refreshWeekRecipesBtn = document.getElementById('refreshWeekRecipesBtn');
+  if (refreshWeekRecipesBtn) {
+    refreshWeekRecipesBtn.onclick = async () => {
+      const bookings = Array.isArray(window.currentScheduleBookings) ? window.currentScheduleBookings : [];
+      const recipeIds = [...new Set(
+        bookings
+          .filter((booking) => !isPlannerLikeBooking(booking))
+          .map((booking) => Number(booking && booking.recipe_id))
+          .filter((id) => Number.isInteger(id) && id > 0)
+      )];
+
+      if (!recipeIds.length) {
+        showInfoToast('No recipe-linked bookings found in this week.');
+        return;
+      }
+
+      refreshWeekRecipesBtn.disabled = true;
+      refreshWeekRecipesBtn.textContent = 'Refreshing...';
+
+      let okCount = 0;
+      let failCount = 0;
+      try {
+        for (const recipeId of recipeIds) {
+          try {
+            const resp = await fetch(`/api/recipes/${encodeURIComponent(String(recipeId))}/refresh`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' }
+            });
+            const payload = await resp.json().catch(() => ({}));
+            if (!resp.ok || !payload.success) {
+              failCount++;
+              continue;
+            }
+            _recipeDetailCache.delete(recipeId);
+            okCount++;
+          } catch (_) {
+            failCount++;
+          }
+        }
+
+        if (okCount > 0 && failCount === 0) {
+          showInfoToast(`Refreshed ${okCount} recipe${okCount === 1 ? '' : 's'} for this week.`);
+        } else if (okCount > 0 && failCount > 0) {
+          showInfoToast(`Refreshed ${okCount} recipe${okCount === 1 ? '' : 's'}, ${failCount} failed.`);
+        } else {
+          showInfoToast('Recipe refresh failed. Check admin access and try again.');
+        }
+
+        await renderScheduleCalendar();
+      } finally {
+        refreshWeekRecipesBtn.disabled = false;
+        refreshWeekRecipesBtn.textContent = '↻ Refresh Recipes';
       }
     };
   }
