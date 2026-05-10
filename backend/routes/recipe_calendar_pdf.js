@@ -790,3 +790,4 @@ router.post('/parse', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.parseDocxCalendar = parseDocxCalendar;

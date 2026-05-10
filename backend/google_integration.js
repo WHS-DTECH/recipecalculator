@@ -5,6 +5,7 @@ const router = express.Router();
 const fs = require('fs');
 const path = require('path');
 const pool = require('./db');
+const { parseDocxCalendar } = require('./routes/recipe_calendar_pdf');
 
 // Load client secrets from a local file
 const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
@@ -122,6 +123,56 @@ function getConfiguredPlannerDocIds() {
     return raw
         .split(',')
         .map((entry) => String(entry || '').trim())
+        .filter(Boolean);
+}
+
+function inferPlannerStreamFromDocTitle(title) {
+    const text = String(title || '').trim().toLowerCase();
+    if (!text) return 'Middle';
+    if (text.includes('junior')) return 'Junior';
+    if (text.includes('senior') || text.includes('hosp')) return 'Senior';
+    if (text.includes('middle')) return 'Middle';
+    return 'Middle';
+}
+
+function defaultClassNameForStream(stream) {
+    const normalized = String(stream || '').trim().toLowerCase();
+    if (normalized === 'junior') return 'JFOOD';
+    if (normalized === 'senior') return '11HOSP';
+    return 'MFOOD';
+}
+
+function mapDocxWeeksToPlannerRows(docxParsed, document, documentId) {
+    const weeks = Array.isArray(docxParsed && docxParsed.weeks) ? docxParsed.weeks : [];
+    const title = String(document && document.title ? document.title : '').trim();
+    const plannerStream = inferPlannerStreamFromDocTitle(title);
+    const className = defaultClassNameForStream(plannerStream);
+
+    return weeks
+        .map((week) => {
+            const bookingDate = parseGooglePlannerDate(week && week.startDate ? week.startDate : '');
+            const recipe = String(week && week.recipe ? week.recipe : '').trim();
+            const recipeUrl = String(week && week.url ? week.url : '').trim();
+            if (!bookingDate || !recipe) {
+                return null;
+            }
+
+            return {
+                staff_id: null,
+                staff_name: null,
+                class_name: className,
+                booking_date: bookingDate,
+                period: 'Planner',
+                recipe,
+                recipe_url: recipeUrl,
+                recipe_id: null,
+                class_size: null,
+                planner_stream: plannerStream,
+                source_document_id: documentId,
+                source_document_title: title,
+                source_document_revision_id: String(document && document.revisionId ? document.revisionId : '').trim()
+            };
+        })
         .filter(Boolean);
 }
 
@@ -306,9 +357,27 @@ async function syncPlannerDocument(documentId) {
     }
 
     const docs = google.docs({ version: 'v1', auth: oAuth2Client });
+    const drive = google.drive({ version: 'v3', auth: oAuth2Client });
     const response = await docs.documents.get({ documentId });
     const document = response && response.data ? response.data : response;
-    const parsedRows = parsePlannerRowsFromDocument(document, documentId);
+    let parsedRows = parsePlannerRowsFromDocument(document, documentId);
+
+    if (!parsedRows.length) {
+        try {
+            const exportResponse = await drive.files.export(
+                {
+                    fileId: documentId,
+                    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                },
+                { responseType: 'arraybuffer' }
+            );
+            const docxBuffer = Buffer.from(exportResponse.data);
+            const docxParsed = await parseDocxCalendar(docxBuffer);
+            parsedRows = mapDocxWeeksToPlannerRows(docxParsed, document, documentId);
+        } catch (fallbackErr) {
+            console.warn('[Google Planner Sync] DOCX fallback parse failed:', fallbackErr.message);
+        }
+    }
 
     if (!parsedRows.length) {
         return {
