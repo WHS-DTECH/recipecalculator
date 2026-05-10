@@ -280,6 +280,14 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
     return { master: 'Dairy', sub: 'Cheese' };
   }
 
+  if (has(/\b(double\s*cream|cream|milk|yoghurt|yogurt|butter)\b/i)) {
+    return { master: 'Dairy', sub: 'Dairy' };
+  }
+
+  if (has(/\b(egg|eggs)\b/i)) {
+    return { master: 'Eggs', sub: 'Eggs' };
+  }
+
   if (has(/\b(spring\s*onion|brown\s*onion|red\s*onion|onion|garlic|potato|potatoes|kumara|tomato|tomatoes)\b/i)) {
     if (has(/\bgarlic\b/i)) return { master: 'Produce', sub: 'Garlic' };
     if (has(/\bonion\b/i)) return { master: 'Produce', sub: 'Onions' };
@@ -288,8 +296,28 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
     return { master: 'Produce', sub: 'Produce' };
   }
 
+  if (has(/\b(chilli|chilies|chillies|capsicum|coriander|parsley|lime|lemon|herbs?)\b/i)) {
+    return { master: 'Produce', sub: 'Produce' };
+  }
+
+  if (has(/\b(chicken|beef|pork|lamb|mince|sausage|bacon|ham|prawn|prawns|fish|salmon|tuna)\b/i)) {
+    return { master: 'Meat', sub: 'Meat' };
+  }
+
   if (has(/\b(aioli|bbq\s*sauce|barbecue\s*sauce|pesto|mayonnaise|mayo)\b/i)) {
     return { master: 'Condiments', sub: 'Sauces' };
+  }
+
+  // Last-pass rescue: if item is currently in Action, try to map known food-like rows.
+  const current = String(currentMaster || '').trim().toLowerCase();
+  if (current === 'action') {
+    if (has(/\b(egg|eggs)\b/i)) return { master: 'Eggs', sub: 'Eggs' };
+    if (has(/\b(chilli|chilies|chillies|capsicum|onion|garlic|tomato|potato|kumara|coriander|lime|lemon|herbs?)\b/i)) {
+      return { master: 'Produce', sub: 'Produce' };
+    }
+    if (has(/\b(chicken|beef|pork|lamb|mince|sausage|bacon|ham|prawn|prawns|fish|salmon|tuna)\b/i)) {
+      return { master: 'Meat', sub: 'Meat' };
+    }
   }
 
   return { master: currentMaster || '', sub: currentSub || '' };
