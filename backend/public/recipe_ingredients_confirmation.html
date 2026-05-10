@@ -309,10 +309,23 @@
 			temp.innerHTML = normalizedHtml;
 			const plainText = String(temp.textContent || temp.innerText || '');
 
-			return plainText
+			const lines = plainText
 				.split(/\r?\n/)
 				.map(line => line.trim())
 				.filter(line => line.length > 0);
+
+			const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b)/i;
+			const merged = [];
+
+			lines.forEach((line) => {
+				if (merged.length > 0 && continuationPhrase.test(line)) {
+					merged[merged.length - 1] = `${merged[merged.length - 1]}, ${line}`;
+					return;
+				}
+				merged.push(line);
+			});
+
+			return merged;
 		}
 
 		function getCurrentIngredientsText() {

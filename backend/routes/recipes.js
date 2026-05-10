@@ -289,6 +289,33 @@ function splitCompressedIngredientText(text) {
   return normalized;
 }
 
+function splitIngredientCommaSafely(line) {
+  const source = String(line || '').trim();
+  if (!source) return [];
+
+  const parts = source
+    .split(/\s*,\s*/)
+    .map((part) => String(part || '').trim())
+    .filter(Boolean);
+
+  if (parts.length <= 1) return [source];
+
+  const likelyNewIngredientStart = /^(?:\d+(?:\s+\d+\/\d+)?|\d+\/\d+|\d*\.\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞]|a\b|an\b|one\b|two\b|three\b|four\b|five\b|six\b|seven\b|eight\b|nine\b|ten\b)/i;
+  const continuationPhrase = /^(?:finely|roughly|coarsely|thinly|thickly|peeled|chopped|diced|minced|sliced|grated|melted|softened|drained|rinsed|beaten|crumbled|optional|plus|for\b|to\b|and\b|or\b|room\s+temperature\b)/i;
+
+  const merged = [parts[0]];
+  for (let i = 1; i < parts.length; i += 1) {
+    const current = parts[i];
+    if (likelyNewIngredientStart.test(current) && !continuationPhrase.test(current)) {
+      merged.push(current);
+    } else {
+      merged[merged.length - 1] = `${merged[merged.length - 1]}, ${current}`;
+    }
+  }
+
+  return merged;
+}
+
 function isMeaningfulIngredientLine(line) {
   if (!line) return false;
   const normalized = String(line).trim();
@@ -349,7 +376,7 @@ function cleanIngredientsForDisplay(raw) {
     const htmlTokens = htmlToText
       .split(/\r?\n/)
       .flatMap((line) => splitCompressedIngredientText(String(line || '')).split(/\r?\n/))
-      .flatMap((line) => String(line || '').split(/\s*,\s*/))
+      .flatMap((line) => splitIngredientCommaSafely(line))
       .map(normalizeIngredientLine)
       .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line));
 
@@ -407,8 +434,8 @@ function cleanIngredientsForDisplay(raw) {
     .replace(/[\[\]{}]/g, ' ')
     .replace(/"/g, '')
     .replace(/\\n/g, '\n')
-    .replace(/\s*,\s*/g, '\n')
     .split('\n')
+    .flatMap((line) => splitIngredientCommaSafely(line))
     .map(normalizeIngredientLine)
     .filter((line) => isMeaningfulIngredientLine(line) && !isLikelyInstructionToken(line))
     .join('\n');
