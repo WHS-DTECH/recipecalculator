@@ -342,9 +342,14 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
     return { master: 'Condiments', sub: 'Sauces' };
   }
 
+  // Pantry / baking staples that often drift into Other/Action/Uncategorised
+  if (has(/\b(vanilla|vanilla\s*extract|extract|essence|cornflour|corn\s*starch|cornstarch|gelatine|gelatin|baking\s*powder|baking\s*soda|yeast|flour|sugar|brown\s*sugar|caster\s*sugar|icing\s*sugar|cocoa|chocolate\s*chips?)\b/i)) {
+    return { master: 'Pantry', sub: 'Dry Ingredients' };
+  }
+
   // Last-pass rescue: if item is currently in Action or Uncategorised, try to map known food-like rows
   const current = String(currentMaster || '').trim().toLowerCase();
-  if (current === 'action' || current === 'uncategorised') {
+  if (current === 'action' || current === 'uncategorised' || current === 'other') {
     if (has(/\b(egg|eggs)\b/i)) return { master: 'Eggs', sub: 'Eggs' };
     
     if (has(/\b(ginger|chilli|chilies|chillies|capsicum|pepper|onion|garlic|pea|peas|bean|beans|pineapple|broccoli|carrot|cucumber|tomato|potato|kumara|coriander|cilantro|lime|lemon|herbs?|parsley|basil)\b/i)) {
@@ -357,6 +362,14 @@ function enforceCriticalCategory(nameValue, currentMaster, currentSub) {
 
     if (has(/\b(cheese|milk|yogurt|butter|cream|dairy)\b/i)) {
       return { master: 'Dairy', sub: 'Dairy' };
+    }
+
+    if (has(/\b(vanilla|vanilla\s*extract|extract|essence|cornflour|corn\s*starch|cornstarch|gelatine|gelatin|flour|sugar|baking\s*powder|baking\s*soda)\b/i)) {
+      return { master: 'Pantry', sub: 'Dry Ingredients' };
+    }
+
+    if (has(/\b(aioli|bbq\s*sauce|barbecue\s*sauce|pesto|mayonnaise|mayo|tomato\s*sauce|soy\s*sauce|oyster\s*sauce|hoisin|sriracha|hot\s*sauce|worcestershire|vinegar)\b/i)) {
+      return { master: 'Condiments', sub: 'Sauces' };
     }
   }
 
@@ -1289,10 +1302,11 @@ router.get('/:id/technician-view', async (req, res) => {
     // Group by category
     const grouped = {};
     for (const item of itemsRes.rows) {
-      const cat = item.category || 'Uncategorised';
+      const normalized = enforceCriticalCategory(item.item_name, item.category, item.sub_aisle);
+      const cat = normalized.master || item.category || 'Uncategorised';
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push({
-        sub_aisle: item.sub_aisle,
+        sub_aisle: normalized.sub || item.sub_aisle,
         item_name: item.item_name,
         base_unit: item.base_unit,
         final_qty: item.final_qty,
