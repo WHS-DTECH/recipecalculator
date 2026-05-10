@@ -247,6 +247,24 @@ function displayNameFromMergeName(mergeName, fallbackName) {
   return key.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function sanitizeCorruptedIngredientName(nameValue, unitValue) {
+  let name = String(nameValue || '').trim();
+  if (!name) return '';
+
+  const unit = normalizeUnit(unitValue);
+  const lower = name.toLowerCase();
+
+  // Historical parser glitch: cheese and tortilla text occasionally merged into one line.
+  if ((unit === 'g' || unit === 'kg' || unit === 'ml' || unit === 'l') &&
+      lower.includes('cheese') &&
+      (lower.includes('tortilla') || lower.includes('wrap'))) {
+    name = name.replace(/\bsmall\s+tortillas?\s+or\s+wraps?\b.*$/i, '').trim();
+    name = name.replace(/\s{2,}/g, ' ').trim();
+  }
+
+  return name;
+}
+
 function extractLeadingQuantityUnit(value) {
   const source = String(value || '').trim();
   if (!source) return { matched: false, qty: null, unit: '', name: '' };
@@ -802,9 +820,10 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
           : (Number.isFinite(extracted.qty) ? extracted.qty : Number.NaN));
       const canonical = toCanonicalQty(effectiveQty, unit);
       const canonicalUnit = canonical.unit || normalizeUnit(unit) || '';
-      const displayName = (extracted.matched && (Number.isFinite(effectiveQty) || !!unit))
+      const displayNameRaw = (extracted.matched && (Number.isFinite(effectiveQty) || !!unit))
         ? rawName
         : rawSourceName;
+      const displayName = sanitizeCorruptedIngredientName(displayNameRaw, canonicalUnit || unit);
       let resolvedSubAisle = String(row.category || 'Uncategorised').trim() || 'Uncategorised';
       let resolvedCategory = String(row.master_category || resolvedSubAisle || 'Uncategorised').trim() || 'Uncategorised';
       const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
@@ -1376,7 +1395,8 @@ router.get('/:id/technician-view', async (req, res) => {
     // Group by category and merge duplicate ingredient variants for display.
     const groupedMaps = {};
     for (const item of itemsRes.rows) {
-      const displayName = stripFoodBrandFromItemName(item.item_name, brands) || item.item_name;
+      const brandedName = stripFoodBrandFromItemName(item.item_name, brands) || item.item_name;
+      const displayName = sanitizeCorruptedIngredientName(brandedName, item.base_unit);
       const normalized = enforceCriticalCategory(displayName, item.category, item.sub_aisle);
       const cat = normalized.master || item.category || 'Uncategorised';
 

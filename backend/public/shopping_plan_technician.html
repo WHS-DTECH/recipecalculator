@@ -476,7 +476,7 @@
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refresh_from_inventory: true })
+          body: JSON.stringify({ refresh_from_inventory: false })
         });
         const generateData = await generateResp.json().catch(() => ({}));
         if (!generateResp.ok || !generateData.success) {
