@@ -15,6 +15,77 @@ let oAuth2Client;
 let configuredRedirectUri = '';
 let plannerSyncTask = null;
 
+async function ensureGoogleOAuthTokenSchema() {
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS google_oauth_tokens (
+            id SMALLINT PRIMARY KEY,
+            token_json TEXT NOT NULL,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+    `);
+}
+
+async function loadStoredTokenFromDatabase() {
+    await ensureGoogleOAuthTokenSchema();
+    const result = await pool.query('SELECT token_json FROM google_oauth_tokens WHERE id = 1 LIMIT 1');
+    if (!result.rowCount) {
+        return null;
+    }
+    const raw = String(result.rows[0].token_json || '').trim();
+    if (!raw) {
+        return null;
+    }
+    return JSON.parse(raw);
+}
+
+async function persistTokenToDatabase(token) {
+    if (!token || typeof token !== 'object') {
+        return;
+    }
+    await ensureGoogleOAuthTokenSchema();
+    await pool.query(
+        `INSERT INTO google_oauth_tokens (id, token_json, updated_at)
+         VALUES (1, $1, NOW())
+         ON CONFLICT (id)
+         DO UPDATE SET token_json = EXCLUDED.token_json, updated_at = NOW()`,
+        [JSON.stringify(token)]
+    );
+}
+
+async function loadStoredTokenAny() {
+    const envToken = String(process.env.GOOGLE_TOKEN_JSON || '').trim();
+    if (envToken) {
+        return JSON.parse(envToken);
+    }
+    if (fs.existsSync(TOKEN_PATH)) {
+        return readJsonFile(TOKEN_PATH);
+    }
+    try {
+        return await loadStoredTokenFromDatabase();
+    } catch (err) {
+        console.warn('[Google OAuth] Failed to load token from database:', err.message);
+        return null;
+    }
+}
+
+function hasOAuthCredentials() {
+    const creds = oAuth2Client && oAuth2Client.credentials ? oAuth2Client.credentials : null;
+    return Boolean(creds && (creds.refresh_token || creds.access_token));
+}
+
+async function ensureOAuthCredentialsLoaded() {
+    if (!oAuth2Client) {
+        throw new Error('Google client is not initialized.');
+    }
+    if (hasOAuthCredentials()) {
+        return;
+    }
+    const token = await loadStoredTokenAny();
+    if (token) {
+        oAuth2Client.setCredentials(token);
+    }
+}
+
 function readJsonFile(filePath) {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
@@ -356,6 +427,8 @@ async function syncPlannerDocument(documentId) {
         throw new Error('Google client is not initialized.');
     }
 
+    await ensureOAuthCredentialsLoaded();
+
     const docs = google.docs({ version: 'v1', auth: oAuth2Client });
     const drive = google.drive({ version: 'v3', auth: oAuth2Client });
     const response = await docs.documents.get({ documentId });
@@ -527,7 +600,7 @@ async function initializeGoogleClient() {
     oAuth2Client = new google.auth.OAuth2(client_id, client_secret, configuredRedirectUri);
 
     // Check if we have previously stored a token
-    const token = loadStoredToken();
+    const token = await loadStoredTokenAny();
     if (token) {
         oAuth2Client.setCredentials(token);
     } else {
@@ -545,6 +618,7 @@ router.get('/auth', async (req, res) => {
 
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
+        prompt: 'consent',
         redirect_uri: configuredRedirectUri,
         scope: [
             'https://www.googleapis.com/auth/drive',
@@ -567,14 +641,25 @@ router.get('/oauth2callback', async (req, res) => {
         }
 
         const { tokens } = await oAuth2Client.getToken(code);
-        oAuth2Client.setCredentials(tokens);
+        const existingToken = await loadStoredTokenAny();
+        const mergedTokens = {
+            ...(existingToken || {}),
+            ...(tokens || {})
+        };
+        oAuth2Client.setCredentials(mergedTokens);
 
         // Store the token to disk for later program executions.
         // Render instances can be ephemeral, so GOOGLE_TOKEN_JSON can be used instead.
         try {
-            fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens, null, 2));
+            fs.writeFileSync(TOKEN_PATH, JSON.stringify(mergedTokens, null, 2));
         } catch (err) {
             console.warn('Unable to persist token to disk:', err.message);
+        }
+
+        try {
+            await persistTokenToDatabase(mergedTokens);
+        } catch (err) {
+            console.warn('Unable to persist token to database:', err.message);
         }
 
         res.send('Authentication successful! You can close this tab.');
