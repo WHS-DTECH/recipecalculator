@@ -84,7 +84,7 @@ function buildCalendarDateHeaderHtml(weekDate) {
 
 function getCellPrimaryText(booking) {
   if (scheduleViewMode === 'recipe') {
-    const recipeLabel = String(booking.recipe || '').trim();
+    const recipeLabel = String((booking && booking.linked_recipe_name) || (booking && booking.recipe) || '').trim();
     return recipeLabel ? `Recipe: ${recipeLabel}` : `Class: ${booking.class_name || ''}`;
   }
   return `Class: ${booking.class_name || ''}`;
@@ -1184,7 +1184,7 @@ async function fetchBookingsForWeek(monday) {
 function buildMissingRecipeRowsForWeek(bookings) {
   const rows = (Array.isArray(bookings) ? bookings : []).filter((booking) => {
     if (isPlannerLikeBooking(booking)) return false;
-    const recipe = String(booking && booking.recipe ? booking.recipe : '').trim();
+    const recipe = String((booking && booking.linked_recipe_name) || (booking && booking.recipe) || '').trim();
     return !recipe;
   });
 

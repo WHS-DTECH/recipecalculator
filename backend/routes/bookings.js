@@ -1397,31 +1397,40 @@ router.get('/all', async (req, res) => {
 
     let query = `
       SELECT
-        id, staff_id, staff_name, class_name, booking_date, period,
-        recipe, recipe_url, recipe_id, class_size, planner_stream,
-        cook_mode, partner_student_name, partner_student_id, groups
-      FROM bookings`;
+        b.id, b.staff_id, b.staff_name, b.class_name, b.booking_date, b.period,
+        b.recipe, b.recipe_url, b.recipe_id, b.class_size, b.planner_stream,
+        b.cook_mode, b.partner_student_name, b.partner_student_id, b.groups,
+        r.name AS linked_recipe_name
+      FROM bookings b
+      LEFT JOIN recipes r
+        ON r.id = CAST(
+          NULLIF(
+            regexp_replace(COALESCE(b.recipe_id::text, ''), '[^0-9]', '', 'g'),
+            ''
+          )
+          AS INTEGER
+        )`;
     const params = [];
     const where = [];
 
     if (boundedStart && boundedEnd) {
-      where.push(`booking_date >= $${params.length + 1} AND booking_date <= $${params.length + 2}`);
+      where.push(`b.booking_date >= $${params.length + 1} AND b.booking_date <= $${params.length + 2}`);
       params.push(boundedStart, boundedEnd);
     } else if (boundedStart) {
-      where.push(`booking_date >= $${params.length + 1}`);
+      where.push(`b.booking_date >= $${params.length + 1}`);
       params.push(boundedStart);
     } else if (boundedEnd) {
-      where.push(`booking_date <= $${params.length + 1}`);
+      where.push(`b.booking_date <= $${params.length + 1}`);
       params.push(boundedEnd);
     }
 
     if (normalizedStaffId) {
-      where.push(`cast(staff_id as text) = $${params.length + 1}`);
+      where.push(`cast(b.staff_id as text) = $${params.length + 1}`);
       params.push(normalizedStaffId);
     }
 
     if (normalizedPlannerStream) {
-      where.push(`lower(coalesce(planner_stream, '')) = lower($${params.length + 1})`);
+      where.push(`lower(coalesce(b.planner_stream, '')) = lower($${params.length + 1})`);
       params.push(normalizedPlannerStream);
     }
 
@@ -1430,7 +1439,7 @@ router.get('/all', async (req, res) => {
     }
 
     params.push(limit);
-    query += ` ORDER BY booking_date DESC, period LIMIT $${params.length}`;
+    query += ` ORDER BY b.booking_date DESC, b.period LIMIT $${params.length}`;
     const result = await pool.query(query, params);
 
     let rows = result.rows;
@@ -1446,6 +1455,7 @@ router.get('/all', async (req, res) => {
           recipe: row.recipe,
           recipe_url: row.recipe_url,
           recipe_id: row.recipe_id,
+          linked_recipe_name: row.linked_recipe_name,
           class_size: row.class_size,
           planner_stream: row.planner_stream,
           groups: row.groups
