@@ -338,6 +338,34 @@
       return Number.isFinite(n) ? n : null;
     }
 
+    function toDateOnly(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      const isoLike = raw.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(isoLike)) return isoLike;
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    }
+
+    function formatHumanDate(value) {
+      const iso = toDateOnly(value);
+      if (!iso) return String(value || '');
+      const d = new Date(iso + 'T00:00:00');
+      if (Number.isNaN(d.getTime())) return iso;
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return String(d.getDate()) + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+    }
+
+    function formatPlanStatus(statusValue) {
+      const status = String(statusValue || '').trim().toLowerCase();
+      if (!status) return 'Unknown';
+      return status.charAt(0).toUpperCase() + status.slice(1);
+    }
+
     function renderWarnings(warnings) {
       const list = Array.isArray(warnings) ? warnings : [];
       if (!list.length) {
@@ -476,7 +504,10 @@
 
       const plans = Array.isArray(payload.plans) ? payload.plans : [];
       planSelect.innerHTML = plans.map((p) => {
-        const label = p.week_ending + ' | v' + p.version + ' | ' + p.status + ' | #' + p.id;
+        const label = 'Week ending ' + formatHumanDate(p.week_ending)
+          + ' | Version ' + String(p.version || '')
+          + ' | ' + formatPlanStatus(p.status)
+          + ' | Plan #' + String(p.id || '');
         return '<option value="' + Number(p.id) + '">' + esc(label) + '</option>';
       }).join('');
 
@@ -499,7 +530,10 @@
       renderItems();
       wireRowEvents();
 
-      planMeta.textContent = 'Plan #' + currentPlan.id + ' | Week ending: ' + currentPlan.week_ending + ' | Version: ' + currentPlan.version + ' | Status: ' + currentPlan.status;
+      planMeta.textContent = 'Plan #' + currentPlan.id
+        + ' | Week ending: ' + formatHumanDate(currentPlan.week_ending)
+        + ' | Version: ' + currentPlan.version
+        + ' | Status: ' + formatPlanStatus(currentPlan.status);
       finalizeBtn.disabled = currentPlan.status !== 'draft';
       generateDraftBtn.disabled = currentPlan.status !== 'draft';
       saveBtn.disabled = currentPlan.status !== 'draft';
