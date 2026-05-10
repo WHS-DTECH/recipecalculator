@@ -499,7 +499,11 @@
         planSelect.value = String(newPlanId);
         await loadPlan(newPlanId);
 
-        setStatus('Refreshed to new finalized version: Plan #' + newPlanId + '.', 'ok');
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set('plan_id', String(newPlanId));
+        window.history.replaceState({}, '', nextUrl.toString());
+
+        setStatus('Refreshed and loaded new finalized version: Plan #' + newPlanId + '.', 'ok');
       } catch (err) {
         setStatus(err.message || 'Refresh failed.', 'err');
       } finally {

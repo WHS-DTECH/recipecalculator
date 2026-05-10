@@ -242,7 +242,7 @@ function displayNameFromMergeName(mergeName, fallbackName) {
   const key = String(mergeName || '').trim().toLowerCase();
   if (!key) return String(fallbackName || '').trim();
   if (key === 'egg') return 'Eggs';
-  if (key === 'spring onion') return 'Spring onion';
+  if (key === 'spring onion') return 'Spring Onions';
   if (key === 'oil') return 'Oil';
   return key.replace(/\b\w/g, (c) => c.toUpperCase());
 }
@@ -1373,21 +1373,39 @@ router.get('/:id/technician-view', async (req, res) => {
     const brandsRes = await pool.query('SELECT brand_name FROM food_brands');
     const brands = (brandsRes.rows || []).map((r) => r.brand_name);
 
-    // Group by category
-    const grouped = {};
+    // Group by category and merge duplicate ingredient variants for display.
+    const groupedMaps = {};
     for (const item of itemsRes.rows) {
       const displayName = stripFoodBrandFromItemName(item.item_name, brands) || item.item_name;
       const normalized = enforceCriticalCategory(displayName, item.category, item.sub_aisle);
       const cat = normalized.master || item.category || 'Uncategorised';
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push({
-        sub_aisle: normalized.sub || item.sub_aisle,
-        item_name: displayName,
-        base_unit: item.base_unit,
-        final_qty: item.final_qty,
-        notes: item.notes
-      });
+
+      if (!groupedMaps[cat]) groupedMaps[cat] = new Map();
+
+      const mergeName = normalizedMergeIngredientName(displayName) || normalizeKey(displayName);
+      const canonical = toCanonicalQty(item.final_qty, item.base_unit);
+      const qty = Number.isFinite(canonical.qty) ? canonical.qty : Number(item.final_qty || 0);
+      const unit = canonical.unit || normalizeUnit(item.base_unit);
+      const mergeKey = normalizeKey(mergeName) + '||' + normalizeKey(unit);
+
+      if (!groupedMaps[cat].has(mergeKey)) {
+        groupedMaps[cat].set(mergeKey, {
+          sub_aisle: normalized.sub || item.sub_aisle,
+          item_name: displayNameFromMergeName(mergeName, displayName),
+          base_unit: unit || item.base_unit,
+          final_qty: 0,
+          notes: item.notes || ''
+        });
+      }
+
+      const entry = groupedMaps[cat].get(mergeKey);
+      entry.final_qty = Number(entry.final_qty || 0) + (Number.isFinite(qty) ? qty : 0);
     }
+
+    const grouped = {};
+    Object.keys(groupedMaps).forEach((cat) => {
+      grouped[cat] = Array.from(groupedMaps[cat].values());
+    });
 
     return res.json({ success: true, plan, categories: grouped });
   } catch (err) {
