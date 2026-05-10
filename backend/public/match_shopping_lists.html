@@ -253,9 +253,22 @@
                 <option value="technician">Technician Finalized Plan</option>
               </select>
             </div>
-            <div class="ms-field" id="technicianPlanField" style="max-width:180px;display:none;">
-              <label class="ms-label" for="technicianPlanIdInput">Finalized plan ID</label>
-              <input id="technicianPlanIdInput" class="ms-input" type="number" min="1" step="1" placeholder="e.g. 14">
+            <div class="ms-field" id="technicianPlanField" style="flex:2 1 520px;display:none;">
+              <div class="ms-row" style="margin:0;">
+                <div class="ms-field" style="min-width:300px;flex:2 1 320px;">
+                  <label class="ms-label" for="technicianPlanSelect">Finalized plans</label>
+                  <select id="technicianPlanSelect" class="ms-select">
+                    <option value="">Select finalized plan...</option>
+                  </select>
+                </div>
+                <div class="ms-field" style="min-width:170px;max-width:190px;">
+                  <label class="ms-label" for="technicianPlanIdInput">Finalized plan ID</label>
+                  <input id="technicianPlanIdInput" class="ms-input" type="number" min="1" step="1" placeholder="e.g. 42">
+                </div>
+                <div style="padding-top:1.3rem;">
+                  <button id="loadTechnicianPlansBtn" type="button" class="ms-btn secondary">Load Finalized Plans</button>
+                </div>
+              </div>
             </div>
             <div style="padding-top:1.3rem;">
               <button id="loadWeekBookingsBtn" type="button" class="ms-btn">Load Week Bookings</button>
@@ -328,7 +341,9 @@
       const clearFiltersBtn = document.getElementById('clearFiltersBtn');
       const compareSourceSelect = document.getElementById('compareSourceSelect');
       const technicianPlanField = document.getElementById('technicianPlanField');
+      const technicianPlanSelect = document.getElementById('technicianPlanSelect');
       const technicianPlanIdInput = document.getElementById('technicianPlanIdInput');
+      const loadTechnicianPlansBtn = document.getElementById('loadTechnicianPlansBtn');
       const loadWeekBookingsBtn = document.getElementById('loadWeekBookingsBtn');
       const runCompareBtn = document.getElementById('runCompareBtn');
       const selectAllBookingsBtn = document.getElementById('selectAllBookingsBtn');
@@ -463,6 +478,63 @@
         if (!Number.isFinite(day) || month === undefined || !Number.isFinite(year)) return null;
         const date = new Date(year, month, day);
         return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      function toDateOnly(value) {
+        const raw = String(value || '').trim();
+        if (!raw) return '';
+        const isoLike = raw.slice(0, 10);
+        if (/^\d{4}-\d{2}-\d{2}$/.test(isoLike)) return isoLike;
+        const d = new Date(raw);
+        if (Number.isNaN(d.getTime())) return '';
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+      }
+
+      function formatHumanDate(value) {
+        const iso = toDateOnly(value);
+        if (!iso) return String(value || '');
+        const d = new Date(iso + 'T00:00:00');
+        if (Number.isNaN(d.getTime())) return iso;
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return String(d.getDate()) + ' ' + months[d.getMonth()] + ' ' + d.getFullYear();
+      }
+
+      function isoWeekNumber(dateValue) {
+        const source = new Date(dateValue);
+        if (Number.isNaN(source.getTime())) return null;
+        const utcDate = new Date(Date.UTC(source.getFullYear(), source.getMonth(), source.getDate()));
+        const day = utcDate.getUTCDay() || 7;
+        utcDate.setUTCDate(utcDate.getUTCDate() + 4 - day);
+        const yearStart = new Date(Date.UTC(utcDate.getUTCFullYear(), 0, 1));
+        return Math.ceil((((utcDate - yearStart) / 86400000) + 1) / 7);
+      }
+
+      function mondayToFridayFromWeekEnding(weekEndingValue) {
+        const iso = toDateOnly(weekEndingValue);
+        if (!iso) return { monday: null, friday: null };
+        const friday = new Date(iso + 'T00:00:00');
+        if (Number.isNaN(friday.getTime())) return { monday: null, friday: null };
+        const monday = new Date(friday);
+        monday.setDate(friday.getDate() - 4);
+        return { monday, friday };
+      }
+
+      function formatRangeDateNoYear(dateValue) {
+        const d = new Date(dateValue);
+        if (Number.isNaN(d.getTime())) return '';
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        return String(d.getDate()) + ' ' + months[d.getMonth()];
+      }
+
+      function buildWeekLabel(weekEndingValue) {
+        const range = mondayToFridayFromWeekEnding(weekEndingValue);
+        if (!range.monday || !range.friday) return '';
+        const weekNo = isoWeekNumber(range.monday);
+        const prefix = Number.isInteger(weekNo) ? ('Week ' + weekNo + ' ') : '';
+        return prefix + '(' + formatRangeDateNoYear(range.monday) + ' - ' + formatHumanDate(range.friday) + ')';
       }
 
       function normalizeIngredientText(text) {
@@ -604,6 +676,37 @@
           setStatus(listsStatus, 'Error: ' + (err.message || String(err)), 'error');
         }
         refreshListsBtn.disabled = false;
+      }
+
+      async function loadFinalizedPlanOptions(selectedId) {
+        loadTechnicianPlansBtn.disabled = true;
+        try {
+          const payload = await requestJson('/api/shopping-plan');
+          const plans = (Array.isArray(payload.plans) ? payload.plans : [])
+            .filter((p) => String(p.status || '').toLowerCase() === 'finalized');
+
+          if (!plans.length) {
+            technicianPlanSelect.innerHTML = '<option value="">No finalized plans found</option>';
+            return;
+          }
+
+          technicianPlanSelect.innerHTML = '<option value="">Select finalized plan...</option>' + plans.map((p) => {
+            const weekLabel = buildWeekLabel(p.week_ending);
+            const label = (weekLabel || ('Week ending ' + formatHumanDate(p.week_ending)))
+              + ' | Version ' + String(p.version || '')
+              + ' | Plan #' + String(p.id || '');
+            return '<option value="' + Number(p.id) + '">' + escHtml(label) + '</option>';
+          }).join('');
+
+          if (selectedId && plans.some((p) => Number(p.id) === Number(selectedId))) {
+            technicianPlanSelect.value = String(selectedId);
+            technicianPlanIdInput.value = String(selectedId);
+          }
+        } catch (err) {
+          technicianPlanSelect.innerHTML = '<option value="">Unable to load finalized plans</option>';
+          setStatus(bookingsStatus, 'Error loading finalized plans: ' + (err.message || String(err)), 'error');
+        }
+        loadTechnicianPlansBtn.disabled = false;
       }
 
       function renderBookings() {
@@ -959,6 +1062,32 @@
         return teacherCategoryOrder.find((c) => c.toLowerCase() === 'other') || (teacherCategoryOrder[0] || 'Other');
       }
 
+      function sortTeacherCategories(inputCategories) {
+        const categories = Array.isArray(inputCategories) ? inputCategories.slice() : [];
+        const originalIndex = new Map();
+        categories.forEach((c, i) => originalIndex.set(c, i));
+
+        function rankCategory(name) {
+          const n = String(name || '').trim().toLowerCase();
+          if (/\bmeat\b/.test(n)) return 0;
+          if (/\bdairy\b/.test(n) || /\bpastry\b/.test(n)) return 1;
+          if (/\bcleaning\b/.test(n)) return 2;
+          if (/\bfruit\b/.test(n) || /\bvegetable\b/.test(n) || /\bproduce\b/.test(n)) return 3;
+          if (/\bdry\s*ingredients\b/.test(n) || /\bpantry\b/.test(n)) return 4;
+          if (/\bother\b/.test(n)) return 5;
+          if (/\baction\b/.test(n)) return 6;
+          if (/\buncategoris(?:ed|e?d)\b/.test(n)) return 7;
+          return 50;
+        }
+
+        return categories.sort((a, b) => {
+          const ra = rankCategory(a);
+          const rb = rankCategory(b);
+          if (ra !== rb) return ra - rb;
+          return (originalIndex.get(a) || 0) - (originalIndex.get(b) || 0);
+        });
+      }
+
       function renderAlignedComparison(teacherItems, comparison) {
         if (!teacherItems.length) {
           alignedComparison.innerHTML = '<div class="ms-muted">No teacher uploaded items found.</div>';
@@ -971,8 +1100,10 @@
           if (!teacherCategoryOrder.includes(category)) teacherCategoryOrder.push(category);
         });
 
+        const orderedCategories = sortTeacherCategories(teacherCategoryOrder);
+
         const byCategoryRows = new Map();
-        teacherCategoryOrder.forEach((cat) => byCategoryRows.set(cat, []));
+        orderedCategories.forEach((cat) => byCategoryRows.set(cat, []));
 
         const matchedByTeacher = new Map();
         (comparison.matched || []).forEach((match) => {
@@ -996,7 +1127,7 @@
 
         // Append book-only items into the best matching teacher master category.
         (comparison.bookOnly || []).forEach((book) => {
-          const category = pickCategoryForBookItem(book, teacherCategoryOrder);
+          const category = pickCategoryForBookItem(book, orderedCategories);
           if (!byCategoryRows.has(category)) byCategoryRows.set(category, []);
           byCategoryRows.get(category).push({
             type: 'Book Only',
@@ -1006,7 +1137,7 @@
         });
 
         let html = '';
-        teacherCategoryOrder.forEach((category) => {
+        orderedCategories.forEach((category) => {
           const rows = byCategoryRows.get(category) || [];
           html += `<h4 style="margin:0.55rem 0 0.2rem;color:#0f172a;font-size:0.9rem;">${escHtml(category)}</h4>`;
           html += '<table class="ms-table"><thead><tr><th style="width:100px;">Result</th><th>Book Shopping</th><th>Teacher List</th></tr></thead><tbody>';
@@ -1095,6 +1226,18 @@
           renderAlignedComparison(teacherItems, comparison);
           comparisonCard.hidden = false;
 
+          const teacherOnlyItems = comparison.teacherOnly || [];
+          const sendBar = document.getElementById('sendToExtrasBar');
+          const sendCount = document.getElementById('sendToExtrasCount');
+          if (teacherOnlyItems.length > 0) {
+            sendCount.textContent = teacherOnlyItems.length + ' Teacher-Only item(s) not in Book Shopping.';
+            sendBar.hidden = false;
+            sendBar._teacherOnlyItems = teacherOnlyItems;
+            sendBar._weekDate = dateEndInput.value.trim();
+          } else {
+            sendBar.hidden = true;
+          }
+
           if (isTechnician) {
             setStatus(bookingsStatus, 'Technician vs Teacher comparison complete.', 'ok');
           }
@@ -1135,10 +1278,20 @@
         selectAllBookingsBtn.disabled = isTechnician;
         clearBookingsBtn.disabled = isTechnician;
         if (isTechnician) {
-          setStatus(bookingsStatus, 'Technician mode: enter Finalized plan ID, then Run Comparison.', '');
+          setStatus(bookingsStatus, 'Technician mode: select finalized plan, then Run Comparison.', '');
         } else {
           setStatus(bookingsStatus, selectedBookingIds.size + ' booking(s) selected.', selectedBookingIds.size ? 'ok' : '');
         }
+      });
+
+      technicianPlanSelect.addEventListener('change', () => {
+        const id = Number(technicianPlanSelect.value || 0);
+        if (Number.isInteger(id) && id > 0) technicianPlanIdInput.value = String(id);
+      });
+
+      loadTechnicianPlansBtn.addEventListener('click', () => {
+        const current = Number(technicianPlanIdInput.value || 0);
+        loadFinalizedPlanOptions(Number.isInteger(current) && current > 0 ? current : null);
       });
 
       selectAllBookingsBtn.addEventListener('click', () => {
@@ -1157,6 +1310,7 @@
       dateEndInput.value = '';
       renderBookings();
       loadSavedLists();
+      loadFinalizedPlanOptions(null);
       compareSourceSelect.dispatchEvent(new Event('change'));
       document.getElementById('sendToExtrasBtn').addEventListener('click', function () {
         const sendBar = document.getElementById('sendToExtrasBar');
@@ -1177,17 +1331,3 @@
   </script>
 </body>
 </html>
-
-          // Show "Send to Extras" bar if there are teacher-only ingredient items
-          const teacherOnlyItems = comparison.teacherOnly || [];
-          const sendBar = document.getElementById('sendToExtrasBar');
-          const sendCount = document.getElementById('sendToExtrasCount');
-          if (teacherOnlyItems.length > 0) {
-            sendCount.textContent = teacherOnlyItems.length + ' Teacher-Only item(s) not in Book Shopping.';
-            sendBar.hidden = false;
-            // Store latest teacher-only items for the button handler
-            sendBar._teacherOnlyItems = teacherOnlyItems;
-            sendBar._weekDate = dateEndInput.value.trim();
-          } else {
-            sendBar.hidden = true;
-          }
