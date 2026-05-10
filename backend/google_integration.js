@@ -9,6 +9,7 @@ const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
 const TOKEN_PATH = path.join(__dirname, 'token.json');
 
 let oAuth2Client;
+let configuredRedirectUri = '';
 
 function readJsonFile(filePath) {
     return JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -33,6 +34,20 @@ function loadStoredToken() {
     return null;
 }
 
+function getRedirectUriFromEnvOrRuntime(configRedirectUris = []) {
+    const explicit = String(process.env.GOOGLE_OAUTH_REDIRECT_URI || '').trim();
+    if (explicit) {
+        return explicit;
+    }
+
+    const renderBase = String(process.env.RENDER_EXTERNAL_URL || '').trim().replace(/\/$/, '');
+    if (renderBase) {
+        return `${renderBase}/google/oauth2callback`;
+    }
+
+    return Array.isArray(configRedirectUris) ? String(configRedirectUris[0] || '').trim() : '';
+}
+
 // Initialize Google OAuth2 client
 async function initializeGoogleClient() {
     const credentials = loadGoogleCredentials();
@@ -43,13 +58,16 @@ async function initializeGoogleClient() {
     }
 
     const { client_secret, client_id, redirect_uris = [] } = config;
-    const redirectUri = String(process.env.GOOGLE_OAUTH_REDIRECT_URI || '').trim() || redirect_uris[0];
+    const redirectUri = getRedirectUriFromEnvOrRuntime(redirect_uris);
 
     if (!client_id || !client_secret || !redirectUri) {
         throw new Error('Missing Google OAuth values: client_id, client_secret, or redirect URI.');
     }
 
-    oAuth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+    console.log('[Google OAuth] Using redirect URI:', redirectUri);
+
+    configuredRedirectUri = redirectUri;
+    oAuth2Client = new google.auth.OAuth2(client_id, client_secret, configuredRedirectUri);
 
     // Check if we have previously stored a token
     const token = loadStoredToken();
@@ -68,6 +86,7 @@ router.get('/auth', async (req, res) => {
 
     const authUrl = oAuth2Client.generateAuthUrl({
         access_type: 'offline',
+        redirect_uri: configuredRedirectUri,
         scope: [
             'https://www.googleapis.com/auth/drive',
             'https://www.googleapis.com/auth/documents'
