@@ -7,6 +7,8 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const { requireAdmin } = require('../middleware/requireAdmin');
+const desiredServingsRoute = require('./desiredServings');
+const saveDesiredServingsPayload = desiredServingsRoute.saveDesiredServingsPayload;
 
 // ---------------------------------------------------------------------------
 // Auto-migration: create shopping_plan tables if they don't exist yet.
@@ -439,40 +441,33 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
 
         const desiredServings = Math.ceil(classSize / groups);
 
-        await pool.query(
-          'DELETE FROM desired_servings_ingredients WHERE booking_id = $1 AND recipe_id = $2',
-          [b.booking_id, recipeId]
-        );
-
-        for (const ing of ingredients) {
+        const payloadIngredients = ingredients.map((ing) => {
           const baseQty = parseFractionLikeInventory(ing.measure_qty);
           const calculatedQty = Number.isFinite(baseQty) ? (baseQty * desiredServings) : null;
-          await pool.query(
-            `INSERT INTO desired_servings_ingredients
-              (booking_id, teacher, staff_id, class_name, class_date, class_size, groups, desired_servings, recipe_id,
-               ingredient_id, ingredient_name, measure_qty, measure_unit, fooditem, calculated_qty, stripfooditem, aisle_category_id)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
-            [
-              b.booking_id,
-              b.staff_name || '',
-              b.staff_id || null,
-              b.class_name || '',
-              b.booking_date,
-              classSize,
-              groups,
-              desiredServings,
-              recipeId,
-              ing.id || null,
-              ing.ingredient_name || '',
-              ing.measure_qty || '',
-              ing.measure_unit || '',
-              ing.fooditem || '',
-              calculatedQty,
-              ing.stripfooditem || ing.fooditem || ing.ingredient_name || '',
-              ing.aisle_category_id || null
-            ]
-          );
-        }
+          return {
+            ingredient_id: ing.id || null,
+            ingredient_name: ing.ingredient_name || '',
+            measure_qty: ing.measure_qty || '',
+            measure_unit: ing.measure_unit || '',
+            fooditem: ing.fooditem || '',
+            calculated_qty: calculatedQty,
+            stripFoodItem: ing.stripfooditem || ing.fooditem || ing.ingredient_name || '',
+            aisle_category_id: ing.aisle_category_id || null
+          };
+        });
+
+        await saveDesiredServingsPayload({
+          booking_id: b.booking_id,
+          teacher: b.staff_name || '',
+          staff_id: b.staff_id || null,
+          class_name: b.class_name || '',
+          class_date: b.booking_date,
+          class_size: classSize,
+          groups,
+          desired_servings: desiredServings,
+          recipe_id: recipeId,
+          ingredients: payloadIngredients
+        });
 
         autofilledClasses += 1;
       }
