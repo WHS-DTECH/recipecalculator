@@ -309,6 +309,17 @@
       </div>
     </div>
 
+    <div class="rcal-card" id="googleSyncCard">
+      <h2>Google Docs Planner Sync</h2>
+      <div class="rcal-card-sub">Trigger a live sync from configured Google planner docs without uploading a file.</div>
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+        <a class="rcal-btn" id="googleAuthBtn" href="/google/auth" target="_blank" rel="noopener noreferrer" style="text-decoration:none;display:inline-block;">Connect Google</a>
+        <button class="rcal-btn rcal-btn-teal" id="googleSyncNowBtn" type="button">Sync Google Docs Now</button>
+      </div>
+      <div id="googleSyncConfig" style="margin-top:0.65rem;font-size:0.9rem;color:#4b5563;">Checking sync configuration...</div>
+      <div class="rcal-status" id="googleSyncStatus" role="status" aria-live="polite"></div>
+    </div>
+
     <!-- Step 2: Review -->
     <div class="rcal-card" id="reviewCard" hidden>
       <h2>Step 2 — Review &amp; Edit</h2>
@@ -486,6 +497,9 @@
     const deletePlannerClassSelect = document.getElementById('deletePlannerClassSelect');
     const deletePlannerEntriesBtn = document.getElementById('deletePlannerEntriesBtn');
     const deletePlannerEntriesStatus = document.getElementById('deletePlannerEntriesStatus');
+    const googleSyncNowBtn = document.getElementById('googleSyncNowBtn');
+    const googleSyncStatus = document.getElementById('googleSyncStatus');
+    const googleSyncConfig = document.getElementById('googleSyncConfig');
     const classnameInput = document.getElementById('classnameInput');
     const plannerUploadsList = document.getElementById('plannerUploadsList');
     let plannerClassOptions = [];
@@ -637,6 +651,77 @@
 
     loadPlannerClassOptions();
     renderPlannerUploadsExplorer();
+
+    function setGoogleSyncStatus(message, kind) {
+      if (!googleSyncStatus) return;
+      googleSyncStatus.className = 'rcal-status' + (kind ? ` ${kind}` : '');
+      googleSyncStatus.textContent = message || '';
+    }
+
+    async function loadGoogleSyncConfig() {
+      if (!googleSyncConfig) return;
+      googleSyncConfig.textContent = 'Checking sync configuration...';
+      try {
+        const res = await fetch('/google/sync-config', { credentials: 'include' });
+        const data = await res.json();
+        if (!res.ok || !data || !data.success) {
+          throw new Error((data && data.error) || 'Unable to load Google sync config.');
+        }
+
+        const docs = Number(data.configuredDocs || 0);
+        const cron = String(data.cronExpression || '*/15 * * * *');
+        const tz = String(data.timezone || 'Pacific/Auckland');
+        const schedulerLabel = data.schedulerActive ? 'active' : 'inactive';
+        const tokenLabel = data.requiresToken ? 'token-protected' : 'open within app';
+
+        googleSyncConfig.textContent = `Configured docs: ${docs}. Schedule: ${cron} (${tz}), scheduler ${schedulerLabel}, manual trigger ${tokenLabel}.`;
+        googleSyncNowBtn.disabled = docs < 1;
+        if (docs < 1) {
+          setGoogleSyncStatus('Set GOOGLE_PLANNER_DOC_IDS in Render to enable manual sync.', 'error');
+        }
+      } catch (err) {
+        googleSyncNowBtn.disabled = true;
+        googleSyncConfig.textContent = 'Unable to load sync config.';
+        setGoogleSyncStatus(`Sync config error: ${err.message || 'Unknown error'}`, 'error');
+      }
+    }
+
+    googleSyncNowBtn.addEventListener('click', async () => {
+      googleSyncNowBtn.disabled = true;
+      setGoogleSyncStatus('Syncing configured Google Docs...', '');
+      try {
+        const res = await fetch('/google/sync-planners', {
+          method: 'POST',
+          credentials: 'include'
+        });
+        const data = await res.json();
+
+        if (res.status === 403) {
+          throw new Error('Sync token is enabled on the server. Use the protected webhook trigger or disable token requirement for UI sync.');
+        }
+        if (!res.ok) {
+          throw new Error((data && data.error) || 'Google sync failed.');
+        }
+
+        const synced = Array.isArray(data.synced) ? data.synced : [];
+        const parts = synced.map((entry) => {
+          const title = String(entry.title || entry.documentId || 'Document');
+          const inserted = Number(entry.inserted || 0);
+          const parsed = Number(entry.parsedRows || 0);
+          const skipped = entry.skipped ? ' (no parsed rows)' : '';
+          return `${title}: ${inserted}/${parsed} rows${skipped}`;
+        });
+        const summary = parts.length ? parts.join(' | ') : 'No configured documents were synced.';
+        setGoogleSyncStatus(`Google sync complete. ${summary}`, 'ok');
+        await Promise.all([renderMiniCal(), renderPlannerUploadsExplorer()]);
+      } catch (err) {
+        setGoogleSyncStatus(`Google sync error: ${err.message || 'Unknown error'}`, 'error');
+      } finally {
+        await loadGoogleSyncConfig();
+      }
+    });
+
+    loadGoogleSyncConfig();
 
     function getDefaultClassNameForStream(stream) {
       if (stream === 'Senior') return '11HOSP';
