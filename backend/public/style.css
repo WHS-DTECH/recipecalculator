@@ -44,6 +44,14 @@
     font-weight: 600;
 }
 
+.calendar-app-wide {
+    max-width: 2500px;
+    width: min(100%, calc(100vw - 12px));
+    margin: 18px auto 32px;
+    padding: 0.85rem 0.35rem 1.25rem;
+    box-sizing: border-box;
+}
+
 .add-booking-page {
     max-width: 2100px;
     width: min(100%, calc(100vw - 12px));
@@ -1654,6 +1662,14 @@
 
     .add-booking-toolbar-actions button {
         flex: 1 1 120px;
+    }
+}
+
+@media (min-width: 1700px) {
+    .calendar-app-wide .calendar-table th,
+    .calendar-app-wide .calendar-table td {
+        min-width: 146px;
+        font-size: 1.08rem;
     }
 }
 

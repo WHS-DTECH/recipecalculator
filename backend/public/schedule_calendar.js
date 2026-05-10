@@ -730,7 +730,17 @@ function normalizePlannerStream(booking) {
 
 // --- Planner mismatch helpers ---
 
-// Build a map of { "weekMonday|stream" => { recipe: string, lc: string } }
+function normalizeRecipeForCompare(value) {
+  return String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Build a map of { "weekMonday|stream" => { recipes: string[], normalized: Set<string> } }
 // from all planner entries in the bookings list.
 function buildPlannerMap(bookings) {
   const map = new Map();
@@ -744,8 +754,17 @@ function buildPlannerMap(bookings) {
     if (!d) continue;
     const monday = toLocalIsoDate(getStartOfWeek(d));
     const key = `${monday}|${stream}`;
+
     if (!map.has(key)) {
-      map.set(key, { recipe, lc: recipe.toLowerCase() });
+      map.set(key, { recipes: [], normalized: new Set() });
+    }
+
+    const entry = map.get(key);
+    const normalizedRecipe = normalizeRecipeForCompare(recipe);
+    if (!normalizedRecipe) continue;
+    if (!entry.normalized.has(normalizedRecipe)) {
+      entry.normalized.add(normalizedRecipe);
+      entry.recipes.push(recipe);
     }
   }
   return map;
@@ -767,9 +786,15 @@ function hasPlannerMismatch(booking, plannerMap) {
   if (isPlannerLikeBooking(booking)) return false;
   const bookingRecipe = String(booking && booking.recipe ? booking.recipe : '').trim();
   if (!bookingRecipe) return false;
+  if (bookingRecipe.toLowerCase() === 'theory') return false;
+
   const plannerEntry = getPlannerRecipeForBooking(booking, plannerMap);
   if (!plannerEntry) return false;
-  return plannerEntry.lc !== bookingRecipe.toLowerCase();
+
+  const bookingNorm = normalizeRecipeForCompare(bookingRecipe);
+  if (!bookingNorm) return false;
+  if (plannerEntry.normalized && plannerEntry.normalized.has(bookingNorm)) return false;
+  return true;
 }
 
 function plannerChipStyle(stream) {
@@ -1534,10 +1559,13 @@ async function renderScheduleCalendar() {
             const slotHref = `teacher_booking_slots.html?booking_id=${encodeURIComponent(String(booking.id || ''))}&source=${encodeURIComponent(window.location.pathname.split('/').pop() || 'add_booking.html')}`;
             const mismatch = hasPlannerMismatch(booking, plannerMap);
             const mismatchEntry = mismatch ? getPlannerRecipeForBooking(booking, plannerMap) : null;
+            const plannerMismatchTitle = mismatch && mismatchEntry && Array.isArray(mismatchEntry.recipes) && mismatchEntry.recipes.length
+              ? `Planner recipe(s): ${mismatchEntry.recipes.join(' | ')}`
+              : 'Planner recipe differs';
             html += `<div class="calendar-booking-cell" id="${bookingId}" data-booking-id="${booking.id}" tabindex="0" role="button" aria-label="${cellLabel}" style='background:${cellStyle.bg};border:1px solid ${cellStyle.border};border-radius:7px;padding:0.34rem 0.22rem;box-shadow:0 1px 2px #0001;cursor:pointer;transition:box-shadow 0.2s;${idx > 0 ? 'margin-top:0.24rem;' : ''}'>
               <div style='font-weight:bold;font-size:0.98em;color:${cellStyle.text};line-height:1.2;'>${escHtml(getCellPrimaryText(booking))}</div>
               <div style='font-weight:bold;color:${cellStyle.teacherText};font-size:0.95em;line-height:1.2;'>Teacher: ${escHtml(booking.staff_name)}</div>
-              ${mismatch && mismatchEntry ? `<div title="Planner recipe: ${escHtml(mismatchEntry.recipe)}" style='display:inline-flex;align-items:center;gap:0.2rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:0.08rem 0.3rem;font-size:0.68rem;color:#c2410c;margin-top:0.18rem;cursor:help;'>&#9888; Planner mismatch</div>` : ''}
+              ${mismatch && mismatchEntry ? `<div title="${escHtml(plannerMismatchTitle)}" style='display:inline-flex;align-items:center;gap:0.2rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:4px;padding:0.08rem 0.3rem;font-size:0.68rem;color:#c2410c;margin-top:0.18rem;cursor:help;'>&#9888; Planner mismatch</div>` : ''}
               ${scheduleViewMode === 'class' && booking.class_size != null && booking.class_size !== '' ? `<div style='font-size:0.86em;color:${cellStyle.text};line-height:1.2;'>Class Size: ${escHtml(String(booking.class_size))}</div>` : ''}
               ${scheduleViewMode === 'recipe' && booking.groups != null && booking.groups !== '' ? `<div style='font-size:0.86em;color:${cellStyle.text};line-height:1.2;'>Groups: ${escHtml(String(booking.groups))}</div>` : ''}
               <div style='margin-top:0.2rem;display:flex;gap:0.18rem;justify-content:center;flex-wrap:wrap;'>${window.bookingPageLabel === 'Add Food Truck Booking' ? `<a href='${slotHref}' onclick='event.stopPropagation();' style='display:inline-block;padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #1d4ed8;background:#eff6ff;color:#1e3a8a;font-size:0.74rem;text-decoration:none;font-weight:700;'>Slots</a>` : ''}${booking.recipe_id ? `<button onclick='event.stopPropagation();handleBookedCellRecipeClick(${Number(booking.id)})' style='padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.74rem;cursor:pointer;font-weight:700;'>Recipes</button>` : ''}<button onclick='event.stopPropagation();printBookingInfoSheet(${Number(booking.id)})' title='Print class info sheet' style='padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #7c3aed;background:#f5f3ff;color:#5b21b6;font-size:0.74rem;cursor:pointer;font-weight:700;'>&#128438; Print</button></div>
