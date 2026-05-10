@@ -95,6 +95,29 @@ async function ensureSchema() {
   _schemaReady = true;
 }
 
+function sortBrandsForMatching(brands) {
+  return (Array.isArray(brands) ? brands : [])
+    .map((b) => String(b || '').trim())
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+}
+
+function stripFoodBrandFromItemName(name, brands) {
+  let stripped = String(name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
+  const orderedBrands = sortBrandsForMatching(brands);
+
+  orderedBrands.forEach((brand) => {
+    const escaped = brand.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+    const anywhere = new RegExp(`(^|\\s|,)${escaped}(?:'s)?(?=\\s|,|$)`, 'ig');
+    stripped = stripped.replace(anywhere, '$1');
+  });
+
+  return stripped
+    .replace(/\s+,/g, ',')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 
 // ---------------------------------------------------------------------------
 // Helper: resolve the requesting user's email from the request
@@ -1299,15 +1322,19 @@ router.get('/:id/technician-view', async (req, res) => {
       [planId]
     );
 
+    const brandsRes = await pool.query('SELECT brand_name FROM food_brands');
+    const brands = (brandsRes.rows || []).map((r) => r.brand_name);
+
     // Group by category
     const grouped = {};
     for (const item of itemsRes.rows) {
-      const normalized = enforceCriticalCategory(item.item_name, item.category, item.sub_aisle);
+      const displayName = stripFoodBrandFromItemName(item.item_name, brands) || item.item_name;
+      const normalized = enforceCriticalCategory(displayName, item.category, item.sub_aisle);
       const cat = normalized.master || item.category || 'Uncategorised';
       if (!grouped[cat]) grouped[cat] = [];
       grouped[cat].push({
         sub_aisle: normalized.sub || item.sub_aisle,
-        item_name: item.item_name,
+        item_name: displayName,
         base_unit: item.base_unit,
         final_qty: item.final_qty,
         notes: item.notes
@@ -1515,18 +1542,8 @@ router.post('/:id/refresh-brand-names', requireAdmin, async (req, res) => {
     }
 
     // Load all food brands
-    const brandsResult = await pool.query('SELECT brand_name FROM food_brands ORDER BY brand_name DESC');
-    const brands = (brandsResult.rows || []).map(b => b.brand_name);
-
-    // Helper to strip brand text
-    function stripBrandFromName(name, brandList) {
-      let stripped = (name || '').replace(/\s*\([^)]*\)\s*$/, '').trim();
-      (brandList || []).forEach(brand => {
-        const re = new RegExp('^' + String(brand || '').replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&") + "('?s)?\\s+", 'i');
-        stripped = stripped.replace(re, '');
-      });
-      return stripped.trim();
-    }
+    const brandsResult = await pool.query('SELECT brand_name FROM food_brands');
+    const brands = (brandsResult.rows || []).map((b) => b.brand_name);
 
     // Get all items in this plan and update them
     const itemsRes = await pool.query(
@@ -1536,7 +1553,7 @@ router.post('/:id/refresh-brand-names', requireAdmin, async (req, res) => {
 
     let updated = 0;
     for (const item of itemsRes.rows) {
-      const stripped = stripBrandFromName(item.item_name, brands);
+      const stripped = stripFoodBrandFromItemName(item.item_name, brands);
       if (stripped !== item.item_name) {
         await pool.query(
           'UPDATE shopping_plan_items SET item_name = $1 WHERE id = $2',
