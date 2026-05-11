@@ -305,6 +305,33 @@ function isNonShoppingMetadataIngredient(nameValue) {
   return false;
 }
 
+function weekdayNameFromDateValue(value) {
+  const iso = String(value || '').trim().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return '';
+  const d = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(d.getTime())) return '';
+  const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  return names[d.getDay()] || '';
+}
+
+function applyLiquidRepairQty(mergeName, qty, unit) {
+  let nextQty = Number(qty);
+  let nextUnit = normalizeUnit(unit);
+  if (!Number.isFinite(nextQty)) return { qty: null, unit: nextUnit };
+
+  if (['oil', 'soy sauce', 'milk'].includes(mergeName)) {
+    if (nextUnit === 'tsp') {
+      nextQty = nextQty * 5;
+      nextUnit = 'ml';
+    } else if (nextUnit === 'each' || !nextUnit) {
+      nextQty = nextQty * 15;
+      nextUnit = 'ml';
+    }
+  }
+
+  return { qty: nextQty, unit: nextUnit };
+}
+
 function extractLeadingQuantityUnit(value) {
   const source = String(value || '').trim();
   if (!source) return { matched: false, qty: null, unit: '', name: '' };
@@ -1422,7 +1449,7 @@ router.get('/:id/technician-view', async (req, res) => {
     }
 
     const itemsRes = await pool.query(
-      `SELECT category, sub_aisle, item_name, base_unit, final_qty, notes
+      `SELECT category, sub_aisle, item_name, base_unit, final_qty, notes, source_detail_json
        FROM shopping_plan_items
        WHERE plan_id = $1
          AND COALESCE(final_qty, 0) > 0
@@ -1433,8 +1460,32 @@ router.get('/:id/technician-view', async (req, res) => {
     const brandsRes = await pool.query('SELECT brand_name FROM food_brands');
     const brands = (brandsRes.rows || []).map((r) => r.brand_name);
 
+    const bookingIds = new Set();
+    for (const item of itemsRes.rows) {
+      const sources = Array.isArray(item.source_detail_json) ? item.source_detail_json : [];
+      for (const src of sources) {
+        const bookingId = Number(src && src.booking_id);
+        if (Number.isInteger(bookingId) && bookingId > 0) bookingIds.add(bookingId);
+      }
+    }
+
+    const bookingDayMap = new Map();
+    if (bookingIds.size > 0) {
+      const bookingRes = await pool.query(
+        `SELECT id, booking_date
+         FROM bookings
+         WHERE id = ANY($1::int[])`,
+        [Array.from(bookingIds)]
+      );
+      for (const row of bookingRes.rows) {
+        const dayName = weekdayNameFromDateValue(row.booking_date);
+        if (dayName) bookingDayMap.set(Number(row.id), dayName);
+      }
+    }
+
     // Group by category and merge duplicate ingredient variants for display.
     const groupedMaps = {};
+    const weekdayGroupedMaps = {};
     for (const item of itemsRes.rows) {
       const brandedName = stripFoodBrandFromItemName(item.item_name, brands) || item.item_name;
       const displayName = sanitizeCorruptedIngredientName(brandedName, item.base_unit);
@@ -1450,18 +1501,9 @@ router.get('/:id/technician-view', async (req, res) => {
       const canonical = toCanonicalQty(item.final_qty, item.base_unit);
       let qty = Number.isFinite(canonical.qty) ? canonical.qty : Number(item.final_qty || 0);
       let unit = canonical.unit || normalizeUnit(item.base_unit);
-
-      // For liquid ingredients, normalize to ml so mixed units merge cleanly.
-      if (['oil', 'soy sauce', 'milk'].includes(mergeName)) {
-        if (unit === 'tsp' && Number.isFinite(qty)) {
-          qty = qty * 5;
-          unit = 'ml';
-        } else if ((unit === 'each' || !unit) && Number.isFinite(qty)) {
-          // Recover legacy rows where liquid units were lost as "each".
-          qty = qty * 15;
-          unit = 'ml';
-        }
-      }
+      const liquidFixed = applyLiquidRepairQty(mergeName, qty, unit);
+      qty = liquidFixed.qty;
+      unit = liquidFixed.unit;
 
       // Spring onion rows should combine by ingredient even if legacy rows drifted in units.
       const mergeUnit = (mergeName === 'spring onion') ? 'each' : unit;
@@ -1479,6 +1521,56 @@ router.get('/:id/technician-view', async (req, res) => {
 
       const entry = groupedMaps[cat].get(mergeKey);
       entry.final_qty = Number(entry.final_qty || 0) + (Number.isFinite(qty) ? qty : 0);
+
+      if (!weekdayGroupedMaps[cat]) weekdayGroupedMaps[cat] = {};
+
+      const sources = Array.isArray(item.source_detail_json) ? item.source_detail_json : [];
+      const dayRaw = new Map();
+      for (const src of sources) {
+        const bookingId = Number(src && src.booking_id);
+        const day = bookingDayMap.get(bookingId) || '';
+        if (!day) continue;
+
+        const sourceCanonicalQty = Number(src && src.canonical_qty);
+        const sourceQtyCandidate = Number.isFinite(sourceCanonicalQty)
+          ? sourceCanonicalQty
+          : Number(src && src.qty);
+        const sourceUnitCandidate = normalizeUnit((src && src.canonical_unit) || (src && src.unit) || item.base_unit);
+        const sourceLiquidFixed = applyLiquidRepairQty(mergeName, sourceQtyCandidate, sourceUnitCandidate);
+        const sourceQty = Number(sourceLiquidFixed.qty);
+        if (!Number.isFinite(sourceQty) || sourceQty <= 0) continue;
+
+        dayRaw.set(day, Number(dayRaw.get(day) || 0) + sourceQty);
+      }
+
+      const dayTotals = new Map();
+      if (dayRaw.size > 0) {
+        const baseTotal = Array.from(dayRaw.values()).reduce((sum, n) => sum + (Number.isFinite(n) ? n : 0), 0);
+        if (baseTotal > 0 && Number.isFinite(qty) && qty > 0) {
+          dayRaw.forEach((value, day) => {
+            dayTotals.set(day, (value / baseTotal) * qty);
+          });
+        }
+      }
+
+      if (!dayTotals.size && Number.isFinite(qty) && qty > 0) {
+        dayTotals.set('Unscheduled', qty);
+      }
+
+      dayTotals.forEach((dayQty, day) => {
+        if (!weekdayGroupedMaps[cat][day]) weekdayGroupedMaps[cat][day] = new Map();
+        if (!weekdayGroupedMaps[cat][day].has(mergeKey)) {
+          weekdayGroupedMaps[cat][day].set(mergeKey, {
+            sub_aisle: normalized.sub || item.sub_aisle,
+            item_name: displayNameFromMergeName(mergeName, displayName),
+            base_unit: mergeUnit || item.base_unit,
+            final_qty: 0,
+            notes: item.notes || ''
+          });
+        }
+        const dayEntry = weekdayGroupedMaps[cat][day].get(mergeKey);
+        dayEntry.final_qty = Number(dayEntry.final_qty || 0) + (Number.isFinite(dayQty) ? dayQty : 0);
+      });
     }
 
     const grouped = {};
@@ -1487,7 +1579,18 @@ router.get('/:id/technician-view', async (req, res) => {
         .sort((a, b) => String(a.item_name || '').localeCompare(String(b.item_name || ''), undefined, { sensitivity: 'base' }));
     });
 
-    return res.json({ success: true, plan, categories: grouped });
+    const weekdayGrouped = {};
+    Object.keys(weekdayGroupedMaps).forEach((cat) => {
+      const dayObj = weekdayGroupedMaps[cat] || {};
+      const next = {};
+      Object.keys(dayObj).forEach((day) => {
+        next[day] = Array.from(dayObj[day].values())
+          .sort((a, b) => String(a.item_name || '').localeCompare(String(b.item_name || ''), undefined, { sensitivity: 'base' }));
+      });
+      weekdayGrouped[cat] = next;
+    });
+
+    return res.json({ success: true, plan, categories: grouped, weekday_categories: weekdayGrouped });
   } catch (err) {
     console.error('[shopping-plan] GET /:id/technician-view error:', err.message);
     return res.status(500).json({ success: false, error: err.message });
