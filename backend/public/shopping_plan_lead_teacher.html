@@ -43,6 +43,18 @@
     .ltv-status { min-height: 1.2rem; margin-top: 0.45rem; font-size: 0.92rem; font-weight: 700; }
     .ltv-status.ok { color: #1f7c4c; }
     .ltv-status.err { color: #b82f2f; }
+    .ltv-mini-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.4rem; }
+    .ltv-mini-title { margin: 0; color: #1d4464; font-size: 1rem; }
+    .ltv-mini-sub { color: #5f7588; font-size: 0.82rem; }
+    .ltv-mini-table-wrap { overflow-x: auto; }
+    .ltv-mini-table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    .ltv-mini-table th, .ltv-mini-table td { border: 1px solid #e1eaf2; padding: 0.3rem 0.35rem; font-size: 0.78rem; vertical-align: top; }
+    .ltv-mini-table th { background: #edf4fb; color: #2d4f68; text-align: center; }
+    .ltv-mini-period { width: 52px; text-align: center; font-weight: 700; background: #f8fbff; color: #35536a; }
+    .ltv-mini-cell { min-height: 50px; }
+    .ltv-mini-chip { background: #f3f8ff; border: 1px solid #d8e6f7; border-radius: 5px; padding: 0.12rem 0.26rem; margin-bottom: 0.16rem; color: #20465f; line-height: 1.25; display: block; }
+    .ltv-mini-chip:last-child { margin-bottom: 0; }
+    .ltv-mini-empty { color: #8ea0b0; text-align: center; }
     .ltv-grid {
       display: grid;
       gap: 0.8rem;
@@ -128,6 +140,16 @@
       <div id="status" class="ltv-status"></div>
     </section>
 
+    <section class="ltv-card">
+      <div class="ltv-mini-head">
+        <h2 class="ltv-mini-title">Practical Calendar (Week Snapshot)</h2>
+        <div id="practicalCalMeta" class="ltv-mini-sub"></div>
+      </div>
+      <div id="practicalCalBody" class="ltv-mini-table-wrap">
+        <div class="ltv-meta">Load a finalized plan to view the practical calendar snapshot.</div>
+      </div>
+    </section>
+
     <section id="printArea" class="ltv-card">
       <div id="categoryGrid" class="ltv-grid">
         <div class="ltv-meta">Load a finalized plan ID to view weekday shopping needs.</div>
@@ -144,6 +166,8 @@
     const csvBtn = document.getElementById('csvBtn');
     const planMeta = document.getElementById('planMeta');
     const statusEl = document.getElementById('status');
+    const practicalCalMeta = document.getElementById('practicalCalMeta');
+    const practicalCalBody = document.getElementById('practicalCalBody');
     const categoryGrid = document.getElementById('categoryGrid');
 
     let currentPayload = null;
@@ -216,6 +240,110 @@
       const weekNo = isoWeekNumber(range.monday);
       const prefix = Number.isInteger(weekNo) ? ('Week ' + weekNo + ' ') : '';
       return prefix + '(' + formatRangeDateNoYear(range.monday) + ' - ' + formatHumanDate(range.friday) + ')';
+    }
+
+    function toIsoLocalDate(dateValue) {
+      const d = new Date(dateValue);
+      if (Number.isNaN(d.getTime())) return '';
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return y + '-' + m + '-' + day;
+    }
+
+    function shortDayLabel(dateValue) {
+      const d = new Date(dateValue);
+      if (Number.isNaN(d.getTime())) return '';
+      const w = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const idx = (d.getDay() + 6) % 7;
+      return w[idx] + ' ' + String(d.getDate()) + '/' + String(d.getMonth() + 1);
+    }
+
+    function parsePeriodValue(periodValue) {
+      const raw = String(periodValue || '').trim().toUpperCase();
+      if (!raw) return null;
+      const m = raw.match(/(\d+)/);
+      if (!m) return null;
+      const n = Number(m[1]);
+      return Number.isInteger(n) && n >= 1 && n <= 5 ? n : null;
+    }
+
+    async function renderPracticalCalendar(plan) {
+      if (!plan || !plan.week_ending) {
+        practicalCalMeta.textContent = '';
+        practicalCalBody.innerHTML = '<div class="ltv-meta">Load a finalized plan to view the practical calendar snapshot.</div>';
+        return;
+      }
+
+      const range = mondayToFridayFromWeekEnding(plan.week_ending);
+      if (!range.monday || !range.friday) {
+        practicalCalMeta.textContent = '';
+        practicalCalBody.innerHTML = '<div class="ltv-meta">Could not resolve week range for this plan.</div>';
+        return;
+      }
+
+      const days = [];
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(range.monday);
+        d.setDate(range.monday.getDate() + i);
+        days.push(d);
+      }
+
+      const start = toIsoLocalDate(days[0]);
+      const end = toIsoLocalDate(days[4]);
+      practicalCalMeta.textContent = shortDayLabel(days[0]) + ' to ' + shortDayLabel(days[4]);
+      practicalCalBody.innerHTML = '<div class="ltv-meta">Loading practical calendar...</div>';
+
+      try {
+        const resp = await fetch('/api/bookings/all?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end) + '&fields=calendar', { credentials: 'include' });
+        const payload = await resp.json().catch(() => ({}));
+        if (!resp.ok) throw new Error(payload.error || 'Failed to load practical calendar.');
+
+        const rows = Array.isArray(payload.bookings) ? payload.bookings : [];
+        const grid = {};
+        for (let p = 1; p <= 5; p++) {
+          grid[p] = {};
+          days.forEach((d) => { grid[p][toIsoLocalDate(d)] = []; });
+        }
+
+        rows.forEach((b) => {
+          const iso = toDateOnly(b.booking_date);
+          const p = parsePeriodValue(b.period);
+          if (!iso || !p || !grid[p] || !grid[p][iso]) return;
+          if (String(b.period || '').toLowerCase() === 'planner') return;
+          const primary = String((b.linked_recipe_name || b.recipe || b.class_name || '')).trim();
+          const secondary = String((b.staff_name || '')).trim();
+          grid[p][iso].push((primary || 'Booking') + (secondary ? ' - ' + secondary : ''));
+        });
+
+        let html = '<table class="ltv-mini-table"><thead><tr><th>Period</th>';
+        html += days.map((d) => '<th>' + esc(shortDayLabel(d)) + '</th>').join('');
+        html += '</tr></thead><tbody>';
+
+        for (let p = 1; p <= 5; p++) {
+          html += '<tr><td class="ltv-mini-period">P' + p + '</td>';
+          for (let i = 0; i < days.length; i++) {
+            const iso = toIsoLocalDate(days[i]);
+            const items = grid[p][iso] || [];
+            if (!items.length) {
+              html += '<td class="ltv-mini-cell ltv-mini-empty">-</td>';
+              continue;
+            }
+            const shown = items.slice(0, 2);
+            let chips = shown.map((text) => '<div class="ltv-mini-chip">' + esc(text) + '</div>').join('');
+            if (items.length > shown.length) {
+              chips += '<div class="ltv-mini-chip">+' + (items.length - shown.length) + ' more</div>';
+            }
+            html += '<td class="ltv-mini-cell">' + chips + '</td>';
+          }
+          html += '</tr>';
+        }
+
+        html += '</tbody></table>';
+        practicalCalBody.innerHTML = html;
+      } catch (err) {
+        practicalCalBody.innerHTML = '<div class="ltv-meta">' + esc(err.message || 'Failed to load practical calendar.') + '</div>';
+      }
     }
 
     function normalizeUnit(value) {
@@ -376,6 +504,8 @@
       currentPayload = payload;
       const plan = payload.plan || {};
       const weekdayCategories = payload.weekday_categories || {};
+
+      renderPracticalCalendar(plan);
 
       planMeta.textContent =
         'Plan #' + plan.id
