@@ -28,6 +28,8 @@ const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
 const scheduleViewModeStorageKey = 'scheduleViewMode';
 const schedulePageParams = new URLSearchParams(window.location.search);
 const schedulePresetBookingId = parseInt(String(schedulePageParams.get('booking_id') || ''), 10);
+const schedulePresetWeekStart = String(schedulePageParams.get('week_start') || '').trim();
+const scheduleAutoPrintBooking = String(schedulePageParams.get('auto_print_booking') || '').trim() === '1';
 const scheduleCalendarSourceId = `schedule-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 const scheduleCalendarSharedChannel = ('BroadcastChannel' in window)
   ? new BroadcastChannel(bookClassSharedChannelName)
@@ -37,6 +39,7 @@ const scheduleCalendarFilters = (window && window.scheduleCalendarFilters && typ
   : {};
 let lastCalendarRefreshSignalAt = 0;
 let schedulePresetApplied = false;
+let scheduleAutoPrintDone = false;
 let scheduleViewMode = (() => {
   const saved = String(localStorage.getItem(scheduleViewModeStorageKey) || '').trim().toLowerCase();
   return saved === 'recipe' ? 'recipe' : 'class';
@@ -1562,6 +1565,12 @@ async function initRecentPlannerSidebar() {
 
 // Track the current week start (Monday)
 let currentMonday = (() => {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(schedulePresetWeekStart)) {
+    const preset = parseLocalIsoDate(schedulePresetWeekStart);
+    if (preset && !Number.isNaN(preset.getTime())) {
+      return getStartOfWeek(preset);
+    }
+  }
   return getStartOfWeek(new Date());
 })();
 
@@ -1822,6 +1831,15 @@ async function renderScheduleCalendar() {
 
   applySelectionStyles();
   setupTeacherQuickSelect();
+
+  if (scheduleAutoPrintBooking && !scheduleAutoPrintDone && Number.isInteger(schedulePresetBookingId) && schedulePresetBookingId > 0) {
+    const exists = bookings.some((b) => Number(b.id) === schedulePresetBookingId);
+    if (exists) {
+      scheduleAutoPrintDone = true;
+      // Defer one tick so popup blockers treat it as part of navigation flow.
+      setTimeout(() => { printBookingInfoSheet(schedulePresetBookingId); }, 0);
+    }
+  }
 
   // Update week label
   const weekStart = new Date(currentMonday);
