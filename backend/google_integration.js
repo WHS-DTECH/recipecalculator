@@ -564,6 +564,35 @@ async function syncPlannerDocument(documentId) {
     };
 }
 
+async function dedupePlannerBookingsKeepLatest() {
+    // Keep only the newest planner row for each class/date/stream/period slot.
+    const result = await pool.query(`
+        WITH ranked AS (
+            SELECT
+                id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY
+                        booking_date,
+                        lower(trim(coalesce(class_name, ''))),
+                        lower(trim(coalesce(planner_stream, 'middle'))),
+                        lower(trim(coalesce(period, 'planner')))
+                    ORDER BY
+                        coalesce(source_document_synced_at, to_timestamp(0)) DESC,
+                        id DESC
+                ) AS row_rank
+            FROM bookings
+            WHERE period = 'Planner'
+        )
+        DELETE FROM bookings b
+        USING ranked r
+        WHERE b.id = r.id
+          AND r.row_rank > 1
+        RETURNING b.id
+    `);
+
+    return Number(result.rowCount || 0);
+}
+
 async function syncConfiguredPlannerDocs(triggerSource = 'manual') {
     const documentIds = getConfiguredPlannerDocIds();
     if (!documentIds.length) {
@@ -590,8 +619,18 @@ async function syncConfiguredPlannerDocs(triggerSource = 'manual') {
         }
     }
 
+    let deduped = 0;
+    try {
+        deduped = await dedupePlannerBookingsKeepLatest();
+        if (deduped > 0) {
+            console.log(`[Google Planner Sync] Removed ${deduped} duplicate planner booking row(s).`);
+        }
+    } catch (dedupeErr) {
+        console.warn('[Google Planner Sync] Planner dedupe failed:', dedupeErr.message);
+    }
+
     const hasErrors = synced.some((entry) => Boolean(entry && entry.error));
-    return { success: !hasErrors, synced, skipped: false };
+    return { success: !hasErrors, synced, skipped: false, deduped };
 }
 
 function startPlannerSyncScheduler() {
