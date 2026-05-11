@@ -146,6 +146,7 @@ function normalizeKey(value) {
 function normalizeUnit(value) {
   const u = String(value || '').trim().toLowerCase();
   if (!u) return '';
+  if (['cup', 'cups', 'c'].includes(u)) return 'cup';
   if (['teaspoon', 'teaspoons', 'tsp'].includes(u)) return 'tsp';
   if (['tablespoon', 'tablespoons', 'tbsp', 'tbs', 'tblsp'].includes(u)) return 'tbsp';
   if (['gram', 'grams', 'g'].includes(u)) return 'g';
@@ -487,6 +488,7 @@ function toCanonicalQty(qtyValue, unitValue) {
     return { qty: NaN, unit, family, wasConverted: false };
   }
 
+  if (unit === 'cup') return { qty: qty * 48, unit: 'tsp', family: 'spoon', wasConverted: true };
   if (unit === 'tbsp') return { qty: qty * 3, unit: 'tsp', family: 'spoon', wasConverted: true };
   if (unit === 'tsp') return { qty, unit: 'tsp', family: 'spoon', wasConverted: false };
   if (unit === 'kg') return { qty: qty * 1000, unit: 'g', family: 'weight', wasConverted: true };
@@ -806,7 +808,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
       let unit = normalizeUnit(String(row.measure_unit || extracted.unit || '').trim());
       if (!unit) {
         const rawLower = rawSourceName.toLowerCase();
-        if (/^\s*\d+\s*t\s+of\s+oil\b/.test(rawLower) || /^\s*t\s+of\s+oil\b/.test(rawLower)) {
+        if (/^\s*\d+\s*t\b\.?\s*of\s+/.test(rawLower) || /^\s*\d+t\b\.?\s*of\s+/.test(rawLower) || /^\s*t\b\.?\s*of\s+/.test(rawLower)) {
           unit = 'tbsp';
         }
       }
@@ -1424,7 +1426,8 @@ router.get('/:id/technician-view', async (req, res) => {
 
     const grouped = {};
     Object.keys(groupedMaps).forEach((cat) => {
-      grouped[cat] = Array.from(groupedMaps[cat].values());
+      grouped[cat] = Array.from(groupedMaps[cat].values())
+        .sort((a, b) => String(a.item_name || '').localeCompare(String(b.item_name || ''), undefined, { sensitivity: 'base' }));
     });
 
     return res.json({ success: true, plan, categories: grouped });
