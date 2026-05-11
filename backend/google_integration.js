@@ -809,6 +809,20 @@ router.post('/sync-planners', async (req, res) => {
     }
 });
 
+router.post('/dedupe-planners', async (req, res) => {
+    try {
+        if (!isPlannerSyncAuthorized(req)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const deduped = await dedupePlannerBookingsKeepLatest();
+        res.status(200).json({ success: true, deduped });
+    } catch (error) {
+        console.error('Planner dedupe error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 router.get('/sync-config', async (req, res) => {
     try {
         const summary = getPlannerSyncConfigSummary();
