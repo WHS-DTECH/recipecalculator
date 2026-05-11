@@ -1,13 +1,10 @@
 
 const express = require('express');
 const router = express.Router();
-const { Pool } = require('pg');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
-require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:password@host:port/db?sslmode=require';
-const pool = new Pool({ connectionString: DATABASE_URL, ssl: { rejectUnauthorized: false } });
+const pool = require('../db');
 
 let foodTruckModerationColumnsEnsured = false;
 let recipeIssueColumnsEnsured = false;

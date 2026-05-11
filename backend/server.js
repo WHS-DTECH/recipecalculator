@@ -938,6 +938,18 @@ app.use('/api/staff_upload', staffUploadRouter);
 
 const bookingsRouter = require('./routes/bookings');
 app.use('/api/bookings', bookingsRouter);
+
+// Lightweight process health check for Render.
+// Do not hard-fail on transient database errors during deploy warm-up.
+app.get('/api/health', async (_req, res) => {
+  try {
+    await pool.query('SELECT 1');
+    return res.status(200).json({ ok: true, db: 'up' });
+  } catch (err) {
+    console.warn('[HEALTH] Database check failed:', err.message);
+    return res.status(200).json({ ok: true, db: 'degraded' });
+  }
+});
 const bookingSlotListsRouter = require('./routes/booking_slot_lists');
 app.use('/api/booking-slot-lists', bookingSlotListsRouter);
 
