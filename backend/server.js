@@ -614,7 +614,17 @@ function getSuggestionSmtpConfigSummary() {
   return `host=${host} port=${port} secure=${secure} user=${user} from=${fromAddress}`;
 }
 
+function shouldRunSuggestionSmtpHealthCheck() {
+  const raw = String(process.env.SUGGESTION_SMTP_HEALTHCHECK_ON_STARTUP || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
 async function logSuggestionMailerHealthCheck() {
+  if (!shouldRunSuggestionSmtpHealthCheck()) {
+    console.log('[SUGGESTIONS] SMTP startup health check skipped. Set SUGGESTION_SMTP_HEALTHCHECK_ON_STARTUP=1 to enable.');
+    return;
+  }
+
   const transporter = createSuggestionMailer();
   if (!transporter) {
     console.warn('[SUGGESTIONS] SMTP health check skipped. Missing SMTP_HOST/SMTP_USER/SMTP_PASS.');
