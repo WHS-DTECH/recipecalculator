@@ -2277,7 +2277,49 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
         }
         const recipe = recipeResult.rows[0];
 
-        // 2. Update recipe_display table with latest recipe data
+        // 2. If a display row exists (edited in Browse Recipes), prefer that as the
+        // source of truth for printable ingredients/instructions.
+        const displaySourceRes = await pool.query(
+          `SELECT name, serving_size, url, ingredients, instructions, image_url
+           FROM recipe_display
+           WHERE recipeid = $1
+           ORDER BY id DESC
+           LIMIT 1`,
+          [recipeId]
+        );
+        const displaySource = displaySourceRes.rowCount > 0 ? displaySourceRes.rows[0] : null;
+
+        const preferredName = String((displaySource && displaySource.name) || recipe.name || '').trim() || recipe.name;
+        const preferredServingSize = (displaySource && displaySource.serving_size != null)
+          ? displaySource.serving_size
+          : recipe.serving_size;
+        const preferredUrl = String((displaySource && displaySource.url) || recipe.url || '').trim() || recipe.url;
+        const preferredIngredients = String((displaySource && displaySource.ingredients) || recipe.ingredients_display || recipe.ingredients || '').trim();
+        const preferredInstructions = String((displaySource && displaySource.instructions) || recipe.instructions_display || recipe.instructions || '').trim();
+
+        await pool.query(
+          `UPDATE recipes
+           SET name = $1,
+               serving_size = $2,
+               url = $3,
+               ingredients_display = $4,
+               instructions_display = $5
+           WHERE id = $6`,
+          [
+            preferredName,
+            preferredServingSize,
+            preferredUrl || null,
+            preferredIngredients || null,
+            preferredInstructions || null,
+            recipeId
+          ]
+        );
+
+        // 3. Re-read updated recipe record so display upsert and response are in sync.
+        const updatedRecipeRes = await pool.query('SELECT * FROM recipes WHERE id = $1', [recipeId]);
+        const updatedRecipe = updatedRecipeRes.rowCount > 0 ? updatedRecipeRes.rows[0] : recipe;
+
+        // 4. Update recipe_display table with the synchronized recipe data.
         const upsertSql = `
           INSERT INTO recipe_display (name, description, ingredients, serving_size, url, instructions, recipeid, image_url)
           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -2292,23 +2334,23 @@ app.post('/api/ingredients/inventory/save-parsed', async (req, res) => {
           RETURNING id`;
         
         const displayResult = await pool.query(upsertSql, [
-          recipe.name,
-          recipe.description,
-          recipe.ingredients_display,
-          recipe.serving_size,
-          recipe.url,
-          recipe.instructions,
-          recipe.id,
-          recipe.image_url || null
+          updatedRecipe.name,
+          updatedRecipe.description,
+          updatedRecipe.ingredients_display,
+          updatedRecipe.serving_size,
+          updatedRecipe.url,
+          updatedRecipe.instructions_display || updatedRecipe.instructions,
+          updatedRecipe.id,
+          (displaySource && displaySource.image_url) || updatedRecipe.image_url || null
         ]);
 
-        // 3. Count bookings referencing this recipe (for visibility only)
+        // 5. Count bookings referencing this recipe (for visibility only)
         const bookingsResult = await pool.query(
           'SELECT COUNT(*)::int AS total FROM bookings WHERE recipe_id = $1',
           [recipeId]
         );
 
-        // 4. Note: existing finalized shopping plans are locked and won't change.
+        // 6. Note: existing finalized shopping plans are locked and won't change.
         // Only new shopping plans generated after this refresh will use the updated recipe.
 
         return res.json({ 
