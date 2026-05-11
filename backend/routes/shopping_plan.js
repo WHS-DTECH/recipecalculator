@@ -281,6 +281,8 @@ function isNonShoppingMetadataIngredient(nameValue) {
   if (!normalized) return true;
 
   if (/^serves(\s+\d+)+\s+serves?$/.test(normalized)) return true;
+  if (/\b\d+(?:\.\d+)?\s*serves?\b/.test(normalized) || /\bserves?\s+\d+\b/.test(normalized)) return true;
+  if (/\bmg\b/.test(normalized) || /\bkj\b/.test(normalized) || /\bkilojoules?\b/.test(normalized)) return true;
 
   const exactMeta = new Set([
     'kj total fat',
@@ -301,6 +303,13 @@ function isNonShoppingMetadataIngredient(nameValue) {
   if (/\b(total\s+fat|saturated\s+fat|carbohydrate|sugars?|sodium|dietary\s+fib(?:re|er)|protein|energy|kilojoules?|kj)\b/.test(normalized)) {
     return true;
   }
+
+  const metaOnly = normalized
+    .replace(/\b(?:serves?|mg|kj|kilojoules?|total|fat|saturated|sodium|dietary|fibre|fiber|carbohydrate|carbohydrates|sugars?|protein|energy)\b/g, ' ')
+    .replace(/\d+(?:\.\d+)?/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!metaOnly) return true;
 
   return false;
 }
