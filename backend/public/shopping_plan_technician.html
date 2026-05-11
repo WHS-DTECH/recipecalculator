@@ -621,7 +621,14 @@
         });
         const finalizeData = await finalizeResp.json().catch(() => ({}));
         if (!finalizeResp.ok || !finalizeData.success) {
-          throw new Error(finalizeData.error || 'Failed to finalize refreshed plan.');
+          // If refresh draft cannot finalize (often due legacy unit conflicts),
+          // keep the current finalized plan loaded and show a non-fatal message.
+          await loadFinalizedPlanOptions(originalPlanId);
+          planIdInput.value = String(originalPlanId);
+          planSelect.value = String(originalPlanId);
+          await loadPlan(originalPlanId);
+          setStatus('Refresh draft could not be finalized. Showing latest finalized plan with normalized display totals.', 'err');
+          return;
         }
 
         await loadFinalizedPlanOptions(newPlanId);

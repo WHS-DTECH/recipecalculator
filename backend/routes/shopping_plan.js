@@ -219,6 +219,8 @@ function normalizedMergeIngredientName(value) {
 
   // Remove leading quantity/unit fragments including loose variants like "1t of ...".
   name = name.replace(/^\s*\d+(?:\s*[-/]\s*\d+)?\s*(?:t\b|tsp\b|tbsp\b|cups?\b|g\b|kg\b|ml\b|l\b)?\s*(?:of\s+)?/i, '');
+  // Remove parenthesized quantity prefix e.g. "(80ml) Soy Sauce".
+  name = name.replace(/^\s*\(\s*\d+(?:\.\d+)?\s*(?:ml|l|g|kg|tsp|tbsp|cups?)\s*\)\s*/i, '');
 
   // Drop trailing prep notes after commas and remove common prep words.
   name = name.replace(/,.*$/, '');
@@ -1406,15 +1408,30 @@ router.get('/:id/technician-view', async (req, res) => {
 
       const mergeName = normalizedMergeIngredientName(displayName) || normalizeKey(displayName);
       const canonical = toCanonicalQty(item.final_qty, item.base_unit);
-      const qty = Number.isFinite(canonical.qty) ? canonical.qty : Number(item.final_qty || 0);
-      const unit = canonical.unit || normalizeUnit(item.base_unit);
-      const mergeKey = normalizeKey(mergeName) + '||' + normalizeKey(unit);
+      let qty = Number.isFinite(canonical.qty) ? canonical.qty : Number(item.final_qty || 0);
+      let unit = canonical.unit || normalizeUnit(item.base_unit);
+
+      // For liquid ingredients, normalize to ml so mixed units merge cleanly.
+      if (['oil', 'soy sauce', 'milk'].includes(mergeName)) {
+        if (unit === 'tsp' && Number.isFinite(qty)) {
+          qty = qty * 5;
+          unit = 'ml';
+        } else if ((unit === 'each' || !unit) && Number.isFinite(qty)) {
+          // Recover legacy rows where liquid units were lost as "each".
+          qty = qty * 15;
+          unit = 'ml';
+        }
+      }
+
+      // Spring onion rows should combine by ingredient even if legacy rows drifted in units.
+      const mergeUnit = (mergeName === 'spring onion') ? 'each' : unit;
+      const mergeKey = normalizeKey(mergeName) + '||' + normalizeKey(mergeUnit);
 
       if (!groupedMaps[cat].has(mergeKey)) {
         groupedMaps[cat].set(mergeKey, {
           sub_aisle: normalized.sub || item.sub_aisle,
           item_name: displayNameFromMergeName(mergeName, displayName),
-          base_unit: unit || item.base_unit,
+          base_unit: mergeUnit || item.base_unit,
           final_qty: 0,
           notes: item.notes || ''
         });
