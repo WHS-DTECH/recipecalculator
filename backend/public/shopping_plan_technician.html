@@ -665,6 +665,21 @@
       refreshBtn.textContent = 'Refreshing...';
 
       try {
+        const isUnitRepairableFinalizeFailure = (payload) => {
+          const errors = Array.isArray(payload && payload.errors) ? payload.errors : [];
+          return errors.some((entry) => /no unit|unit compatibility/i.test(String(entry || '')));
+        };
+
+        const attemptFinalize = async (planId) => {
+          const finalizeResp = await fetch('/api/shopping-plan/' + planId + '/finalize', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          const finalizeData = await finalizeResp.json().catch(() => ({}));
+          return { finalizeResp, finalizeData };
+        };
+
         setStatus('Creating refreshed draft version...', '');
 
         const reopenResp = await fetch('/api/shopping-plan/' + originalPlanId + '/reopen', {
@@ -692,12 +707,22 @@
         }
 
         setStatus('Finalizing refreshed plan version...', '');
-        const finalizeResp = await fetch('/api/shopping-plan/' + newPlanId + '/finalize', {
-          method: 'POST',
-          credentials: 'include',
-          headers: { 'Content-Type': 'application/json' }
-        });
-        const finalizeData = await finalizeResp.json().catch(() => ({}));
+        let { finalizeResp, finalizeData } = await attemptFinalize(newPlanId);
+        if ((!finalizeResp.ok || !finalizeData.success) && isUnitRepairableFinalizeFailure(finalizeData)) {
+          setStatus('Repairing legacy unit rows in refreshed draft...', '');
+          const repairResp = await fetch('/api/shopping-plan/' + newPlanId + '/fix-legacy-units', {
+            method: 'POST',
+            credentials: 'include'
+          });
+          const repairData = await repairResp.json().catch(() => ({}));
+          if (!repairResp.ok || !repairData.success) {
+            throw new Error(repairData.error || 'Refreshed draft failed legacy unit repair.');
+          }
+
+          setStatus('Retrying finalization after legacy unit repair...', '');
+          ({ finalizeResp, finalizeData } = await attemptFinalize(newPlanId));
+        }
+
         if (!finalizeResp.ok || !finalizeData.success) {
           // If refresh draft cannot finalize (often due legacy unit conflicts),
           // keep the current finalized plan loaded and show a non-fatal message.
