@@ -268,6 +268,33 @@ function sanitizeCorruptedIngredientName(nameValue, unitValue) {
   return name;
 }
 
+function isNonIngredientNoise(nameValue) {
+  const raw = String(nameValue || '').trim();
+  if (!raw) return true;
+  const v = raw.toLowerCase().replace(/\s+/g, ' ').trim();
+
+  // Nutrition table labels and meta rows that should never become shopping items.
+  const exactNoise = new Set([
+    'total fat',
+    'saturated fat',
+    'total carbohydrate',
+    'dietary fibre',
+    'sodium',
+    'sugars',
+    'protein',
+    'energy',
+    'mg'
+  ]);
+  if (exactNoise.has(v)) return true;
+
+  if (/^serves\b/.test(v)) return true;
+  if (/\bserves\s+\d+\s+serves\s+\d+/.test(v)) return true;
+  if (/\b(total\s+fat|saturated\s+fat|total\s+carbohydrate|dietary\s*fibre|sugars?|sodium)\b/.test(v) && /\d/.test(v)) return true;
+  if (/^(\d+(?:\.\d+)?)\s*(kj|kcal|mg)\b/.test(v)) return true;
+
+  return false;
+}
+
 function extractLeadingQuantityUnit(value) {
   const source = String(value || '').trim();
   if (!source) return { matched: false, qty: null, unit: '', name: '' };
@@ -828,6 +855,7 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         ? rawName
         : rawSourceName;
       const displayName = sanitizeCorruptedIngredientName(displayNameRaw, canonicalUnit || unit);
+      if (isNonIngredientNoise(displayName)) continue;
       let resolvedSubAisle = String(row.category || 'Uncategorised').trim() || 'Uncategorised';
       let resolvedCategory = String(row.master_category || resolvedSubAisle || 'Uncategorised').trim() || 'Uncategorised';
       const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
