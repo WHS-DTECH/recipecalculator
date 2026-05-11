@@ -373,10 +373,10 @@
       return value;
     }
 
-    function formatQty(value, decimals) {
+    function formatQty(value) {
       const n = Number(value);
       if (!Number.isFinite(n)) return '';
-      return n.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+      return n.toFixed(1).replace(/\.0$/, '');
     }
 
     function toPurchaseUnit(qtyValue, unitValue) {
@@ -387,17 +387,63 @@
       }
 
       if (unit === 'tsp' && Math.abs(qty) >= 3) {
-        return { qty: formatQty(qty / 3, 3), unit: 'tbsp' };
+        return { qty: formatQty(qty / 3), unit: 'tbsp' };
       }
 
       if (unit === 'g' && Math.abs(qty) >= 1000) {
-        return { qty: formatQty(qty / 1000, 3), unit: 'kg' };
+        return { qty: formatQty(qty / 1000), unit: 'kg' };
       }
       if (unit === 'ml' && Math.abs(qty) >= 1000) {
-        return { qty: formatQty(qty / 1000, 3), unit: 'l' };
+        return { qty: formatQty(qty / 1000), unit: 'l' };
       }
 
-      return { qty: formatQty(qty, 4), unit: String(unitValue || '') };
+      return { qty: formatQty(qty), unit: String(unitValue || '') };
+    }
+
+    function mergeNameKey(value) {
+      let s = String(value || '').toLowerCase().trim();
+      if (!s) return '';
+      s = s
+        .replace(/\b(finely|thinly|roughly|lightly|shredded|sliced|chopped|beaten)\b/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      s = s
+        .replace(/\bspring onions?\b/g, 'spring onion')
+        .replace(/\beggs\b/g, 'egg');
+      return s;
+    }
+
+    function displayNameFromMergeKey(key, fallback) {
+      if (key === 'spring onion') return 'Spring Onions';
+      if (key === 'egg') return 'Eggs';
+      return String(fallback || '').trim() || key;
+    }
+
+    function mergeRows(rows) {
+      const list = Array.isArray(rows) ? rows : [];
+      const map = new Map();
+
+      list.forEach((r) => {
+        const unit = normalizeUnit(r && r.base_unit) || String((r && r.base_unit) || '').trim().toLowerCase();
+        const keyName = mergeNameKey(r && r.item_name);
+        const mergeKey = keyName + '||' + unit;
+        const qty = Number(r && r.final_qty);
+
+        if (!map.has(mergeKey)) {
+          map.set(mergeKey, {
+            sub_aisle: r && r.sub_aisle,
+            item_name: displayNameFromMergeKey(keyName, r && r.item_name),
+            base_unit: r && r.base_unit,
+            final_qty: 0,
+            notes: r && r.notes
+          });
+        }
+
+        const entry = map.get(mergeKey);
+        entry.final_qty += Number.isFinite(qty) ? qty : 0;
+      });
+
+      return Array.from(map.values()).sort((a, b) => String(a.item_name || '').localeCompare(String(b.item_name || ''), undefined, { sensitivity: 'base' }));
     }
 
     function canonicalCategoryKey(name) {
@@ -479,6 +525,9 @@
         if (!grouped[key]) grouped[key] = [];
         const rows = Array.isArray(categories[cat]) ? categories[cat] : [];
         grouped[key] = grouped[key].concat(rows);
+      });
+      Object.keys(grouped).forEach((key) => {
+        grouped[key] = mergeRows(grouped[key]);
       });
 
       const rowOrder = [
