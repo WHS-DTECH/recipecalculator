@@ -147,8 +147,8 @@ function normalizeUnit(value) {
   const u = String(value || '').trim().toLowerCase();
   if (!u) return '';
   if (['cup', 'cups', 'c'].includes(u)) return 'cup';
-  if (['teaspoon', 'teaspoons', 'tsp'].includes(u)) return 'tsp';
-  if (['tablespoon', 'tablespoons', 'tbsp', 'tbs', 'tblsp'].includes(u)) return 'tbsp';
+  if (['teaspoon', 'teaspoons', 'tsp', 'tsps'].includes(u)) return 'tsp';
+  if (['tablespoon', 'tablespoons', 'tablesppon', 'tablesppons', 'tbsp', 'tbs', 'tblsp', 'tbsps'].includes(u)) return 'tbsp';
   if (['gram', 'grams', 'g'].includes(u)) return 'g';
   if (['kilogram', 'kilograms', 'kg'].includes(u)) return 'kg';
   if (['milliliter', 'milliliters', 'millilitre', 'millilitres', 'ml'].includes(u)) return 'ml';
@@ -204,11 +204,12 @@ function cleanIngredientName(value) {
   if (!source) return '';
 
   const qtyPattern = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
-  const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
+  const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tablesppons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
   const withUnit = new RegExp(`^\\s*${qtyPattern}\\s*${unitPattern}\\b\\s*[,;:-]?\\s*`, 'i');
   const qtyOnly = new RegExp(`^\\s*${qtyPattern}\\s*[,;:-]?\\s*`, 'i');
+  const unitOnly = new RegExp(`^\\s*${unitPattern}\\b\\s*[,;:-]?\\s*`, 'i');
 
-  return source.replace(withUnit, '').replace(qtyOnly, '').trim();
+  return source.replace(withUnit, '').replace(qtyOnly, '').replace(unitOnly, '').trim();
 }
 
 function normalizedMergeIngredientName(value) {
@@ -346,7 +347,7 @@ function extractLeadingQuantityUnit(value) {
   if (!source) return { matched: false, qty: null, unit: '', name: '' };
 
   const qtyPattern = '(?:\\d+(?:\\s+\\d+\\/\\d+)?|\\d+\\/\\d+|\\d*\\.\\d+|[¼½¾⅐⅑⅒⅓⅔⅕⅖⅗⅘⅙⅚⅛⅜⅝⅞])';
-  const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
+  const unitPattern = '(?:cups?|cup|tbsp|tablespoons?|tablesppons?|tsp|teaspoons?|g|grams?|kg|kilograms?|ml|millilit(?:er|re)s?|l|lit(?:er|re)s?|oz|ounces?|lb|pounds?|pinch(?:es)?|dash(?:es)?|cloves?|cans?|slices?|pieces?)';
 
   const withUnit = source.match(new RegExp(`^\\s*(${qtyPattern})\\s*(${unitPattern})\\b\\s*[,;:-]?\\s*(.+)$`, 'i'));
   if (withUnit) {
@@ -355,6 +356,16 @@ function extractLeadingQuantityUnit(value) {
       qty: parseFractionLikeInventory(withUnit[1]),
       unit: normalizeUnit(withUnit[2]),
       name: String(withUnit[3] || '').trim()
+    };
+  }
+
+  const unitOnly = source.match(new RegExp(`^\\s*(${unitPattern})\\b\\s*[,;:-]?\\s*(.+)$`, 'i'));
+  if (unitOnly) {
+    return {
+      matched: true,
+      qty: null,
+      unit: normalizeUnit(unitOnly[1]),
+      name: String(unitOnly[2] || '').trim()
     };
   }
 
