@@ -49,38 +49,38 @@
       grid-template-columns: repeat(2, minmax(320px, 1fr));
     }
     .ltv-cat {
-      border: 1px solid #cfdbe6;
-      border-radius: 7px;
+      border: 1px solid #262f38;
+      border-radius: 0;
       overflow: hidden;
       background: #fff;
       min-height: 220px;
     }
     .ltv-cat h3 {
       margin: 0;
-      background: #245f91;
-      color: #fff;
+      background: #fff;
+      color: #1e2a33;
       font-size: 0.92rem;
-      padding: 0.46rem 0.58rem;
+      padding: 0.34rem 0.45rem;
+      border-bottom: 1px solid #262f38;
+      text-decoration: underline;
     }
-    .ltv-cat-body { padding: 0.45rem 0.58rem 0.65rem; }
-    .ltv-day { margin-bottom: 0.62rem; }
+    .ltv-cat-body { padding: 0.42rem 0.45rem 0.7rem; }
+    .ltv-day { margin-bottom: 0.8rem; }
     .ltv-day:last-child { margin-bottom: 0; }
     .ltv-day-name {
       font-weight: 700;
-      color: #2d4659;
+      color: #1f2c36;
       margin: 0;
       font-size: 0.9rem;
     }
     .ltv-lines {
-      margin: 0.16rem 0 0;
-      padding: 0;
-      list-style: none;
-      color: #1f3444;
+      margin: 0.12rem 0 0;
+      color: #1f2c36;
       font-size: 0.89rem;
-      line-height: 1.32;
+      line-height: 1.34;
+      white-space: normal;
     }
-    .ltv-lines li { margin: 0.12rem 0; }
-    .ltv-empty { color: #8498aa; }
+    .ltv-empty { color: #778899; }
     @media (max-width: 980px) {
       .ltv-grid { grid-template-columns: 1fr; }
     }
@@ -89,6 +89,12 @@
       #printArea, #printArea * { visibility: visible !important; }
       #printArea { position: absolute; inset: 0; background: #fff; }
       .ltv-card:first-child { display: none !important; }
+      .ltv-wrap { max-width: none; margin: 0; padding: 0; }
+      .ltv-card { border: none; border-radius: 0; box-shadow: none; padding: 0; margin: 0; }
+      .ltv-grid { gap: 0.55rem; }
+      .ltv-cat { min-height: 210px; break-inside: avoid; }
+      .ltv-cat h3 { font-size: 0.9rem; padding: 0.2rem 0.38rem; }
+      .ltv-day-name, .ltv-lines { font-size: 0.86rem; }
     }
   </style>
 </head>
@@ -305,13 +311,13 @@
       const rows = Array.isArray(dayRows) ? dayRows : [];
       const visible = rows.filter((r) => !isNonShoppingMetadataItem(r && r.item_name));
       if (!visible.length) return '<div class="ltv-empty">-</div>';
-      return '<ul class="ltv-lines">' + visible.map((r) => {
+      return '<div class="ltv-lines">' + visible.map((r) => {
         const purchase = toPurchaseUnit(r.final_qty, r.base_unit);
         const qtyPart = purchase.qty ? (purchase.qty + ' ') : '';
         const unitPart = purchase.unit ? (purchase.unit + ' ') : '';
         const notesPart = r && r.notes ? (' - ' + String(r.notes)) : '';
-        return '<li>' + esc(qtyPart + unitPart + String((r && r.item_name) || '') + notesPart).trim() + '</li>';
-      }).join('') + '</ul>';
+        return esc((qtyPart + unitPart + String((r && r.item_name) || '') + notesPart).trim());
+      }).join('<br>') + '</div>';
     }
 
     function renderCategoryCard(title, dayMap) {
