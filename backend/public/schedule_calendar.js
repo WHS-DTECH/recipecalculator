@@ -26,6 +26,7 @@ const bookingPageLabel = (window && window.bookingPageLabel) ? String(window.boo
 const bookClassSharedStateKey = 'bookClassEmbedSharedState';
 const bookClassSharedChannelName = 'bookClassEmbedSharedChannel';
 const scheduleViewModeStorageKey = 'scheduleViewMode';
+const plannerSyncTokenStorageKey = 'plannerSyncToken';
 const schedulePageParams = new URLSearchParams(window.location.search);
 const schedulePresetBookingId = parseInt(String(schedulePageParams.get('booking_id') || ''), 10);
 const schedulePresetWeekStart = String(schedulePageParams.get('week_start') || '').trim();
@@ -192,6 +193,43 @@ function showInfoToast(message) {
     return;
   }
   alert(text);
+}
+
+function getStoredPlannerSyncToken() {
+  return String(localStorage.getItem(plannerSyncTokenStorageKey) || '').trim();
+}
+
+function setStoredPlannerSyncToken(token) {
+  const normalized = String(token || '').trim();
+  if (normalized) {
+    localStorage.setItem(plannerSyncTokenStorageKey, normalized);
+  } else {
+    localStorage.removeItem(plannerSyncTokenStorageKey);
+  }
+}
+
+function promptForPlannerSyncToken() {
+  const existing = getStoredPlannerSyncToken();
+  const entered = window.prompt('Enter planner sync token (only needed if server token protection is enabled):', existing);
+  if (entered == null) return null;
+  const normalized = String(entered || '').trim();
+  setStoredPlannerSyncToken(normalized);
+  return normalized;
+}
+
+async function postPlannerDedupe(token) {
+  const headers = { 'Content-Type': 'application/json' };
+  const normalizedToken = String(token || '').trim();
+  if (normalizedToken) {
+    headers['x-planner-sync-token'] = normalizedToken;
+  }
+  const res = await fetch('/google/dedupe-planners', {
+    method: 'POST',
+    credentials: 'include',
+    headers
+  });
+  const data = await res.json().catch(() => ({}));
+  return { res, data };
 }
 
 async function fetchLinkedRecipesForBooking(bookingId) {
@@ -1972,6 +2010,44 @@ document.addEventListener('DOMContentLoaded', () => {
       } finally {
         syncFromPlannerBtn.disabled = false;
         syncFromPlannerBtn.textContent = '\u21ba Sync from Planner';
+      }
+    };
+  }
+
+  const dedupePlannerEntriesBtn = document.getElementById('dedupePlannerEntriesBtn');
+  if (dedupePlannerEntriesBtn) {
+    dedupePlannerEntriesBtn.onclick = async () => {
+      dedupePlannerEntriesBtn.disabled = true;
+      dedupePlannerEntriesBtn.textContent = 'Deduping...';
+      try {
+        let token = getStoredPlannerSyncToken();
+        let attempt = await postPlannerDedupe(token);
+
+        if (attempt.res.status === 403) {
+          token = promptForPlannerSyncToken();
+          if (token == null) {
+            showInfoToast('Planner dedupe cancelled.');
+            return;
+          }
+          attempt = await postPlannerDedupe(token);
+        }
+
+        if (!attempt.res.ok || !attempt.data || attempt.data.success !== true) {
+          const errMsg = (attempt.data && attempt.data.error)
+            ? String(attempt.data.error)
+            : 'Planner dedupe failed.';
+          showInfoToast(errMsg);
+          return;
+        }
+
+        const deduped = Number(attempt.data.deduped || 0);
+        showInfoToast(`Planner dedupe complete. Removed ${deduped} duplicate row${deduped === 1 ? '' : 's'}.`);
+        await renderScheduleCalendar();
+      } catch (err) {
+        showInfoToast('Planner dedupe error: ' + (err && err.message ? err.message : 'Unknown error'));
+      } finally {
+        dedupePlannerEntriesBtn.disabled = false;
+        dedupePlannerEntriesBtn.textContent = 'Dedupe Planner Entries';
       }
     };
   }
