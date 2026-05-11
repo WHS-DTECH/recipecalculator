@@ -403,8 +403,10 @@
     function mergeNameKey(value) {
       let s = String(value || '').toLowerCase().trim();
       if (!s) return '';
+      if (/spring\s*onions?/i.test(s)) return 'spring onion';
       s = s
         .replace(/\b(finely|thinly|roughly|lightly|shredded|sliced|chopped|beaten)\b/g, ' ')
+        .replace(/[^a-z0-9\s]/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
       s = s
