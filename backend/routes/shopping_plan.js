@@ -1250,6 +1250,107 @@ router.put('/:id/items', requireAdmin, async (req, res) => {
 });
 
 // ===========================================================================
+// POST /api/shopping-plan/:id/fix-legacy-units
+// One-click repair for legacy rows that were saved before improved unit parsing.
+// Normalizes unit aliases/typos and cleans item names that include leading units.
+// Draft plans only.
+// ===========================================================================
+router.post('/:id/fix-legacy-units', requireAdmin, async (req, res) => {
+  await ensureSchema();
+  const planId = parseInt(req.params.id, 10);
+  if (!Number.isInteger(planId) || planId <= 0) {
+    return res.status(400).json({ success: false, error: 'Invalid plan ID.' });
+  }
+
+  const email = requestEmail(req);
+
+  try {
+    const planRes = await pool.query('SELECT status FROM shopping_plan WHERE id = $1', [planId]);
+    if (planRes.rowCount === 0) {
+      return res.status(404).json({ success: false, error: 'Plan not found.' });
+    }
+    if (String(planRes.rows[0].status || '').toLowerCase() !== 'draft') {
+      return res.status(409).json({ success: false, error: 'Only draft plans can be repaired.' });
+    }
+
+    const itemsRes = await pool.query(
+      `SELECT id, item_name, normalized_item_key, base_unit, calculated_qty, source_detail_json
+       FROM shopping_plan_items
+       WHERE plan_id = $1
+       ORDER BY id`,
+      [planId]
+    );
+
+    let rowsUpdated = 0;
+    let unitsInferred = 0;
+    let namesCleaned = 0;
+
+    for (const item of itemsRes.rows) {
+      const currentName = String(item.item_name || '').trim();
+      const currentUnit = normalizeUnit(item.base_unit);
+
+      let nextUnit = currentUnit;
+      const fromSourceUnit = (Array.isArray(item.source_detail_json)
+        ? item.source_detail_json.map((s) => normalizeUnit(s && s.unit)).find(Boolean)
+        : '') || '';
+
+      const parsed = extractQuantityUnitFromText(currentName);
+      if (!nextUnit && fromSourceUnit) {
+        nextUnit = fromSourceUnit;
+      }
+      if (!nextUnit && parsed.unit) {
+        nextUnit = normalizeUnit(parsed.unit);
+      }
+      if (!nextUnit && Number(item.calculated_qty) > 0 && Number.isFinite(parsed.qty)) {
+        nextUnit = 'each';
+      }
+
+      const cleanedName = cleanIngredientName(parsed.name || currentName);
+      const sanitizedName = sanitizeCorruptedIngredientName(cleanedName || currentName, nextUnit || currentUnit);
+      const nextName = String(sanitizedName || currentName).trim() || currentName;
+      const nextNormalizedKey = normalizeKey(normalizedMergeIngredientName(nextName) || nextName);
+
+      const changedUnit = nextUnit !== currentUnit;
+      const changedName = nextName !== currentName;
+      const changedKey = nextNormalizedKey !== normalizeKey(item.normalized_item_key || currentName);
+      if (!changedUnit && !changedName && !changedKey) continue;
+
+      await pool.query(
+        `UPDATE shopping_plan_items
+         SET item_name = $1,
+             normalized_item_key = $2,
+             base_unit = $3,
+             edited_by = $4,
+             edited_at = NOW()
+         WHERE id = $5 AND plan_id = $6`,
+        [
+          nextName,
+          nextNormalizedKey || null,
+          nextUnit || null,
+          email,
+          item.id,
+          planId
+        ]
+      );
+
+      rowsUpdated += 1;
+      if (changedUnit && !currentUnit && nextUnit) unitsInferred += 1;
+      if (changedName) namesCleaned += 1;
+    }
+
+    return res.json({
+      success: true,
+      updated: rowsUpdated,
+      units_inferred: unitsInferred,
+      names_cleaned: namesCleaned
+    });
+  } catch (err) {
+    console.error('[shopping-plan] POST /:id/fix-legacy-units error:', err.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ===========================================================================
 // POST /api/shopping-plan/:id/finalize
 // Compute final_qty for every item, then lock the plan to status=finalized.
 // Blocks on: negative quantities, NaN quantities for items that have a unit.

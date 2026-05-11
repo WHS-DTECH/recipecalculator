@@ -219,6 +219,7 @@
           <p class="spe-control-note">Update draft items, then finalize and move to technician view.</p>
           <div class="spe-actions-grid">
             <button id="generateDraftBtn" class="spe-btn secondary" type="button">Regenerate Draft</button>
+            <button id="fixLegacyUnitsBtn" class="spe-btn secondary" type="button">Fix Legacy Units</button>
             <button id="addRowBtn" class="spe-btn secondary" type="button">Add Manual Row</button>
             <button id="saveBtn" class="spe-btn success" type="button">Save Draft</button>
             <button id="finalizeBtn" class="spe-btn warn" type="button">Finalize Plan</button>
@@ -296,6 +297,7 @@
     const saveBtn = document.getElementById('saveBtn');
     const finalizeBtn = document.getElementById('finalizeBtn');
     const generateDraftBtn = document.getElementById('generateDraftBtn');
+    const fixLegacyUnitsBtn = document.getElementById('fixLegacyUnitsBtn');
     const addRowBtn = document.getElementById('addRowBtn');
     const itemsBody = document.getElementById('itemsBody');
     const topStatus = document.getElementById('topStatus');
@@ -536,6 +538,7 @@
         + ' | Status: ' + formatPlanStatus(currentPlan.status);
       finalizeBtn.disabled = currentPlan.status !== 'draft';
       generateDraftBtn.disabled = currentPlan.status !== 'draft';
+      if (fixLegacyUnitsBtn) fixLegacyUnitsBtn.disabled = currentPlan.status !== 'draft';
       saveBtn.disabled = currentPlan.status !== 'draft';
       addRowBtn.disabled = currentPlan.status !== 'draft';
 
@@ -609,6 +612,28 @@
         msg += ' ' + skippedAutofill + ' class(es) still need recipe, class size, groups, or inventory ingredients.';
       }
       setStatus(msg, 'ok');
+      await loadPlan(currentPlan.id);
+    }
+
+    async function fixLegacyUnits() {
+      if (!currentPlan) return;
+      if (currentPlan.status !== 'draft') {
+        setStatus('Plan is finalized and cannot be repaired.', 'err');
+        return;
+      }
+
+      setStatus('Repairing legacy unit rows...', '');
+      const resp = await fetch('/api/shopping-plan/' + currentPlan.id + '/fix-legacy-units', {
+        method: 'POST',
+        credentials: 'include'
+      });
+      const payload = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(payload.error || 'Legacy unit repair failed.');
+
+      const updated = Number(payload.updated || 0);
+      const units = Number(payload.units_inferred || 0);
+      const names = Number(payload.names_cleaned || 0);
+      setStatus('Legacy unit repair complete: ' + updated + ' row(s) updated, ' + units + ' unit(s) inferred, ' + names + ' name(s) cleaned.', 'ok');
       await loadPlan(currentPlan.id);
     }
 
@@ -695,6 +720,11 @@
     generateDraftBtn.addEventListener('click', async () => {
       try { await regenerateDraft(); } catch (err) { setStatus(err.message, 'err'); }
     });
+    if (fixLegacyUnitsBtn) {
+      fixLegacyUnitsBtn.addEventListener('click', async () => {
+        try { await fixLegacyUnits(); } catch (err) { setStatus(err.message, 'err'); }
+      });
+    }
     finalizeBtn.addEventListener('click', async () => {
       try { await finalizePlan(); } catch (err) { setStatus(err.message, 'err'); }
     });
