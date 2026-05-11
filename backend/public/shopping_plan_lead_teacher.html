@@ -53,6 +53,7 @@
     .ltv-mini-period { width: 52px; text-align: center; font-weight: 700; background: #f8fbff; color: #35536a; }
     .ltv-mini-cell { min-height: 50px; }
     .ltv-mini-chip { background: #f3f8ff; border: 1px solid #d8e6f7; border-radius: 5px; padding: 0.12rem 0.26rem; margin-bottom: 0.16rem; color: #20465f; line-height: 1.25; display: block; }
+    .ltv-mini-chip:hover { background: #e9f2fd; border-color: #c6ddf6; }
     .ltv-mini-chip:last-child { margin-bottom: 0; }
     .ltv-mini-empty { color: #8ea0b0; text-align: center; }
     .ltv-grid {
@@ -313,7 +314,10 @@
           if (String(b.period || '').toLowerCase() === 'planner') return;
           const primary = String((b.linked_recipe_name || b.recipe || b.class_name || '')).trim();
           const secondary = String((b.staff_name || '')).trim();
-          grid[p][iso].push((primary || 'Booking') + (secondary ? ' - ' + secondary : ''));
+          grid[p][iso].push({
+            id: Number(b.id),
+            text: (primary || 'Booking') + (secondary ? ' - ' + secondary : '')
+          });
         });
 
         let html = '<table class="ltv-mini-table"><thead><tr><th>Period</th>';
@@ -330,7 +334,12 @@
               continue;
             }
             const shown = items.slice(0, 2);
-            let chips = shown.map((text) => '<div class="ltv-mini-chip">' + esc(text) + '</div>').join('');
+            const weekStart = toIsoLocalDate(days[0]);
+            let chips = shown.map((entry) => {
+              const bookingId = Number(entry && entry.id);
+              const href = 'browse_practicals.html?booking_id=' + encodeURIComponent(String(bookingId)) + '&week_start=' + encodeURIComponent(weekStart) + '&auto_print_booking=1';
+              return '<a class="ltv-mini-chip" href="' + esc(href) + '" target="_blank" title="Open worksheet print">' + esc(entry && entry.text ? entry.text : '') + '</a>';
+            }).join('');
             if (items.length > shown.length) {
               chips += '<div class="ltv-mini-chip">+' + (items.length - shown.length) + ' more</div>';
             }
