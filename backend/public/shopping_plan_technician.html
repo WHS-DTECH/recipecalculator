@@ -421,11 +421,28 @@
       return String(fallback || '').trim() || key;
     }
 
+    function isNonShoppingMetadataItem(nameValue) {
+      const raw = String(nameValue || '').trim();
+      if (!raw) return true;
+      const normalized = raw
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!normalized) return true;
+      if (/^serves(\s+\d+)+\s+serves?$/.test(normalized)) return true;
+      if (/\b(total\s+fat|saturated\s+fat|carbohydrate|sugars?|sodium|dietary\s+fib(?:re|er)|protein|energy|kilojoules?|kj)\b/.test(normalized)) {
+        return true;
+      }
+      return false;
+    }
+
     function mergeRows(rows) {
       const list = Array.isArray(rows) ? rows : [];
       const map = new Map();
 
       list.forEach((r) => {
+        if (isNonShoppingMetadataItem(r && r.item_name)) return;
         const unit = normalizeUnit(r && r.base_unit) || String((r && r.base_unit) || '').trim().toLowerCase();
         const keyName = mergeNameKey(r && r.item_name);
         const mergeKey = keyName + '||' + unit;

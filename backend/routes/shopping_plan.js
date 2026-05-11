@@ -268,29 +268,39 @@ function sanitizeCorruptedIngredientName(nameValue, unitValue) {
   return name;
 }
 
-function isNonIngredientNoise(nameValue) {
+function isNonShoppingMetadataIngredient(nameValue) {
   const raw = String(nameValue || '').trim();
   if (!raw) return true;
-  const v = raw.toLowerCase().replace(/\s+/g, ' ').trim();
 
-  // Nutrition table labels and meta rows that should never become shopping items.
-  const exactNoise = new Set([
-    'total fat',
-    'saturated fat',
-    'total carbohydrate',
-    'dietary fibre',
+  const normalized = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!normalized) return true;
+
+  if (/^serves(\s+\d+)+\s+serves?$/.test(normalized)) return true;
+
+  const exactMeta = new Set([
+    'kj total fat',
+    'kj',
+    'mg',
     'sodium',
+    'dietary fibre',
+    'dietary fiber',
+    'total carbohydrate',
+    'total carbohydrates',
+    'saturated fat',
     'sugars',
     'protein',
-    'energy',
-    'mg'
+    'energy'
   ]);
-  if (exactNoise.has(v)) return true;
+  if (exactMeta.has(normalized)) return true;
 
-  if (/^serves\b/.test(v)) return true;
-  if (/\bserves\s+\d+\s+serves\s+\d+/.test(v)) return true;
-  if (/\b(total\s+fat|saturated\s+fat|total\s+carbohydrate|dietary\s*fibre|sugars?|sodium)\b/.test(v) && /\d/.test(v)) return true;
-  if (/^(\d+(?:\.\d+)?)\s*(kj|kcal|mg)\b/.test(v)) return true;
+  if (/\b(total\s+fat|saturated\s+fat|carbohydrate|sugars?|sodium|dietary\s+fib(?:re|er)|protein|energy|kilojoules?|kj)\b/.test(normalized)) {
+    return true;
+  }
 
   return false;
 }
@@ -855,7 +865,6 @@ router.post('/:id/generate-draft', requireAdmin, async (req, res) => {
         ? rawName
         : rawSourceName;
       const displayName = sanitizeCorruptedIngredientName(displayNameRaw, canonicalUnit || unit);
-      if (isNonIngredientNoise(displayName)) continue;
       let resolvedSubAisle = String(row.category || 'Uncategorised').trim() || 'Uncategorised';
       let resolvedCategory = String(row.master_category || resolvedSubAisle || 'Uncategorised').trim() || 'Uncategorised';
       const matchedCategory = resolveCategoryFromKeywords(displayName, aisleKeywords);
@@ -1429,6 +1438,9 @@ router.get('/:id/technician-view', async (req, res) => {
     for (const item of itemsRes.rows) {
       const brandedName = stripFoodBrandFromItemName(item.item_name, brands) || item.item_name;
       const displayName = sanitizeCorruptedIngredientName(brandedName, item.base_unit);
+      if (isNonShoppingMetadataIngredient(displayName)) {
+        continue;
+      }
       const normalized = enforceCriticalCategory(displayName, item.category, item.sub_aisle);
       const cat = normalized.master || item.category || 'Uncategorised';
 
