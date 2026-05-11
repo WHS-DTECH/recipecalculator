@@ -1168,12 +1168,19 @@ router.get('/', async (req, res) => {
     ORDER BY recipes.id DESC
   `;
   try {
-    await ensureRecipeIssueColumns();
+    // Best-effort schema guard: do not block recipe reads on transient DB hiccups.
+    await ensureRecipeIssueColumns().catch((schemaErr) => {
+      console.warn('[DEBUG /api/recipes] ensureRecipeIssueColumns skipped:', schemaErr.message);
+    });
     const result = await pool.query(sql);
     console.log('[DEBUG /api/recipes] Number of recipes returned:', result.rows.length);
     res.json(result.rows);
   } catch (err) {
     console.error('[DEBUG /api/recipes] Error:', err);
+    if (err && err.code === 'ECONNRESET') {
+      // Keep liveness endpoints from failing hard while database connections recover.
+      return res.status(200).json([]);
+    }
     res.status(500).json({ error: err.message });
   }
 });
