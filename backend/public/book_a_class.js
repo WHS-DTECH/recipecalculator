@@ -1500,7 +1500,12 @@ function getStaffIdByName(staffName) {
 
 // --- Fetch and Render Bookings ---
 function fetchAndRenderBookings() {
-  fetch('/api/bookings/all')
+  const scheduledSection = document.getElementById('adminScheduledBookingsSection');
+  if (isTeacherEmbedView || !scheduledSection || scheduledSection.offsetParent === null) {
+    return;
+  }
+
+  fetch('/api/bookings/all', { credentials: 'include' })
     .then(res => res.json())
     .then(data => {
       renderBookings(data.bookings || []);

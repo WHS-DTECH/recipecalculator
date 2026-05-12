@@ -127,6 +127,7 @@ async function ensureSchema() {
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS partner_student_id TEXT");
   await pool.query("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS groups INTEGER");
   await pool.query("UPDATE bookings SET planner_stream='Middle' WHERE planner_stream IS NULL OR planner_stream=''");
+  await pool.query("UPDATE bookings SET class_name = regexp_replace(class_name, 'HSOP', 'HOSP', 'gi') WHERE period = 'Planner' AND upper(coalesce(class_name, '')) LIKE '%HSOP%'");
   schemaReady = true;
 }
 
@@ -159,7 +160,7 @@ function getLegacyClassNamesForStream(stream) {
 }
 
 function inferPlannerStreamFromCode(code) {
-  const value = String(code || '').trim().toUpperCase();
+  const value = normalizeHospTypo(String(code || '').trim().toUpperCase());
   if (!value) return 'Other';
   if (JUNIOR_FOOD_RE.test(value)) return 'Junior';
   if (value.includes('HOSP')) return 'Senior';
@@ -195,6 +196,11 @@ function normalizeClassToken(value) {
   return String(value || '').trim().toUpperCase();
 }
 
+function normalizeHospTypo(value) {
+  // Common planner typo: HSOP -> HOSP
+  return String(value || '').replace(/HSOP/gi, 'HOSP');
+}
+
 function normalizeRecipeId(value) {
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed <= 0) return null;
@@ -202,7 +208,7 @@ function normalizeRecipeId(value) {
 }
 
 function inferStreamFromClassToken(classToken) {
-  const value = normalizeClassToken(classToken);
+  const value = normalizeHospTypo(normalizeClassToken(classToken));
   if (!value) return '';
   if (value.includes('HOSP')) return 'Senior';
   if (JUNIOR_FOOD_RE.test(value)) return 'Junior';
@@ -213,7 +219,7 @@ function inferStreamFromClassToken(classToken) {
 // Extract a planner class code that can uniquely identify stream variants,
 // for example 11HOSP vs 13HOSP, or JFOOD vs MFOOD.
 function inferPlannerClassCode(classToken) {
-  const value = normalizeClassToken(classToken);
+  const value = normalizeHospTypo(normalizeClassToken(classToken));
   if (!value) return '';
 
   const hospMatch = value.match(/(?:^|[-_])((?:\d{2,3})HOSP)(?:[-_]|$)/);
@@ -282,7 +288,7 @@ router.put('/:id', requireSignedIn, async (req, res) => {
   const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id, groups } = req.body;
   try {
     await ensureSchema();
-    await pool.query(
+    const updateResult = await pool.query(
       "UPDATE bookings SET staff_id=$1, staff_name=$2, class_name=$3, booking_date=$4, period=$5, recipe=$6, recipe_url=$7, recipe_id=$8, class_size=$9, planner_stream=COALESCE($10, planner_stream, 'Middle'), cook_mode=$11, partner_student_name=$12, partner_student_id=$13, groups=$14 WHERE id=$15",
       [
         staff_id,
@@ -302,6 +308,9 @@ router.put('/:id', requireSignedIn, async (req, res) => {
         req.params.id
       ]
     );
+    if (!updateResult.rowCount) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
     res.json({ success: true });
   } catch (err) {
     console.error('Failed to update booking:', err.message);
@@ -406,11 +415,11 @@ router.delete('/:id', requireSignedIn, async (req, res) => {
 
 // Create a new booking
 router.post('/', requireSignedIn, async (req, res) => {
-  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id } = req.body;
+  const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id, groups } = req.body;
   try {
     await ensureSchema();
     const result = await pool.query(
-      "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id",
+      "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream, cook_mode, partner_student_name, partner_student_id, groups) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING id",
       [
         staff_id,
         staff_name,
@@ -424,7 +433,8 @@ router.post('/', requireSignedIn, async (req, res) => {
         planner_stream || 'Middle',
         cook_mode || null,
         partner_student_name || null,
-        partner_student_id || null
+        partner_student_id || null,
+        groups || null
       ]
     );
     res.json({ success: true, booking_id: result.rows[0].id });
@@ -472,9 +482,10 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
     let updated = 0;
     for (const b of items) {
       const { staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream } = b;
+      const normalizedClassName = normalizeHospTypo(String(class_name || '').trim());
       const streamVal = planner_stream || 'Middle';
       const dateVal = String(booking_date || '').slice(0, 10);
-      const classKey = String(class_name || '').trim().toUpperCase();
+      const classKey = normalizedClassName.toUpperCase();
       const dedupKey = `${dateVal}|${streamVal}|${classKey}`;
 
       const existing = existingPlannerMap.get(dedupKey);
@@ -483,25 +494,25 @@ router.post('/batch', requirePlanningRole, async (req, res) => {
         const sameRecipe = String(existing.recipe || '').trim() === String(recipe || '').trim();
         const sameUrl = String(existing.recipe_url || '').trim() === String(recipe_url || '').trim();
         const sameId = String(existing.recipe_id || '') === String(recipe_id || '');
-        const sameClassName = String(existing.class_name || '').trim() === String(class_name || '').trim();
+        const sameClassName = String(existing.class_name || '').trim() === normalizedClassName;
         if (sameRecipe && sameUrl && sameId && sameClassName) {
           skipped += 1;
         } else {
           // Planner details changed — update the existing row so the chip label stays in sync.
           await pool.query(
             `UPDATE bookings SET class_name=$1, recipe=$2, recipe_url=$3, recipe_id=$4 WHERE id=$5`,
-            [class_name, recipe, recipe_url || '', recipe_id || null, existing.id]
+            [normalizedClassName, recipe, recipe_url || '', recipe_id || null, existing.id]
           );
           ids.push(existing.id);
           updated += 1;
-          existingPlannerMap.set(dedupKey, { ...existing, class_name, recipe, recipe_url, recipe_id });
+          existingPlannerMap.set(dedupKey, { ...existing, class_name: normalizedClassName, recipe, recipe_url, recipe_id });
         }
         continue;
       }
 
       const result = await pool.query(
         "INSERT INTO bookings (staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, planner_stream) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id",
-        [staff_id, staff_name, class_name, booking_date, period, recipe, recipe_url, recipe_id, class_size, streamVal]
+        [staff_id, staff_name, normalizedClassName, booking_date, period, recipe, recipe_url, recipe_id, class_size, streamVal]
       );
       ids.push(result.rows[0].id);
       existingPlannerMap.set(dedupKey, { id: result.rows[0].id, recipe, recipe_url, recipe_id }); // prevent dupes within same batch
@@ -1345,7 +1356,7 @@ router.get('/planner-range', async (req, res) => {
 //   - Default date window: ±120 days
 //   - Row limit: 1500 default, 4000 max
 //   - Transfer logging enabled
-router.get('/all', async (req, res) => {
+router.get('/all', requireSignedIn, async (req, res) => {
   try {
     await ensureSchema();
     const { start, end, staff_id, planner_stream } = req.query;

@@ -166,6 +166,9 @@ router.get('/by-class/:ttcode', async (req, res) => {
 
   // Precise 3-way token: staffCode + subject + room, e.g. RR-MFOOD-F
   const exactStudentToken = (staffCode && useCore) ? `${staffCode}-${coreSuffix}` : null;
+  const compactToken = String(ttcode || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const compactCore = String(coreSuffix || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const compactExactStudent = String(exactStudentToken || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase();
 
   function buildExactConditions(token) {
     const params = [];
@@ -217,7 +220,36 @@ router.get('/by-class/:ttcode', async (req, res) => {
        ORDER BY student_name, id_number`,
       params2
     );
-    res.json({ students: result.rows });
+    if (result.rows.length > 0) {
+      return res.json({ students: result.rows });
+    }
+
+    // Phase 3: normalized compact fallback for token format variations
+    // (e.g. RR-HOSP-COOK-F vs RR-HOSPCOOK-F, punctuation differences).
+    const compactCandidates = [compactExactStudent, compactCore, compactToken].filter(Boolean);
+    if (!compactCandidates.length) {
+      return res.json({ students: [] });
+    }
+
+    const compactParams = [];
+    const compactConditions = PERIOD_COLUMNS.map((col) => {
+      const normalizedCol = `upper(regexp_replace(coalesce(${col}, ''), '[^A-Za-z0-9]', '', 'g'))`;
+      const perCol = compactCandidates.map((candidate) => {
+        compactParams.push(candidate);
+        return `${normalizedCol} LIKE '%' || $${compactParams.length} || '%'`;
+      });
+      return `(${perCol.join(' OR ')})`;
+    });
+
+    const compactResult = await pool.query(
+      `SELECT id, student_name, id_number, form_class, year_level
+       FROM student_timetable
+       WHERE COALESCE(status, 'Current') = 'Current'
+         AND (${compactConditions.join(' OR ')})
+       ORDER BY student_name, id_number`,
+      compactParams
+    );
+    return res.json({ students: compactResult.rows });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch students for class.' });
   }
