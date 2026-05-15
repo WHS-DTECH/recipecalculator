@@ -211,30 +211,51 @@ window.OpsWorkspace = (() => {
     const el = document.getElementById(containerId);
     if (!el) return;
     if (!Array.isArray(rows) || rows.length === 0) {
-      el.innerHTML = `<div class="ops-empty">${escapeHtml(emptyMessage || 'No rows to display.')}</div>`;
+      el.innerHTML = `<div class="ops-empty">${escapeHtml(emptyMessage || 'No rows to display.')}<br><span style='color:#8a2d2d;font-size:0.98em;'>Tip: Try adjusting your filters, or check if data is available for your selection.</span></div>`;
       return;
     }
+
+    // Filtering state (per table)
+    let filter = '';
+    const filterKey = `opsTableFilter_${containerId}`;
+    try {
+      const stored = sessionStorage.getItem(filterKey);
+      if (stored) filter = stored;
+    } catch (_) {}
 
     // Pagination state (per table)
     const PAGE_SIZE = 20;
     let page = 1;
-    const totalPages = Math.ceil(rows.length / PAGE_SIZE);
-    // Try to persist page state per table in sessionStorage
+    let filteredRows = rows;
     const pageKey = `opsTablePage_${containerId}`;
+    function applyFilter() {
+      if (!filter) return rows;
+      const f = filter.toLowerCase();
+      return rows.filter(row => Object.values(row).some(val => String(val).toLowerCase().includes(f)));
+    }
+    filteredRows = applyFilter();
+    let totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
     try {
       const stored = sessionStorage.getItem(pageKey);
       if (stored) page = Math.max(1, Math.min(totalPages, parseInt(stored, 10)));
     } catch (_) {}
 
     function renderPage() {
+      filteredRows = applyFilter();
+      totalPages = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+      if (page > totalPages) page = totalPages;
       const start = (page - 1) * PAGE_SIZE;
       const end = start + PAGE_SIZE;
-      const pageRows = rows.slice(start, end);
+      const pageRows = filteredRows.slice(start, end);
       el.innerHTML = `
+        <div class="ops-table-toolbar" style="margin-bottom:0.5em;display:flex;align-items:center;gap:0.7em;">
+          <label for="${containerId}_filter" style="font-size:0.98em;">Filter:</label>
+          <input id="${containerId}_filter" class="ops-input" type="search" value="${escapeHtml(filter)}" placeholder="Type to filter..." style="max-width:220px;" aria-label="Filter table" />
+        </div>
         <div class="ops-table-wrap">
           <table class="ops-table" aria-label="Data table, page ${page} of ${totalPages}">
             <thead>
-              <tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
+              <tr>${columns.map((column) => `<th title="${escapeHtml(column.copy || column.label)}">${escapeHtml(column.label)}</th>`).join('')}</tr>
             </thead>
             <tbody>
               ${pageRows.map((row) => `
@@ -251,11 +272,21 @@ window.OpsWorkspace = (() => {
         </div>
         <nav class="ops-pagination" aria-label="Table pagination" style="margin-top:0.7em;display:${totalPages>1?'flex':'none'};align-items:center;gap:0.5em;">
           <button class="ops-button" aria-label="Previous page" ${page===1?'disabled':''} tabindex="0">Prev</button>
-          <span aria-live="polite" style="font-size:0.98em;">Page ${page} of ${totalPages}</span>
+          <span aria-live="polite" style="font-size:0.98em;">Page ${page} of ${totalPages} (${filteredRows.length} row${filteredRows.length!==1?'s':''})</span>
           <button class="ops-button" aria-label="Next page" ${page===totalPages?'disabled':''} tabindex="0">Next</button>
         </nav>
       `;
       // Add event listeners for pagination
+      const [filterInput] = el.querySelectorAll(`#${containerId}_filter`);
+      if (filterInput) {
+        filterInput.oninput = (e) => {
+          filter = e.target.value;
+          try{sessionStorage.setItem(filterKey, filter);}catch(_){}
+          page = 1;
+          try{sessionStorage.setItem(pageKey, page);}catch(_){}
+          renderPage();
+        };
+      }
       const [prevBtn, , nextBtn] = el.querySelectorAll('.ops-pagination button');
       if (prevBtn) prevBtn.onclick = () => { page = Math.max(1, page - 1); try{sessionStorage.setItem(pageKey, page);}catch(_){} renderPage(); };
       if (nextBtn) nextBtn.onclick = () => { page = Math.min(totalPages, page + 1); try{sessionStorage.setItem(pageKey, page);}catch(_){} renderPage(); };
