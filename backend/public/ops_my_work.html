@@ -14,16 +14,16 @@
   <script src="shared/navbar_loader.js"></script>
 </head>
 <body class="ops-body" data-ops-page="my_work">
-  <main class="ops-page">
-    <section class="ops-hero">
+  <main class="ops-page" aria-label="My Recipes And Classes Main Content">
+    <section class="ops-hero" aria-labelledby="opsTitle" tabindex="0">
       <h1 id="opsTitle" class="ops-title">My Recipes And Classes</h1>
       <p id="opsSubtitle" class="ops-subtitle"></p>
-      <div id="opsChipRow" class="ops-chip-row"></div>
+      <div id="opsChipRow" class="ops-chip-row" role="status" aria-live="polite"></div>
     </section>
-    <section id="opsSummary"></section>
-    <section class="ops-grid two-column">
-      <div id="opsPrimary" class="ops-grid"></div>
-      <aside id="opsSecondary" class="ops-grid"></aside>
+    <section id="opsSummary" aria-label="Summary Statistics"></section>
+    <section class="ops-grid two-column" aria-label="My Recipes And Classes Content Grid">
+      <div id="opsPrimary" class="ops-grid" tabindex="0" aria-label="Primary Content"></div>
+      <aside id="opsSecondary" class="ops-grid" tabindex="0" aria-label="Secondary Content"></aside>
     </section>
   </main>
   <script src="shared/ops_workspace.js"></script>
