@@ -1,3 +1,21 @@
+/* Breadcrumbs styling */
+.ops-breadcrumbs {
+  margin: 0 0 1.2em 0;
+  font-size: 1.05em;
+  color: #3a4a5e;
+  letter-spacing: 0.01em;
+}
+.ops-breadcrumbs a {
+  color: #214f78;
+  text-decoration: underline;
+  font-weight: 500;
+}
+.ops-breadcrumbs span[aria-current="page"] {
+  color: #1a2a3a;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: default;
+}
 :root {
   --ops-bg: #f3f7fb;
   --ops-surface: #ffffff;
