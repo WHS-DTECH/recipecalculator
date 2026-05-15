@@ -902,7 +902,18 @@ const OpsPages = (() => {
     Ops.renderTable(
       'accountAssignmentsTable',
       [
-        { label: 'User', render: (user) => escape(user.user_label || user.user_identifier || 'Unknown') },
+        { label: 'User', render: (user) => {
+            // Mask email/ID for privacy
+            let label = user.user_label || user.user_identifier || 'Unknown';
+            if (label && label.includes('@')) {
+              const [name, domain] = label.split('@');
+              label = name.slice(0,2) + '***@' + domain;
+            } else if (/\d{4,}/.test(label)) {
+              label = label.slice(0,2) + '***' + label.slice(-2);
+            }
+            return escape(label);
+          }
+        },
         { label: 'Type', render: (user) => escape(user.user_type || 'Unknown') },
         { label: 'Roles', render: (user) => escape((user.roles || []).join(', ') || 'None') }
       ],
