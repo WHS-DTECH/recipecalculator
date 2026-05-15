@@ -131,7 +131,13 @@ const OpsPages = (() => {
   }
 
   function renderError(message) {
-    setSections(`<div class="ops-error">${escape(message)}</div>`, '');
+    setSections(`
+      <div class="ops-error">
+        <div style="font-weight:bold;">${escape(message)}</div>
+        <div style="margin-top:0.5em;">If this is a database or API error, please check your connection or contact IT support.</div>
+        <button class="ops-button" style="margin-top:1em;" onclick="window.location.reload()">Retry</button>
+      </div>
+    `, '');
     Ops.renderStats('opsSummary', []);
   }
 
