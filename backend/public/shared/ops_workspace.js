@@ -215,26 +215,52 @@ window.OpsWorkspace = (() => {
       return;
     }
 
-    el.innerHTML = `
-      <div class="ops-table-wrap">
-        <table class="ops-table">
-          <thead>
-            <tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
-          </thead>
-          <tbody>
-            ${rows.map((row) => `
-              <tr>
-                ${columns.map((column) => {
-                  const raw = typeof column.render === 'function' ? column.render(row) : row[column.key];
-                  const value = raw === null || raw === undefined ? '' : String(raw);
-                  return `<td>${value}</td>`;
-                }).join('')}
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
+    // Pagination state (per table)
+    const PAGE_SIZE = 20;
+    let page = 1;
+    const totalPages = Math.ceil(rows.length / PAGE_SIZE);
+    // Try to persist page state per table in sessionStorage
+    const pageKey = `opsTablePage_${containerId}`;
+    try {
+      const stored = sessionStorage.getItem(pageKey);
+      if (stored) page = Math.max(1, Math.min(totalPages, parseInt(stored, 10)));
+    } catch (_) {}
+
+    function renderPage() {
+      const start = (page - 1) * PAGE_SIZE;
+      const end = start + PAGE_SIZE;
+      const pageRows = rows.slice(start, end);
+      el.innerHTML = `
+        <div class="ops-table-wrap">
+          <table class="ops-table" aria-label="Data table, page ${page} of ${totalPages}">
+            <thead>
+              <tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
+            </thead>
+            <tbody>
+              ${pageRows.map((row) => `
+                <tr>
+                  ${columns.map((column) => {
+                    const raw = typeof column.render === 'function' ? column.render(row) : row[column.key];
+                    const value = raw === null || raw === undefined ? '' : String(raw);
+                    return `<td>${value}</td>`;
+                  }).join('')}
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+        <nav class="ops-pagination" aria-label="Table pagination" style="margin-top:0.7em;display:${totalPages>1?'flex':'none'};align-items:center;gap:0.5em;">
+          <button class="ops-button" aria-label="Previous page" ${page===1?'disabled':''} tabindex="0">Prev</button>
+          <span aria-live="polite" style="font-size:0.98em;">Page ${page} of ${totalPages}</span>
+          <button class="ops-button" aria-label="Next page" ${page===totalPages?'disabled':''} tabindex="0">Next</button>
+        </nav>
+      `;
+      // Add event listeners for pagination
+      const [prevBtn, , nextBtn] = el.querySelectorAll('.ops-pagination button');
+      if (prevBtn) prevBtn.onclick = () => { page = Math.max(1, page - 1); try{sessionStorage.setItem(pageKey, page);}catch(_){} renderPage(); };
+      if (nextBtn) nextBtn.onclick = () => { page = Math.min(totalPages, page + 1); try{sessionStorage.setItem(pageKey, page);}catch(_){} renderPage(); };
+    }
+    renderPage();
   }
 
   function tag(text, tone = '') {
