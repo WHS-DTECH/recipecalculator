@@ -25,10 +25,18 @@ const OpsPages = (() => {
     window.history.replaceState({}, '', url);
   }
 
-  function setHero({ title, subtitle, chips = [] }) {
+  // Add status indicator to chips
+  function setHero({ title, subtitle, chips = [], status }) {
     byId('opsTitle').textContent = title;
     byId('opsSubtitle').textContent = subtitle;
-    byId('opsChipRow').innerHTML = chips.map((chip) => Ops.tag(chip.text, chip.tone)).join('');
+    let statusChip = '';
+    if (status) {
+      let tone = status.ok === false ? 'warning' : (status.ok === true ? 'success' : 'danger');
+      let text = status.ok === false ? 'Status unknown' : (status.ok === true ? 'API reachable' : 'API error');
+      if (status.status && status.status !== 'unknown') text += ` (${status.status})`;
+      statusChip = Ops.tag(text, tone);
+    }
+    byId('opsChipRow').innerHTML = [statusChip, ...chips.map((chip) => Ops.tag(chip.text, chip.tone))].join('');
   }
 
   function setSections(primaryHtml, secondaryHtml = '') {
@@ -1082,11 +1090,24 @@ const OpsPages = (() => {
     byId('opsPrimary').innerHTML = '<div class="ops-banner"><strong>Loading page data.</strong> Pulling current data from the available APIs.</div>';
     byId('opsSecondary').innerHTML = '';
 
+    // Fetch status and store for setHero
+    let status = null;
+    try {
+      status = await Ops.getStatus();
+    } catch (e) {
+      status = { ok: null, status: 'error' };
+    }
+    // Patch setHero to always include status
+    const origSetHero = setHero;
+    window.setHero = (opts) => origSetHero({ ...opts, status });
+
     try {
       await render();
     } catch (err) {
       renderError(err && err.message ? err.message : 'Failed to load operations page data.');
     }
+    // Restore setHero
+    window.setHero = origSetHero;
   }
 
   return { renderCurrentPage };

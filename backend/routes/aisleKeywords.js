@@ -9,6 +9,9 @@ let masterKeywordSeedReady = false;
 async function ensureMasterKeywordSchema() {
   if (masterKeywordSchemaReady) return;
 
+  await pool.query('ALTER TABLE aisle_category ADD COLUMN IF NOT EXISTS master_category TEXT');
+  await pool.query("UPDATE aisle_category SET master_category = COALESCE(NULLIF(trim(master_category), ''), name)");
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS aisle_master_keywords (
       id SERIAL PRIMARY KEY,
@@ -205,7 +208,11 @@ router.post('/delete', async (req, res) => {
 // API endpoint to get all aisle keywords with category names
 router.get('/all', async (req, res) => {
   const sql = `
-    SELECT ak.id, ak.keyword, ac.name AS aisle_category
+    SELECT ak.id,
+           ak.keyword,
+           ac.name AS aisle_category,
+           COALESCE(NULLIF(trim(ac.master_category), ''), ac.name) AS master_category,
+           ac.name AS sub_aisle
     FROM aisle_keywords ak
     LEFT JOIN aisle_category ac ON ak.aisle_category_id = ac.id
     ORDER BY COALESCE(ac.sort_order, 9999), ak.keyword
