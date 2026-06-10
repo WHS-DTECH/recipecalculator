@@ -517,13 +517,23 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   function parseBookingDate(value) {
-    return parseLocalIsoDate(value) || new Date(value);
+    const local = parseLocalIsoDate(value);
+    if (local) return local;
+    // Avoid UTC offset shifts: extract YYYY-MM-DD when present.
+    const datePart = String(value || '').match(/^(\d{4}-\d{2}-\d{2})/);
+    if (datePart) {
+      const fromPart = parseLocalIsoDate(datePart[1]);
+      if (fromPart) return fromPart;
+    }
+    return new Date(value);
   }
 
   function getWeekStart(date) {
     const base = new Date(date.getFullYear(), date.getMonth(), date.getDate());
     base.setHours(0, 0, 0, 0);
-    base.setDate(base.getDate() - base.getDay());
+    // School week starts on Monday.
+    const mondayOffset = (base.getDay() + 6) % 7;
+    base.setDate(base.getDate() - mondayOffset);
     return base;
   }
 
@@ -551,9 +561,15 @@ document.addEventListener('DOMContentLoaded', function() {
     return String(row.recipeid || row.recipe_id || row.id || '');
   }
 
+  function normalizeBookingRecipeName(value) {
+    return String(value || '')
+      .replace(/^\s*Recipe\s*:\s*/i, '')
+      .trim();
+  }
+
   function createRecipeCard(row, index, recipeById) {
     const name = row.name || '(No Name)';
-    const recipeNumber = row.recipeid || row.recipe_id || row.id;
+    const recipeNumber = row.recipeid || row.recipe_id || row.id || 'Planner';
     const category = getDishCategory(name);
     const normalizedImageUrl = normalizeRecipeImageUrl(row.image_url);
     const imageUrl = optimizeExternalImageUrl(normalizedImageUrl || getDishImage(name, row.id, category, index));
@@ -578,7 +594,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
     const card = document.createElement('div');
     card.className = 'recipe-card';
-    card.style.cursor = 'pointer';
+    const hasDetailId = String(row.id || '').trim() !== '';
+    card.style.cursor = hasDetailId ? 'pointer' : 'default';
     card.innerHTML = `
       <img class="recipe-thumb" src="${imageUrl}" alt="${String(name).replace(/"/g, '&quot;')}" loading="${imageLoading}" decoding="async" fetchpriority="${imagePriority}">
       <div class="recipe-card-body">
@@ -607,15 +624,17 @@ document.addEventListener('DOMContentLoaded', function() {
       });
     });
 
-    card.onclick = () => {
-      const detailUrl = `recipe_display.html?id=${row.id}`;
-      if (!canOpenRecipeDetails) {
-        pendingRecipeDetailUrl = detailUrl;
-        openInlineLoginPanel('Sign in with Google to open this recipe.');
-        return;
-      }
-      window.location.href = detailUrl;
-    };
+    if (hasDetailId) {
+      card.onclick = () => {
+        const detailUrl = `recipe_display.html?id=${row.id}`;
+        if (!canOpenRecipeDetails) {
+          pendingRecipeDetailUrl = detailUrl;
+          openInlineLoginPanel('Sign in with Google to open this recipe.');
+          return;
+        }
+        window.location.href = detailUrl;
+      };
+    }
 
     return card;
   }
@@ -711,15 +730,30 @@ document.addEventListener('DOMContentLoaded', function() {
         if (!(bookingDate instanceof Date) || Number.isNaN(bookingDate.getTime())) return;
         if (bookingDate < weekStart || bookingDate > weekEnd) return;
 
+        const bookingRecipeName = normalizeBookingRecipeName(booking && booking.recipe);
         const byId = displayByRecipeId.get(String(booking.recipe_id || '').trim());
-        const byName = displayByName.get(String(booking.recipe || '').trim().toLowerCase());
+        const byName = displayByName.get(bookingRecipeName.toLowerCase());
         const row = byId || byName;
-        if (!row) return;
 
-        const key = rowRecipeKey(row);
+        let featuredRow = row;
+        if (!featuredRow && bookingRecipeName) {
+          // Show planner-booked recipes even when they are not yet in display-table.
+          featuredRow = {
+            id: String(booking.recipe_id || '').trim() || '',
+            recipe_id: String(booking.recipe_id || '').trim() || '',
+            recipeid: String(booking.recipe_id || '').trim() || '',
+            name: bookingRecipeName,
+            url: String(booking.recipe_url || '').trim() || '',
+            image_url: '',
+            isBookingOnly: true
+          };
+        }
+        if (!featuredRow) return;
+
+        const key = rowRecipeKey(featuredRow) || bookingRecipeName.toLowerCase();
         if (!key || featuredKeys.has(key)) return;
         featuredKeys.add(key);
-        featuredRows.push(row);
+        featuredRows.push(featuredRow);
       });
 
       if (weeklyBox && weeklyList && weeklyEmpty) {
