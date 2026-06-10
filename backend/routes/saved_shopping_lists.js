@@ -215,7 +215,18 @@ router.get('/', requireShoppingListAccess, async (req, res) => {
               COALESCE(NULLIF(parsed_state->>'weekDate', ''), '') AS week_date,
               created_by_email, created_by_name, created_at, updated_at
          FROM saved_shopping_lists
-        ORDER BY updated_at DESC, id DESC`
+        ORDER BY CASE
+                   WHEN COALESCE(parsed_state->>'term', '') ~ '\\d+'
+                     THEN substring(parsed_state->>'term' from '\\d+')::int
+                   ELSE NULL
+                 END DESC NULLS LAST,
+                 CASE
+                   WHEN COALESCE(parsed_state->>'week', '') ~ '\\d+'
+                     THEN substring(parsed_state->>'week' from '\\d+')::int
+                   ELSE NULL
+                 END DESC NULLS LAST,
+         updated_at DESC,
+         id DESC`
     );
 
     return res.json({ success: true, lists: result.rows });

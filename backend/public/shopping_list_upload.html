@@ -489,9 +489,22 @@
           var data = await requestJson('/api/saved-shopping-lists');
           var lists = Array.isArray(data.lists) ? data.lists : [];
           lists.sort(function (a, b) {
-            var da = new Date(b.updated_at || b.created_at || 0);
-            var db = new Date(a.updated_at || a.created_at || 0);
-            return da - db;
+            function num(v) {
+              var m = String(v == null ? '' : v).match(/\d+/);
+              return m ? parseInt(m[0], 10) : 0;
+            }
+
+            var termA = num(a.term);
+            var termB = num(b.term);
+            if (termB !== termA) return termB - termA;
+
+            var weekA = num(a.week);
+            var weekB = num(b.week);
+            if (weekB !== weekA) return weekB - weekA;
+
+            var tsA = Date.parse(a.updated_at || a.created_at || '') || 0;
+            var tsB = Date.parse(b.updated_at || b.created_at || '') || 0;
+            return tsB - tsA;
           });
           renderSavedLists(lists);
           setSavedListsStatus(lists.length ? 'Showing ' + lists.length + ' saved shopping list(s).' : 'No uploaded shopping lists saved yet.', lists.length ? 'ok' : '');
