@@ -488,6 +488,11 @@
         try {
           var data = await requestJson('/api/saved-shopping-lists');
           var lists = Array.isArray(data.lists) ? data.lists : [];
+          lists.sort(function (a, b) {
+            var da = new Date(b.updated_at || b.created_at || 0);
+            var db = new Date(a.updated_at || a.created_at || 0);
+            return da - db;
+          });
           renderSavedLists(lists);
           setSavedListsStatus(lists.length ? 'Showing ' + lists.length + ' saved shopping list(s).' : 'No uploaded shopping lists saved yet.', lists.length ? 'ok' : '');
         } catch (err) {
