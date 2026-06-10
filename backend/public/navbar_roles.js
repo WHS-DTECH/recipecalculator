@@ -35,7 +35,8 @@
     document.querySelectorAll('[data-route]').forEach((el) => {
       const routeKey = String(el.getAttribute('data-route') || '').trim();
       if (!routeKey) return;
-      const allowed = Boolean(rolePermissions[routeKey]);
+      const hasExplicitPermission = Object.prototype.hasOwnProperty.call(rolePermissions, routeKey);
+      const allowed = hasExplicitPermission ? Boolean(rolePermissions[routeKey]) : true;
       setElementVisible(el, allowed);
     });
   }

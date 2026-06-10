@@ -342,7 +342,10 @@
     document.querySelectorAll('[data-route]').forEach(function(el) {
       var routeKey = String(el.getAttribute('data-route') || '').trim();
       if (!routeKey) return;
-      var allowed = permRow ? Boolean(permRow[routeKey]) : defaultRouteAllowed(routeKey, norm);
+      var hasExplicitPermission = permRow && Object.prototype.hasOwnProperty.call(permRow, routeKey);
+      var allowed = hasExplicitPermission
+        ? Boolean(permRow[routeKey])
+        : defaultRouteAllowed(routeKey, norm);
       setVisible(el, allowed);
     });
   }
