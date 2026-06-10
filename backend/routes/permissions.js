@@ -134,6 +134,7 @@ async function initializePermissionsSchema() {
     // Keep bootstrap defaults sensible for existing rows.
     await pool.query("UPDATE role_permissions SET food_truck = true, ft_teacher = true WHERE role_name IN ('admin','lead_teacher','teacher')");
     await pool.query("UPDATE role_permissions SET food_truck = true WHERE role_name = 'student'");
+    await pool.query("UPDATE role_permissions SET recipes = true WHERE role_name IN ('admin','lead_teacher','teacher','technician','student','staff')");
     await pool.query("UPDATE role_permissions SET browse_practicals = true WHERE role_name IN ('admin','lead_teacher','teacher','technician','student','staff')");
 
     // Ensure all known roles exist without overwriting custom values.
