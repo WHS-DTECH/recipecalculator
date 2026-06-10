@@ -8,6 +8,7 @@ const DEFAULT_ROLES = {
   admin: {
     inventory: true,
     recipes: true,
+    browse_practicals: true,
     add_recipes: true,
     shopping: true,
     booking: true,
@@ -19,6 +20,7 @@ const DEFAULT_ROLES = {
   lead_teacher: {
     inventory: true,
     recipes: true,
+    browse_practicals: true,
     add_recipes: true,
     shopping: true,
     booking: true,
@@ -30,6 +32,7 @@ const DEFAULT_ROLES = {
   teacher: {
     inventory: true,
     recipes: true,
+    browse_practicals: true,
     add_recipes: true,
     shopping: true,
     booking: true,
@@ -41,6 +44,7 @@ const DEFAULT_ROLES = {
   technician: {
     inventory: true,
     recipes: true,
+    browse_practicals: true,
     add_recipes: false,
     shopping: true,
     booking: false,
@@ -52,6 +56,7 @@ const DEFAULT_ROLES = {
   student: {
     inventory: true,
     recipes: true,
+    browse_practicals: true,
     add_recipes: false,
     shopping: false,
     booking: false,
@@ -63,6 +68,7 @@ const DEFAULT_ROLES = {
   staff: {
     inventory: true,
     recipes: true,
+    browse_practicals: true,
     add_recipes: false,
     shopping: false,
     booking: false,
@@ -74,6 +80,7 @@ const DEFAULT_ROLES = {
   public_access: {
     inventory: true,
     recipes: false,
+    browse_practicals: false,
     add_recipes: false,
     shopping: false,
     booking: false,
@@ -84,7 +91,7 @@ const DEFAULT_ROLES = {
   }
 };
 
-const ROUTES = ['inventory', 'add_recipes', 'recipes', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
+const ROUTES = ['inventory', 'add_recipes', 'recipes', 'browse_practicals', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
 
 function buildDefaultRolesRows() {
   return Object.entries(DEFAULT_ROLES)
@@ -104,6 +111,7 @@ async function initializePermissionsSchema() {
         id SERIAL PRIMARY KEY,
         role_name VARCHAR(50) UNIQUE NOT NULL,
         recipes BOOLEAN DEFAULT false,
+        browse_practicals BOOLEAN DEFAULT false,
         add_recipes BOOLEAN DEFAULT false,
         inventory BOOLEAN DEFAULT false,
         shopping BOOLEAN DEFAULT false,
@@ -121,20 +129,23 @@ async function initializePermissionsSchema() {
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS planning BOOLEAN DEFAULT false');
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS food_truck BOOLEAN DEFAULT false');
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS ft_teacher BOOLEAN DEFAULT false');
+    await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS browse_practicals BOOLEAN DEFAULT false');
 
     // Keep bootstrap defaults sensible for existing rows.
     await pool.query("UPDATE role_permissions SET food_truck = true, ft_teacher = true WHERE role_name IN ('admin','lead_teacher','teacher')");
     await pool.query("UPDATE role_permissions SET food_truck = true WHERE role_name = 'student'");
+    await pool.query("UPDATE role_permissions SET browse_practicals = true WHERE role_name IN ('admin','lead_teacher','teacher','technician','student','staff')");
 
     // Ensure all known roles exist without overwriting custom values.
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO role_permissions (role_name, recipes, browse_practicals, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         ON CONFLICT (role_name) DO NOTHING
       `, [
         roleName,
         permissions.recipes,
+        permissions.browse_practicals,
         permissions.add_recipes,
         permissions.inventory,
         permissions.shopping,
@@ -189,7 +200,7 @@ router.get('/all', async (req, res) => {
     }
 
     const result = await pool.query(`
-      SELECT role_name, recipes, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin
+      SELECT role_name, recipes, browse_practicals, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin
       FROM role_permissions
       ORDER BY CASE 
         WHEN role_name = 'admin' THEN 1
@@ -230,11 +241,12 @@ router.put('/:roleName', requireAdmin, async (req, res) => {
     
     await pool.query(`
       UPDATE role_permissions
-      SET recipes = $1, add_recipes = $2, inventory = $3, shopping = $4, booking = $5, food_truck = $6, ft_teacher = $7, planning = $8, admin = $9,
+      SET recipes = $1, browse_practicals = $2, add_recipes = $3, inventory = $4, shopping = $5, booking = $6, food_truck = $7, ft_teacher = $8, planning = $9, admin = $10,
           updated_at = CURRENT_TIMESTAMP
-      WHERE role_name = $10
+      WHERE role_name = $11
     `, [
       permissions.recipes || false,
+      permissions.browse_practicals || false,
       permissions.add_recipes || false,
       permissions.inventory || false,
       permissions.shopping || false,
@@ -268,11 +280,12 @@ router.post('/reset', requireAdmin, async (req, res) => {
 
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO role_permissions (role_name, recipes, browse_practicals, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
       `, [
         roleName,
         permissions.recipes,
+        permissions.browse_practicals,
         permissions.add_recipes,
         permissions.inventory,
         permissions.shopping,

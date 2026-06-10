@@ -1,9 +1,10 @@
 let permissionsData = [];
-let ROUTES = ['inventory', 'add_recipes', 'recipes', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
+let ROUTES = ['inventory', 'add_recipes', 'recipes', 'browse_practicals', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
 const ROUTE_LABELS = {
   inventory: 'Homepage',
   add_recipes: 'Add Recipes',
   recipes: 'View Recipes',
+  browse_practicals: 'Browse Practicals',
   shopping: 'Book Shopping',
   booking: 'Add Booking',
   food_truck: 'Food Truck',
