@@ -92,6 +92,7 @@ const DEFAULT_ROLES = {
 };
 
 const ROUTES = ['inventory', 'add_recipes', 'recipes', 'browse_practicals', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
+const ROLE_PERMISSION_COLUMNS = ['recipes', 'browse_practicals', 'add_recipes', 'inventory', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
 
 function buildDefaultRolesRows() {
   return Object.entries(DEFAULT_ROLES)
@@ -102,6 +103,72 @@ let schemaAvailable = false;
 let schemaReadyPromise = null;
 let lastSchemaInitAttempt = 0;
 const SCHEMA_INIT_RETRY_MS = 60 * 1000;
+
+async function normalizeKnownRoleRows() {
+  const knownRoles = Object.keys(DEFAULT_ROLES);
+
+  // Remove obviously invalid role rows early to keep normalization deterministic.
+  await pool.query("DELETE FROM role_permissions WHERE trim(COALESCE(role_name, '')) = ''");
+
+  for (const roleName of knownRoles) {
+    const mergedResult = await pool.query(
+      `SELECT COUNT(*)::int AS count,
+              COALESCE(bool_or(recipes), false) AS recipes,
+              COALESCE(bool_or(browse_practicals), false) AS browse_practicals,
+              COALESCE(bool_or(add_recipes), false) AS add_recipes,
+              COALESCE(bool_or(inventory), false) AS inventory,
+              COALESCE(bool_or(shopping), false) AS shopping,
+              COALESCE(bool_or(booking), false) AS booking,
+              COALESCE(bool_or(food_truck), false) AS food_truck,
+              COALESCE(bool_or(ft_teacher), false) AS ft_teacher,
+              COALESCE(bool_or(planning), false) AS planning,
+              COALESCE(bool_or(admin), false) AS admin
+         FROM role_permissions
+        WHERE lower(trim(role_name)) = $1`,
+      [roleName]
+    );
+
+    const merged = mergedResult.rows[0];
+    if (!merged || !merged.count) continue;
+
+    await pool.query(
+      `INSERT INTO role_permissions (${['role_name'].concat(ROLE_PERMISSION_COLUMNS).join(', ')})
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+       ON CONFLICT (role_name) DO UPDATE
+         SET recipes = EXCLUDED.recipes,
+             browse_practicals = EXCLUDED.browse_practicals,
+             add_recipes = EXCLUDED.add_recipes,
+             inventory = EXCLUDED.inventory,
+             shopping = EXCLUDED.shopping,
+             booking = EXCLUDED.booking,
+             food_truck = EXCLUDED.food_truck,
+             ft_teacher = EXCLUDED.ft_teacher,
+             planning = EXCLUDED.planning,
+             admin = EXCLUDED.admin,
+             updated_at = CURRENT_TIMESTAMP`,
+      [
+        roleName,
+        merged.recipes,
+        merged.browse_practicals,
+        merged.add_recipes,
+        merged.inventory,
+        merged.shopping,
+        merged.booking,
+        merged.food_truck,
+        merged.ft_teacher,
+        merged.planning,
+        merged.admin
+      ]
+    );
+
+    await pool.query(
+      `DELETE FROM role_permissions
+        WHERE lower(trim(role_name)) = $1
+          AND role_name <> $2`,
+      [roleName, roleName]
+    );
+  }
+}
 
 async function initializePermissionsSchema() {
   try {
@@ -130,6 +197,9 @@ async function initializePermissionsSchema() {
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS food_truck BOOLEAN DEFAULT false');
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS ft_teacher BOOLEAN DEFAULT false');
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS browse_practicals BOOLEAN DEFAULT false');
+
+    // Normalize duplicate/mixed-case role names into canonical role rows.
+    await normalizeKnownRoleRows();
 
     // Keep bootstrap defaults sensible for existing rows.
     await pool.query("UPDATE role_permissions SET food_truck = true, ft_teacher = true WHERE role_name IN ('admin','lead_teacher','teacher')");
