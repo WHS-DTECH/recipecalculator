@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   function getDishImage(name, rowId, category, index) {
     const lower = String(name || '').toLowerCase();
-    const seed = `${rowId || ''}-${index}-${name || ''}`;
+    const seed = `${rowId || ''}-${name || ''}`;
 
     if (/(cupcake|cake|cookie|brownie|muffin|pavlova|dessert|slice)/.test(lower)) {
       const list = STOCK_IMAGES.Baking;

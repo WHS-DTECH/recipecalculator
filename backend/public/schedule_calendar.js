@@ -2161,7 +2161,105 @@ async function printBookingInfoSheet(bookingId) {
   const teacherColour = teacherColorFromName(booking.staff_name || '');
   const logoUrl = new URL('images/whs logo circular reo .png', window.location.href).href;
 
+  function isLikelyImagePath(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return false;
+    if (/^https?:\/\//i.test(raw)) return true;
+    if (/^data:image\//i.test(raw)) return true;
+    if (/\.(png|jpe?g|webp|gif|svg)(\?.*)?$/i.test(raw)) return true;
+    return false;
+  }
+
+  function normalizeRecipeImageUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw || !isLikelyImagePath(raw)) return '';
+    if (/^data:image\//i.test(raw)) return raw;
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (raw.startsWith('/')) return raw;
+    if (/^images\//i.test(raw)) return `/${raw}`;
+    return `/images/recipe_user_uploads/${raw}`;
+  }
+
+  function stableIndex(seed, length) {
+    if (!length) return 0;
+    const str = String(seed || 'seed');
+    let hash = 0;
+    for (let i = 0; i < str.length; i += 1) {
+      hash = ((hash << 5) - hash) + str.charCodeAt(i);
+      hash |= 0;
+    }
+    return Math.abs(hash) % length;
+  }
+
+  function getDishImage(name, rowId, category) {
+    const lower = String(name || '').toLowerCase();
+    const seed = `${rowId || ''}-${name || ''}`;
+    const stockImages = {
+      'Student Favourites': [
+        'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/1435904/pexels-photo-1435904.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/461198/pexels-photo-461198.jpeg?auto=compress&cs=tinysrgb&w=1200'
+      ],
+      'Fresh and Veg': [
+        'https://images.pexels.com/photos/1211887/pexels-photo-1211887.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/257816/pexels-photo-257816.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/1300972/pexels-photo-1300972.jpeg?auto=compress&cs=tinysrgb&w=1200'
+      ],
+      'Breakfast': [
+        'https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/1527603/pexels-photo-1527603.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/1437267/pexels-photo-1437267.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/2233729/pexels-photo-2233729.jpeg?auto=compress&cs=tinysrgb&w=1200'
+      ],
+      'Baking': [
+        'https://images.pexels.com/photos/376464/pexels-photo-376464.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/70497/pexels-photo-70497.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/1092730/pexels-photo-1092730.jpeg?auto=compress&cs=tinysrgb&w=1200',
+        'https://images.pexels.com/photos/793765/pexels-photo-793765.jpeg?auto=compress&cs=tinysrgb&w=1200'
+      ]
+    };
+
+    if (/(cupcake|cake|cookie|brownie|muffin|pavlova|dessert|slice)/.test(lower)) {
+      const list = stockImages.Baking;
+      return list[stableIndex(seed, list.length)];
+    }
+    if (/(salad|vegetable|veggie|beetroot|kumara|pumpkin)/.test(lower)) {
+      const list = stockImages['Fresh and Veg'];
+      return list[stableIndex(seed, list.length)];
+    }
+    if (/(breakfast|granola|oats|toast|egg)/.test(lower)) {
+      const list = stockImages.Breakfast;
+      return list[stableIndex(seed, list.length)];
+    }
+
+    const list = stockImages[category] || stockImages['Student Favourites'];
+    return list[stableIndex(seed, list.length)];
+  }
+
+  function getDishCategory(name) {
+    const lower = String(name || '').toLowerCase();
+    if (/(cupcake|cake|cookie|brownie|muffin|pavlova|dessert|slice)/.test(lower)) return 'Baking';
+    if (/(salad|vegetable|veggie|beetroot|kumara|pumpkin)/.test(lower)) return 'Fresh and Veg';
+    if (/(breakfast|granola|oats|toast|egg)/.test(lower)) return 'Breakfast';
+    return 'Student Favourites';
+  }
+
   function pickRecipeImageUrl(recipeRow) {
+    try {
+      const images = JSON.parse(String(recipeRow && recipeRow.ft_images || 'null')) || [];
+      const primarySlot = Number(recipeRow && recipeRow.ft_primary_slot);
+      if (Number.isInteger(primarySlot) && primarySlot >= 1 && primarySlot <= images.length) {
+        const starred = normalizeRecipeImageUrl(images[primarySlot - 1]);
+        if (starred) return starred;
+      }
+      for (const image of images) {
+        const value = normalizeRecipeImageUrl(image);
+        if (value) return value;
+      }
+    } catch (_) {}
+
     const candidates = [
       recipeRow && recipeRow.image_url,
       recipeRow && recipeRow.imageUrl,
@@ -2173,7 +2271,7 @@ async function printBookingInfoSheet(bookingId) {
       recipeRow && recipeRow.hero_image
     ];
     for (const candidate of candidates) {
-      const url = String(candidate || '').trim();
+      const url = normalizeRecipeImageUrl(candidate);
       if (!url) continue;
       if (/^javascript:/i.test(url)) continue;
       return url;
@@ -2193,7 +2291,12 @@ async function printBookingInfoSheet(bookingId) {
       }
       const rows = window._recipeDisplayImageRowsCache;
       const match = rows.find((row) => Number(row && row.recipeid) === id || Number(row && row.id) === id);
-      return String(match && match.image_url ? match.image_url : '').trim();
+      if (!match) return '';
+      const explicitImage = pickRecipeImageUrl(match);
+      if (explicitImage) return explicitImage;
+      const recipeName = String(match.name || booking.recipe || '').trim();
+      const recipeCategory = getDishCategory(recipeName);
+      return getDishImage(recipeName, match.recipeid || match.id || id, recipeCategory);
     } catch (_) {
       return '';
     }
