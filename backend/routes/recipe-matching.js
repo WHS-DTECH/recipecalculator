@@ -349,7 +349,40 @@ router.get('/bookings', async (req, res) => {
            ORDER BY br.linked_at`,
           [booking.id]
         );
-        const linked_recipes = linkedResult.rows;
+        let linked_recipes = linkedResult.rows;
+
+        // Backward-compatibility: some older bookings only have bookings.recipe_id set.
+        if (!linked_recipes.length && booking.recipe_id != null) {
+          const fallback = await pool.query(
+            `SELECT b.recipe_id, r.name, r.url
+             FROM bookings b
+             JOIN recipes r
+               ON r.id = CAST(
+                 NULLIF(
+                   regexp_replace(COALESCE(b.recipe_id::text, ''), '[^0-9]', '', 'g'),
+                   ''
+                 )
+                 AS INTEGER
+               )
+             WHERE b.id = $1
+               AND b.recipe_id IS NOT NULL
+             LIMIT 1`,
+            [booking.id]
+          );
+
+          if (fallback.rows.length) {
+            linked_recipes = fallback.rows;
+            const primaryRecipeId = Number(fallback.rows[0].recipe_id);
+            if (Number.isInteger(primaryRecipeId) && primaryRecipeId > 0) {
+              await pool.query(
+                `INSERT INTO booking_recipes (booking_id, recipe_id)
+                 VALUES ($1, $2)
+                 ON CONFLICT DO NOTHING`,
+                [booking.id, primaryRecipeId]
+              );
+            }
+          }
+        }
 
         // For unmatched (no recipe_id), also get suggestions
         let suggestions = [];
