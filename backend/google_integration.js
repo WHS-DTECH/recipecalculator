@@ -201,12 +201,20 @@ function inferPlannerStreamFromDocTitle(title) {
     const text = String(title || '').trim().toLowerCase();
     if (!text) return 'Middle';
     if (text.includes('junior')) return 'Junior';
+    if (/\bhp\s*100\b|\bhp100\b|\b100\s*hosp\b|\bhosp\s*100\b/.test(text)) return 'Senior';
+    if (/\bhp\s*200\b|\bhp200\b|\b200\s*hosp\b|\bhosp\s*200\b/.test(text)) return 'Senior';
+    if (/\bhp\s*300\b|\bhp300\b|\b300\s*hosp\b|\bhosp\s*300\b/.test(text)) return 'Senior';
     if (text.includes('senior') || text.includes('hosp')) return 'Senior';
     if (text.includes('middle')) return 'Middle';
     return 'Middle';
 }
 
-function defaultClassNameForStream(stream) {
+function defaultClassNameForStream(stream, title) {
+    const text = String(title || '').trim().toLowerCase();
+    if (/\bhp\s*100\b|\bhp100\b|\b100\s*hosp\b|\bhosp\s*100\b/.test(text)) return '11HOSP';
+    if (/\bhp\s*200\b|\bhp200\b|\b200\s*hosp\b|\bhosp\s*200\b/.test(text)) return '12HOSP';
+    if (/\bhp\s*300\b|\bhp300\b|\b300\s*hosp\b|\bhosp\s*300\b/.test(text)) return '13HOSP';
+
     const normalized = String(stream || '').trim().toLowerCase();
     if (normalized === 'junior') return 'JFOOD';
     if (normalized === 'senior') return '11HOSP';
@@ -217,7 +225,7 @@ function mapDocxWeeksToPlannerRows(docxParsed, document, documentId) {
     const weeks = Array.isArray(docxParsed && docxParsed.weeks) ? docxParsed.weeks : [];
     const title = String(document && document.title ? document.title : '').trim();
     const plannerStream = inferPlannerStreamFromDocTitle(title);
-    const className = defaultClassNameForStream(plannerStream);
+    const className = defaultClassNameForStream(plannerStream, title);
 
     return weeks
         .map((week) => {
@@ -328,6 +336,9 @@ function inferPlannerStreamFromText(value) {
     const text = String(value || '').trim().toUpperCase();
     if (!text) {
         return 'Middle';
+    }
+    if (text.includes('HP100') || text.includes('HP200') || text.includes('HP300')) {
+        return 'Senior';
     }
     if (text.includes('HOSP')) {
         return 'Senior';
