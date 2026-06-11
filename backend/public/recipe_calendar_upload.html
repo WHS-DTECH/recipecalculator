@@ -748,6 +748,12 @@
       ];
     }
 
+    function plannerManualLinkBySlotKey() {
+      return {
+        junior: 'https://docs.google.com/spreadsheets/d/110sYwULOvIXyOrtssazosKva9SwxMCovJIU4L_mNZBs/edit?usp=sharing'
+      };
+    }
+
     function buildDocTitleById(historyRows) {
       const byId = new Map();
       (Array.isArray(historyRows) ? historyRows : []).forEach((row) => {
@@ -797,6 +803,7 @@
       if (!plannerQuickLinks) return;
 
       const mapped = mapDocsToPlannerSlots(docIds, historyRows);
+      const manualLinks = plannerManualLinkBySlotKey();
       plannerQuickLinks.innerHTML = `
         <div style="font-weight:700;color:#1f2937;margin-bottom:0.25rem;">Quick planner links</div>
         <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
@@ -806,6 +813,12 @@
               const safeLabel = escHtml(item.label);
               const safeTitle = escHtml(item.title || item.label);
               return `<a href="https://docs.google.com/document/d/${safeId}/edit" target="_blank" rel="noopener noreferrer" class="rcal-btn" style="padding:0.3rem 0.6rem;font-size:0.82rem;text-decoration:none;" title="${safeTitle}">${safeLabel}</a>`;
+            }
+            const manualUrl = manualLinks[item.key];
+            if (manualUrl) {
+              const safeManualUrl = escHtml(manualUrl);
+              const safeLabel = escHtml(item.label);
+              return `<a href="${safeManualUrl}" target="_blank" rel="noopener noreferrer" class="rcal-btn" style="padding:0.3rem 0.6rem;font-size:0.82rem;text-decoration:none;" title="${safeLabel}">${safeLabel}</a>`;
             }
             const safeMissingLabel = escHtml(`${item.label} (not configured)`);
             return `<span class="rcal-btn" style="padding:0.3rem 0.6rem;font-size:0.82rem;opacity:0.5;cursor:not-allowed;" title="Planner not configured in GOOGLE_PLANNER_DOC_IDS">${safeMissingLabel}</span>`;
