@@ -625,7 +625,9 @@ router.get('/display-table', async (req, res) => {
     const scope = String(req.query && req.query.scope || '').trim().toLowerCase();
 
     const sql = `
-      SELECT rd.*
+      SELECT rd.*,
+             coalesce(r.ft_images, '[]') AS ft_images,
+             r.ft_primary_slot
         FROM recipe_display rd
         LEFT JOIN recipes r ON r.id = rd.recipeid
        WHERE (

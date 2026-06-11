@@ -446,6 +446,24 @@ document.addEventListener('DOMContentLoaded', function() {
     return `/images/recipe_user_uploads/${raw}`;
   }
 
+  function getFtPrimaryImage(recipe) {
+    try {
+      const images = JSON.parse(String(recipe && recipe.ft_images || 'null')) || [];
+      const primarySlot = Number(recipe && recipe.ft_primary_slot);
+      if (Number.isInteger(primarySlot) && primarySlot >= 1 && primarySlot <= images.length) {
+        const starred = normalizeRecipeImageUrl(images[primarySlot - 1]);
+        if (starred) return starred;
+      }
+      for (const image of images) {
+        const value = normalizeRecipeImageUrl(image);
+        if (value) return value;
+      }
+    } catch (_) {
+      return '';
+    }
+    return '';
+  }
+
   function hostFromUrl(value) {
     try {
       const host = new URL(value).hostname.replace(/^www\./i, '');
@@ -586,8 +604,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const name = row.name || '(No Name)';
     const recipeNumber = row.recipeid || row.recipe_id || row.id || 'Planner';
     const category = getDishCategory(name);
+    const ftPrimaryImage = getFtPrimaryImage(row);
     const normalizedImageUrl = normalizeRecipeImageUrl(row.image_url);
-    const imageUrl = optimizeExternalImageUrl(normalizedImageUrl || getDishImage(name, row.id, category, index));
+    const imageUrl = optimizeExternalImageUrl(ftPrimaryImage || normalizedImageUrl || getDishImage(name, row.id, category, index));
     const linkedRecipe = recipeById.get(String(recipeNumber)) || recipeById.get(String(row.id)) || null;
     const recipeUrl = row.url || (linkedRecipe && linkedRecipe.url) || '';
     const imageLoading = index < 4 ? 'eager' : 'lazy';
@@ -725,6 +744,10 @@ document.addEventListener('DOMContentLoaded', function() {
       if (!cardList) return;
 
       const recipeById = new Map();
+      rows.forEach((row) => {
+        const keys = [rowRecipeKey(row), String(row.id || '').trim()].filter(Boolean);
+        keys.forEach((key) => recipeById.set(key, row));
+      });
       const displayByRecipeId = new Map(rows.map(row => [rowRecipeKey(row), row]));
       const displayByName = new Map(rows.map(row => [String(row.name || '').trim().toLowerCase(), row]));
       const displayByNormalizedName = new Map(rows.map(row => [normalizeRecipeLookupName(row.name || ''), row]));
