@@ -1247,6 +1247,12 @@
     function applyFilters() {
       let filtered = allBookings;
 
+      const recipeSortKey = (booking) =>
+        String((booking && booking.recipe) || '')
+          .replace(/^\s*recipe\s*:\s*/i, '')
+          .trim()
+          .toLowerCase();
+
       const hasSourceUrl = (booking) => String((booking && booking.recipe_url) || '').trim().length > 0;
 
       if (filterStatus === 'matched') {
@@ -1271,6 +1277,16 @@
           getClassValue(b).toLowerCase().includes(searchTerm)
         );
       }
+
+      filtered = filtered.slice().sort((a, b) => {
+        const recipeCmp = recipeSortKey(a).localeCompare(recipeSortKey(b), undefined, { sensitivity: 'base' });
+        if (recipeCmp !== 0) return recipeCmp;
+
+        // Stable tie-breakers for repeat recipe names.
+        const classCmp = getClassValue(a).localeCompare(getClassValue(b), undefined, { sensitivity: 'base' });
+        if (classCmp !== 0) return classCmp;
+        return String(a.booking_date || '').localeCompare(String(b.booking_date || ''));
+      });
 
       displayedBookings = filtered;
       currentPage = 0;
