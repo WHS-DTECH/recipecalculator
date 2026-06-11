@@ -663,6 +663,7 @@ function getPlannerSyncConfigSummary() {
 
     return {
         configuredDocs: docIds.length,
+        configuredDocIds: docIds,
         cronExpression,
         timezone,
         schedulerActive: Boolean(plannerSyncTask),
