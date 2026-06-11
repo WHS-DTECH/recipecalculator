@@ -1381,7 +1381,7 @@
               <div class="action-row" style="margin-top: 10px;">
                 <button class="btn btn-primary btn-sm" onclick="openLinkModal(${booking.id}, null, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Link to existing recipe">Link Existing</button>
                 <button class="btn btn-success btn-sm" onclick="openCreateModal(${booking.id}, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Create new recipe">Create New</button>
-                 <button class="btn btn-secondary btn-sm" onclick="openLinkModal(${booking.id}, null, decodeURIComponent('${encodeURIComponent(booking.recipe || '')}'))" title="Search and load existing recipe">Load Recipe Manually</button>
+                 <button class="btn btn-secondary btn-sm" onclick="window.location.href='add_recipe_manually.html'" title="Open Add Recipe Manually page">Add Recipe Manually</button>
               </div>
             ` : ''}
           </div>
