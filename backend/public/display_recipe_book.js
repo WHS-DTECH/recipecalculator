@@ -567,6 +567,12 @@ document.addEventListener('DOMContentLoaded', function() {
       .trim();
   }
 
+  function isNonRecipePlannerLabel(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return true;
+    return normalized === 'theory' || normalized.startsWith('theory ');
+  }
+
   function createRecipeCard(row, index, recipeById) {
     const name = row.name || '(No Name)';
     const recipeNumber = row.recipeid || row.recipe_id || row.id || 'Planner';
@@ -731,6 +737,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (bookingDate < weekStart || bookingDate > weekEnd) return;
 
         const bookingRecipeName = normalizeBookingRecipeName(booking && booking.recipe);
+        if (isNonRecipePlannerLabel(bookingRecipeName)) return;
         const byId = displayByRecipeId.get(String(booking.recipe_id || '').trim());
         const byName = displayByName.get(bookingRecipeName.toLowerCase());
         const row = byId || byName;
