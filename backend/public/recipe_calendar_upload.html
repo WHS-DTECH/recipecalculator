@@ -526,6 +526,8 @@
     const googleSyncStatus = document.getElementById('googleSyncStatus');
     const googleSyncConfig = document.getElementById('googleSyncConfig');
     const plannerQuickLinks = document.getElementById('plannerQuickLinks');
+    let latestGoogleSyncHistory = [];
+    let latestConfiguredDocIds = [];
     const googleSyncHistoryBody = document.getElementById('googleSyncHistoryBody');
     const refreshGoogleSyncHistoryBtn = document.getElementById('refreshGoogleSyncHistoryBtn');
     const classnameInput = document.getElementById('classnameInput');
@@ -732,6 +734,86 @@
       }).join('');
     }
 
+    function normalizePlannerTitle(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function plannerSlotDefinitions() {
+      return [
+        { key: 'junior', label: 'Junior School', patterns: [/junior/] },
+        { key: 'middle', label: 'Middle School', patterns: [/middle/, /middleschool/, /mfood/] },
+        { key: 'hosp100', label: '11HOSP (100HOSP)', patterns: [/hp100/, /\b100\b/, /11hosp/] },
+        { key: 'hosp200', label: '12HOSP (200HOSP)', patterns: [/hp200/, /\b200\b/, /12hosp/] },
+        { key: 'hosp300', label: '13HOSP (300HOSP)', patterns: [/hp300/, /\b300\b/, /13hosp/] }
+      ];
+    }
+
+    function buildDocTitleById(historyRows) {
+      const byId = new Map();
+      (Array.isArray(historyRows) ? historyRows : []).forEach((row) => {
+        const docId = String(row && row.document_id || '').trim();
+        const title = String(row && row.document_title || '').trim();
+        if (!docId || !title) return;
+        if (!byId.has(docId)) byId.set(docId, title);
+      });
+      return byId;
+    }
+
+    function mapDocsToPlannerSlots(docIds, historyRows) {
+      const slots = plannerSlotDefinitions();
+      const titleById = buildDocTitleById(historyRows);
+      const unassigned = new Set((Array.isArray(docIds) ? docIds : []).filter(Boolean));
+      const assignedBySlot = new Map();
+
+      // First pass: assign by title patterns.
+      slots.forEach((slot) => {
+        for (const docId of unassigned) {
+          const title = normalizePlannerTitle(titleById.get(docId));
+          if (!title) continue;
+          if (slot.patterns.some((pattern) => pattern.test(title))) {
+            assignedBySlot.set(slot.key, docId);
+            unassigned.delete(docId);
+            break;
+          }
+        }
+      });
+
+      // Second pass: fill remaining slots by remaining doc order.
+      const remainingDocIds = Array.from(unassigned);
+      slots.forEach((slot) => {
+        if (assignedBySlot.has(slot.key)) return;
+        if (!remainingDocIds.length) return;
+        assignedBySlot.set(slot.key, remainingDocIds.shift());
+      });
+
+      return slots.map((slot) => ({
+        ...slot,
+        docId: assignedBySlot.get(slot.key) || '',
+        title: assignedBySlot.get(slot.key) ? (titleById.get(assignedBySlot.get(slot.key)) || '') : ''
+      }));
+    }
+
+    function renderPlannerQuickLinks(docIds, historyRows) {
+      if (!plannerQuickLinks) return;
+
+      const mapped = mapDocsToPlannerSlots(docIds, historyRows);
+      plannerQuickLinks.innerHTML = `
+        <div style="font-weight:700;color:#1f2937;margin-bottom:0.25rem;">Quick planner links</div>
+        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
+          ${mapped.map((item) => {
+            if (item.docId) {
+              const safeId = escHtml(item.docId);
+              const safeLabel = escHtml(item.label);
+              const safeTitle = escHtml(item.title || item.label);
+              return `<a href="https://docs.google.com/document/d/${safeId}/edit" target="_blank" rel="noopener noreferrer" class="rcal-btn" style="padding:0.3rem 0.6rem;font-size:0.82rem;text-decoration:none;" title="${safeTitle}">${safeLabel}</a>`;
+            }
+            const safeMissingLabel = escHtml(`${item.label} (not configured)`);
+            return `<span class="rcal-btn" style="padding:0.3rem 0.6rem;font-size:0.82rem;opacity:0.5;cursor:not-allowed;" title="Planner not configured in GOOGLE_PLANNER_DOC_IDS">${safeMissingLabel}</span>`;
+          }).join('')}
+        </div>
+      `;
+    }
+
     async function loadGoogleSyncHistory() {
       if (!googleSyncHistoryBody) return;
       googleSyncHistoryBody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#6b7280;">Loading sync history...</td></tr>';
@@ -741,7 +823,9 @@
         if (!res.ok || !data || !data.success) {
           throw new Error((data && data.error) || 'Unable to load sync history.');
         }
-        renderGoogleSyncHistoryRows(Array.isArray(data.history) ? data.history : []);
+        latestGoogleSyncHistory = Array.isArray(data.history) ? data.history : [];
+        renderGoogleSyncHistoryRows(latestGoogleSyncHistory);
+        renderPlannerQuickLinks(latestConfiguredDocIds, latestGoogleSyncHistory);
       } catch (err) {
         googleSyncHistoryBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escHtml(err.message || 'Failed to load sync history.')}</td></tr>`;
       }
@@ -759,28 +843,14 @@
 
         const docs = Number(data.configuredDocs || 0);
         const docIds = Array.isArray(data.configuredDocIds) ? data.configuredDocIds.map((id) => String(id || '').trim()).filter(Boolean) : [];
+        latestConfiguredDocIds = docIds;
         const cron = String(data.cronExpression || '*/15 * * * *');
         const tz = String(data.timezone || 'Pacific/Auckland');
         const schedulerLabel = data.schedulerActive ? 'active' : 'inactive';
         const tokenLabel = data.requiresToken ? 'token-protected' : 'open within app';
 
         googleSyncConfig.textContent = `Configured docs: ${docs}. Schedule: ${cron} (${tz}), scheduler ${schedulerLabel}, manual trigger ${tokenLabel}.`;
-        if (plannerQuickLinks) {
-          if (docIds.length) {
-            plannerQuickLinks.innerHTML = `
-              <div style="font-weight:700;color:#1f2937;margin-bottom:0.25rem;">Quick planner links</div>
-              <div style="display:flex;gap:0.4rem;flex-wrap:wrap;align-items:center;">
-                ${docIds.map((id, idx) => {
-                  const safeId = escHtml(id);
-                  const label = `Planner ${idx + 1}`;
-                  return `<a href="https://docs.google.com/document/d/${safeId}/edit" target="_blank" rel="noopener noreferrer" class="rcal-btn" style="padding:0.3rem 0.6rem;font-size:0.82rem;text-decoration:none;">${label}</a>`;
-                }).join('')}
-              </div>
-            `;
-          } else {
-            plannerQuickLinks.innerHTML = '<span style="color:#64748b;">Quick planner links will appear once GOOGLE_PLANNER_DOC_IDS is configured.</span>';
-          }
-        }
+        renderPlannerQuickLinks(latestConfiguredDocIds, latestGoogleSyncHistory);
         googleSyncNowBtn.disabled = docs < 1;
         if (docs < 1) {
           setGoogleSyncStatus('Set GOOGLE_PLANNER_DOC_IDS in Render to enable manual sync.', 'error');
