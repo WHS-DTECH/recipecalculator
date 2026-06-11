@@ -187,14 +187,18 @@ async function getPlannerSyncHistory(limit = 50) {
 }
 
 function getConfiguredPlannerDocIds() {
+    const bundledDocIds = [
+        // 12HOSP planner supplied by school admin.
+        '1SPo6NsfrHd3qH01DH8GEvNKrmUtnFlwyAXWzSlL3ybg'
+    ];
+
     const raw = String(process.env.GOOGLE_PLANNER_DOC_IDS || '').trim();
-    if (!raw) {
-        return [];
-    }
-    return raw
+    const envDocIds = raw
         .split(',')
         .map((entry) => String(entry || '').trim())
         .filter(Boolean);
+
+    return Array.from(new Set([...envDocIds, ...bundledDocIds]));
 }
 
 function inferPlannerStreamFromDocTitle(title) {
