@@ -567,6 +567,15 @@ document.addEventListener('DOMContentLoaded', function() {
       .trim();
   }
 
+  function normalizeRecipeLookupName(value) {
+    return String(value || '')
+      .replace(/^\s*Recipe\s*:\s*/i, '')
+      .replace(/\bassessment\b[\s\-:]*\d*$/i, '')
+      .replace(/[^a-z0-9]+/gi, ' ')
+      .trim()
+      .toLowerCase();
+  }
+
   function isNonRecipePlannerLabel(value) {
     const normalized = String(value || '').trim().toLowerCase();
     if (!normalized) return true;
@@ -718,6 +727,7 @@ document.addEventListener('DOMContentLoaded', function() {
       const recipeById = new Map();
       const displayByRecipeId = new Map(rows.map(row => [rowRecipeKey(row), row]));
       const displayByName = new Map(rows.map(row => [String(row.name || '').trim().toLowerCase(), row]));
+      const displayByNormalizedName = new Map(rows.map(row => [normalizeRecipeLookupName(row.name || ''), row]));
       const bookings = Array.isArray(bookingsPayload && bookingsPayload.bookings) ? bookingsPayload.bookings : [];
 
       const now = new Date();
@@ -738,9 +748,21 @@ document.addEventListener('DOMContentLoaded', function() {
 
         const bookingRecipeName = normalizeBookingRecipeName(booking && booking.recipe);
         if (isNonRecipePlannerLabel(bookingRecipeName)) return;
+        const normalizedBookingName = normalizeRecipeLookupName(bookingRecipeName);
         const byId = displayByRecipeId.get(String(booking.recipe_id || '').trim());
         const byName = displayByName.get(bookingRecipeName.toLowerCase());
-        const row = byId || byName;
+        const byNormalizedName = displayByNormalizedName.get(normalizedBookingName);
+
+        let byFuzzyName = null;
+        if (!byId && !byName && !byNormalizedName && normalizedBookingName) {
+          byFuzzyName = rows.find((candidate) => {
+            const candidateName = normalizeRecipeLookupName(candidate && candidate.name || '');
+            if (!candidateName) return false;
+            return candidateName.includes(normalizedBookingName) || normalizedBookingName.includes(candidateName);
+          }) || null;
+        }
+
+        const row = byId || byName || byNormalizedName || byFuzzyName;
 
         let featuredRow = row;
         if (!featuredRow && bookingRecipeName) {
