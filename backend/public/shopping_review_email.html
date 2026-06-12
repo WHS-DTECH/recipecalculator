@@ -41,6 +41,7 @@
     .smtp-badge.ok{background:#dcfce7;color:#166534;}
     .smtp-badge.error{background:#fee2e2;color:#991b1b;}
     .smtp-badge.neutral{background:#e2e8f0;color:#334155;}
+    .mini-actions{display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.7rem;}
     @media (max-width:760px){.field{min-width:100%;}}
   </style>
 </head>
@@ -55,6 +56,9 @@
     <div class="card">
       <div id="smtpStatusBadge" class="smtp-badge neutral">Checking SMTP status...</div>
       <div id="smtpStatusText" class="sub" style="margin:0.55rem 0 0;">This confirms whether scheduled review emails can be sent from Render.</div>
+      <div class="mini-actions">
+        <button type="button" id="smtpTestBtn" class="btn btn-muted" style="padding:0.45rem 0.75rem;font-size:0.82rem;">Send SMTP Test</button>
+      </div>
     </div>
 
     <div class="card">
@@ -116,6 +120,7 @@
       const scheduleTableBody = document.getElementById('scheduleTableBody');
       const smtpStatusBadge = document.getElementById('smtpStatusBadge');
       const smtpStatusText = document.getElementById('smtpStatusText');
+      const smtpTestBtn = document.getElementById('smtpTestBtn');
 
       function esc(str) {
         return String(str == null ? '' : str)
@@ -271,6 +276,27 @@
         sendNowBtn.disabled = false;
       }
 
+      async function sendSmtpTest() {
+        const savedListId = Number(savedListSelect.value || 0);
+        if (!savedListId) {
+          setStatus('Select a saved shopping list first.', 'error');
+          return;
+        }
+
+        smtpTestBtn.disabled = true;
+        setStatus('Sending SMTP test email...', '');
+        try {
+          const data = await requestJson('/api/shopping-workflow-email/send-test', {
+            method: 'POST',
+            body: JSON.stringify({ savedListId })
+          });
+          setStatus(`Test email sent to ${data.recipientEmail || 'the configured recipient'}.`, 'ok');
+        } catch (err) {
+          setStatus(err.message || 'Failed to send SMTP test email.', 'error');
+        }
+        smtpTestBtn.disabled = false;
+      }
+
       async function scheduleEmail() {
         const savedListId = Number(savedListSelect.value || 0);
         const triggerAt = String(triggerAtInput.value || '').trim();
@@ -340,6 +366,7 @@
       sendNowBtn.addEventListener('click', sendNow);
       scheduleBtn.addEventListener('click', scheduleEmail);
       refreshBtn.addEventListener('click', loadSchedules);
+      smtpTestBtn.addEventListener('click', sendSmtpTest);
 
       triggerAtInput.value = isoLocalNowPlusMinutes(10);
       loadSavedLists();
