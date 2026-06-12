@@ -48,6 +48,18 @@ function hasResendReady() {
   return Boolean(cfg.apiKey && cfg.fromAddress);
 }
 
+function getShoppingReviewEmailChannelPreference() {
+  const raw = String(process.env.SHOPPING_REVIEW_EMAIL_CHANNEL || '').trim().toLowerCase();
+  if (raw === 'smtp' || raw === 'resend') return raw;
+  return 'auto';
+}
+
+function shouldUseResendChannel() {
+  const preference = getShoppingReviewEmailChannelPreference();
+  if (preference === 'smtp') return false;
+  return hasResendReady();
+}
+
 function createMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = String(process.env.SMTP_USER || '').trim();
@@ -340,13 +352,15 @@ router.get('/status', async (req, res) => {
   try {
     await ensureSchema();
     const resendCfg = getResendConfig();
-    const resendReady = hasResendReady();
+    const resendReady = shouldUseResendChannel();
+    const channelPreference = getShoppingReviewEmailChannelPreference();
     const fromAddress = resendReady ? resendCfg.fromAddress : getFromAddress();
     const mailerStatus = resendReady ? { smtpReady: true, smtpError: '' } : await verifyMailer(createMailer(), 12000);
     return res.json({
       success: true,
       smtpReady: Boolean(fromAddress) && Boolean(mailerStatus.smtpReady),
       smtpChannel: resendReady ? 'resend' : 'smtp',
+      channelPreference,
       resendReady,
       resendApiConfigured: Boolean(resendCfg.apiKey),
       resendApiSource: String(resendCfg.apiKeySource || ''),
@@ -493,10 +507,11 @@ async function sendShoppingReviewEmail(options = {}) {
 
   const from = getFromAddress();
   const subject = `Shopping List Review: ${String(list.title || 'Weekly Shopping List')}`;
+  const useResend = shouldUseResendChannel();
 
   let deliveryChannel = 'smtp';
   try {
-    if (hasResendReady()) {
+    if (useResend) {
       const resendResult = await sendViaResend({ to: recipientEmail, subject, html });
       deliveryChannel = resendResult.channel || 'resend';
     } else {
