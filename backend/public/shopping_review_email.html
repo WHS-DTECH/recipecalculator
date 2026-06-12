@@ -252,7 +252,8 @@
           smtpStatusBadge.className = 'smtp-badge ' + (ok ? 'ok' : 'error');
           smtpStatusBadge.textContent = ok ? 'SMTP Ready' : 'SMTP Not Ready';
           const channel = String(data.smtpChannel || 'smtp').toUpperCase();
-          const resendFlags = `Resend API: ${data.resendApiConfigured ? 'yes' : 'no'} | Resend From: ${data.resendFromConfigured ? 'yes' : 'no'}`;
+          const resendSource = data.resendApiConfigured ? String(data.resendApiSource || 'RESEND_API_KEY') : '-';
+          const resendFlags = `Resend API: ${data.resendApiConfigured ? 'yes' : 'no'} (${resendSource}) | Resend From: ${data.resendFromConfigured ? 'yes' : 'no'}`;
           smtpStatusText.textContent = ok
             ? `Channel: ${channel} | Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
             : `Channel: ${channel} | ${data.smtpError || 'SMTP is not ready.'} | ${resendFlags}`;

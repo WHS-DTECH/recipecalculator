@@ -32,9 +32,15 @@ function getFromAddress() {
 }
 
 function getResendConfig() {
-  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const apiKeyCandidates = [
+    { name: 'RESEND_API_KEY', value: process.env.RESEND_API_KEY },
+    { name: 'RESEND_KEY', value: process.env.RESEND_KEY },
+    { name: 'RESEND_TOKEN', value: process.env.RESEND_TOKEN }
+  ];
+  const selectedApi = apiKeyCandidates.find((entry) => String(entry.value || '').trim());
+  const apiKey = String(selectedApi && selectedApi.value ? selectedApi.value : '').trim();
   const fromAddress = String(process.env.RESEND_FROM || process.env.DIGEST_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
-  return { apiKey, fromAddress };
+  return { apiKey, fromAddress, apiKeySource: selectedApi ? selectedApi.name : '' };
 }
 
 function hasResendReady() {
@@ -343,6 +349,7 @@ router.get('/status', async (req, res) => {
       smtpChannel: resendReady ? 'resend' : 'smtp',
       resendReady,
       resendApiConfigured: Boolean(resendCfg.apiKey),
+      resendApiSource: String(resendCfg.apiKeySource || ''),
       resendFromConfigured: Boolean(resendCfg.fromAddress),
       smtpError: fromAddress ? (mailerStatus.smtpReady ? '' : formatSmtpStatusError({ message: mailerStatus.smtpError })) : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
       fromAddress: fromAddress || '',
