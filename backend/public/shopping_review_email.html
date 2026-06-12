@@ -251,8 +251,9 @@
           const ok = Boolean(data.smtpReady);
           smtpStatusBadge.className = 'smtp-badge ' + (ok ? 'ok' : 'error');
           smtpStatusBadge.textContent = ok ? 'SMTP Ready' : 'SMTP Not Ready';
+          const channel = String(data.smtpChannel || 'smtp').toUpperCase();
           smtpStatusText.textContent = ok
-            ? `Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
+            ? `Channel: ${channel} | Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
             : (data.smtpError || 'SMTP is not ready. Scheduled emails will stay disabled until the Render SMTP settings are fixed.');
           setWorkflowControlsEnabled(ok);
         } catch (err) {
