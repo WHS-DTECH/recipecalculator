@@ -37,6 +37,10 @@
     .pill-failed{background:#fee2e2;color:#991b1b;}
     .pill-cancelled{background:#e5e7eb;color:#374151;}
     .actions{display:flex;gap:0.35rem;flex-wrap:wrap;}
+    .smtp-badge{display:inline-flex;align-items:center;gap:0.45rem;padding:0.35rem 0.6rem;border-radius:999px;font-size:0.8rem;font-weight:700;}
+    .smtp-badge.ok{background:#dcfce7;color:#166534;}
+    .smtp-badge.error{background:#fee2e2;color:#991b1b;}
+    .smtp-badge.neutral{background:#e2e8f0;color:#334155;}
     @media (max-width:760px){.field{min-width:100%;}}
   </style>
 </head>
@@ -47,6 +51,11 @@
   <div class="page">
     <h1 class="title">Shopping Review Email</h1>
     <p class="sub">Send the structured shopping review email now, or schedule it for a future date/time.</p>
+
+    <div class="card">
+      <div id="smtpStatusBadge" class="smtp-badge neutral">Checking SMTP status...</div>
+      <div id="smtpStatusText" class="sub" style="margin:0.55rem 0 0;">This confirms whether scheduled review emails can be sent from Render.</div>
+    </div>
 
     <div class="card">
       <div class="row">
@@ -105,6 +114,8 @@
       const refreshBtn = document.getElementById('refreshBtn');
       const statusEl = document.getElementById('status');
       const scheduleTableBody = document.getElementById('scheduleTableBody');
+      const smtpStatusBadge = document.getElementById('smtpStatusBadge');
+      const smtpStatusText = document.getElementById('smtpStatusText');
 
       function esc(str) {
         return String(str == null ? '' : str)
@@ -222,6 +233,22 @@
         }
       }
 
+      async function loadSmtpStatus() {
+        try {
+          const data = await requestJson('/api/shopping-workflow-email/status');
+          const ok = Boolean(data.smtpReady);
+          smtpStatusBadge.className = 'smtp-badge ' + (ok ? 'ok' : 'error');
+          smtpStatusBadge.textContent = ok ? 'SMTP Ready' : 'SMTP Not Ready';
+          smtpStatusText.textContent = ok
+            ? `Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
+            : 'SMTP settings are missing or incomplete in Render. Scheduled emails will not send until those are configured.';
+        } catch (err) {
+          smtpStatusBadge.className = 'smtp-badge neutral';
+          smtpStatusBadge.textContent = 'SMTP Unknown';
+          smtpStatusText.textContent = err.message || 'Unable to load SMTP status.';
+        }
+      }
+
       async function sendNow() {
         const savedListId = Number(savedListSelect.value || 0);
         if (!savedListId) {
@@ -317,6 +344,7 @@
       triggerAtInput.value = isoLocalNowPlusMinutes(10);
       loadSavedLists();
       loadSchedules();
+      loadSmtpStatus();
     })();
   </script>
 </body>

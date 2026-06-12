@@ -218,6 +218,26 @@ function buildRespondResultHtml(title, message, type) {
   `;
 }
 
+router.get('/status', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    await ensureSchema();
+    const fromAddress = getFromAddress();
+    const mailerReady = Boolean(createMailer());
+    return res.json({
+      success: true,
+      smtpReady: mailerReady && Boolean(fromAddress),
+      fromAddress: fromAddress || '',
+      testRecipient: normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz')
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to load shopping review email status.' });
+  }
+});
+
 async function ensureSchema() {
   if (schemaReady) return;
 
