@@ -999,6 +999,9 @@ app.use('/api/weekly-digest', weeklyDigestRouter);
 const savedShoppingListsRouter = require('./routes/saved_shopping_lists');
 app.use('/api/saved-shopping-lists', savedShoppingListsRouter);
 
+const shoppingWorkflowEmailRouter = require('./routes/shopping_workflow_email');
+app.use('/api/shopping-workflow-email', shoppingWorkflowEmailRouter);
+
 const shoppingPlanRouter = require('./routes/shopping_plan');
 app.use('/api/shopping-plan', shoppingPlanRouter);
 
