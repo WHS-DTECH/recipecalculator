@@ -23,6 +23,7 @@
     .btn-muted:hover{background:#334155;}
     .btn-danger{background:#b91c1c;color:#fff;}
     .btn-danger:hover{background:#991b1b;}
+    .btn:disabled{opacity:0.45;cursor:not-allowed;}
     .status{margin-top:0.7rem;min-height:1.2rem;font-size:0.9rem;color:#334155;}
     .status.ok{color:#166534;}
     .status.error{color:#b91c1c;}
@@ -252,7 +253,7 @@
           smtpStatusBadge.textContent = ok ? 'SMTP Ready' : 'SMTP Not Ready';
           smtpStatusText.textContent = ok
             ? `Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
-            : (data.smtpError || 'SMTP settings are missing or incomplete in Render. Scheduled emails will not send until those are configured.');
+            : (data.smtpError || 'SMTP is not ready. Scheduled emails will stay disabled until the Render SMTP settings are fixed.');
           setWorkflowControlsEnabled(ok);
         } catch (err) {
           smtpStatusBadge.className = 'smtp-badge neutral';

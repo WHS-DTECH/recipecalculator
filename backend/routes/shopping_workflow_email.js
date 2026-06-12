@@ -67,6 +67,18 @@ async function verifyMailer(mailer, timeoutMs) {
   }
 }
 
+function formatSmtpStatusError(err) {
+  const message = String(err && err.message ? err.message : '').trim();
+  if (!message) return 'SMTP verification failed.';
+  if (/invalid login|username and password not accepted|auth/i.test(message)) {
+    return 'SMTP authentication failed. Check SMTP_USER and SMTP_PASS in Render.';
+  }
+  if (/timeout/i.test(message)) {
+    return 'SMTP verification timed out.';
+  }
+  return 'SMTP verification failed. Check the Render environment variables.';
+}
+
 function getBootstrapAdminEmails() {
   const configured = String(process.env.ADMIN_BOOTSTRAP_EMAILS || '')
     .split(',')
@@ -249,7 +261,7 @@ router.get('/status', async (req, res) => {
     return res.json({
       success: true,
       smtpReady: Boolean(fromAddress) && Boolean(mailerStatus.smtpReady),
-      smtpError: fromAddress ? String(mailerStatus.smtpError || '') : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
+      smtpError: fromAddress ? (mailerStatus.smtpReady ? '' : formatSmtpStatusError({ message: mailerStatus.smtpError })) : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
       fromAddress: fromAddress || '',
       testRecipient: normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz')
     });
