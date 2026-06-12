@@ -771,6 +771,38 @@
       font-size: 12px;
       white-space: pre-wrap;
     }
+
+    .planner-quick-links {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin: 0 0 14px 0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+
+    .planner-quick-links-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: #334155;
+      margin: 0 0 6px 0;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .planner-quick-links-row {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .planner-quick-links .btn {
+      padding: 4px 10px;
+      font-size: 12px;
+      text-decoration: none;
+      border-radius: 999px;
+    }
   </style>
 </head>
 <body>
@@ -816,6 +848,13 @@
       </select>
       <input type="text" id="searchInput" placeholder="Search recipe name...">
       <button class="btn btn-secondary btn-sm" id="refreshBtn">Refresh</button>
+    </div>
+
+    <div class="planner-quick-links" aria-live="polite">
+      <div class="planner-quick-links-title">Quick Planner Links</div>
+      <div id="plannerQuickLinks" class="planner-quick-links-row">
+        <span style="font-size:12px;color:#64748b;">Loading planner links...</span>
+      </div>
     </div>
 
     <div id="recipeContainer" class="recipe-list"></div>
@@ -935,6 +974,8 @@
     let availableRecipesCache = null;
     const recipeDetailsCache = new Map();
     const linkModalSelectedIds = new Set();
+    let latestPlannerConfiguredDocIds = [];
+    let latestPlannerSyncHistory = [];
 
     function getCurrentStaffEmail() {
       try {
@@ -1143,9 +1184,127 @@
       }
     }
 
+    function normalizePlannerTitle(value) {
+      return String(value || '').trim().toLowerCase();
+    }
+
+    function plannerSlotDefinitions() {
+      return [
+        { key: 'junior', label: 'Junior School', patterns: [/junior/] },
+        { key: 'middle', label: 'Middle School', patterns: [/middle/, /middleschool/, /mfood/] },
+        { key: 'hosp100', label: '11HOSP (100HOSP)', patterns: [/hp100/, /\b100\b/, /11hosp/] },
+        { key: 'hosp200', label: '12HOSP (200HOSP)', patterns: [/hp200/, /\b200\b/, /12hosp/] },
+        { key: 'hosp300', label: '13HOSP (300HOSP)', patterns: [/hp300/, /\b300\b/, /13hosp/] }
+      ];
+    }
+
+    function plannerManualLinkBySlotKey() {
+      return {
+        junior: 'https://docs.google.com/spreadsheets/d/110sYwULOvIXyOrtssazosKva9SwxMCovJIU4L_mNZBs/edit?usp=sharing'
+      };
+    }
+
+    function buildPlannerDocTitleById(historyRows) {
+      const byId = new Map();
+      (Array.isArray(historyRows) ? historyRows : []).forEach((row) => {
+        const docId = String(row && row.document_id || '').trim();
+        const title = String(row && row.document_title || '').trim();
+        if (!docId || !title) return;
+        if (!byId.has(docId)) byId.set(docId, title);
+      });
+      return byId;
+    }
+
+    function mapDocsToPlannerSlots(docIds, historyRows) {
+      const slots = plannerSlotDefinitions();
+      const titleById = buildPlannerDocTitleById(historyRows);
+      const unassigned = new Set((Array.isArray(docIds) ? docIds : []).filter(Boolean));
+      const assignedBySlot = new Map();
+
+      slots.forEach((slot) => {
+        for (const docId of unassigned) {
+          const title = normalizePlannerTitle(titleById.get(docId));
+          if (!title) continue;
+          if (slot.patterns.some((pattern) => pattern.test(title))) {
+            assignedBySlot.set(slot.key, docId);
+            unassigned.delete(docId);
+            break;
+          }
+        }
+      });
+
+      const remainingDocIds = Array.from(unassigned);
+      slots.forEach((slot) => {
+        if (assignedBySlot.has(slot.key)) return;
+        if (!remainingDocIds.length) return;
+        assignedBySlot.set(slot.key, remainingDocIds.shift());
+      });
+
+      return slots.map((slot) => ({
+        key: slot.key,
+        label: slot.label,
+        docId: assignedBySlot.get(slot.key) || '',
+        title: assignedBySlot.get(slot.key) ? (titleById.get(assignedBySlot.get(slot.key)) || '') : ''
+      }));
+    }
+
+    function renderPlannerQuickLinks() {
+      const quickLinksEl = document.getElementById('plannerQuickLinks');
+      if (!quickLinksEl) return;
+
+      const mapped = mapDocsToPlannerSlots(latestPlannerConfiguredDocIds, latestPlannerSyncHistory);
+      const manualLinks = plannerManualLinkBySlotKey();
+
+      quickLinksEl.innerHTML = mapped.map((item) => {
+        if (item.docId) {
+          const safeId = escapeHtml(item.docId);
+          const safeLabel = escapeHtml(item.label);
+          const safeTitle = escapeHtml(item.title || item.label);
+          return `<a href="https://docs.google.com/document/d/${safeId}/edit" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" title="${safeTitle}">${safeLabel}</a>`;
+        }
+
+        const manualUrl = manualLinks[item.key];
+        if (manualUrl) {
+          const safeManualUrl = escapeHtml(manualUrl);
+          const safeLabel = escapeHtml(item.label);
+          return `<a href="${safeManualUrl}" target="_blank" rel="noopener noreferrer" class="btn btn-primary btn-sm" title="${safeLabel}">${safeLabel}</a>`;
+        }
+
+        const safeMissingLabel = escapeHtml(`${item.label} (not configured)`);
+        return `<span class="btn btn-secondary btn-sm" style="opacity:0.55;cursor:not-allowed;" title="Planner not configured in GOOGLE_PLANNER_DOC_IDS">${safeMissingLabel}</span>`;
+      }).join('');
+    }
+
+    async function loadPlannerQuickLinks() {
+      const quickLinksEl = document.getElementById('plannerQuickLinks');
+      if (!quickLinksEl) return;
+
+      try {
+        const [configRes, historyRes] = await Promise.all([
+          fetch('/google/sync-config', { credentials: 'include' }),
+          fetch('/google/sync-history?limit=30', { credentials: 'include' })
+        ]);
+
+        const configData = await configRes.json().catch(() => ({}));
+        const historyData = await historyRes.json().catch(() => ({}));
+
+        latestPlannerConfiguredDocIds = Array.isArray(configData && configData.configuredDocIds)
+          ? configData.configuredDocIds.map((id) => String(id || '').trim()).filter(Boolean)
+          : [];
+        latestPlannerSyncHistory = Array.isArray(historyData && historyData.history)
+          ? historyData.history
+          : [];
+
+        renderPlannerQuickLinks();
+      } catch (_) {
+        quickLinksEl.innerHTML = '<span style="font-size:12px;color:#b91c1c;">Unable to load planner links.</span>';
+      }
+    }
+
     // Initialize
     document.addEventListener('DOMContentLoaded', () => {
       loadUnmatchedRecipes();
+      loadPlannerQuickLinks();
       document.getElementById('autoMatchBtn').addEventListener('click', autoMatchAll);
       document.getElementById('resaveAuditBtn').addEventListener('click', runResaveAudit);
       document.getElementById('auditLoadMissingBtn').addEventListener('click', runAuditLoadMissingIngredients);
