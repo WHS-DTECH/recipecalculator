@@ -122,6 +122,12 @@
       const smtpStatusText = document.getElementById('smtpStatusText');
       const smtpTestBtn = document.getElementById('smtpTestBtn');
 
+      function setWorkflowControlsEnabled(enabled) {
+        sendNowBtn.disabled = !enabled;
+        scheduleBtn.disabled = !enabled;
+        smtpTestBtn.disabled = !enabled;
+      }
+
       function esc(str) {
         return String(str == null ? '' : str)
           .replace(/&/g, '&amp;')
@@ -246,11 +252,13 @@
           smtpStatusBadge.textContent = ok ? 'SMTP Ready' : 'SMTP Not Ready';
           smtpStatusText.textContent = ok
             ? `Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
-            : 'SMTP settings are missing or incomplete in Render. Scheduled emails will not send until those are configured.';
+            : (data.smtpError || 'SMTP settings are missing or incomplete in Render. Scheduled emails will not send until those are configured.');
+          setWorkflowControlsEnabled(ok);
         } catch (err) {
           smtpStatusBadge.className = 'smtp-badge neutral';
           smtpStatusBadge.textContent = 'SMTP Unknown';
           smtpStatusText.textContent = err.message || 'Unable to load SMTP status.';
+          setWorkflowControlsEnabled(false);
         }
       }
 
@@ -368,6 +376,7 @@
       refreshBtn.addEventListener('click', loadSchedules);
       smtpTestBtn.addEventListener('click', sendSmtpTest);
 
+      setWorkflowControlsEnabled(false);
       triggerAtInput.value = isoLocalNowPlusMinutes(10);
       loadSavedLists();
       loadSchedules();

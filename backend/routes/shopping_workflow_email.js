@@ -48,6 +48,25 @@ function createMailer() {
   });
 }
 
+async function verifyMailer(mailer, timeoutMs) {
+  if (!mailer) {
+    return { smtpReady: false, smtpError: 'SMTP settings are incomplete.' };
+  }
+
+  const timeout = Math.max(1000, Number(timeoutMs || 12000));
+  const verifyPromise = mailer.verify();
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('SMTP verification timed out.')), timeout);
+  });
+
+  try {
+    await Promise.race([verifyPromise, timeoutPromise]);
+    return { smtpReady: true, smtpError: '' };
+  } catch (err) {
+    return { smtpReady: false, smtpError: err && err.message ? err.message : 'SMTP verification failed.' };
+  }
+}
+
 function getBootstrapAdminEmails() {
   const configured = String(process.env.ADMIN_BOOTSTRAP_EMAILS || '')
     .split(',')
@@ -226,10 +245,11 @@ router.get('/status', async (req, res) => {
   try {
     await ensureSchema();
     const fromAddress = getFromAddress();
-    const mailerReady = Boolean(createMailer());
+    const mailerStatus = await verifyMailer(createMailer(), 12000);
     return res.json({
       success: true,
-      smtpReady: mailerReady && Boolean(fromAddress),
+      smtpReady: Boolean(fromAddress) && Boolean(mailerStatus.smtpReady),
+      smtpError: fromAddress ? String(mailerStatus.smtpError || '') : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
       fromAddress: fromAddress || '',
       testRecipient: normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz')
     });
