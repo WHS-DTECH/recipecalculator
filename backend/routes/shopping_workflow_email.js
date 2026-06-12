@@ -2,6 +2,7 @@
 
 const express = require('express');
 const crypto = require('crypto');
+const https = require('https');
 const nodemailer = require('nodemailer');
 const pool = require('../db');
 
@@ -38,7 +39,7 @@ function getResendConfig() {
 
 function hasResendReady() {
   const cfg = getResendConfig();
-  return Boolean(cfg.apiKey && cfg.fromAddress && typeof fetch === 'function');
+  return Boolean(cfg.apiKey && cfg.fromAddress);
 }
 
 function createMailer() {
@@ -95,28 +96,63 @@ async function sendViaResend(payload) {
   const cfg = getResendConfig();
   if (!cfg.apiKey) throw new Error('Resend API key is not configured.');
   if (!cfg.fromAddress) throw new Error('Resend sender address is not configured.');
-  if (typeof fetch !== 'function') throw new Error('Fetch is unavailable for Resend API calls.');
+  const requestBody = {
+    from: cfg.fromAddress,
+    to: [payload.to],
+    subject: payload.subject,
+    html: payload.html
+  };
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${cfg.apiKey}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      from: cfg.fromAddress,
-      to: [payload.to],
-      subject: payload.subject,
-      html: payload.html
-    })
-  });
+  if (typeof fetch === 'function') {
+    const response = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(requestBody)
+    });
 
-  if (!response.ok) {
-    const bodyText = await response.text().catch(() => '');
-    throw new Error(`Resend send failed (${response.status} ${response.statusText}) ${String(bodyText || '').trim()}`.trim());
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => '');
+      throw new Error(`Resend send failed (${response.status} ${response.statusText}) ${String(bodyText || '').trim()}`.trim());
+    }
+
+    await response.json().catch(() => ({}));
+    return { channel: 'resend', fromAddress: cfg.fromAddress };
   }
 
-  await response.json().catch(() => ({}));
+  const fallbackResult = await new Promise((resolve, reject) => {
+    const body = JSON.stringify(requestBody);
+    const req = https.request({
+      hostname: 'api.resend.com',
+      path: '/emails',
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cfg.apiKey}`,
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    }, (resp) => {
+      let raw = '';
+      resp.on('data', (chunk) => { raw += String(chunk || ''); });
+      resp.on('end', () => {
+        const statusCode = Number(resp.statusCode || 0);
+        if (statusCode >= 200 && statusCode < 300) {
+          return resolve({ statusCode, body: raw });
+        }
+        return reject(new Error(`Resend send failed (${statusCode}) ${raw}`.trim()));
+      });
+    });
+    req.on('error', (err) => reject(err));
+    req.write(body);
+    req.end();
+  });
+
+  if (!fallbackResult || !fallbackResult.statusCode) {
+    throw new Error('Resend send failed.');
+  }
+
   return { channel: 'resend', fromAddress: cfg.fromAddress };
 }
 
@@ -297,13 +333,17 @@ router.get('/status', async (req, res) => {
 
   try {
     await ensureSchema();
+    const resendCfg = getResendConfig();
     const resendReady = hasResendReady();
-    const fromAddress = resendReady ? getResendConfig().fromAddress : getFromAddress();
+    const fromAddress = resendReady ? resendCfg.fromAddress : getFromAddress();
     const mailerStatus = resendReady ? { smtpReady: true, smtpError: '' } : await verifyMailer(createMailer(), 12000);
     return res.json({
       success: true,
       smtpReady: Boolean(fromAddress) && Boolean(mailerStatus.smtpReady),
       smtpChannel: resendReady ? 'resend' : 'smtp',
+      resendReady,
+      resendApiConfigured: Boolean(resendCfg.apiKey),
+      resendFromConfigured: Boolean(resendCfg.fromAddress),
       smtpError: fromAddress ? (mailerStatus.smtpReady ? '' : formatSmtpStatusError({ message: mailerStatus.smtpError })) : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
       fromAddress: fromAddress || '',
       testRecipient: normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz')
