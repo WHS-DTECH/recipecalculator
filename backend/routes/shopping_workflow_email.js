@@ -33,8 +33,9 @@ function getFromAddress() {
 function createMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = String(process.env.SMTP_USER || '').trim();
-  const pass = String(process.env.SMTP_PASS || '').trim();
-  if (!host || !user || !pass) return null;
+  const rawPass = String(process.env.SMTP_PASS || '').trim();
+  if (!host || !user || !rawPass) return null;
+  const pass = /(^|\.)gmail\.com$/i.test(host) ? rawPass.replace(/\s+/g, '') : rawPass;
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
   return nodemailer.createTransport({
