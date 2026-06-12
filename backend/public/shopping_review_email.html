@@ -58,7 +58,7 @@
       <div id="smtpStatusBadge" class="smtp-badge neutral">Checking SMTP status...</div>
       <div id="smtpStatusText" class="sub" style="margin:0.55rem 0 0;">This confirms whether scheduled review emails can be sent from Render.</div>
       <div class="mini-actions">
-        <button type="button" id="smtpTestBtn" class="btn btn-muted" style="padding:0.45rem 0.75rem;font-size:0.82rem;">Send SMTP Test</button>
+        <button type="button" id="smtpTestBtn" class="btn btn-muted" style="padding:0.45rem 0.75rem;font-size:0.82rem;">Send Test Email</button>
       </div>
     </div>
 
@@ -254,6 +254,7 @@
           const channel = String(data.smtpChannel || 'smtp').toUpperCase();
           const resendSource = data.resendApiConfigured ? String(data.resendApiSource || 'RESEND_API_KEY') : '-';
           const resendFlags = `Resend API: ${data.resendApiConfigured ? 'yes' : 'no'} (${resendSource}) | Resend From: ${data.resendFromConfigured ? 'yes' : 'no'}`;
+          smtpTestBtn.textContent = channel === 'RESEND' ? 'Send Resend Test' : 'Send SMTP Test';
           smtpStatusText.textContent = ok
             ? `Channel: ${channel} | Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
             : `Channel: ${channel} | ${data.smtpError || 'SMTP is not ready.'} | ${resendFlags}`;
