@@ -515,21 +515,9 @@ async function sendShoppingReviewEmail(options = {}) {
       });
     }
   } catch (primaryErr) {
-    if (hasResendReady()) {
-      const mailer = createMailer();
-      if (!mailer || !from) {
-        throw new Error(primaryErr && primaryErr.message ? primaryErr.message : 'Email delivery failed.');
-      }
-      await mailer.sendMail({
-        from,
-        to: recipientEmail,
-        subject,
-        html
-      });
-      deliveryChannel = 'smtp';
-    } else {
-      throw primaryErr;
-    }
+    // If Resend is configured, do not fall back to SMTP automatically.
+    // SMTP fallback can mask the real Resend error and re-introduce Gmail auth failures.
+    throw new Error(primaryErr && primaryErr.message ? primaryErr.message : 'Email delivery failed.');
   }
 
   return {
