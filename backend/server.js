@@ -2905,6 +2905,26 @@ app.listen(PORT, () => {
     console.error('[SUGGESTIONS] SMTP health check error:', err.message);
   });
 
+  let shoppingReviewSchedulerBusy = false;
+  const scheduleIntervalMs = Math.max(30000, Number(process.env.SHOPPING_REVIEW_SCHEDULE_POLL_MS || 60000));
+  setInterval(async () => {
+    if (shoppingReviewSchedulerBusy) return;
+    shoppingReviewSchedulerBusy = true;
+    try {
+      if (typeof shoppingWorkflowEmailRouter.processDueSchedules === 'function') {
+        const processed = await shoppingWorkflowEmailRouter.processDueSchedules(5);
+        if (Number(processed) > 0) {
+          console.log(`[SHOPPING-REVIEW] Processed ${processed} due scheduled email(s).`);
+        }
+      }
+    } catch (err) {
+      console.error('[SHOPPING-REVIEW] Scheduler failed:', err.message);
+    } finally {
+      shoppingReviewSchedulerBusy = false;
+    }
+  }, scheduleIntervalMs);
+  console.log(`[SHOPPING-REVIEW] Schedule poll started (${scheduleIntervalMs}ms)`);
+
   // ── Weekly Digest Scheduler ──────────────────────────────────────────────
   // Fires every Monday at 07:00 NZT (UTC+13 NZDT / UTC+12 NZST).
   // Uses node-cron if available; logs a warning if not installed.

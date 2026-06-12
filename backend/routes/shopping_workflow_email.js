@@ -250,10 +250,129 @@ async function ensureSchema() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopping_email_review_schedules (
+      id SERIAL PRIMARY KEY,
+      saved_list_id INTEGER NOT NULL REFERENCES saved_shopping_lists(id) ON DELETE CASCADE,
+      recipient_email TEXT NOT NULL,
+      trigger_at TIMESTAMPTZ NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_by_email TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      sent_at TIMESTAMPTZ,
+      request_id INTEGER REFERENCES shopping_email_review_requests(id) ON DELETE SET NULL,
+      last_error TEXT NOT NULL DEFAULT ''
+    )
+  `);
+
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_requests_status_idx ON shopping_email_review_requests(status, expires_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_responses_request_idx ON shopping_email_review_responses(request_id, created_at DESC)');
+  await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_schedules_status_idx ON shopping_email_review_schedules(status, trigger_at ASC)');
 
   schemaReady = true;
+}
+
+async function resolveSavedList(savedListId) {
+  if (Number.isInteger(savedListId) && savedListId > 0) {
+    const byId = await pool.query(
+      `SELECT id, title, week_info, parsed_state
+       FROM saved_shopping_lists
+       WHERE id = $1
+       LIMIT 1`,
+      [savedListId]
+    );
+    if (byId.rowCount) return byId.rows[0];
+  }
+
+  const latest = await pool.query(
+    `SELECT id, title, week_info, parsed_state
+     FROM saved_shopping_lists
+     ORDER BY updated_at DESC, id DESC
+     LIMIT 1`
+  );
+  return latest.rowCount ? latest.rows[0] : null;
+}
+
+async function sendShoppingReviewEmail(options = {}) {
+  await ensureSchema();
+
+  const forcedRecipient = normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz');
+  const requestedRecipient = normalizeEmail(options.recipientEmail);
+  const recipientEmail = requestedRecipient || forcedRecipient;
+  if (recipientEmail !== forcedRecipient) {
+    throw new Error(`Test emails are locked to ${forcedRecipient}.`);
+  }
+
+  const list = await resolveSavedList(Number(options.savedListId));
+  if (!list) {
+    throw new Error('No saved shopping list found. Upload and save one first.');
+  }
+
+  const token = randomToken();
+  const tokenHash = hashToken(token);
+  const triggerEmail = normalizeEmail(options.triggerEmail);
+  const triggerSource = String(options.triggerSource || 'manual').trim();
+
+  const requestInsert = await pool.query(
+    `INSERT INTO shopping_email_review_requests (
+       saved_list_id, recipient_email, recipient_name, token_hash, status, expires_at, payload
+     ) VALUES ($1, $2, $3, $4, 'sent', NOW() + INTERVAL '7 days', $5::jsonb)
+     RETURNING id`,
+    [
+      list.id,
+      recipientEmail,
+      'Vanessa',
+      tokenHash,
+      JSON.stringify({
+        trigger_email: triggerEmail,
+        trigger_source: triggerSource,
+        created_at: new Date().toISOString()
+      })
+    ]
+  );
+
+  const requestId = Number(requestInsert.rows[0].id);
+  const siteUrl = getSiteUrl();
+  const approveLink = `${siteUrl}/api/shopping-workflow-email/respond?action=approve&token=${encodeURIComponent(token)}`;
+  const requestChangesLink = `${siteUrl}/api/shopping-workflow-email/review-form?token=${encodeURIComponent(token)}`;
+  const respondPostUrl = `${siteUrl}/api/shopping-workflow-email/respond`;
+
+  const previewItems = parseItemsFromState(list.parsed_state || {});
+  const html = buildShoppingReviewEmailHtml({
+    title: list.title,
+    weekInfo: list.week_info,
+    approveLink,
+    requestChangesLink,
+    respondPostUrl,
+    token,
+    previewItems
+  });
+
+  const from = getFromAddress();
+  if (!from) {
+    throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
+  }
+
+  const mailer = createMailer();
+  if (!mailer) {
+    throw new Error('SMTP is not configured.');
+  }
+
+  await mailer.sendMail({
+    from,
+    to: recipientEmail,
+    subject: `Shopping List Review: ${String(list.title || 'Weekly Shopping List')}`,
+    html
+  });
+
+  return {
+    requestId,
+    recipientEmail,
+    savedListId: list.id,
+    approveLink,
+    requestChangesLink
+  };
 }
 
 async function findRequestByToken(rawToken) {
@@ -323,102 +442,202 @@ router.post('/send-test', async (req, res) => {
   }
 
   try {
+    const sent = await sendShoppingReviewEmail({
+      savedListId: Number(req.body && req.body.savedListId),
+      recipientEmail: req.body && req.body.recipientEmail,
+      triggerEmail: getRequestEmail(req),
+      triggerSource: 'manual_api'
+    });
+    return res.json(Object.assign({ success: true }, sent));
+  } catch (err) {
+    const status = /not configured|locked/i.test(String(err && err.message || '')) ? 503 : 500;
+    return res.status(status).json({ success: false, error: err.message || 'Failed to send shopping review email.' });
+  }
+});
+
+router.get('/schedules', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    await ensureSchema();
+    const result = await pool.query(
+      `SELECT s.id, s.saved_list_id, s.recipient_email, s.trigger_at, s.status,
+              s.created_by_email, s.created_at, s.updated_at, s.sent_at, s.last_error,
+              l.title, l.week_info
+       FROM shopping_email_review_schedules s
+       LEFT JOIN saved_shopping_lists l ON l.id = s.saved_list_id
+       ORDER BY s.trigger_at DESC, s.id DESC
+       LIMIT 100`
+    );
+    return res.json({ success: true, schedules: result.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to load schedules.' });
+  }
+});
+
+router.post('/schedules', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
     await ensureSchema();
 
     const forcedRecipient = normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz');
-    const requestedRecipient = normalizeEmail(req.body && req.body.recipientEmail);
-    const recipientEmail = requestedRecipient || forcedRecipient;
-    if (recipientEmail !== forcedRecipient) {
-      return res.status(400).json({ success: false, error: `Test emails are locked to ${forcedRecipient}.` });
-    }
-
     const savedListId = Number(req.body && req.body.savedListId);
-    let listResult;
-    if (Number.isInteger(savedListId) && savedListId > 0) {
-      listResult = await pool.query(
-        `SELECT id, title, week_info, parsed_state
-           FROM saved_shopping_lists
-          WHERE id = $1
-          LIMIT 1`,
-        [savedListId]
-      );
-    } else {
-      listResult = await pool.query(
-        `SELECT id, title, week_info, parsed_state
-           FROM saved_shopping_lists
-          ORDER BY updated_at DESC, id DESC
-          LIMIT 1`
-      );
+    const triggerAtRaw = String(req.body && req.body.triggerAt || '').trim();
+    const triggerDate = new Date(triggerAtRaw);
+
+    if (!Number.isInteger(savedListId) || savedListId <= 0) {
+      return res.status(400).json({ success: false, error: 'savedListId is required.' });
     }
 
-    if (!listResult.rowCount) {
-      return res.status(404).json({ success: false, error: 'No saved shopping list found. Upload and save one first.' });
+    if (!triggerAtRaw || Number.isNaN(triggerDate.getTime())) {
+      return res.status(400).json({ success: false, error: 'A valid triggerAt date/time is required.' });
     }
 
-    const list = listResult.rows[0];
-    const token = randomToken();
-    const tokenHash = hashToken(token);
+    if (triggerDate.getTime() <= Date.now() + 30000) {
+      return res.status(400).json({ success: false, error: 'Trigger time must be at least 30 seconds in the future.' });
+    }
 
-    const requestInsert = await pool.query(
-      `INSERT INTO shopping_email_review_requests (
-         saved_list_id, recipient_email, recipient_name, token_hash, status, expires_at, payload
-       ) VALUES ($1, $2, $3, $4, 'sent', NOW() + INTERVAL '7 days', $5::jsonb)
-       RETURNING id`,
-      [
-        list.id,
-        recipientEmail,
-        'Vanessa',
-        tokenHash,
-        JSON.stringify({ trigger_email: getRequestEmail(req), created_at: new Date().toISOString() })
-      ]
+    const list = await resolveSavedList(savedListId);
+    if (!list) {
+      return res.status(404).json({ success: false, error: 'Saved shopping list not found.' });
+    }
+
+    const insert = await pool.query(
+      `INSERT INTO shopping_email_review_schedules (
+         saved_list_id, recipient_email, trigger_at, status, created_by_email
+       ) VALUES ($1, $2, $3::timestamptz, 'pending', $4)
+       RETURNING id, saved_list_id, recipient_email, trigger_at, status, created_by_email, created_at`,
+      [savedListId, forcedRecipient, triggerAtRaw, getRequestEmail(req)]
     );
 
-    const requestId = Number(requestInsert.rows[0].id);
-    const siteUrl = getSiteUrl();
-    const approveLink = `${siteUrl}/api/shopping-workflow-email/respond?action=approve&token=${encodeURIComponent(token)}`;
-    const requestChangesLink = `${siteUrl}/api/shopping-workflow-email/review-form?token=${encodeURIComponent(token)}`;
-    const respondPostUrl = `${siteUrl}/api/shopping-workflow-email/respond`;
-
-    const previewItems = parseItemsFromState(list.parsed_state || {});
-    const html = buildShoppingReviewEmailHtml({
-      title: list.title,
-      weekInfo: list.week_info,
-      approveLink,
-      requestChangesLink,
-      respondPostUrl,
-      token,
-      previewItems
-    });
-
-    const from = getFromAddress();
-    if (!from) {
-      return res.status(503).json({ success: false, error: 'Email sender is not configured (SMTP_FROM/SMTP_USER).' });
-    }
-
-    const mailer = createMailer();
-    if (!mailer) {
-      return res.status(503).json({ success: false, error: 'SMTP is not configured.' });
-    }
-
-    await mailer.sendMail({
-      from,
-      to: recipientEmail,
-      subject: `Shopping List Review: ${String(list.title || 'Weekly Shopping List')}`,
-      html
-    });
-
-    return res.json({
-      success: true,
-      requestId,
-      recipientEmail,
-      savedListId: list.id,
-      approveLink,
-      requestChangesLink
-    });
+    return res.status(201).json({ success: true, schedule: insert.rows[0] });
   } catch (err) {
-    return res.status(500).json({ success: false, error: err.message || 'Failed to send shopping review email.' });
+    return res.status(500).json({ success: false, error: err.message || 'Unable to create schedule.' });
   }
 });
+
+router.post('/schedules/:id/cancel', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    await ensureSchema();
+    const scheduleId = Number(req.params.id);
+    if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid schedule id is required.' });
+    }
+
+    const update = await pool.query(
+      `UPDATE shopping_email_review_schedules
+          SET status = 'cancelled', updated_at = NOW()
+        WHERE id = $1 AND status = 'pending'
+        RETURNING id, status, updated_at`,
+      [scheduleId]
+    );
+
+    if (!update.rowCount) {
+      return res.status(404).json({ success: false, error: 'Pending schedule not found.' });
+    }
+
+    return res.json({ success: true, schedule: update.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to cancel schedule.' });
+  }
+});
+
+router.post('/schedules/:id/run-now', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    await ensureSchema();
+    const scheduleId = Number(req.params.id);
+    if (!Number.isInteger(scheduleId) || scheduleId <= 0) {
+      return res.status(400).json({ success: false, error: 'Valid schedule id is required.' });
+    }
+
+    const lookup = await pool.query(
+      `SELECT * FROM shopping_email_review_schedules WHERE id = $1 LIMIT 1`,
+      [scheduleId]
+    );
+    if (!lookup.rowCount) {
+      return res.status(404).json({ success: false, error: 'Schedule not found.' });
+    }
+
+    const row = lookup.rows[0];
+    if (String(row.status || '').toLowerCase() !== 'pending') {
+      return res.status(400).json({ success: false, error: 'Only pending schedules can run now.' });
+    }
+
+    const sent = await sendShoppingReviewEmail({
+      savedListId: Number(row.saved_list_id),
+      recipientEmail: row.recipient_email,
+      triggerEmail: getRequestEmail(req),
+      triggerSource: 'schedule_run_now'
+    });
+
+    await pool.query(
+      `UPDATE shopping_email_review_schedules
+          SET status = 'sent', sent_at = NOW(), updated_at = NOW(), request_id = $2, last_error = ''
+        WHERE id = $1`,
+      [scheduleId, sent.requestId]
+    );
+
+    return res.json({ success: true, scheduleId, sent });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to run schedule now.' });
+  }
+});
+
+async function processDueSchedules(limit = 5) {
+  await ensureSchema();
+
+  const dueResult = await pool.query(
+    `SELECT *
+     FROM shopping_email_review_schedules
+     WHERE status = 'pending'
+       AND trigger_at <= NOW()
+     ORDER BY trigger_at ASC, id ASC
+     LIMIT $1`,
+    [Math.max(1, Number(limit) || 5)]
+  );
+
+  let processed = 0;
+  for (const row of dueResult.rows) {
+    try {
+      const sent = await sendShoppingReviewEmail({
+        savedListId: Number(row.saved_list_id),
+        recipientEmail: row.recipient_email,
+        triggerEmail: row.created_by_email,
+        triggerSource: 'scheduled'
+      });
+
+      await pool.query(
+        `UPDATE shopping_email_review_schedules
+            SET status = 'sent', sent_at = NOW(), updated_at = NOW(), request_id = $2, last_error = ''
+          WHERE id = $1`,
+        [row.id, sent.requestId]
+      );
+      processed += 1;
+    } catch (err) {
+      await pool.query(
+        `UPDATE shopping_email_review_schedules
+            SET status = 'failed', updated_at = NOW(), last_error = $2
+          WHERE id = $1`,
+        [row.id, String(err && err.message || 'Unknown schedule send error')]
+      );
+    }
+  }
+
+  return processed;
+}
 
 router.get('/review-form', async (req, res) => {
   try {
@@ -501,3 +720,4 @@ router.all('/respond', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.processDueSchedules = processDueSchedules;
