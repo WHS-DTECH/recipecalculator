@@ -937,5 +937,44 @@ router.all('/respond', async (req, res) => {
   }
 });
 
+function getShoppingSmtpConfigSummary() {
+  const mailer = createMailer();
+  if (!mailer) return 'SMTP not configured';
+  const host = String(process.env.SMTP_HOST || '').trim();
+  const port = Number(process.env.SMTP_PORT || 587);
+  const secure = parseSmtpSecureFlag(process.env.SMTP_SECURE);
+  const user = resolveSmtpAuthUser(process.env.SMTP_USER, getFromAddress());
+  const fromAddress = getFromAddress();
+  return `host=${host} port=${port} secure=${secure} user=${user} from=${fromAddress}`;
+}
+
+function formatShoppingSmtpHealthError(err) {
+  const message = String(err && err.message ? err.message : err || '').trim();
+  if (!message) return 'unknown SMTP error';
+  if (/invalid login|username and password not accepted|badcredentials|auth/i.test(message)) {
+    return 'gmail authentication failed';
+  }
+  if (/timed out|timeout/i.test(message)) {
+    return 'smtp connection timed out';
+  }
+  return message;
+}
+
+async function logShoppingMailerHealthCheck() {
+  const mailer = createMailer();
+  if (!mailer) {
+    console.warn('[SHOPPING-REVIEW] SMTP self-test skipped: missing SMTP_HOST/SMTP_USER/SMTP_PASS.', getShoppingSmtpConfigSummary());
+    return;
+  }
+
+  try {
+    await mailer.verify();
+    console.log('[SHOPPING-REVIEW] SMTP self-test passed.', getShoppingSmtpConfigSummary());
+  } catch (err) {
+    console.error('[SHOPPING-REVIEW] SMTP self-test failed:', formatShoppingSmtpHealthError(err), getShoppingSmtpConfigSummary());
+  }
+}
+
 module.exports = router;
 module.exports.processDueSchedules = processDueSchedules;
+module.exports.logShoppingMailerHealthCheck = logShoppingMailerHealthCheck;

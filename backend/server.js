@@ -2948,6 +2948,11 @@ app.listen(PORT, () => {
   logSuggestionMailerHealthCheck().catch((err) => {
     console.error('[SUGGESTIONS] SMTP health check error:', err.message);
   });
+  if (typeof shoppingWorkflowEmailRouter.logShoppingMailerHealthCheck === 'function') {
+    shoppingWorkflowEmailRouter.logShoppingMailerHealthCheck().catch((err) => {
+      console.error('[SHOPPING-REVIEW] SMTP health check error:', err.message);
+    });
+  }
 
   let shoppingReviewSchedulerBusy = false;
   const scheduleIntervalMs = Math.max(30000, Number(process.env.SHOPPING_REVIEW_SCHEDULE_POLL_MS || 60000));
