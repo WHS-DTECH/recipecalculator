@@ -97,6 +97,8 @@
               <th>Status</th>
               <th>List</th>
               <th>Recipient</th>
+              <th>Sent At</th>
+              <th>Message ID</th>
               <th>Error</th>
               <th>Actions</th>
             </tr>
@@ -191,7 +193,7 @@
       function renderSchedules(rows) {
         const list = Array.isArray(rows) ? rows : [];
         if (!list.length) {
-          scheduleTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;">No schedules yet.</td></tr>';
+          scheduleTableBody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#64748b;">No schedules yet.</td></tr>';
           return;
         }
 
@@ -202,6 +204,8 @@
           const week = String(row.week_info || '').trim();
           const info = week ? `${title} (${week})` : title;
           const canRun = status === 'pending';
+          const msgId = String(row.message_id || '').trim();
+          const msgIdDisplay = msgId ? msgId.substring(0, 16) + (msgId.length > 16 ? '...' : '') : '-';
           return `
             <tr>
               <td>${Number(row.id) || '-'}</td>
@@ -209,6 +213,8 @@
               <td><span class="pill ${pillClass}">${esc(status || 'pending')}</span></td>
               <td>${esc(info)}</td>
               <td>${esc(row.recipient_email || '-')}</td>
+              <td>${esc(fmtDate(row.sent_at))}</td>
+              <td title="${esc(msgId)}">${esc(msgIdDisplay)}</td>
               <td>${esc(row.last_error || '')}</td>
               <td>
                 <div class="actions">
@@ -247,7 +253,7 @@
           const data = await requestJson('/api/shopping-workflow-email/schedules');
           renderSchedules(data.schedules || []);
         } catch (err) {
-          scheduleTableBody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#b91c1c;">${esc(err.message || 'Failed to load schedules.')}</td></tr>`;
+          scheduleTableBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#b91c1c;">${esc(err.message || 'Failed to load schedules.')}</td></tr>`;
           setStatus(err.message || 'Failed to load schedules.', 'error');
         }
       }

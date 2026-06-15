@@ -446,6 +446,7 @@ async function ensureSchema() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       sent_at TIMESTAMPTZ,
       request_id INTEGER REFERENCES shopping_email_review_requests(id) ON DELETE SET NULL,
+      message_id TEXT NOT NULL DEFAULT '',
       last_error TEXT NOT NULL DEFAULT ''
     )
   `);
@@ -681,7 +682,7 @@ router.get('/schedules', async (req, res) => {
     await ensureSchema();
     const result = await pool.query(
       `SELECT s.id, s.saved_list_id, s.recipient_email, s.trigger_at, s.status,
-              s.created_by_email, s.created_at, s.updated_at, s.sent_at, s.last_error,
+              s.created_by_email, s.created_at, s.updated_at, s.sent_at, s.message_id, s.last_error,
               l.title, l.week_info
        FROM shopping_email_review_schedules s
        LEFT JOIN saved_shopping_lists l ON l.id = s.saved_list_id
@@ -802,9 +803,9 @@ router.post('/schedules/:id/run-now', async (req, res) => {
 
     await pool.query(
       `UPDATE shopping_email_review_schedules
-          SET status = 'sent', sent_at = NOW(), updated_at = NOW(), request_id = $2, last_error = ''
+          SET status = 'sent', sent_at = NOW(), updated_at = NOW(), request_id = $2, message_id = $3, last_error = ''
         WHERE id = $1`,
-      [scheduleId, sent.requestId]
+      [scheduleId, sent.requestId, String(sent.messageId || '')]
     );
 
     return res.json({ success: true, scheduleId, sent });
@@ -838,9 +839,9 @@ async function processDueSchedules(limit = 5) {
 
       await pool.query(
         `UPDATE shopping_email_review_schedules
-            SET status = 'sent', sent_at = NOW(), updated_at = NOW(), request_id = $2, last_error = ''
+            SET status = 'sent', sent_at = NOW(), updated_at = NOW(), request_id = $2, message_id = $3, last_error = ''
           WHERE id = $1`,
-        [row.id, sent.requestId]
+        [row.id, sent.requestId, String(sent.messageId || '')]
       );
       processed += 1;
     } catch (err) {
