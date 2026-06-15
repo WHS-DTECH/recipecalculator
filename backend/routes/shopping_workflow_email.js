@@ -158,8 +158,14 @@ async function sendViaResend(payload) {
       throw new Error(`Resend send failed (${response.status} ${response.statusText}) ${String(bodyText || '').trim()}`.trim());
     }
 
-    await response.json().catch(() => ({}));
-    return { channel: 'resend', fromAddress: cfg.fromAddress };
+    const responsePayload = await response.json().catch(() => ({}));
+    return {
+      channel: 'resend',
+      fromAddress: cfg.fromAddress,
+      acceptedCount: 1,
+      rejectedCount: 0,
+      messageId: responsePayload && responsePayload.id ? String(responsePayload.id) : ''
+    };
   }
 
   const fallbackResult = await new Promise((resolve, reject) => {
@@ -193,7 +199,7 @@ async function sendViaResend(payload) {
     throw new Error('Resend send failed.');
   }
 
-  return { channel: 'resend', fromAddress: cfg.fromAddress };
+  return { channel: 'resend', fromAddress: cfg.fromAddress, acceptedCount: 1, rejectedCount: 0, messageId: '' };
 }
 
 function getBootstrapAdminEmails() {
@@ -532,10 +538,16 @@ async function sendShoppingReviewEmail(options = {}) {
   const useResend = shouldUseResendChannel();
 
   let deliveryChannel = 'smtp';
+  let deliveryMessageId = '';
+  let acceptedCount = 0;
+  let rejectedCount = 0;
   try {
     if (useResend) {
       const resendResult = await sendViaResend({ to: recipientEmail, subject, html });
       deliveryChannel = resendResult.channel || 'resend';
+      deliveryMessageId = String(resendResult.messageId || '');
+      acceptedCount = Number(resendResult.acceptedCount || 1);
+      rejectedCount = Number(resendResult.rejectedCount || 0);
     } else {
       if (!from) {
         throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
@@ -553,9 +565,13 @@ async function sendShoppingReviewEmail(options = {}) {
       });
 
       const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+      const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
       if (!accepted.length) {
         throw new Error('SMTP send was attempted but no recipients were accepted.');
       }
+      acceptedCount = accepted.length;
+      rejectedCount = rejected.length;
+      deliveryMessageId = String((info && (info.messageId || info.response)) || '');
     }
   } catch (primaryErr) {
     // If Resend is configured, do not fall back to SMTP automatically.
@@ -568,6 +584,9 @@ async function sendShoppingReviewEmail(options = {}) {
     recipientEmail,
     savedListId: list.id,
     deliveryChannel,
+    acceptedCount,
+    rejectedCount,
+    messageId: deliveryMessageId,
     approveLink,
     requestChangesLink
   };

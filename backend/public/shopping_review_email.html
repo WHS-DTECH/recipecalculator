@@ -60,6 +60,7 @@
       <div class="mini-actions">
         <button type="button" id="smtpTestBtn" class="btn btn-muted" style="padding:0.45rem 0.75rem;font-size:0.82rem;">Send Test Email</button>
       </div>
+      <div id="smtpTestStatus" class="status" style="margin-top:0.45rem;min-height:1rem;"></div>
     </div>
 
     <div class="card">
@@ -118,6 +119,7 @@
       const scheduleBtn = document.getElementById('scheduleBtn');
       const refreshBtn = document.getElementById('refreshBtn');
       const statusEl = document.getElementById('status');
+      const smtpTestStatusEl = document.getElementById('smtpTestStatus');
       const scheduleTableBody = document.getElementById('scheduleTableBody');
       const smtpStatusBadge = document.getElementById('smtpStatusBadge');
       const smtpStatusText = document.getElementById('smtpStatusText');
@@ -151,6 +153,11 @@
       function setStatus(message, type) {
         statusEl.className = 'status' + (type ? ' ' + type : '');
         statusEl.textContent = message || '';
+      }
+
+      function setSmtpTestStatus(message, type) {
+        smtpTestStatusEl.className = 'status' + (type ? ' ' + type : '');
+        smtpTestStatusEl.textContent = message || '';
       }
 
       function fmtDate(value) {
@@ -259,11 +266,17 @@
             ? `Channel: ${channel} | Sender: ${data.fromAddress || 'configured'} | Test recipient: ${data.testRecipient || 'vanessapringle@westlandhigh.school.nz'}`
             : `Channel: ${channel} | ${data.smtpError || 'SMTP is not ready.'} | ${resendFlags}`;
           setWorkflowControlsEnabled(ok);
+          if (!ok) {
+            setSmtpTestStatus('SMTP test is unavailable until channel status is ready.', 'error');
+          } else {
+            setSmtpTestStatus('', '');
+          }
         } catch (err) {
           smtpStatusBadge.className = 'smtp-badge neutral';
           smtpStatusBadge.textContent = 'SMTP Unknown';
           smtpStatusText.textContent = err.message || 'Unable to load SMTP status.';
           setWorkflowControlsEnabled(false);
+          setSmtpTestStatus('SMTP test status unavailable.', 'error');
         }
       }
 
@@ -281,7 +294,11 @@
             method: 'POST',
             body: JSON.stringify({ savedListId })
           });
-          setStatus(`Email sent to ${data.recipientEmail || 'test recipient'}.`, 'ok');
+          const accepted = Number(data.acceptedCount || 0);
+          const rejected = Number(data.rejectedCount || 0);
+          const msgId = String(data.messageId || '').trim();
+          const details = msgId ? ` Message ID: ${msgId}` : '';
+          setStatus(`Review email accepted: ${accepted}, rejected: ${rejected}. Recipient: ${data.recipientEmail || 'test recipient'}.${details}`, 'ok');
           await loadSchedules();
         } catch (err) {
           setStatus(err.message || 'Failed to send email.', 'error');
@@ -297,15 +314,19 @@
         }
 
         smtpTestBtn.disabled = true;
-        setStatus('Sending SMTP test email...', '');
+        setSmtpTestStatus('Sending SMTP test email...', '');
         try {
           const data = await requestJson('/api/shopping-workflow-email/send-test', {
             method: 'POST',
             body: JSON.stringify({ savedListId })
           });
-          setStatus(`Test email sent to ${data.recipientEmail || 'the configured recipient'}.`, 'ok');
+          const accepted = Number(data.acceptedCount || 0);
+          const rejected = Number(data.rejectedCount || 0);
+          const msgId = String(data.messageId || '').trim();
+          const details = msgId ? ` Message ID: ${msgId}` : '';
+          setSmtpTestStatus(`SMTP test accepted: ${accepted}, rejected: ${rejected}. Recipient: ${data.recipientEmail || 'configured recipient'}.${details}`, 'ok');
         } catch (err) {
-          setStatus(err.message || 'Failed to send SMTP test email.', 'error');
+          setSmtpTestStatus(err.message || 'Failed to send SMTP test email.', 'error');
         }
         smtpTestBtn.disabled = false;
       }
