@@ -451,6 +451,17 @@ async function ensureSchema() {
     )
   `);
 
+  // Migration: Add message_id column to existing schedules table if not present
+  try {
+    await pool.query(`
+      ALTER TABLE shopping_email_review_schedules
+      ADD COLUMN IF NOT EXISTS message_id TEXT NOT NULL DEFAULT ''
+    `);
+  } catch (migrationErr) {
+    // Column may already exist; continue
+    console.log('[SHOPPING-REVIEW] Migration check (message_id column): column likely already exists');
+  }
+
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_requests_status_idx ON shopping_email_review_requests(status, expires_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_responses_request_idx ON shopping_email_review_responses(request_id, created_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_schedules_status_idx ON shopping_email_review_schedules(status, trigger_at ASC)');
