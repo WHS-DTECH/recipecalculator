@@ -641,34 +641,39 @@ function createSuggestionMailer() {
 function getSuggestionSmtpConfigSummary() {
   const host = String(process.env.SMTP_HOST || '').trim() || '(missing)';
   const port = String(process.env.SMTP_PORT || '587').trim();
-  const secure = String(process.env.SMTP_SECURE || '').trim() === '1' ? 'true' : 'false';
-  const user = String(process.env.SMTP_USER || '').trim() || '(missing)';
+  const secure = parseSmtpSecureFlag(process.env.SMTP_SECURE) ? 'true' : 'false';
+  const user = resolveSmtpAuthUser(
+    process.env.SMTP_USER,
+    process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM
+  ) || '(missing)';
   const fromAddress = String(process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim() || '(missing)';
   return `host=${host} port=${port} secure=${secure} user=${user} from=${fromAddress}`;
 }
 
-function shouldRunSuggestionSmtpHealthCheck() {
-  const raw = String(process.env.SUGGESTION_SMTP_HEALTHCHECK_ON_STARTUP || '').trim().toLowerCase();
-  return raw === '1' || raw === 'true' || raw === 'yes';
+function formatSuggestionSmtpHealthError(err) {
+  const message = String(err && err.message ? err.message : err || '').trim();
+  if (!message) return 'unknown SMTP error';
+  if (/invalid login|username and password not accepted|badcredentials|auth/i.test(message)) {
+    return 'gmail authentication failed';
+  }
+  if (/timed out|timeout/i.test(message)) {
+    return 'smtp connection timed out';
+  }
+  return message;
 }
 
 async function logSuggestionMailerHealthCheck() {
-  if (!shouldRunSuggestionSmtpHealthCheck()) {
-    console.log('[SUGGESTIONS] SMTP startup health check skipped. Set SUGGESTION_SMTP_HEALTHCHECK_ON_STARTUP=1 to enable.');
-    return;
-  }
-
   const transporter = createSuggestionMailer();
   if (!transporter) {
-    console.warn('[SUGGESTIONS] SMTP health check skipped. Missing SMTP_HOST/SMTP_USER/SMTP_PASS.');
+    console.warn('[SUGGESTIONS] SMTP self-test skipped: missing SMTP_HOST/SMTP_USER/SMTP_PASS.', getSuggestionSmtpConfigSummary());
     return;
   }
 
   try {
     await transporter.verify();
-    console.log('[SUGGESTIONS] SMTP health check passed.', getSuggestionSmtpConfigSummary());
+    console.log('[SUGGESTIONS] SMTP self-test passed.', getSuggestionSmtpConfigSummary());
   } catch (err) {
-    console.error('[SUGGESTIONS] SMTP health check failed:', err.message, getSuggestionSmtpConfigSummary());
+    console.error('[SUGGESTIONS] SMTP self-test failed:', formatSuggestionSmtpHealthError(err), getSuggestionSmtpConfigSummary());
   }
 }
 
