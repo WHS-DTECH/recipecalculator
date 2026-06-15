@@ -68,10 +68,12 @@ function getFromAddress() {
 function createMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = String(process.env.SMTP_USER || '').trim();
-  const pass = String(process.env.SMTP_PASS || '').trim();
+  const rawPass = String(process.env.SMTP_PASS || '').trim();
+  const pass = /(^|\.)gmail\.com$/i.test(host) ? rawPass.replace(/\s+/g, '') : rawPass;
   if (!host || !user || !pass) return null;
   const port = Number(process.env.SMTP_PORT || 587);
-  const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
+  const secureRaw = String(process.env.SMTP_SECURE || '').trim().toLowerCase();
+  const secure = secureRaw === '1' || secureRaw === 'true' || secureRaw === 'yes';
   return nodemailer.createTransport({
     host, port, secure,
     connectionTimeout: 10000,

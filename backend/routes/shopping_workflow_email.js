@@ -51,7 +51,7 @@ function hasResendReady() {
 function getShoppingReviewEmailChannelPreference() {
   const raw = String(process.env.SHOPPING_REVIEW_EMAIL_CHANNEL || '').trim().toLowerCase();
   if (raw === 'smtp' || raw === 'resend') return raw;
-  return 'auto';
+  return 'smtp';
 }
 
 function shouldUseResendChannel() {

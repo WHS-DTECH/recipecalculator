@@ -404,6 +404,24 @@ function getResendConfig() {
   return { apiKey, fromAddress };
 }
 
+function parseSmtpSecureFlag(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+function normalizeSmtpPassword(host, rawPassword) {
+  const pass = String(rawPassword || '').trim();
+  if (!pass) return pass;
+  return /(^|\.)gmail\.com$/i.test(String(host || '').trim()) ? pass.replace(/\s+/g, '') : pass;
+}
+
+function getSuggestionEmailChannelPreference() {
+  const raw = String(process.env.SUGGESTION_EMAIL_CHANNEL || '').trim().toLowerCase();
+  if (raw === 'smtp' || raw === 'resend' || raw === 'auto') return raw;
+  // Default to SMTP to match original system behavior.
+  return 'smtp';
+}
+
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -562,7 +580,7 @@ async function sendSuggestionNotificationViaResend(suggestion, recipients) {
       };
     }
 
-    const payload = await response.json().catch(() => ({}));
+    const responsePayload = await response.json().catch(() => ({}));
     return {
       sent: true,
       reason: 'sent',
@@ -570,7 +588,7 @@ async function sendSuggestionNotificationViaResend(suggestion, recipients) {
       recipients,
       recipientCount: recipients.length,
       acceptedCount: recipients.length,
-      messageId: payload && payload.id ? String(payload.id) : ''
+      messageId: responsePayload && responsePayload.id ? String(responsePayload.id) : ''
     };
   } catch (err) {
     return {
@@ -586,11 +604,11 @@ async function sendSuggestionNotificationViaResend(suggestion, recipients) {
 function createSuggestionMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = String(process.env.SMTP_USER || '').trim();
-  const pass = String(process.env.SMTP_PASS || '').trim();
+  const pass = normalizeSmtpPassword(host, process.env.SMTP_PASS || '');
   if (!host || !user || !pass) return null;
 
   const port = Number(process.env.SMTP_PORT || 587);
-  const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
+  const secure = parseSmtpSecureFlag(process.env.SMTP_SECURE);
   const connectionTimeout = Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 8000);
   const greetingTimeout = Number(process.env.SMTP_GREETING_TIMEOUT_MS || 8000);
   const socketTimeout = Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 12000);
@@ -657,8 +675,14 @@ async function sendSuggestionNotificationEmail(suggestion) {
     };
   }
 
-  // Prefer API-based delivery when configured, as it is often more reliable on hosted platforms.
-  if (String(process.env.RESEND_API_KEY || '').trim()) {
+  const suggestionChannel = getSuggestionEmailChannelPreference();
+
+  // Optional Resend behavior. SMTP remains default unless explicitly changed.
+  if (suggestionChannel === 'resend' && String(process.env.RESEND_API_KEY || '').trim()) {
+    return sendSuggestionNotificationViaResend(suggestion, recipients);
+  }
+
+  if (suggestionChannel === 'auto' && String(process.env.RESEND_API_KEY || '').trim()) {
     const resendResult = await sendSuggestionNotificationViaResend(suggestion, recipients);
     if (resendResult.sent) return resendResult;
     console.error('[SUGGESTIONS] Resend delivery failed, falling back to SMTP:', resendResult.error || resendResult.reason);
