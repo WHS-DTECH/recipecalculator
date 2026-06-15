@@ -222,6 +222,32 @@ function getRequestEmail(req) {
   );
 }
 
+function getConfiguredShoppingTestRecipient() {
+  return normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || '');
+}
+
+function resolveShoppingRecipient(options = {}) {
+  const configuredRecipient = getConfiguredShoppingTestRecipient();
+  const requestedRecipient = normalizeEmail(options.recipientEmail);
+  const triggerEmail = normalizeEmail(options.triggerEmail);
+  const fallbackRecipient = configuredRecipient || triggerEmail;
+  const recipientEmail = requestedRecipient || fallbackRecipient;
+
+  if (!recipientEmail) {
+    throw new Error('No recipient email is configured for shopping review emails.');
+  }
+
+  if (configuredRecipient && recipientEmail !== configuredRecipient) {
+    throw new Error(`Test emails are locked to ${configuredRecipient}.`);
+  }
+
+  if (!configuredRecipient && triggerEmail && recipientEmail !== triggerEmail) {
+    throw new Error(`Test emails are locked to ${triggerEmail}.`);
+  }
+
+  return recipientEmail;
+}
+
 function isAdminRequest(req) {
   const email = getRequestEmail(req);
   return Boolean(email && getBootstrapAdminEmails().has(email));
@@ -395,7 +421,7 @@ router.get('/status', async (req, res) => {
       resendFromConfigured: Boolean(resendCfg.fromAddress),
       smtpError: fromAddress ? (mailerStatus.smtpReady ? '' : formatSmtpStatusError({ message: mailerStatus.smtpError })) : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
       fromAddress: fromAddress || '',
-      testRecipient: normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz')
+      testRecipient: getConfiguredShoppingTestRecipient() || getRequestEmail(req) || ''
     });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message || 'Unable to load shopping review email status.' });
@@ -493,12 +519,7 @@ async function resolveSavedList(savedListId) {
 async function sendShoppingReviewEmail(options = {}) {
   await ensureSchema();
 
-  const forcedRecipient = normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz');
-  const requestedRecipient = normalizeEmail(options.recipientEmail);
-  const recipientEmail = requestedRecipient || forcedRecipient;
-  if (recipientEmail !== forcedRecipient) {
-    throw new Error(`Test emails are locked to ${forcedRecipient}.`);
-  }
+  const recipientEmail = resolveShoppingRecipient(options);
 
   const list = await resolveSavedList(Number(options.savedListId));
   if (!list) {
@@ -716,7 +737,8 @@ router.post('/schedules', async (req, res) => {
   try {
     await ensureSchema();
 
-    const forcedRecipient = normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || 'vanessapringle@westlandhigh.school.nz');
+    const creatorEmail = getRequestEmail(req);
+    const scheduleRecipient = getConfiguredShoppingTestRecipient() || creatorEmail;
     const savedListId = Number(req.body && req.body.savedListId);
     const triggerAtRaw = String(req.body && req.body.triggerAt || '').trim();
     const triggerDate = new Date(triggerAtRaw);
@@ -727,6 +749,10 @@ router.post('/schedules', async (req, res) => {
 
     if (!triggerAtRaw || Number.isNaN(triggerDate.getTime())) {
       return res.status(400).json({ success: false, error: 'A valid triggerAt date/time is required.' });
+    }
+
+    if (!scheduleRecipient) {
+      return res.status(400).json({ success: false, error: 'No recipient email is configured for schedule sends.' });
     }
 
     if (triggerDate.getTime() <= Date.now() + 30000) {
@@ -743,7 +769,7 @@ router.post('/schedules', async (req, res) => {
          saved_list_id, recipient_email, trigger_at, status, created_by_email
        ) VALUES ($1, $2, $3::timestamptz, 'pending', $4)
        RETURNING id, saved_list_id, recipient_email, trigger_at, status, created_by_email, created_at`,
-      [savedListId, forcedRecipient, triggerAtRaw, getRequestEmail(req)]
+      [savedListId, scheduleRecipient, triggerAtRaw, creatorEmail]
     );
 
     return res.status(201).json({ success: true, schedule: insert.rows[0] });
