@@ -65,9 +65,21 @@ function getFromAddress() {
   return String(process.env.DIGEST_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
 }
 
+function isLikelyEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+}
+
+function resolveSmtpAuthUser(preferredUser, fallbackFrom) {
+  const user = String(preferredUser || '').trim();
+  const from = String(fallbackFrom || '').trim();
+  if (isLikelyEmail(user)) return user;
+  if (isLikelyEmail(from)) return from;
+  return user;
+}
+
 function createMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
-  const user = String(process.env.SMTP_USER || '').trim();
+  const user = resolveSmtpAuthUser(process.env.SMTP_USER, getFromAddress());
   const rawPass = String(process.env.SMTP_PASS || '').trim();
   const pass = /(^|\.)gmail\.com$/i.test(host) ? rawPass.replace(/\s+/g, '') : rawPass;
   if (!host || !user || !pass) return null;
