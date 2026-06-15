@@ -43,6 +43,17 @@ function resolveSmtpAuthUser(preferredUser, fallbackFrom) {
   return user;
 }
 
+function parseSmtpSecureFlag(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes';
+}
+
+function normalizeSmtpPassword(host, rawPassword) {
+  const pass = String(rawPassword || '').trim();
+  if (!pass) return pass;
+  return /(^|\.)gmail\.com$/i.test(String(host || '').trim()) ? pass.replace(/\s+/g, '') : pass;
+}
+
 function getResendConfig() {
   const apiKeyCandidates = [
     { name: 'RESEND_API_KEY', value: process.env.RESEND_API_KEY },
@@ -75,11 +86,10 @@ function shouldUseResendChannel() {
 function createMailer() {
   const host = String(process.env.SMTP_HOST || '').trim();
   const user = resolveSmtpAuthUser(process.env.SMTP_USER, getFromAddress());
-  const rawPass = String(process.env.SMTP_PASS || '').trim();
-  if (!host || !user || !rawPass) return null;
-  const pass = /(^|\.)gmail\.com$/i.test(host) ? rawPass.replace(/\s+/g, '') : rawPass;
+  const pass = normalizeSmtpPassword(host, process.env.SMTP_PASS || '');
+  if (!host || !user || !pass) return null;
   const port = Number(process.env.SMTP_PORT || 587);
-  const secure = String(process.env.SMTP_SECURE || '').trim() === '1';
+  const secure = parseSmtpSecureFlag(process.env.SMTP_SECURE);
   return nodemailer.createTransport({
     host,
     port,
@@ -534,12 +544,18 @@ async function sendShoppingReviewEmail(options = {}) {
       if (!mailer) {
         throw new Error('SMTP is not configured.');
       }
-      await mailer.sendMail({
+      const info = await mailer.sendMail({
         from,
         to: recipientEmail,
         subject,
+        text: `Please review the saved shopping list: ${String(list.title || 'Weekly Shopping List')} (${String(list.week_info || 'Upcoming week')}).`,
         html
       });
+
+      const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+      if (!accepted.length) {
+        throw new Error('SMTP send was attempted but no recipients were accepted.');
+      }
     }
   } catch (primaryErr) {
     // If Resend is configured, do not fall back to SMTP automatically.
