@@ -568,6 +568,7 @@ async function sendShoppingReviewEmail(options = {}) {
       if (!mailer) {
         throw new Error('SMTP is not configured.');
       }
+      console.log(`[SHOPPING-REVIEW] Sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
       const info = await mailer.sendMail({
         from,
         to: recipientEmail,
@@ -578,6 +579,7 @@ async function sendShoppingReviewEmail(options = {}) {
 
       const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
       const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
+      console.log(`[SHOPPING-REVIEW] Send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${String(info && (info.messageId || info.response) || '')}`);
       if (!accepted.length) {
         throw new Error('SMTP send was attempted but no recipients were accepted.');
       }
@@ -838,9 +840,12 @@ async function processDueSchedules(limit = 5) {
     [Math.max(1, Number(limit) || 5)]
   );
 
+  console.log(`[SHOPPING-REVIEW] processDueSchedules: found ${dueResult.rowCount} due schedules`);
+
   let processed = 0;
   for (const row of dueResult.rows) {
     try {
+      console.log(`[SHOPPING-REVIEW] Processing schedule ${row.id}: savedListId=${row.saved_list_id}, recipient=${row.recipient_email}`);
       const sent = await sendShoppingReviewEmail({
         savedListId: Number(row.saved_list_id),
         recipientEmail: row.recipient_email,
@@ -854,13 +859,16 @@ async function processDueSchedules(limit = 5) {
           WHERE id = $1`,
         [row.id, sent.requestId, String(sent.messageId || '')]
       );
+      console.log(`[SHOPPING-REVIEW] Schedule ${row.id} marked as sent with messageId: ${sent.messageId}`);
       processed += 1;
     } catch (err) {
+      const errorMsg = String(err && err.message || 'Unknown schedule send error');
+      console.error(`[SHOPPING-REVIEW] Failed to send schedule ${row.id}: ${errorMsg}`);
       await pool.query(
         `UPDATE shopping_email_review_schedules
             SET status = 'failed', updated_at = NOW(), last_error = $2
           WHERE id = $1`,
-        [row.id, String(err && err.message || 'Unknown schedule send error')]
+        [row.id, errorMsg]
       );
     }
   }
