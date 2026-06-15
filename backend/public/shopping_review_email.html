@@ -160,8 +160,8 @@
         return d.toLocaleString();
       }
 
-      function isoLocalNowPlusMinutes(mins) {
-        const d = new Date(Date.now() + mins * 60000);
+      function isoLocalNow() {
+        const d = new Date();
         const pad = (n) => String(n).padStart(2, '0');
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
       }
@@ -382,7 +382,7 @@
       smtpTestBtn.addEventListener('click', sendSmtpTest);
 
       setWorkflowControlsEnabled(false);
-      triggerAtInput.value = isoLocalNowPlusMinutes(10);
+      triggerAtInput.value = isoLocalNow();
       loadSavedLists();
       loadSchedules();
       loadSmtpStatus();
