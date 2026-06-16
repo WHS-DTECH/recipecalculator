@@ -78,7 +78,7 @@ function hasResendReady() {
 function getShoppingReviewEmailChannelPreference() {
   const raw = String(process.env.SHOPPING_REVIEW_EMAIL_CHANNEL || '').trim().toLowerCase();
   if (raw === 'smtp' || raw === 'resend') return raw;
-  return 'smtp';
+  return 'auto';
 }
 
 function shouldUseResendChannel() {
@@ -146,6 +146,10 @@ async function sendViaResend(payload) {
     subject: payload.subject,
     html: payload.html
   };
+
+  if (String(payload.text || '').trim()) {
+    requestBody.text = String(payload.text);
+  }
 
   if (typeof fetch === 'function') {
     const response = await fetch('https://api.resend.com/emails', {
@@ -741,20 +745,33 @@ async function sendShoppingListNowEmail(options = {}) {
     </div>
   `;
 
-  console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
-  const info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
+  const useResend = shouldUseResendChannel();
+  let info = null;
+  let deliveryChannel = 'smtp';
+  if (useResend) {
+    const resendResult = await sendViaResend({ to: recipientEmail, subject, text, html });
+    deliveryChannel = resendResult.channel || 'resend';
+    info = {
+      accepted: [recipientEmail],
+      rejected: [],
+      messageId: resendResult.messageId || ''
+    };
+  } else {
+    console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
+    info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
+  }
 
   const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
   const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
   const messageId = String((info && (info.messageId || info.response)) || '');
-  console.log(`[SHOPPING-REVIEW] List send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
+  console.log(`[SHOPPING-REVIEW] List send response - channel: ${deliveryChannel}, accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
 
   if (!accepted.length) {
     throw new Error('Shopping list email was attempted but no recipients were accepted.');
   }
 
   return {
-    deliveryChannel: 'smtp',
+    deliveryChannel,
     recipientEmail,
     acceptedCount: accepted.length,
     rejectedCount: rejected.length,
