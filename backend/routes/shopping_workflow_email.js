@@ -32,7 +32,7 @@ function getSiteUrl() {
 }
 
 function getFromAddress() {
-  return String(process.env.DIGEST_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  return String(process.env.SUGGESTION_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
 }
 
 function isLikelyEmail(value) {
@@ -78,7 +78,7 @@ function hasResendReady() {
 function getShoppingReviewEmailChannelPreference() {
   const raw = String(process.env.SHOPPING_REVIEW_EMAIL_CHANNEL || '').trim().toLowerCase();
   if (raw === 'smtp' || raw === 'resend') return raw;
-  return 'auto';
+  return 'smtp';
 }
 
 function shouldUseResendChannel() {
@@ -98,9 +98,9 @@ function createMailer() {
     host,
     port,
     secure,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: Number(process.env.SUGGESTION_EMAIL_CONNECTION_TIMEOUT_MS || 8000),
+    greetingTimeout: Number(process.env.SUGGESTION_EMAIL_GREETING_TIMEOUT_MS || 8000),
+    socketTimeout: Number(process.env.SUGGESTION_EMAIL_SOCKET_TIMEOUT_MS || 12000),
     auth: { user, pass }
   });
 }
@@ -146,10 +146,6 @@ async function sendViaResend(payload) {
     subject: payload.subject,
     html: payload.html
   };
-
-  if (String(payload.text || '').trim()) {
-    requestBody.text = String(payload.text);
-  }
 
   if (typeof fetch === 'function') {
     const response = await fetch('https://api.resend.com/emails', {
@@ -745,33 +741,20 @@ async function sendShoppingListNowEmail(options = {}) {
     </div>
   `;
 
-  const useResend = shouldUseResendChannel();
-  let info = null;
-  let deliveryChannel = 'smtp';
-  if (useResend) {
-    const resendResult = await sendViaResend({ to: recipientEmail, subject, text, html });
-    deliveryChannel = resendResult.channel || 'resend';
-    info = {
-      accepted: [recipientEmail],
-      rejected: [],
-      messageId: resendResult.messageId || ''
-    };
-  } else {
-    console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
-    info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
-  }
+  console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
+  const info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
 
   const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
   const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
   const messageId = String((info && (info.messageId || info.response)) || '');
-  console.log(`[SHOPPING-REVIEW] List send response - channel: ${deliveryChannel}, accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
+  console.log(`[SHOPPING-REVIEW] List send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
 
   if (!accepted.length) {
     throw new Error('Shopping list email was attempted but no recipients were accepted.');
   }
 
   return {
-    deliveryChannel,
+    deliveryChannel: 'smtp',
     recipientEmail,
     acceptedCount: accepted.length,
     rejectedCount: rejected.length,
