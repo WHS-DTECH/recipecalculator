@@ -568,6 +568,27 @@
         return String(valueA || '').localeCompare(String(valueB || ''), undefined, { sensitivity: 'base' });
       }
 
+      function parseNumberOrZero(value) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
+      }
+
+      function sortSavedListsByWeekDesc(a, b) {
+        const termA = parseNumberOrZero(a && a.term);
+        const termB = parseNumberOrZero(b && b.term);
+        if (termA !== termB) return termB - termA;
+
+        const weekA = parseNumberOrZero(a && a.week);
+        const weekB = parseNumberOrZero(b && b.week);
+        if (weekA !== weekB) return weekB - weekA;
+
+        const dateA = String(a && (a.weekDate || a.week_date) || '');
+        const dateB = String(b && (b.weekDate || b.week_date) || '');
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+
+        return Number(b && b.id || 0) - Number(a && a.id || 0);
+      }
+
       function sortPreviewItems(items) {
         return (Array.isArray(items) ? items : [])
           .map((item) => String(item || '').trim())
@@ -928,7 +949,7 @@
         try {
           const data = await requestJson('/api/saved-shopping-lists');
           savedLists = Array.isArray(data.lists) ? data.lists : [];
-          savedLists.sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')) || Number(b.id || 0) - Number(a.id || 0));
+          savedLists.sort(sortSavedListsByWeekDesc);
           savedListSelect.innerHTML = '<option value="">Select a saved shopping list...</option>' + savedLists.map((list) => {
             const selected = String(selectedId || '') === String(list.id) ? ' selected' : '';
             return '<option value="' + esc(String(list.id)) + '"' + selected + '>' + esc(formatSavedListOption(list)) + '</option>';
