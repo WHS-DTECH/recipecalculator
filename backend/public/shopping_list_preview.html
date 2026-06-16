@@ -574,13 +574,13 @@
       }
 
       function sortSavedListsByWeekDesc(a, b) {
-        const termA = parseNumberOrZero(a && a.term);
-        const termB = parseNumberOrZero(b && b.term);
-        if (termA !== termB) return termB - termA;
-
         const weekA = parseNumberOrZero(a && a.week);
         const weekB = parseNumberOrZero(b && b.week);
         if (weekA !== weekB) return weekB - weekA;
+
+        const termA = parseNumberOrZero(a && a.term);
+        const termB = parseNumberOrZero(b && b.term);
+        if (termA !== termB) return termB - termA;
 
         const dateA = String(a && (a.weekDate || a.week_date) || '');
         const dateB = String(b && (b.weekDate || b.week_date) || '');
