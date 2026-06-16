@@ -672,20 +672,6 @@
           }
         });
 
-        const remaining = flattened
-          .filter((category) => !usedKeys.has(normalizeCategoryKey(category.name)))
-          .sort((a, b) => {
-            const orderA = orderIndex(a && a.name, CATEGORY_ORDER);
-            const orderB = orderIndex(b && b.name, CATEGORY_ORDER);
-            if (orderA !== orderB) return orderA - orderB;
-            return sortText(a && a.name, b && b.name);
-          });
-
-        remaining.forEach((category, index) => {
-          if (index % 2 === 0) left.push(category);
-          else right.push(category);
-        });
-
         return [left, right];
       }
 
