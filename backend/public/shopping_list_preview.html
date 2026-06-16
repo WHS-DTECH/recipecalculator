@@ -894,13 +894,16 @@
 
         const leftColumn = Array.isArray(columns[0]) ? columns[0] : [];
         const rightColumn = Array.isArray(columns[1]) ? columns[1] : [];
-        const otherCategory = leftColumn.find((category) => normalizeCategoryKey(category && category.name) === 'other')
-          || rightColumn.find((category) => normalizeCategoryKey(category && category.name) === 'other')
-          || null;
+        const leftOtherIndex = leftColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+        const rightOtherIndex = rightColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+        const firstOtherIndex = [leftOtherIndex, rightOtherIndex].filter((index) => index !== -1).sort((a, b) => a - b)[0];
+        const otherCategory = leftOtherIndex !== -1
+          ? leftColumn[leftOtherIndex]
+          : (rightOtherIndex !== -1 ? rightColumn[rightOtherIndex] : null);
         const pairedLeftColumn = leftColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
         const pairedRightColumn = rightColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
         const pairRows = [];
-        const renderLimit = Math.max(pairedLeftColumn.length, pairedRightColumn.length, 1);
+        const renderLimit = Number.isInteger(firstOtherIndex) ? Math.min(firstOtherIndex, Math.max(pairedLeftColumn.length, pairedRightColumn.length)) : Math.max(pairedLeftColumn.length, pairedRightColumn.length, 1);
         for (let idx = 0; idx < renderLimit; idx += 1) {
           const leftCard = renderCategoryCard(pairedLeftColumn[idx] || null);
           const rightCard = renderCategoryCard(pairedRightColumn[idx] || null);
