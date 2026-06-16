@@ -12,6 +12,9 @@
       --ink: #172033;
       --muted: #5b687a;
       --accent: #1e63d6;
+      --paper: #ffffff;
+      --paper-line: #d8e1ee;
+      --paper-head: #1f4f8f;
       --line: #d8e1ee;
       --soft: #edf3fb;
       --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
@@ -119,17 +122,17 @@
     }
 
     .doc {
-      background: #fff;
-      border: 1px solid #cbd5e1;
-      border-radius: 12px;
+      background: var(--paper);
+      border: 1px solid var(--paper-line);
+      border-radius: 14px;
       overflow: hidden;
       max-width: 100%;
     }
 
     .doc-head {
-      background: linear-gradient(135deg, #173b67 0%, #235ea8 100%);
+      background: linear-gradient(135deg, #173b67 0%, var(--paper-head) 100%);
       color: #fff;
-      padding: 1rem 1.1rem;
+      padding: 1rem 1.1rem 0.95rem;
     }
 
     .doc-head-top {
@@ -146,6 +149,13 @@
       letter-spacing: -0.02em;
     }
 
+    .doc-note {
+      margin-top: 0.55rem;
+      font-size: 0.93rem;
+      color: rgba(255, 255, 255, 0.9);
+      max-width: 70rem;
+    }
+
     .doc-meta {
       margin: 0.35rem 0 0;
       color: rgba(255, 255, 255, 0.85);
@@ -154,6 +164,26 @@
 
     .doc-body {
       padding: 1rem 1.1rem 1.2rem;
+    }
+
+    .doc-banner {
+      border: 1px solid var(--line);
+      background: #fbfdff;
+      border-radius: 12px;
+      padding: 0.85rem 0.95rem;
+      margin-bottom: 1rem;
+    }
+
+    .doc-banner strong {
+      display: block;
+      margin-bottom: 0.25rem;
+      color: var(--paper-head);
+    }
+
+    .doc-banner p {
+      margin: 0.15rem 0 0;
+      color: var(--muted);
+      font-size: 0.93rem;
     }
 
     .doc-summary {
@@ -248,6 +278,20 @@
 
     .items li {
       margin: 0 0 0.3rem;
+    }
+
+    .order-chip {
+      display: inline-block;
+      margin-left: 0.45rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #21538f;
+      background: #eaf2ff;
+      border-radius: 999px;
+      padding: 0.18rem 0.48rem;
+      vertical-align: middle;
     }
 
     .empty-state {
@@ -352,6 +396,7 @@
             <div id="docId" style="font-size:0.95rem;font-weight:700;opacity:0.92;"></div>
           </div>
           <p class="doc-meta" id="docMeta">Select a saved shopping list to preview it.</p>
+          <div class="doc-note">This preview is sorted into the teacher-facing print order first, so the layout matches the working document before you print or export it.</div>
         </div>
         <div class="doc-body" id="docBody">
           <div class="empty-state">Choose a list to render the teacher-facing template.</div>
@@ -374,6 +419,31 @@
 
       let selectedList = null;
       let savedLists = [];
+
+      const CATEGORY_ORDER = [
+        'Meat',
+        'Dairy & Pastry',
+        'Dry Ingredients',
+        'Tinned Food',
+        'Cleaning Products',
+        'Fruit and Vegetables',
+        'Other'
+      ];
+
+      const SECTION_ORDER = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Junior',
+        'L1',
+        'L2',
+        'L3',
+        'St M',
+        'DK',
+        'RS'
+      ];
 
       function esc(value) {
         return String(value == null ? '' : value)
@@ -423,6 +493,53 @@
         return out;
       }
 
+      function orderIndex(value, orderList) {
+        const index = orderList.indexOf(String(value || '').trim());
+        return index === -1 ? 999 : index;
+      }
+
+      function sortText(valueA, valueB) {
+        return String(valueA || '').localeCompare(String(valueB || ''), undefined, { sensitivity: 'base' });
+      }
+
+      function sortPreviewItems(items) {
+        return (Array.isArray(items) ? items : [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+          .sort(sortText);
+      }
+
+      function sortPreviewSections(sections) {
+        return (Array.isArray(sections) ? sections : [])
+          .slice()
+          .sort((a, b) => {
+            const orderA = orderIndex(a && a.label, SECTION_ORDER);
+            const orderB = orderIndex(b && b.label, SECTION_ORDER);
+            if (orderA !== orderB) return orderA - orderB;
+            return sortText(a && a.label, b && b.label);
+          })
+          .map((section) => ({
+            label: section && section.label ? section.label : 'Section',
+            sublabel: section && section.sublabel ? section.sublabel : '',
+            items: sortPreviewItems(section && section.items)
+          }));
+      }
+
+      function sortPreviewCategories(column) {
+        return (Array.isArray(column) ? column : [])
+          .slice()
+          .sort((a, b) => {
+            const orderA = orderIndex(a && a.name, CATEGORY_ORDER);
+            const orderB = orderIndex(b && b.name, CATEGORY_ORDER);
+            if (orderA !== orderB) return orderA - orderB;
+            return sortText(a && a.name, b && b.name);
+          })
+          .map((category) => ({
+            name: category && category.name ? category.name : 'Category',
+            sections: sortPreviewSections(category && category.sections)
+          }));
+      }
+
       function buildMetaParts(list) {
         const parts = [];
         if (list.term) parts.push('Term ' + list.term);
@@ -455,8 +572,8 @@
         }
 
         const state = list.state || {};
-        const columns = normalizeColumns(state);
-        const title = list.title || state.title || 'Shopping List';
+        const columns = normalizeColumns(state).map(sortPreviewCategories);
+        const title = list.title || state.title || 'Shopping List Food Technology and Hospitality (Monday - Friday)';
         const meta = buildMetaParts(list);
 
         docTitle.textContent = title;
@@ -492,7 +609,7 @@
             }).join('') : '<div class="empty-state">No sections yet.</div>';
 
             return '<article class="category-card">'
-              + '<div class="category-head">' + esc(category.name || 'Category') + '</div>'
+              + '<div class="category-head">' + esc(category.name || 'Category') + '<span class="order-chip">sorted</span></div>'
               + '<div class="category-body">' + sectionsHtml + '</div>'
               + '</article>';
           }).join('');
@@ -501,6 +618,7 @@
         }).join('');
 
         docBody.innerHTML = ''
+          + '<div class="doc-banner"><strong>Teacher Preview</strong><p>Layout follows the teacher-facing shopping list format and is sorted before print/export.</p></div>'
           + '<div class="doc-summary">' + summaryHtml + '</div>'
           + '<div class="doc-grid">' + gridHtml + '</div>';
       }
