@@ -215,10 +215,16 @@
       word-break: break-word;
     }
 
-    .doc-grid {
+    .doc-pairs {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .doc-pair-row {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 1rem;
+      align-items: start;
     }
 
     .category-card {
@@ -227,6 +233,7 @@
       overflow: hidden;
       break-inside: avoid;
       background: #fff;
+      min-height: 100%;
     }
 
     .category-head {
@@ -294,6 +301,13 @@
       vertical-align: middle;
     }
 
+    .category-placeholder {
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+      min-height: 2.2rem;
+      background: #fafcff;
+    }
+
     .empty-state {
       color: var(--muted);
       font-style: italic;
@@ -313,7 +327,7 @@
 
     @media (max-width: 900px) {
       .doc-summary,
-      .doc-grid {
+      .doc-pair-row {
         grid-template-columns: 1fr;
       }
 
@@ -660,36 +674,47 @@
           '<div class="summary-chip"><div class="label">' + esc(item.label) + '</div><div class="value">' + esc(item.value) + '</div></div>'
         ).join('');
 
-        const gridHtml = columns.map((column, columnIndex) => {
-          const cards = (column || []).map((category) => {
-            const sections = Array.isArray(category && category.sections) ? category.sections : [];
-            const sectionsHtml = sections.length ? sections.map((section) => {
-              const items = Array.isArray(section && section.items) ? section.items : [];
-              const itemsHtml = items.length
-                ? '<ul class="items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
-                : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
-              return '<div class="section">'
-                + '<div class="section-head">'
-                + '<div class="section-label">' + esc(section.label || 'Section') + '</div>'
-                + '<div class="section-sublabel">' + esc(section.sublabel || '') + '</div>'
-                + '</div>'
-                + itemsHtml
-                + '</div>';
-            }).join('') : '<div class="empty-state">No sections yet.</div>';
+        function renderCategoryCard(category) {
+          if (!category) {
+            return '<div class="category-placeholder" aria-hidden="true"></div>';
+          }
 
-            return '<article class="category-card">'
-              + '<div class="category-head">' + esc(category.name || 'Category') + '<span class="order-chip">sorted</span></div>'
-              + '<div class="category-body">' + sectionsHtml + '</div>'
-              + '</article>';
-          }).join('');
+          const sections = Array.isArray(category && category.sections) ? category.sections : [];
+          const sectionsHtml = sections.length ? sections.map((section) => {
+            const items = Array.isArray(section && section.items) ? section.items : [];
+            const itemsHtml = items.length
+              ? '<ul class="items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
+              : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
+            return '<div class="section">'
+              + '<div class="section-head">'
+              + '<div class="section-label">' + esc(section.label || 'Section') + '</div>'
+              + '<div class="section-sublabel">' + esc(section.sublabel || '') + '</div>'
+              + '</div>'
+              + itemsHtml
+              + '</div>';
+          }).join('') : '<div class="empty-state">No sections yet.</div>';
 
-          return cards ? cards : '<div class="empty-state">No categories in column ' + (columnIndex + 1) + '.</div>';
-        }).join('');
+          return '<article class="category-card">'
+            + '<div class="category-head">' + esc(category.name || 'Category') + '<span class="order-chip">sorted</span></div>'
+            + '<div class="category-body">' + sectionsHtml + '</div>'
+            + '</article>';
+        }
+
+        const leftColumn = Array.isArray(columns[0]) ? columns[0] : [];
+        const rightColumn = Array.isArray(columns[1]) ? columns[1] : [];
+        const pairCount = Math.max(leftColumn.length, rightColumn.length, 1);
+        const pairRows = [];
+        for (let idx = 0; idx < pairCount; idx += 1) {
+          const leftCard = renderCategoryCard(leftColumn[idx] || null);
+          const rightCard = renderCategoryCard(rightColumn[idx] || null);
+          pairRows.push('<div class="doc-pair-row">' + leftCard + rightCard + '</div>');
+        }
+        const gridHtml = '<div class="doc-pairs">' + pairRows.join('') + '</div>';
 
         docBody.innerHTML = ''
           + '<div class="doc-banner"><strong>Teacher Preview</strong><p>Layout follows the teacher-facing shopping list format and is sorted before print/export.</p></div>'
           + '<div class="doc-summary">' + summaryHtml + '</div>'
-          + '<div class="doc-grid">' + gridHtml + '</div>';
+          + gridHtml;
       }
 
       async function loadSavedLists(selectedId) {
