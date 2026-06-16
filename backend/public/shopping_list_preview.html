@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Shopping List Preview</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --page-bg: #f4f7fb;
+      --card-bg: #ffffff;
+      --ink: #172033;
+      --muted: #5b687a;
+      --accent: #1e63d6;
+      --line: #d8e1ee;
+      --soft: #edf3fb;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    body {
+      background: radial-gradient(circle at top, #ffffff 0%, var(--page-bg) 45%, #eef3f9 100%);
+      color: var(--ink);
+    }
+
+    .preview-shell {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 1.2rem 1rem 2rem;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 2vw, 2.1rem);
+      letter-spacing: -0.03em;
+    }
+
+    .hero p {
+      margin: 0.3rem 0 0;
+      color: var(--muted);
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 0.72rem 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn.secondary {
+      background: #526074;
+    }
+
+    .toolbar,
+    .meta-card,
+    .preview-card {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: minmax(260px, 1fr) auto;
+      gap: 0.85rem 1rem;
+      align-items: center;
+      margin-bottom: 1rem;
+    }
+
+    .toolbar label {
+      font-size: 0.86rem;
+      font-weight: 700;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 0.35rem;
+    }
+
+    .toolbar select {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 0.72rem 0.8rem;
+      font-size: 0.98rem;
+      background: #fff;
+    }
+
+    .toolbar-status {
+      grid-column: 1 / -1;
+      color: var(--muted);
+      min-height: 1.2rem;
+      font-size: 0.94rem;
+    }
+
+    .preview-card {
+      padding: 1rem;
+    }
+
+    .doc {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      overflow: hidden;
+      max-width: 100%;
+    }
+
+    .doc-head {
+      background: linear-gradient(135deg, #173b67 0%, #235ea8 100%);
+      color: #fff;
+      padding: 1rem 1.1rem;
+    }
+
+    .doc-head-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      flex-wrap: wrap;
+      align-items: baseline;
+    }
+
+    .doc-head h2 {
+      margin: 0;
+      font-size: 1.3rem;
+      letter-spacing: -0.02em;
+    }
+
+    .doc-meta {
+      margin: 0.35rem 0 0;
+      color: rgba(255, 255, 255, 0.85);
+      font-size: 0.94rem;
+    }
+
+    .doc-body {
+      padding: 1rem 1.1rem 1.2rem;
+    }
+
+    .doc-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .summary-chip {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: var(--soft);
+      padding: 0.75rem 0.85rem;
+    }
+
+    .summary-chip .label {
+      font-size: 0.77rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.25rem;
+    }
+
+    .summary-chip .value {
+      font-weight: 700;
+      color: var(--ink);
+      font-size: 0.98rem;
+      word-break: break-word;
+    }
+
+    .doc-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+    }
+
+    .category-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      break-inside: avoid;
+      background: #fff;
+    }
+
+    .category-head {
+      background: #2164cf;
+      color: #fff;
+      padding: 0.8rem 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .category-body {
+      padding: 0.9rem 0.95rem 0.95rem;
+    }
+
+    .section {
+      margin-bottom: 0.9rem;
+    }
+
+    .section:last-child {
+      margin-bottom: 0;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px dashed #d7dfeb;
+      padding-bottom: 0.35rem;
+    }
+
+    .section-label {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .section-sublabel {
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: right;
+    }
+
+    .items {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: #273246;
+    }
+
+    .items li {
+      margin: 0 0 0.3rem;
+    }
+
+    .empty-state {
+      color: var(--muted);
+      font-style: italic;
+      padding: 1.2rem 0;
+      text-align: center;
+    }
+
+    .footer-note {
+      margin-top: 0.85rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .hide-on-load {
+      display: none;
+    }
+
+    @media (max-width: 900px) {
+      .doc-summary,
+      .doc-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .toolbar {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      #navbar-include,
+      .hero,
+      .toolbar,
+      .hero-actions,
+      .toolbar-status,
+      .footer-note {
+        display: none !important;
+      }
+
+      .preview-shell {
+        max-width: none;
+        padding: 0;
+      }
+
+      .preview-card {
+        border: 0;
+        box-shadow: none;
+        padding: 0;
+      }
+
+      .doc {
+        border: 0;
+        border-radius: 0;
+      }
+
+      .category-card {
+        break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+
+  <main class="preview-shell">
+    <div class="hero">
+      <div>
+        <h1>Shopping List Preview</h1>
+        <p>Preview the selected shopping list in a clean teacher-facing layout before printing or exporting.</p>
+      </div>
+      <div class="hero-actions">
+        <button id="printBtn" class="btn" type="button">Print / Save PDF</button>
+        <a href="book_the_shopping.html" class="btn secondary">Back to Book Shopping</a>
+      </div>
+    </div>
+
+    <section class="toolbar" aria-label="Shopping list selection">
+      <div>
+        <label for="savedListSelect">Saved shopping list</label>
+        <select id="savedListSelect" aria-label="Select saved shopping list">
+          <option value="">Loading saved shopping lists...</option>
+        </select>
+      </div>
+      <div>
+        <label>&nbsp;</label>
+        <button id="refreshBtn" class="btn secondary" type="button">Refresh Lists</button>
+      </div>
+      <div class="toolbar-status" id="statusText"></div>
+    </section>
+
+    <section class="preview-card">
+      <div class="doc" id="docPreview">
+        <div class="doc-head">
+          <div class="doc-head-top">
+            <h2 id="docTitle">Shopping List Preview</h2>
+            <div id="docId" style="font-size:0.95rem;font-weight:700;opacity:0.92;"></div>
+          </div>
+          <p class="doc-meta" id="docMeta">Select a saved shopping list to preview it.</p>
+        </div>
+        <div class="doc-body" id="docBody">
+          <div class="empty-state">Choose a list to render the teacher-facing template.</div>
+        </div>
+      </div>
+      <div class="footer-note">This preview is intentionally read-only. Use Print / Save PDF to export the same layout the teacher sees.</div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const savedListSelect = document.getElementById('savedListSelect');
+      const refreshBtn = document.getElementById('refreshBtn');
+      const printBtn = document.getElementById('printBtn');
+      const statusText = document.getElementById('statusText');
+      const docTitle = document.getElementById('docTitle');
+      const docId = document.getElementById('docId');
+      const docMeta = document.getElementById('docMeta');
+      const docBody = document.getElementById('docBody');
+
+      let selectedList = null;
+      let savedLists = [];
+
+      function esc(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function requestJson(url, options) {
+        return fetch(url, Object.assign({
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }
+        }, options || {})).then(async (response) => {
+          let payload = null;
+          try {
+            payload = await response.json();
+          } catch (err) {
+            payload = null;
+          }
+          if (!response.ok || (payload && payload.success === false)) {
+            throw new Error(payload && payload.error ? payload.error : ('Request failed (' + response.status + ')'));
+          }
+          return payload || {};
+        });
+      }
+
+      function setStatus(message, type) {
+        statusText.textContent = message || '';
+        statusText.style.color = type === 'error' ? '#b91c1c' : (type === 'ok' ? '#166534' : '#5b687a');
+      }
+
+      function formatDateTime(value) {
+        if (!value) return '';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return date.toLocaleString();
+      }
+
+      function normalizeColumns(state) {
+        const columns = Array.isArray(state && state.columns) ? state.columns : [];
+        const out = [[], []];
+        columns.slice(0, 2).forEach((column, columnIndex) => {
+          out[columnIndex] = Array.isArray(column) ? column : [];
+        });
+        return out;
+      }
+
+      function buildMetaParts(list) {
+        const parts = [];
+        if (list.term) parts.push('Term ' + list.term);
+        if (list.week) parts.push('Week ' + list.week);
+        if (list.weekDate) parts.push('Date ending: ' + list.weekDate);
+        if (list.weekInfo) parts.push(list.weekInfo);
+        return parts.join(' | ');
+      }
+
+      function getInitialSavedListId() {
+        const params = new URLSearchParams(window.location.search || '');
+        return params.get('saved_list_id') || '';
+      }
+
+      function formatSavedListOption(list) {
+        const parts = [list.title || 'Shopping List'];
+        if (list.term) parts.push('Term ' + list.term);
+        if (list.week) parts.push('Week ' + list.week);
+        if (list.weekDate) parts.push(list.weekDate);
+        return parts.join(' - ');
+      }
+
+      function renderPreview(list) {
+        if (!list) {
+          docTitle.textContent = 'Shopping List Preview';
+          docId.textContent = '';
+          docMeta.textContent = 'Select a saved shopping list to preview it.';
+          docBody.innerHTML = '<div class="empty-state">Choose a list to render the teacher-facing template.</div>';
+          return;
+        }
+
+        const state = list.state || {};
+        const columns = normalizeColumns(state);
+        const title = list.title || state.title || 'Shopping List';
+        const meta = buildMetaParts(list);
+
+        docTitle.textContent = title;
+        docId.textContent = list.id ? 'Saved list #' + list.id : '';
+        docMeta.textContent = meta || 'Teacher-facing shopping list preview';
+
+        const summary = [
+          { label: 'Saved By', value: list.createdByName || 'Unknown' },
+          { label: 'Created', value: formatDateTime(list.createdAt) || '-' },
+          { label: 'Updated', value: formatDateTime(list.updatedAt) || '-' },
+          { label: 'Source', value: list.sourceFilename || 'Manual / saved list' }
+        ];
+
+        const summaryHtml = summary.map((item) =>
+          '<div class="summary-chip"><div class="label">' + esc(item.label) + '</div><div class="value">' + esc(item.value) + '</div></div>'
+        ).join('');
+
+        const gridHtml = columns.map((column, columnIndex) => {
+          const cards = (column || []).map((category) => {
+            const sections = Array.isArray(category && category.sections) ? category.sections : [];
+            const sectionsHtml = sections.length ? sections.map((section) => {
+              const items = Array.isArray(section && section.items) ? section.items : [];
+              const itemsHtml = items.length
+                ? '<ul class="items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
+                : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
+              return '<div class="section">'
+                + '<div class="section-head">'
+                + '<div class="section-label">' + esc(section.label || 'Section') + '</div>'
+                + '<div class="section-sublabel">' + esc(section.sublabel || '') + '</div>'
+                + '</div>'
+                + itemsHtml
+                + '</div>';
+            }).join('') : '<div class="empty-state">No sections yet.</div>';
+
+            return '<article class="category-card">'
+              + '<div class="category-head">' + esc(category.name || 'Category') + '</div>'
+              + '<div class="category-body">' + sectionsHtml + '</div>'
+              + '</article>';
+          }).join('');
+
+          return cards ? cards : '<div class="empty-state">No categories in column ' + (columnIndex + 1) + '.</div>';
+        }).join('');
+
+        docBody.innerHTML = ''
+          + '<div class="doc-summary">' + summaryHtml + '</div>'
+          + '<div class="doc-grid">' + gridHtml + '</div>';
+      }
+
+      async function loadSavedLists(selectedId) {
+        refreshBtn.disabled = true;
+        setStatus('Loading saved shopping lists...', '');
+        try {
+          const data = await requestJson('/api/saved-shopping-lists');
+          savedLists = Array.isArray(data.lists) ? data.lists : [];
+          savedLists.sort((a, b) => String(b.updated_at || '').localeCompare(String(a.updated_at || '')) || Number(b.id || 0) - Number(a.id || 0));
+          savedListSelect.innerHTML = '<option value="">Select a saved shopping list...</option>' + savedLists.map((list) => {
+            const selected = String(selectedId || '') === String(list.id) ? ' selected' : '';
+            return '<option value="' + esc(String(list.id)) + '"' + selected + '>' + esc(formatSavedListOption(list)) + '</option>';
+          }).join('');
+          setStatus(savedLists.length ? ('Loaded ' + savedLists.length + ' saved list(s).') : 'No saved shopping lists found.', savedLists.length ? 'ok' : '');
+        } catch (err) {
+          savedListSelect.innerHTML = '<option value="">Unable to load saved shopping lists</option>';
+          setStatus(err.message || 'Could not load saved shopping lists.', 'error');
+        }
+        refreshBtn.disabled = false;
+      }
+
+      async function loadListById(listId) {
+        if (!listId) {
+          selectedList = null;
+          renderPreview(null);
+          setStatus('Select a saved shopping list to preview it.', '');
+          return;
+        }
+
+        setStatus('Loading preview...', '');
+        try {
+          const data = await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(String(listId)));
+          selectedList = data.list || null;
+          renderPreview(selectedList);
+          setStatus('Preview loaded for "' + (selectedList.title || 'Shopping List') + '".', 'ok');
+        } catch (err) {
+          selectedList = null;
+          renderPreview(null);
+          setStatus(err.message || 'Could not load preview.', 'error');
+        }
+      }
+
+      savedListSelect.addEventListener('change', () => {
+        loadListById(savedListSelect.value);
+      });
+
+      refreshBtn.addEventListener('click', () => {
+        loadSavedLists(savedListSelect.value);
+      });
+
+      printBtn.addEventListener('click', () => {
+        window.print();
+      });
+
+      const initialSavedListId = getInitialSavedListId();
+      loadSavedLists(initialSavedListId).then(() => {
+        if (initialSavedListId) {
+          savedListSelect.value = initialSavedListId;
+          loadListById(initialSavedListId);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
