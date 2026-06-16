@@ -430,6 +430,13 @@
         'Other'
       ];
 
+      const CATEGORY_PAIRS = [
+        ['Meat', 'Dairy & Pastry'],
+        ['Dry Ingredients', 'Tinned Food'],
+        ['Cleaning Products', 'Fruit and Vegetables'],
+        ['Other', '']
+      ];
+
       const SECTION_ORDER = [
         'Monday',
         'Tuesday',
@@ -540,6 +547,68 @@
           }));
       }
 
+      function flattenCategories(columns) {
+        return (Array.isArray(columns) ? columns : []).reduce((all, column) => {
+          const entries = Array.isArray(column) ? column : [];
+          entries.forEach((category) => {
+            all.push({
+              name: category && category.name ? category.name : 'Category',
+              sections: sortPreviewSections(category && category.sections)
+            });
+          });
+          return all;
+        }, []);
+      }
+
+      function normalizeCategoryKey(name) {
+        return String(name || '').trim().toLowerCase();
+      }
+
+      function buildTeacherDocColumns(columns) {
+        const flattened = flattenCategories(columns);
+        const byName = new Map();
+
+        flattened.forEach((category) => {
+          byName.set(normalizeCategoryKey(category.name), category);
+        });
+
+        const left = [];
+        const right = [];
+        const usedKeys = new Set();
+
+        CATEGORY_PAIRS.forEach((pair) => {
+          const leftName = pair[0];
+          const rightName = pair[1];
+          const leftKey = normalizeCategoryKey(leftName);
+          const rightKey = normalizeCategoryKey(rightName);
+
+          if (leftKey && byName.has(leftKey)) {
+            left.push(byName.get(leftKey));
+            usedKeys.add(leftKey);
+          }
+          if (rightKey && byName.has(rightKey)) {
+            right.push(byName.get(rightKey));
+            usedKeys.add(rightKey);
+          }
+        });
+
+        const remaining = flattened
+          .filter((category) => !usedKeys.has(normalizeCategoryKey(category.name)))
+          .sort((a, b) => {
+            const orderA = orderIndex(a && a.name, CATEGORY_ORDER);
+            const orderB = orderIndex(b && b.name, CATEGORY_ORDER);
+            if (orderA !== orderB) return orderA - orderB;
+            return sortText(a && a.name, b && b.name);
+          });
+
+        remaining.forEach((category, index) => {
+          if (index % 2 === 0) left.push(category);
+          else right.push(category);
+        });
+
+        return [left, right];
+      }
+
       function buildMetaParts(list) {
         const parts = [];
         if (list.term) parts.push('Term ' + list.term);
@@ -572,7 +641,7 @@
         }
 
         const state = list.state || {};
-        const columns = normalizeColumns(state).map(sortPreviewCategories);
+        const columns = buildTeacherDocColumns(normalizeColumns(state));
         const title = list.title || state.title || 'Shopping List Food Technology and Hospitality (Monday - Friday)';
         const meta = buildMetaParts(list);
 
