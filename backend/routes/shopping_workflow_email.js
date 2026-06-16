@@ -721,8 +721,24 @@ async function sendShoppingListNowEmail(options = {}) {
     ...(textItems.length ? textItems.map((item) => `- ${item}`) : ['- No items found'])
   ].join('\n');
 
+  const safeTitle = escapeHtml(String(list.title || 'Weekly Shopping List'));
+  const safeWeekInfo = escapeHtml(String(list.week_info || 'Upcoming week'));
+  const itemsHtml = textItems.length
+    ? textItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')
+    : '<li>No items found in this saved shopping list yet.</li>';
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#1f2937;line-height:1.45;">
+      <h2 style="margin:0 0 10px;">${safeTitle}</h2>
+      <p style="margin:0 0 12px;"><strong>Week:</strong> ${safeWeekInfo}</p>
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
+        <div style="font-size:14px;font-weight:700;margin:0 0 8px;">Items</div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;">${itemsHtml}</ul>
+      </div>
+    </div>
+  `;
+
   console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
-  const info = await mailer.sendMail({ from, to: recipientEmail, subject, text });
+  const info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
 
   const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
   const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
