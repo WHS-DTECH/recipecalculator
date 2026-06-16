@@ -344,7 +344,6 @@ function buildShoppingReviewEmailHtml(payload) {
   const safeWeekInfo = esc(payload.weekInfo || 'Upcoming week');
   const approveLink = payload.approveLink;
   const requestChangesLink = payload.requestChangesLink;
-  const token = payload.token;
   const previewItems = Array.isArray(payload.previewItems) ? payload.previewItems.slice(0, 24) : [];
 
   const itemsHtml = previewItems.length
@@ -373,16 +372,8 @@ function buildShoppingReviewEmailHtml(payload) {
 
       <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;">
         <div style="font-size:14px;font-weight:700;margin:0 0 8px;">Add Items / Notes</div>
-        <p style="margin:0 0 8px;font-size:12px;color:#7c2d12;">Email clients vary. If the form is blocked, use the Request Changes link above.</p>
-        <form method="POST" action="${payload.respondPostUrl}">
-          <input type="hidden" name="token" value="${esc(token)}">
-          <input type="hidden" name="action" value="request_changes">
-          <label style="display:block;font-size:12px;font-weight:700;margin:0 0 4px;">Add items (one per line)</label>
-          <textarea name="add_items" rows="5" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:6px;padding:8px;font-family:Arial,sans-serif;font-size:12px;margin-bottom:8px;"></textarea>
-          <label style="display:block;font-size:12px;font-weight:700;margin:0 0 4px;">Change notes</label>
-          <textarea name="change_notes" rows="4" style="width:100%;box-sizing:border-box;border:1px solid #d1d5db;border-radius:6px;padding:8px;font-family:Arial,sans-serif;font-size:12px;margin-bottom:10px;"></textarea>
-          <button type="submit" style="background:#b45309;color:#fff;border:none;border-radius:7px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;">Submit Changes</button>
-        </form>
+        <p style="margin:0 0 8px;font-size:12px;color:#7c2d12;">For better deliverability and compatibility, this email uses links instead of embedded forms.</p>
+        <a href="${requestChangesLink}" style="display:inline-block;background:#b45309;color:#fff;text-decoration:none;padding:9px 12px;border-radius:7px;font-size:12px;font-weight:700;">Open Request Changes Form</a>
       </div>
     </div>
   `;
