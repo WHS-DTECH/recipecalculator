@@ -57,6 +57,14 @@
       flex-wrap: wrap;
     }
 
+    .toolbar-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+
     .btn {
       border: 0;
       border-radius: 10px;
@@ -115,6 +123,14 @@
       color: var(--muted);
       min-height: 1.2rem;
       font-size: 0.94rem;
+    }
+
+    .toolbar .email-btn {
+      background: #0f766e;
+    }
+
+    .toolbar .email-btn:hover {
+      background: #115e59;
     }
 
     .preview-card {
@@ -444,6 +460,15 @@
         <label>&nbsp;</label>
         <button id="refreshBtn" class="btn secondary" type="button">Refresh Lists</button>
       </div>
+      <div class="toolbar-actions">
+        <div style="flex:1 1 280px;min-width:260px;">
+          <label for="staffEmailSelect">Staff Email</label>
+          <select id="staffEmailSelect" aria-label="Select staff email">
+            <option value="">Loading staff emails...</option>
+          </select>
+        </div>
+        <button id="emailBtn" class="btn email-btn" type="button">Email</button>
+      </div>
       <div class="toolbar-status" id="statusText"></div>
     </section>
 
@@ -469,6 +494,8 @@
     (function () {
       const savedListSelect = document.getElementById('savedListSelect');
       const refreshBtn = document.getElementById('refreshBtn');
+      const emailBtn = document.getElementById('emailBtn');
+      const staffEmailSelect = document.getElementById('staffEmailSelect');
       const printBtn = document.getElementById('printBtn');
       const statusText = document.getElementById('statusText');
       const docTitle = document.getElementById('docTitle');
@@ -804,6 +831,29 @@
         return parts.join(' - ');
       }
 
+      function readCurrentStaffUser() {
+        try {
+          const raw = sessionStorage.getItem('currentStaffUser');
+          return raw ? JSON.parse(raw) : null;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      function getCurrentStaffEmail() {
+        const staff = readCurrentStaffUser();
+        return String(staff && staff.email_school ? staff.email_school : '').trim().toLowerCase();
+      }
+
+      function buildStaffLabel(row) {
+        const first = String(row && row.first_name || '').trim();
+        const last = String(row && row.last_name || '').trim();
+        const code = String(row && row.code || '').trim();
+        const name = [last, first].filter(Boolean).join(', ');
+        const base = name || code || 'Staff';
+        return code ? base + ' (' + code + ')' : base;
+      }
+
       function renderPreview(list) {
         if (!list) {
           docTitle.textContent = 'Shopping List Preview';
@@ -950,6 +1000,29 @@
         refreshBtn.disabled = false;
       }
 
+      async function loadStaffEmails() {
+        if (!staffEmailSelect) return;
+        const preferredEmail = getCurrentStaffEmail();
+        try {
+          const data = await requestJson('/api/staff_upload/dropdown');
+          const staff = Array.isArray(data.staff) ? data.staff.slice() : [];
+          staff.sort((a, b) => buildStaffLabel(a).localeCompare(buildStaffLabel(b), undefined, { sensitivity: 'base' }));
+
+          staffEmailSelect.innerHTML = '<option value="">Select a staff email...</option>' + staff.map((row) => {
+            const email = String(row && row.email_school || '').trim().toLowerCase();
+            const selected = preferredEmail && email === preferredEmail ? ' selected' : '';
+            return '<option value="' + esc(email) + '"' + selected + '>' + esc(buildStaffLabel(row) + ' - ' + email) + '</option>';
+          }).join('');
+
+          if (!preferredEmail && staff.length) {
+            staffEmailSelect.value = String(staff[0].email_school || '').trim().toLowerCase();
+          }
+        } catch (err) {
+          staffEmailSelect.innerHTML = '<option value="">Unable to load staff emails</option>';
+          setStatus(err.message || 'Unable to load staff emails.', 'error');
+        }
+      }
+
       async function loadListById(listId) {
         if (!listId) {
           selectedList = null;
@@ -971,6 +1044,36 @@
         }
       }
 
+      async function emailSelectedList() {
+        const savedListId = Number(savedListSelect.value || 0);
+        const recipientEmail = String(staffEmailSelect && staffEmailSelect.value || '').trim().toLowerCase();
+        if (!savedListId) {
+          setStatus('Select a saved shopping list first.', 'error');
+          return;
+        }
+        if (!recipientEmail) {
+          setStatus('Select a staff email first.', 'error');
+          return;
+        }
+
+        emailBtn.disabled = true;
+        setStatus('Sending shopping list email...', '');
+        try {
+          const data = await requestJson('/api/shopping-workflow-email/send-list-now', {
+            method: 'POST',
+            body: JSON.stringify({ savedListId, recipientEmail })
+          });
+          const accepted = Number(data.acceptedCount || 0);
+          const rejected = Number(data.rejectedCount || 0);
+          const msgId = String(data.messageId || '').trim();
+          const details = msgId ? ' Message ID: ' + msgId : '';
+          setStatus('Shopping list email accepted: ' + accepted + ', rejected: ' + rejected + '. Recipient: ' + (data.recipientEmail || recipientEmail) + '.' + details, 'ok');
+        } catch (err) {
+          setStatus(err.message || 'Failed to send shopping list email.', 'error');
+        }
+        emailBtn.disabled = false;
+      }
+
       savedListSelect.addEventListener('change', () => {
         loadListById(savedListSelect.value);
       });
@@ -978,6 +1081,8 @@
       refreshBtn.addEventListener('click', () => {
         loadSavedLists(savedListSelect.value);
       });
+
+      emailBtn.addEventListener('click', emailSelectedList);
 
       printBtn.addEventListener('click', () => {
         window.print();
@@ -990,6 +1095,7 @@
           loadListById(initialSavedListId);
         }
       });
+      loadStaffEmails();
     })();
   </script>
 </body>
