@@ -671,6 +671,79 @@ async function sendShoppingSmtpTestEmail(options = {}) {
   };
 }
 
+function buildSimpleShoppingListEmailHtml(list) {
+  const safeTitle = esc(list && list.title ? list.title : 'Shopping List');
+  const safeWeekInfo = esc(list && list.week_info ? list.week_info : 'Upcoming week');
+  const items = parseItemsFromState((list && list.parsed_state) || {}).slice(0, 120);
+  const itemsHtml = items.length
+    ? items.map((item) => `<li style="margin-bottom:4px;">${esc(item)}</li>`).join('')
+    : '<li>No items found in this saved shopping list yet.</li>';
+
+  return `
+    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#1f2937;line-height:1.45;">
+      <h2 style="margin:0 0 10px;">${safeTitle}</h2>
+      <p style="margin:0 0 12px;"><strong>Week:</strong> ${safeWeekInfo}</p>
+      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
+        <div style="font-size:14px;font-weight:700;margin:0 0 8px;">Items</div>
+        <ul style="margin:0;padding-left:18px;font-size:13px;">${itemsHtml}</ul>
+      </div>
+    </div>
+  `;
+}
+
+async function sendShoppingListNowEmail(options = {}) {
+  await ensureSchema();
+
+  const recipientEmail = resolveShoppingRecipient(options);
+  const savedListId = Number(options.savedListId);
+  const list = await resolveSavedList(savedListId);
+  if (!list) {
+    throw new Error('No saved shopping list found. Upload and save one first.');
+  }
+
+  const from = getFromAddress();
+  if (!from) {
+    throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
+  }
+
+  const mailer = createMailer();
+  if (!mailer) {
+    throw new Error('SMTP is not configured.');
+  }
+
+  const subject = `Shopping List: ${String(list.title || 'Weekly Shopping List')}`;
+  const textItems = parseItemsFromState(list.parsed_state || {}).slice(0, 120);
+  const text = [
+    `Shopping List: ${String(list.title || 'Weekly Shopping List')}`,
+    `Week: ${String(list.week_info || 'Upcoming week')}`,
+    '',
+    'Items:',
+    ...(textItems.length ? textItems.map((item) => `- ${item}`) : ['- No items found'])
+  ].join('\n');
+  const html = buildSimpleShoppingListEmailHtml(list);
+
+  console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
+  const info = await mailer.sendMail({ from, to: recipientEmail, subject, text, html });
+
+  const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+  const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
+  const messageId = String((info && (info.messageId || info.response)) || '');
+  console.log(`[SHOPPING-REVIEW] List send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
+
+  if (!accepted.length) {
+    throw new Error('Shopping list email was attempted but no recipients were accepted.');
+  }
+
+  return {
+    deliveryChannel: 'smtp',
+    recipientEmail,
+    acceptedCount: accepted.length,
+    rejectedCount: rejected.length,
+    messageId,
+    savedListId: Number(list.id || 0)
+  };
+}
+
 async function findRequestByToken(rawToken) {
   const token = String(rawToken || '').trim();
   if (!token) return null;
@@ -765,6 +838,24 @@ router.post('/send-smtp-test', async (req, res) => {
   } catch (err) {
     const status = /not configured|locked/i.test(String(err && err.message || '')) ? 503 : 500;
     return res.status(status).json({ success: false, error: err.message || 'Failed to send SMTP test email.' });
+  }
+});
+
+router.post('/send-list-now', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    const sent = await sendShoppingListNowEmail({
+      savedListId: Number(req.body && req.body.savedListId),
+      recipientEmail: req.body && req.body.recipientEmail,
+      triggerEmail: getRequestEmail(req)
+    });
+    return res.json(Object.assign({ success: true }, sent));
+  } catch (err) {
+    const status = /not configured|locked/i.test(String(err && err.message || '')) ? 503 : 500;
+    return res.status(status).json({ success: false, error: err.message || 'Failed to send shopping list email.' });
   }
 });
 
