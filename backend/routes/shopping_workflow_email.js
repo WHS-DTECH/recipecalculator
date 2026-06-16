@@ -720,10 +720,9 @@ async function sendShoppingListNowEmail(options = {}) {
     'Items:',
     ...(textItems.length ? textItems.map((item) => `- ${item}`) : ['- No items found'])
   ].join('\n');
-  const html = buildSimpleShoppingListEmailHtml(list);
 
   console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
-  const info = await mailer.sendMail({ from, to: recipientEmail, subject, text, html });
+  const info = await mailer.sendMail({ from, to: recipientEmail, subject, text });
 
   const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
   const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
