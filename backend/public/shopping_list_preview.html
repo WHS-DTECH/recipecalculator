@@ -236,6 +236,20 @@
       min-height: 100%;
     }
 
+    .category-card.full-width {
+      grid-column: 1 / -1;
+      min-height: 0;
+    }
+
+    .category-card.compact .category-body {
+      padding-top: 0.65rem;
+      padding-bottom: 0.65rem;
+    }
+
+    .category-card.compact .section {
+      margin-bottom: 0.55rem;
+    }
+
     .category-head {
       background: #2164cf;
       color: #fff;
@@ -836,6 +850,7 @@
             return '<div class="category-placeholder" aria-hidden="true"></div>';
           }
 
+          const isOther = normalizeCategoryKey(category.name) === 'other';
           const sections = Array.isArray(category && category.sections) ? category.sections : [];
           const sectionsHtml = sections.length ? sections.map((section) => {
             const items = Array.isArray(section && section.items) ? section.items : [];
@@ -859,12 +874,32 @@
 
         const leftColumn = Array.isArray(columns[0]) ? columns[0] : [];
         const rightColumn = Array.isArray(columns[1]) ? columns[1] : [];
-        const pairCount = Math.max(leftColumn.length, rightColumn.length, 1);
+        const leftOtherIndex = leftColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+        const rightOtherIndex = rightColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+        const hasOther = leftOtherIndex !== -1 || rightOtherIndex !== -1;
+        const pairCount = hasOther ? Math.max(Math.min(leftOtherIndex === -1 ? leftColumn.length : leftOtherIndex + 1, leftColumn.length), Math.min(rightOtherIndex === -1 ? rightColumn.length : rightOtherIndex + 1, rightColumn.length), 1) : Math.max(leftColumn.length, rightColumn.length, 1);
         const pairRows = [];
-        for (let idx = 0; idx < pairCount; idx += 1) {
+        const renderLimit = hasOther ? Math.max(leftOtherIndex === -1 ? leftColumn.length : leftOtherIndex, rightOtherIndex === -1 ? rightColumn.length : rightOtherIndex) : pairCount;
+        for (let idx = 0; idx < renderLimit; idx += 1) {
           const leftCard = renderCategoryCard(leftColumn[idx] || null);
           const rightCard = renderCategoryCard(rightColumn[idx] || null);
           pairRows.push('<div class="doc-pair-row">' + leftCard + rightCard + '</div>');
+        }
+        const otherCategory = leftOtherIndex !== -1 ? leftColumn[leftOtherIndex] : (rightOtherIndex !== -1 ? rightColumn[rightOtherIndex] : null);
+        if (otherCategory) {
+          pairRows.push('<div class="doc-pair-row"><article class="category-card full-width compact"><div class="category-head">' + esc(otherCategory.name || 'Other') + '<span class="order-chip">sorted</span></div><div class="category-body">' + (Array.isArray(otherCategory.sections) && otherCategory.sections.length ? otherCategory.sections.map((section) => {
+            const items = Array.isArray(section && section.items) ? section.items : [];
+            const itemsHtml = items.length
+              ? '<ul class="items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
+              : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
+            return '<div class="section">'
+              + '<div class="section-head">'
+              + '<div class="section-label">' + esc(section.label || 'Section') + '</div>'
+              + '<div class="section-sublabel">' + esc(section.sublabel || '') + '</div>'
+              + '</div>'
+              + itemsHtml
+              + '</div>';
+          }).join('') : '<div class="empty-state">No sections yet.</div>') + '</div></article></div>');
         }
         const gridHtml = '<div class="doc-pairs">' + pairRows.join('') + '</div>';
 
