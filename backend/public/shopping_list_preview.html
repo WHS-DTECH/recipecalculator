@@ -301,6 +301,37 @@
       vertical-align: middle;
     }
 
+    .recipe-schedule-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+      margin-bottom: 1rem;
+    }
+
+    .recipe-schedule-card .recipe-item {
+      margin: 0 0 0.4rem;
+      list-style: disc;
+    }
+
+    .recipe-schedule-card .recipe-item.empty {
+      list-style: none;
+      color: var(--muted);
+      font-style: italic;
+    }
+
+    .recipe-class {
+      display: inline-block;
+      margin-right: 0.4rem;
+      padding: 0.1rem 0.35rem;
+      border-radius: 999px;
+      background: #eaf2ff;
+      color: #21538f;
+      font-size: 0.78rem;
+      font-weight: 700;
+      vertical-align: baseline;
+    }
+
     .category-placeholder {
       border: 1px dashed var(--line);
       border-radius: 14px;
@@ -632,6 +663,113 @@
         return parts.join(' | ');
       }
 
+      function parseWeekEndingDate(text) {
+        const input = String(text || '').trim();
+        if (!input) return null;
+
+        const iso = input.match(/(\d{4}-\d{2}-\d{2})/);
+        if (iso) {
+          const isoDate = new Date(iso[1] + 'T00:00:00');
+          return Number.isNaN(isoDate.getTime()) ? null : isoDate;
+        }
+
+        const compact = input.match(/(\d{1,2})\s*([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
+        if (!compact) return null;
+
+        const day = Number(compact[1]);
+        const monthName = String(compact[2] || '').toLowerCase();
+        const monthMap = {
+          jan: 0, january: 0,
+          feb: 1, february: 1,
+          mar: 2, march: 2,
+          apr: 3, april: 3,
+          may: 4,
+          jun: 5, june: 5,
+          jul: 6, july: 6,
+          aug: 7, august: 7,
+          sep: 8, sept: 8, september: 8,
+          oct: 9, october: 9,
+          nov: 10, november: 10,
+          dec: 11, december: 11
+        };
+        if (!Number.isFinite(day) || monthMap[monthName] == null) return null;
+
+        const year = compact[3] ? Number(compact[3]) : (new Date()).getFullYear();
+        const parsed = new Date(year, monthMap[monthName], day);
+        return Number.isNaN(parsed.getTime()) ? null : parsed;
+      }
+
+      function deriveWeekRangeFromList(list) {
+        const state = list && list.state ? list.state : {};
+        const endingDate = parseWeekEndingDate((state && state.weekDate) || list.weekDate || list.weekInfo || '');
+        if (!endingDate) return null;
+
+        const friday = new Date(endingDate.getFullYear(), endingDate.getMonth(), endingDate.getDate());
+        const monday = new Date(friday);
+        monday.setDate(friday.getDate() - 4);
+        monday.setHours(0, 0, 0, 0);
+        friday.setHours(0, 0, 0, 0);
+        return { monday: monday, friday: friday };
+      }
+
+      function isoDateKey(dateObj) {
+        const year = dateObj.getFullYear();
+        const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const day = String(dateObj.getDate()).padStart(2, '0');
+        return year + '-' + month + '-' + day;
+      }
+
+      function weekdayName(dateObj) {
+        return dateObj.toLocaleDateString(undefined, { weekday: 'long' });
+      }
+
+      function dateLabel(dateObj) {
+        return dateObj.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
+      }
+
+      function cleanBookingRecipeTitle(row) {
+        return String((row && (row.linked_recipe_name || row.recipe)) || '').trim();
+      }
+
+      function cleanRecipeUrl(row) {
+        return String(row && row.recipe_url || '').trim();
+      }
+
+      async function loadRecipeScheduleForList(list) {
+        const range = deriveWeekRangeFromList(list);
+        if (!range) return null;
+
+        const start = isoDateKey(range.monday);
+        const end = isoDateKey(range.friday);
+        const data = await requestJson('/api/bookings/all?start=' + encodeURIComponent(start) + '&end=' + encodeURIComponent(end) + '&limit=500');
+        const bookings = Array.isArray(data.bookings) ? data.bookings : [];
+
+        const byDay = new Map();
+        for (let i = 0; i < 5; i += 1) {
+          const day = new Date(range.monday);
+          day.setDate(range.monday.getDate() + i);
+          day.setHours(0, 0, 0, 0);
+          byDay.set(isoDateKey(day), { dateObj: day, label: weekdayName(day), entries: [] });
+        }
+
+        bookings.forEach((row) => {
+          const dateKey = String(row && row.booking_date || '').slice(0, 10);
+          if (!byDay.has(dateKey)) return;
+          const title = cleanBookingRecipeTitle(row);
+          if (!title) return;
+          byDay.get(dateKey).entries.push({
+            className: String(row && row.class_name || '').trim(),
+            title: title,
+            url: cleanRecipeUrl(row)
+          });
+        });
+
+        return Array.from(byDay.values()).map((day) => {
+          day.entries.sort((a, b) => sortText(a.className, b.className) || sortText(a.title, b.title));
+          return day;
+        });
+      }
+
       function getInitialSavedListId() {
         const params = new URLSearchParams(window.location.search || '');
         return params.get('saved_list_id') || '';
@@ -674,6 +812,25 @@
           '<div class="summary-chip"><div class="label">' + esc(item.label) + '</div><div class="value">' + esc(item.value) + '</div></div>'
         ).join('');
 
+        function renderRecipeSchedule(dayRows) {
+          if (!dayRows || !dayRows.length) {
+            return '<section class="recipe-schedule-card"><div class="category-head">Recipe Schedule</div><div class="category-body"><div class="empty-state">No recipe schedule found for this week.</div></div></section>';
+          }
+
+          const scheduleHtml = dayRows.map((day) => {
+            const header = '<div class="section-head"><div class="section-label">' + esc(day.label || 'Day') + '</div><div class="section-sublabel">' + esc(dateLabel(day.dateObj)) + '</div></div>';
+            const itemsHtml = day.entries && day.entries.length ? day.entries.map((entry) => {
+              const linkText = esc(entry.title || 'Recipe');
+              const linkHtml = entry.url ? '<a href="' + esc(entry.url) + '" target="_blank" rel="noopener noreferrer">' + linkText + '</a>' : linkText;
+              const classHtml = entry.className ? '<span class="recipe-class">' + esc(entry.className) + '</span>' : '';
+              return '<li class="recipe-item">' + classHtml + linkHtml + '</li>';
+            }).join('') : '<li class="recipe-item empty">No recipes for this day.</li>';
+            return '<div class="section">' + header + '<ul class="items recipe-list">' + itemsHtml + '</ul></div>';
+          }).join('');
+
+          return '<section class="recipe-schedule-card"><div class="category-head">Recipe Schedule <span class="order-chip">linked</span></div><div class="category-body">' + scheduleHtml + '</div></section>';
+        }
+
         function renderCategoryCard(category) {
           if (!category) {
             return '<div class="category-placeholder" aria-hidden="true"></div>';
@@ -714,7 +871,20 @@
         docBody.innerHTML = ''
           + '<div class="doc-banner"><strong>Teacher Preview</strong><p>Layout follows the teacher-facing shopping list format and is sorted before print/export.</p></div>'
           + '<div class="doc-summary">' + summaryHtml + '</div>'
+          + '<div id="recipeScheduleContainer" style="margin-bottom:1rem;"><div class="empty-state">Loading recipe schedule...</div></div>'
           + gridHtml;
+
+        loadRecipeScheduleForList(list)
+          .then((dayRows) => {
+            const container = document.getElementById('recipeScheduleContainer');
+            if (container) container.innerHTML = renderRecipeSchedule(dayRows);
+          })
+          .catch((err) => {
+            const container = document.getElementById('recipeScheduleContainer');
+            if (container) {
+              container.innerHTML = '<section class="recipe-schedule-card"><div class="category-head">Recipe Schedule</div><div class="category-body"><div class="empty-state">' + esc(err.message || 'Could not load recipe schedule.') + '</div></div></section>';
+            }
+          });
       }
 
       async function loadSavedLists(selectedId) {
