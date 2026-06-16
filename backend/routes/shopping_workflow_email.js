@@ -233,6 +233,15 @@ function getConfiguredShoppingTestRecipient() {
 async function getShoppingAdminRecipients() {
   const recipients = new Set();
 
+  const configured = String(process.env.SUGGESTION_NOTIFY_TO || process.env.ADMIN_NOTIFICATION_EMAIL || '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
+
+  configured.forEach((email) => {
+    if (isLikelyEmail(email)) recipients.add(email);
+  });
+
   getBootstrapAdminEmails().forEach((email) => {
     if (isLikelyEmail(email)) recipients.add(email);
   });
@@ -241,7 +250,7 @@ async function getShoppingAdminRecipients() {
     `SELECT DISTINCT lower(trim(email_school)) AS email
        FROM staff_upload
       WHERE COALESCE(status, 'Current') = 'Current'
-        AND lower(trim(COALESCE(primary_role, ''))) = 'admin'
+        AND lower(trim(COALESCE(primary_role, ''))) IN ('lead_teacher', 'teacher', 'admin')
         AND trim(COALESCE(email_school, '')) <> ''`
   );
 
@@ -254,7 +263,7 @@ async function getShoppingAdminRecipients() {
     `SELECT DISTINCT lower(trim(uar.email)) AS email
        FROM user_additional_roles uar
       WHERE lower(trim(uar.user_type)) = 'staff'
-        AND lower(trim(uar.role_name)) = 'admin'
+        AND lower(trim(uar.role_name)) IN ('lead_teacher', 'teacher', 'admin')
         AND trim(COALESCE(uar.email, '')) <> ''`
   );
 
@@ -808,12 +817,14 @@ async function sendShoppingListNowEmail(options = {}) {
         `From: ${from}`,
         `Time: ${new Date().toISOString()}`
       ].join('\n');
-      await mailer.sendMail({
-        from,
-        to: adminNotificationRecipients,
-        subject: adminSubject,
-        text: adminText
-      });
+      for (const adminRecipient of adminNotificationRecipients) {
+        await mailer.sendMail({
+          from,
+          to: adminRecipient,
+          subject: adminSubject,
+          text: adminText
+        });
+      }
       adminNotificationSent = true;
     }
   } catch (err) {
