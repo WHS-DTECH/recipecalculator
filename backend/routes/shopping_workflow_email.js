@@ -71,20 +71,15 @@ function getResendConfig() {
 }
 
 function hasResendReady() {
-  const cfg = getResendConfig();
-  return Boolean(cfg.apiKey && cfg.fromAddress);
+  return false;
 }
 
 function getShoppingReviewEmailChannelPreference() {
-  const raw = String(process.env.SHOPPING_REVIEW_EMAIL_CHANNEL || '').trim().toLowerCase();
-  if (raw === 'smtp' || raw === 'resend') return raw;
   return 'smtp';
 }
 
 function shouldUseResendChannel() {
-  const preference = getShoppingReviewEmailChannelPreference();
-  if (preference === 'smtp') return false;
-  return hasResendReady();
+  return false;
 }
 
 function createMailer() {
@@ -98,9 +93,9 @@ function createMailer() {
     host,
     port,
     secure,
-    connectionTimeout: Number(process.env.SUGGESTION_EMAIL_CONNECTION_TIMEOUT_MS || 8000),
-    greetingTimeout: Number(process.env.SUGGESTION_EMAIL_GREETING_TIMEOUT_MS || 8000),
-    socketTimeout: Number(process.env.SUGGESTION_EMAIL_SOCKET_TIMEOUT_MS || 12000),
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 8000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 8000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 12000),
     auth: { user, pass }
   });
 }
@@ -233,24 +228,11 @@ function getConfiguredShoppingTestRecipient() {
 async function getShoppingAdminRecipients() {
   const recipients = new Set();
 
-  const configured = String(process.env.SUGGESTION_NOTIFY_TO || process.env.ADMIN_NOTIFICATION_EMAIL || '')
-    .split(',')
-    .map((entry) => normalizeEmail(entry))
-    .filter(Boolean);
-
-  configured.forEach((email) => {
-    if (isLikelyEmail(email)) recipients.add(email);
-  });
-
-  getBootstrapAdminEmails().forEach((email) => {
-    if (isLikelyEmail(email)) recipients.add(email);
-  });
-
   const adminRoleResult = await pool.query(
     `SELECT DISTINCT lower(trim(email_school)) AS email
        FROM staff_upload
       WHERE COALESCE(status, 'Current') = 'Current'
-        AND lower(trim(COALESCE(primary_role, ''))) IN ('lead_teacher', 'teacher', 'admin')
+        AND lower(trim(COALESCE(primary_role, ''))) = 'admin'
         AND trim(COALESCE(email_school, '')) <> ''`
   );
 
@@ -263,7 +245,7 @@ async function getShoppingAdminRecipients() {
     `SELECT DISTINCT lower(trim(uar.email)) AS email
        FROM user_additional_roles uar
       WHERE lower(trim(uar.user_type)) = 'staff'
-        AND lower(trim(uar.role_name)) IN ('lead_teacher', 'teacher', 'admin')
+        AND lower(trim(uar.role_name)) = 'admin'
         AND trim(COALESCE(uar.email, '')) <> ''`
   );
 
@@ -445,20 +427,18 @@ router.get('/status', async (req, res) => {
 
   try {
     await ensureSchema();
-    const resendCfg = getResendConfig();
-    const resendReady = shouldUseResendChannel();
     const channelPreference = getShoppingReviewEmailChannelPreference();
-    const fromAddress = resendReady ? resendCfg.fromAddress : getFromAddress();
-    const mailerStatus = resendReady ? { smtpReady: true, smtpError: '' } : await verifyMailer(createMailer(), 12000);
+    const fromAddress = getFromAddress();
+    const mailerStatus = await verifyMailer(createMailer(), 12000);
     return res.json({
       success: true,
       smtpReady: Boolean(fromAddress) && Boolean(mailerStatus.smtpReady),
-      smtpChannel: resendReady ? 'resend' : 'smtp',
+      smtpChannel: 'smtp',
       channelPreference,
-      resendReady,
-      resendApiConfigured: Boolean(resendCfg.apiKey),
-      resendApiSource: String(resendCfg.apiKeySource || ''),
-      resendFromConfigured: Boolean(resendCfg.fromAddress),
+      resendReady: false,
+      resendApiConfigured: false,
+      resendApiSource: '',
+      resendFromConfigured: false,
       smtpError: fromAddress ? (mailerStatus.smtpReady ? '' : formatSmtpStatusError({ message: mailerStatus.smtpError })) : 'Email sender is not configured (SMTP_FROM/SMTP_USER).',
       fromAddress: fromAddress || '',
       testRecipient: getConfiguredShoppingTestRecipient() || getRequestEmail(req) || ''
@@ -608,51 +588,35 @@ async function sendShoppingReviewEmail(options = {}) {
 
   const from = getFromAddress();
   const subject = `Shopping List Review: ${String(list.title || 'Weekly Shopping List')}`;
-  const useResend = shouldUseResendChannel();
-
   let deliveryChannel = 'smtp';
   let deliveryMessageId = '';
   let acceptedCount = 0;
   let rejectedCount = 0;
-  try {
-    if (useResend) {
-      const resendResult = await sendViaResend({ to: recipientEmail, subject, html });
-      deliveryChannel = resendResult.channel || 'resend';
-      deliveryMessageId = String(resendResult.messageId || '');
-      acceptedCount = Number(resendResult.acceptedCount || 1);
-      rejectedCount = Number(resendResult.rejectedCount || 0);
-    } else {
-      if (!from) {
-        throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
-      }
-      const mailer = createMailer();
-      if (!mailer) {
-        throw new Error('SMTP is not configured.');
-      }
-      console.log(`[SHOPPING-REVIEW] Sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
-      const info = await mailer.sendMail({
-        from,
-        to: recipientEmail,
-        subject,
-        text: `Please review the saved shopping list: ${String(list.title || 'Weekly Shopping List')} (${String(list.week_info || 'Upcoming week')}).`,
-        html
-      });
-
-      const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
-      const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
-      console.log(`[SHOPPING-REVIEW] Send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${String(info && (info.messageId || info.response) || '')}`);
-      if (!accepted.length) {
-        throw new Error('SMTP send was attempted but no recipients were accepted.');
-      }
-      acceptedCount = accepted.length;
-      rejectedCount = rejected.length;
-      deliveryMessageId = String((info && (info.messageId || info.response)) || '');
-    }
-  } catch (primaryErr) {
-    // If Resend is configured, do not fall back to SMTP automatically.
-    // SMTP fallback can mask the real Resend error and re-introduce Gmail auth failures.
-    throw new Error(primaryErr && primaryErr.message ? primaryErr.message : 'Email delivery failed.');
+  if (!from) {
+    throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
   }
+  const mailer = createMailer();
+  if (!mailer) {
+    throw new Error('SMTP is not configured.');
+  }
+  console.log(`[SHOPPING-REVIEW] Sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
+  const info = await mailer.sendMail({
+    from,
+    to: recipientEmail,
+    subject,
+    text: `Please review the saved shopping list: ${String(list.title || 'Weekly Shopping List')} (${String(list.week_info || 'Upcoming week')}).`,
+    html
+  });
+
+  const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+  const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
+  console.log(`[SHOPPING-REVIEW] Send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${String(info && (info.messageId || info.response) || '')}`);
+  if (!accepted.length) {
+    throw new Error('SMTP send was attempted but no recipients were accepted.');
+  }
+  acceptedCount = accepted.length;
+  rejectedCount = rejected.length;
+  deliveryMessageId = String((info && (info.messageId || info.response)) || '');
 
   return {
     requestId,
