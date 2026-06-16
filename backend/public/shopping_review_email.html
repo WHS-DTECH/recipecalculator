@@ -313,18 +313,12 @@
       }
 
       async function sendSmtpTest() {
-        const savedListId = Number(savedListSelect.value || 0);
-        if (!savedListId) {
-          setStatus('Select a saved shopping list first.', 'error');
-          return;
-        }
-
         smtpTestBtn.disabled = true;
         setSmtpTestStatus('Sending SMTP test email...', '');
         try {
-          const data = await requestJson('/api/shopping-workflow-email/send-test', {
+          const data = await requestJson('/api/shopping-workflow-email/send-smtp-test', {
             method: 'POST',
-            body: JSON.stringify({ savedListId })
+            body: JSON.stringify({})
           });
           const accepted = Number(data.acceptedCount || 0);
           const rejected = Number(data.rejectedCount || 0);

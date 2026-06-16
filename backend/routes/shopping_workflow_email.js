@@ -618,6 +618,59 @@ async function sendShoppingReviewEmail(options = {}) {
   };
 }
 
+async function sendShoppingSmtpTestEmail(options = {}) {
+  await ensureSchema();
+
+  const recipientEmail = resolveShoppingRecipient(options);
+  const from = getFromAddress();
+  if (!from) {
+    throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
+  }
+
+  const mailer = createMailer();
+  if (!mailer) {
+    throw new Error('SMTP is not configured.');
+  }
+
+  const sentAtIso = new Date().toISOString();
+  const subject = `Shopping SMTP Test ${sentAtIso}`;
+  const text = [
+    'This is a simple SMTP connectivity test for Shopping Review emails.',
+    `Sent at: ${sentAtIso}`,
+    `From: ${from}`,
+    `To: ${recipientEmail}`
+  ].join('\n');
+  const html = `
+    <div style="font-family:Arial,sans-serif;max-width:640px;margin:0 auto;color:#1f2937;line-height:1.45;">
+      <h2 style="margin:0 0 10px;">Shopping SMTP Test</h2>
+      <p style="margin:0 0 8px;">This is a simple SMTP connectivity test for Shopping Review emails.</p>
+      <p style="margin:0 0 4px;"><strong>Sent at:</strong> ${esc(sentAtIso)}</p>
+      <p style="margin:0 0 4px;"><strong>From:</strong> ${esc(from)}</p>
+      <p style="margin:0;"><strong>To:</strong> ${esc(recipientEmail)}</p>
+    </div>
+  `;
+
+  console.log(`[SHOPPING-REVIEW] SMTP test sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
+  const info = await mailer.sendMail({ from, to: recipientEmail, subject, text, html });
+
+  const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+  const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
+  const messageId = String((info && (info.messageId || info.response)) || '');
+  console.log(`[SHOPPING-REVIEW] SMTP test response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
+
+  if (!accepted.length) {
+    throw new Error('SMTP test was attempted but no recipients were accepted.');
+  }
+
+  return {
+    deliveryChannel: 'smtp',
+    recipientEmail,
+    acceptedCount: accepted.length,
+    rejectedCount: rejected.length,
+    messageId
+  };
+}
+
 async function findRequestByToken(rawToken) {
   const token = String(rawToken || '').trim();
   if (!token) return null;
@@ -695,6 +748,23 @@ router.post('/send-test', async (req, res) => {
   } catch (err) {
     const status = /not configured|locked/i.test(String(err && err.message || '')) ? 503 : 500;
     return res.status(status).json({ success: false, error: err.message || 'Failed to send shopping review email.' });
+  }
+});
+
+router.post('/send-smtp-test', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    const sent = await sendShoppingSmtpTestEmail({
+      recipientEmail: req.body && req.body.recipientEmail,
+      triggerEmail: getRequestEmail(req)
+    });
+    return res.json(Object.assign({ success: true }, sent));
+  } catch (err) {
+    const status = /not configured|locked/i.test(String(err && err.message || '')) ? 503 : 500;
+    return res.status(status).json({ success: false, error: err.message || 'Failed to send SMTP test email.' });
   }
 });
 
