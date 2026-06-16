@@ -871,7 +871,6 @@
             return '<div class="category-placeholder" aria-hidden="true"></div>';
           }
 
-          const isOther = normalizeCategoryKey(category.name) === 'other';
           const sections = Array.isArray(category && category.sections) ? category.sections : [];
           const sectionsHtml = sections.length ? sections.map((section) => {
             const items = Array.isArray(section && section.items) ? section.items : [];
@@ -895,18 +894,18 @@
 
         const leftColumn = Array.isArray(columns[0]) ? columns[0] : [];
         const rightColumn = Array.isArray(columns[1]) ? columns[1] : [];
-        const leftOtherIndex = leftColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
-        const rightOtherIndex = rightColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
-        const hasOther = leftOtherIndex !== -1 || rightOtherIndex !== -1;
-        const pairCount = hasOther ? Math.max(Math.min(leftOtherIndex === -1 ? leftColumn.length : leftOtherIndex + 1, leftColumn.length), Math.min(rightOtherIndex === -1 ? rightColumn.length : rightOtherIndex + 1, rightColumn.length), 1) : Math.max(leftColumn.length, rightColumn.length, 1);
+        const otherCategory = leftColumn.find((category) => normalizeCategoryKey(category && category.name) === 'other')
+          || rightColumn.find((category) => normalizeCategoryKey(category && category.name) === 'other')
+          || null;
+        const pairedLeftColumn = leftColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
+        const pairedRightColumn = rightColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
         const pairRows = [];
-        const renderLimit = hasOther ? Math.max(leftOtherIndex === -1 ? leftColumn.length : leftOtherIndex, rightOtherIndex === -1 ? rightColumn.length : rightOtherIndex) : pairCount;
+        const renderLimit = Math.max(pairedLeftColumn.length, pairedRightColumn.length, 1);
         for (let idx = 0; idx < renderLimit; idx += 1) {
-          const leftCard = renderCategoryCard(leftColumn[idx] || null);
-          const rightCard = renderCategoryCard(rightColumn[idx] || null);
+          const leftCard = renderCategoryCard(pairedLeftColumn[idx] || null);
+          const rightCard = renderCategoryCard(pairedRightColumn[idx] || null);
           pairRows.push('<div class="doc-pair-row">' + leftCard + rightCard + '</div>');
         }
-        const otherCategory = leftOtherIndex !== -1 ? leftColumn[leftOtherIndex] : (rightOtherIndex !== -1 ? rightColumn[rightOtherIndex] : null);
         if (otherCategory) {
           pairRows.push('<div class="doc-pair-row"><article class="category-card full-width compact"><div class="category-head">' + esc(otherCategory.name || 'Other') + '<span class="order-chip">sorted</span></div><div class="category-body">' + (Array.isArray(otherCategory.sections) && otherCategory.sections.length ? otherCategory.sections.map((section) => {
             const items = Array.isArray(section && section.items) ? section.items : [];
