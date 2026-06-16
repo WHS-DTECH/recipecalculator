@@ -230,6 +230,42 @@ function getConfiguredShoppingTestRecipient() {
   return normalizeEmail(process.env.SHOPPING_REVIEW_TEST_RECIPIENT || '');
 }
 
+async function getShoppingAdminRecipients() {
+  const recipients = new Set();
+
+  getBootstrapAdminEmails().forEach((email) => {
+    if (isLikelyEmail(email)) recipients.add(email);
+  });
+
+  const adminRoleResult = await pool.query(
+    `SELECT DISTINCT lower(trim(email_school)) AS email
+       FROM staff_upload
+      WHERE COALESCE(status, 'Current') = 'Current'
+        AND lower(trim(COALESCE(primary_role, ''))) = 'admin'
+        AND trim(COALESCE(email_school, '')) <> ''`
+  );
+
+  adminRoleResult.rows.forEach((row) => {
+    const email = normalizeEmail(row.email);
+    if (isLikelyEmail(email)) recipients.add(email);
+  });
+
+  const additionalRolesResult = await pool.query(
+    `SELECT DISTINCT lower(trim(uar.email)) AS email
+       FROM user_additional_roles uar
+      WHERE lower(trim(uar.user_type)) = 'staff'
+        AND lower(trim(uar.role_name)) = 'admin'
+        AND trim(COALESCE(uar.email, '')) <> ''`
+  );
+
+  additionalRolesResult.rows.forEach((row) => {
+    const email = normalizeEmail(row.email);
+    if (isLikelyEmail(email)) recipients.add(email);
+  });
+
+  return Array.from(recipients);
+}
+
 function resolveShoppingRecipient(options = {}) {
   const configuredRecipient = getConfiguredShoppingTestRecipient();
   const requestedRecipient = normalizeEmail(options.recipientEmail);
@@ -753,13 +789,48 @@ async function sendShoppingListNowEmail(options = {}) {
     throw new Error('Shopping list email was attempted but no recipients were accepted.');
   }
 
+  let adminNotificationSent = false;
+  let adminNotificationRecipients = [];
+  let adminNotificationError = '';
+  try {
+    adminNotificationRecipients = await getShoppingAdminRecipients();
+    if (adminNotificationRecipients.length) {
+      const adminSubject = `[Shopping List Sent] ${String(list.title || 'Weekly Shopping List')}`;
+      const adminText = [
+        'Shopping list email sent successfully.',
+        '',
+        `List: ${String(list.title || 'Weekly Shopping List')}`,
+        `Week: ${String(list.week_info || 'Upcoming week')}`,
+        `Recipient: ${recipientEmail}`,
+        `Accepted: ${accepted.length}`,
+        `Rejected: ${rejected.length}`,
+        `Message ID: ${messageId || 'N/A'}`,
+        `From: ${from}`,
+        `Time: ${new Date().toISOString()}`
+      ].join('\n');
+      await mailer.sendMail({
+        from,
+        to: adminNotificationRecipients,
+        subject: adminSubject,
+        text: adminText
+      });
+      adminNotificationSent = true;
+    }
+  } catch (err) {
+    adminNotificationError = err && err.message ? err.message : String(err || 'Failed to send admin receipt.');
+    console.warn('[SHOPPING-REVIEW] Admin receipt email failed:', adminNotificationError);
+  }
+
   return {
     deliveryChannel: 'smtp',
     recipientEmail,
     acceptedCount: accepted.length,
     rejectedCount: rejected.length,
     messageId,
-    savedListId: Number(list.id || 0)
+    savedListId: Number(list.id || 0),
+    adminNotificationSent,
+    adminNotificationRecipients,
+    adminNotificationError
   };
 }
 

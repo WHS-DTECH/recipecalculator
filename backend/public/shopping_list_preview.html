@@ -1066,7 +1066,9 @@
           const rejected = Number(data.rejectedCount || 0);
           const msgId = String(data.messageId || '').trim();
           const details = msgId ? ' Message ID: ' + msgId : '';
-          setStatus('Shopping list email accepted: ' + accepted + ', rejected: ' + rejected + '. Recipient: ' + (data.recipientEmail || recipientEmail) + '.' + details, 'ok');
+          const adminSent = data.adminNotificationSent ? (' Admin receipt sent to ' + Number((data.adminNotificationRecipients || []).length || 0) + ' admin recipient(s).') : '';
+          const adminError = data.adminNotificationError ? (' Admin receipt error: ' + data.adminNotificationError) : '';
+          setStatus('Shopping list email accepted: ' + accepted + ', rejected: ' + rejected + '. Recipient: ' + (data.recipientEmail || recipientEmail) + '.' + details + adminSent + adminError, 'ok');
         } catch (err) {
           setStatus(err.message || 'Failed to send shopping list email.', 'error');
         }
