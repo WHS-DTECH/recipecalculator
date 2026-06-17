@@ -497,6 +497,21 @@ async function ensureSchema() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS shopping_email_delivery_log (
+      id SERIAL PRIMARY KEY,
+      event_type TEXT NOT NULL,
+      recipient_email TEXT NOT NULL,
+      sender_email TEXT NOT NULL DEFAULT '',
+      subject TEXT NOT NULL DEFAULT '',
+      message_id TEXT NOT NULL DEFAULT '',
+      accepted_count INTEGER NOT NULL DEFAULT 0,
+      rejected_count INTEGER NOT NULL DEFAULT 0,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
   // Migration: Add message_id column to existing schedules table if not present
   try {
     await pool.query(`
@@ -511,8 +526,31 @@ async function ensureSchema() {
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_requests_status_idx ON shopping_email_review_requests(status, expires_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_responses_request_idx ON shopping_email_review_responses(request_id, created_at DESC)');
   await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_review_schedules_status_idx ON shopping_email_review_schedules(status, trigger_at ASC)');
+  await pool.query('CREATE INDEX IF NOT EXISTS shopping_email_delivery_log_created_idx ON shopping_email_delivery_log(created_at DESC)');
 
   schemaReady = true;
+}
+
+async function logShoppingDelivery(eventType, recipientEmail, senderEmail, subject, messageId, acceptedCount, rejectedCount, metadata) {
+  try {
+    await pool.query(
+      `INSERT INTO shopping_email_delivery_log (
+         event_type, recipient_email, sender_email, subject, message_id, accepted_count, rejected_count, metadata
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb)`,
+      [
+        String(eventType || ''),
+        String(recipientEmail || ''),
+        String(senderEmail || ''),
+        String(subject || ''),
+        String(messageId || ''),
+        Number(acceptedCount || 0),
+        Number(rejectedCount || 0),
+        JSON.stringify(metadata && typeof metadata === 'object' ? metadata : {})
+      ]
+    );
+  } catch (err) {
+    console.warn('[SHOPPING-REVIEW] Failed to write delivery log:', err && err.message ? err.message : err);
+  }
 }
 
 async function resolveSavedList(savedListId) {
@@ -614,6 +652,21 @@ async function sendShoppingReviewEmail(options = {}) {
   if (!accepted.length) {
     throw new Error('SMTP send was attempted but no recipients were accepted.');
   }
+
+  await logShoppingDelivery(
+    'review_send',
+    recipientEmail,
+    from,
+    subject,
+    deliveryMessageId,
+    acceptedCount,
+    rejectedCount,
+    {
+      savedListId: Number(list.id || 0),
+      triggerEmail: triggerEmail || '',
+      triggerSource: triggerSource || ''
+    }
+  );
   acceptedCount = accepted.length;
   rejectedCount = rejected.length;
   deliveryMessageId = String((info && (info.messageId || info.response)) || '');
@@ -674,6 +727,17 @@ async function sendShoppingSmtpTestEmail(options = {}) {
   if (!accepted.length) {
     throw new Error('SMTP test was attempted but no recipients were accepted.');
   }
+
+  await logShoppingDelivery(
+    'smtp_test',
+    recipientEmail,
+    from,
+    subject,
+    messageId,
+    accepted.length,
+    rejected.length,
+    { sentAtIso }
+  );
 
   return {
     deliveryChannel: 'smtp',
@@ -762,6 +826,17 @@ async function sendShoppingListNowEmail(options = {}) {
     throw new Error('Shopping list email was attempted but no recipients were accepted.');
   }
 
+  await logShoppingDelivery(
+    'list_send',
+    recipientEmail,
+    from,
+    subject,
+    messageId,
+    accepted.length,
+    rejected.length,
+    { savedListId: Number(list.id || 0) }
+  );
+
   let adminNotificationSent = false;
   let adminNotificationRecipients = [];
   let adminNotificationError = '';
@@ -782,12 +857,29 @@ async function sendShoppingListNowEmail(options = {}) {
         `Time: ${new Date().toISOString()}`
       ].join('\n');
       for (const adminRecipient of adminNotificationRecipients) {
-        await mailer.sendMail({
+        const adminInfo = await mailer.sendMail({
           from,
           to: adminRecipient,
           subject: adminSubject,
           text: adminText
         });
+        const adminAccepted = Array.isArray(adminInfo && adminInfo.accepted) ? adminInfo.accepted.length : 0;
+        const adminRejected = Array.isArray(adminInfo && adminInfo.rejected) ? adminInfo.rejected.length : 0;
+        const adminMessageId = String((adminInfo && (adminInfo.messageId || adminInfo.response)) || '');
+        await logShoppingDelivery(
+          'admin_receipt',
+          adminRecipient,
+          from,
+          adminSubject,
+          adminMessageId,
+          adminAccepted,
+          adminRejected,
+          {
+            sourceRecipient: recipientEmail,
+            sourceMessageId: messageId || '',
+            savedListId: Number(list.id || 0)
+          }
+        );
       }
       adminNotificationSent = true;
     }
@@ -943,6 +1035,29 @@ router.get('/schedules', async (req, res) => {
     return res.json({ success: true, schedules: result.rows });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message || 'Unable to load schedules.' });
+  }
+});
+
+router.get('/delivery-log', async (req, res) => {
+  if (!isAdminRequest(req)) {
+    return res.status(403).json({ success: false, error: 'Admin access required.' });
+  }
+
+  try {
+    await ensureSchema();
+    const limitRaw = Number(req.query && req.query.limit);
+    const limit = Number.isInteger(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 50;
+    const result = await pool.query(
+      `SELECT id, event_type, recipient_email, sender_email, subject, message_id,
+              accepted_count, rejected_count, metadata, created_at
+       FROM shopping_email_delivery_log
+       ORDER BY created_at DESC, id DESC
+       LIMIT $1`,
+      [limit]
+    );
+    return res.json({ success: true, rows: result.rows });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to load delivery log.' });
   }
 });
 
