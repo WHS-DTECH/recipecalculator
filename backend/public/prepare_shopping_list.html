@@ -515,6 +515,21 @@
         return termWeeks.find(w => w.week === Number(week));
       }
 
+      function isPlannerLikeBooking(row) {
+        const period = String(row && row.period || '').trim().toLowerCase();
+        if (period === 'planner') return true;
+
+        const hasTeacher = Boolean(
+          String(row && row.staff_id || '').trim() ||
+          String(row && row.staff_name || '').trim()
+        );
+        if (hasTeacher) return false;
+
+        const className = String(row && row.class_name || '').trim().toUpperCase();
+        return className === 'MFOOD' || className === 'HOSP' ||
+          ['JFOOD', 'VEFOOD', 'MMFOOD', 'SDFOOD', 'PIFOOD', 'SRFOOD', 'JTRFOOD', 'MTRFOOD'].includes(className);
+      }
+
       async function loadStaffEmails() {
         try {
           const data = await requestJson('/api/staff_upload/dropdown');
@@ -570,6 +585,7 @@
           bookings.forEach(row => {
             const dateKey = String(row && row.booking_date || '').slice(0, 10);
             if (!byDay.has(dateKey)) return;
+            if (!isPlannerLikeBooking(row)) return;
             const title = String(row && (row.linked_recipe_name || row.recipe) || '').trim();
             if (!title) return;
             byDay.get(dateKey).entries.push({
