@@ -685,62 +685,31 @@
           return;
         }
 
-        setStatus('Creating and sending shopping list email...', 'info');
+        setStatus('Sending prepared shopping list email...', 'info');
         try {
           const term = String(termSelect.value || '');
           const week = String(weekSelect.value || '');
           const title = `Shopping List - Term ${term} Week ${week}`;
+          const scheduleRows = Array.isArray(currentPreparedState.scheduleRows) ? currentPreparedState.scheduleRows : [];
 
-          // Build a minimal parsed_state structure with recipe schedule info
-          const parsedState = {
-            term,
-            week,
-            weekDate: currentWeekInfo,
-            columns: [[], []]
-          };
-
-          // Create temporary shopping list
-          const listData = {
-            title,
-            week_info: currentWeekInfo,
-            parsed_state: parsedState,
-            source_filename: 'Prepared Shopping List'
-          };
-
-          // First, create the temporary saved shopping list
-          const createResponse = await requestJson('/api/saved-shopping-lists', {
-            method: 'POST',
-            body: JSON.stringify(listData)
-          });
-
-          if (!createResponse.success || !createResponse.list || !createResponse.list.id) {
-            throw new Error(createResponse.error || 'Failed to create shopping list');
-          }
-
-          const savedListId = createResponse.list.id;
-
-          // Now send the email with the created list
-          const emailResponse = await requestJson('/api/shopping-workflow-email/send-list-now', {
+          const response = await requestJson('/api/shopping-workflow-email/send-prepared-list', {
             method: 'POST',
             body: JSON.stringify({
               recipientEmail,
-              savedListId
+              title,
+              weekInfo: currentWeekInfo,
+              scheduleRows
             })
           });
 
-          if (!emailResponse.success) {
-            throw new Error(emailResponse.error || 'Failed to send email');
+          if (!response.success) {
+            throw new Error(response.error || 'Failed to send email');
           }
 
-          const adminMsg = emailResponse.adminNotificationSent 
-            ? ` Admin receipt sent to ${emailResponse.adminNotificationRecipients.length} recipient(s).`
+          const adminMsg = response.adminNotificationSent 
+            ? ` Admin receipt sent to ${response.adminNotificationRecipients.length} recipient(s).`
             : '';
           setStatus(`Email sent successfully.${adminMsg}`, 'success');
-
-          // Optional: Clean up the temporary list after a delay
-          setTimeout(() => {
-            fetch(`/api/saved-shopping-lists/${savedListId}`, { method: 'DELETE' }).catch(() => {});
-          }, 2000);
         } catch (err) {
           setStatus(err.message || 'Failed to send email.', 'error');
           console.error(err);

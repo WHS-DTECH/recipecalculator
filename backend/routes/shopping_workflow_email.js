@@ -1640,6 +1640,148 @@ function formatShoppingSmtpHealthError(err) {
   return message;
 }
 
+async function sendPreparedShoppingListEmail(options = {}) {
+  await ensureSchema();
+
+  const recipientEmail = normalizeEmail(options.recipientEmail);
+  const title = String(options.title || 'Shopping List');
+  const weekInfo = String(options.weekInfo || 'Upcoming week');
+  const scheduleRows = Array.isArray(options.scheduleRows) ? options.scheduleRows : [];
+
+  if (!isLikelyEmail(recipientEmail)) {
+    throw new Error('A valid recipient email is required.');
+  }
+
+  const from = getFromAddress();
+  if (!from) {
+    throw new Error('Email sender is not configured (SMTP_FROM/SMTP_USER).');
+  }
+
+  const mailer = createMailer();
+  if (!mailer) {
+    throw new Error('SMTP is not configured.');
+  }
+
+  const subject = `Shopping List: ${title}`;
+  const text = [
+    `Shopping List: ${title}`,
+    `Week: ${weekInfo}`,
+    '',
+    'Recipes for the week:',
+    ...(scheduleRows.length
+      ? scheduleRows.flatMap((day) => {
+        const dayLabel = String(day && day.label ? day.label : 'Day');
+        const dateLabel = formatScheduleDateLabel(day && day.dateObj ? day.dateObj : new Date());
+        const entries = Array.isArray(day && day.entries) ? day.entries : [];
+        const items = entries.length
+          ? entries.map((entry) => {
+            const className = String(entry && entry.className ? entry.className : '');
+            const titleStr = String(entry && entry.title ? entry.title : 'Recipe');
+            return className ? `- ${className}: ${titleStr}` : `- ${titleStr}`;
+          })
+          : ['- No recipes for this day'];
+        return [`${dayLabel}:`, ...items];
+      })
+      : ['- No recipe schedule available'])
+  ].join('\n');
+
+  const mockList = {
+    title,
+    week_info: weekInfo,
+    created_by_name: 'Prepared List',
+    created_at: new Date(),
+    updated_at: new Date(),
+    source_filename: 'Prepared Shopping List',
+    parsed_state: { columns: [] }
+  };
+
+  const html = buildSimpleShoppingListEmailHtml(mockList, scheduleRows);
+
+  console.log(`[SHOPPING-REVIEW] Prepared list send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
+  const info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
+
+  const accepted = Array.isArray(info && info.accepted) ? info.accepted : [];
+  const rejected = Array.isArray(info && info.rejected) ? info.rejected : [];
+  const messageId = String((info && (info.messageId || info.response)) || '');
+  console.log(`[SHOPPING-REVIEW] Prepared list send response - accepted: ${accepted.length}, rejected: ${rejected.length}, messageId: ${messageId}`);
+
+  if (!accepted.length) {
+    throw new Error('Prepared shopping list email was attempted but no recipients were accepted.');
+  }
+
+  await logShoppingDelivery(
+    'prepared_list_send',
+    recipientEmail,
+    from,
+    subject,
+    messageId,
+    accepted.length,
+    rejected.length,
+    { title, weekInfo }
+  );
+
+  let adminNotificationSent = false;
+  let adminNotificationRecipients = [];
+  let adminNotificationError = '';
+  try {
+    adminNotificationRecipients = await getShoppingAdminRecipients();
+    if (adminNotificationRecipients.length) {
+      const adminSubject = `[Prepared Shopping List Sent] ${title}`;
+      const adminText = [
+        'Prepared shopping list email sent successfully.',
+        '',
+        `List: ${title}`,
+        `Week: ${weekInfo}`,
+        `Recipient: ${recipientEmail}`,
+        `Accepted: ${accepted.length}`,
+        `Rejected: ${rejected.length}`,
+        `Message ID: ${messageId || 'N/A'}`,
+        `From: ${from}`,
+        `Time: ${new Date().toISOString()}`
+      ].join('\n');
+      for (const adminRecipient of adminNotificationRecipients) {
+        const adminInfo = await mailer.sendMail({
+          from,
+          to: adminRecipient,
+          subject: adminSubject,
+          text: adminText
+        });
+        const adminAccepted = Array.isArray(adminInfo && adminInfo.accepted) ? adminInfo.accepted.length : 0;
+        const adminRejected = Array.isArray(adminInfo && adminInfo.rejected) ? adminInfo.rejected.length : 0;
+        const adminMessageId = String((adminInfo && (adminInfo.messageId || adminInfo.response)) || '');
+        await logShoppingDelivery(
+          'admin_receipt',
+          adminRecipient,
+          from,
+          adminSubject,
+          adminMessageId,
+          adminAccepted,
+          adminRejected,
+          {
+            sourcePreparedList: title,
+            sourceRecipient: recipientEmail,
+            sourceMessageId: messageId || ''
+          }
+        );
+      }
+      adminNotificationSent = true;
+    }
+  } catch (err) {
+    adminNotificationError = err && err.message ? err.message : String(err || 'Failed to send admin receipt.');
+    console.warn('[SHOPPING-REVIEW] Admin receipt email failed:', adminNotificationError);
+  }
+
+  return {
+    deliveryChannel: 'smtp',
+    recipientEmail,
+    acceptedCount: accepted.length,
+    rejectedCount: rejected.length,
+    messageId,
+    adminNotificationSent,
+    adminNotificationRecipients
+  };
+}
+
 async function logShoppingMailerHealthCheck() {
   const mailer = createMailer();
   if (!mailer) {
@@ -1654,6 +1796,21 @@ async function logShoppingMailerHealthCheck() {
     console.error('[SHOPPING-REVIEW] SMTP self-test failed:', formatShoppingSmtpHealthError(err), getShoppingSmtpConfigSummary());
   }
 }
+
+router.post('/send-prepared-list', async (req, res) => {
+  try {
+    const sent = await sendPreparedShoppingListEmail({
+      recipientEmail: req.body && req.body.recipientEmail,
+      title: req.body && req.body.title,
+      weekInfo: req.body && req.body.weekInfo,
+      scheduleRows: req.body && req.body.scheduleRows
+    });
+    return res.json(Object.assign({ success: true }, sent));
+  } catch (err) {
+    const status = /not configured|locked/i.test(String(err && err.message || '')) ? 503 : 400;
+    return res.status(status).json({ success: false, error: err.message || 'Failed to send prepared shopping list email.' });
+  }
+});
 
 module.exports = router;
 module.exports.processDueSchedules = processDueSchedules;
