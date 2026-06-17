@@ -764,8 +764,13 @@ function formatEmailDateTime(value) {
 function renderColumnSectionsHtml(parsedState) {
   const state = parsedState && typeof parsedState === 'object' ? parsedState : {};
   const columns = Array.isArray(state.columns) ? state.columns : [];
+  const normalizeCategoryKey = (name) => String(name || '').trim().toLowerCase();
 
   const renderCategory = (category) => {
+    if (!category) {
+      return '<div style="border:1px solid transparent;border-radius:10px;min-height:8px;"></div>';
+    }
+
     const categoryName = esc(category && category.name ? category.name : 'Items');
     const sections = Array.isArray(category && category.sections) ? category.sections : [];
     const sectionHtml = sections.map((section) => {
@@ -808,15 +813,42 @@ function renderColumnSectionsHtml(parsedState) {
 
   const leftColumn = Array.isArray(columns[0]) ? columns[0] : [];
   const rightColumn = Array.isArray(columns[1]) ? columns[1] : [];
-  const leftHtml = leftColumn.length ? leftColumn.map(renderCategory).join('') : '<div style="font-size:12px;color:#64748b;">No items</div>';
-  const rightHtml = rightColumn.length ? rightColumn.map(renderCategory).join('') : '<div style="font-size:12px;color:#64748b;">No items</div>';
+  const leftOtherIndex = leftColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+  const rightOtherIndex = rightColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+  const firstOtherIndex = [leftOtherIndex, rightOtherIndex]
+    .filter((index) => index !== -1)
+    .sort((a, b) => a - b)[0];
+  const otherCategory = leftOtherIndex !== -1
+    ? leftColumn[leftOtherIndex]
+    : (rightOtherIndex !== -1 ? rightColumn[rightOtherIndex] : null);
+
+  const pairedLeftColumn = leftColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
+  const pairedRightColumn = rightColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
+  const renderLimit = Number.isInteger(firstOtherIndex)
+    ? Math.min(firstOtherIndex, Math.max(pairedLeftColumn.length, pairedRightColumn.length))
+    : Math.max(pairedLeftColumn.length, pairedRightColumn.length, 1);
+
+  const rowHtml = [];
+  for (let idx = 0; idx < renderLimit; idx += 1) {
+    rowHtml.push(`
+      <tr>
+        <td valign="top" width="50%" style="width:50%;">${renderCategory(pairedLeftColumn[idx] || null)}</td>
+        <td valign="top" width="50%" style="width:50%;">${renderCategory(pairedRightColumn[idx] || null)}</td>
+      </tr>
+    `);
+  }
+
+  if (otherCategory) {
+    rowHtml.push(`
+      <tr>
+        <td valign="top" colspan="2" style="width:100%;">${renderCategory(otherCategory)}</td>
+      </tr>
+    `);
+  }
 
   return `
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:10px 0;">
-      <tr>
-        <td valign="top" width="50%" style="width:50%;">${leftHtml}</td>
-        <td valign="top" width="50%" style="width:50%;">${rightHtml}</td>
-      </tr>
+      ${rowHtml.join('')}
     </table>
   `;
 }
