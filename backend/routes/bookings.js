@@ -1417,7 +1417,8 @@ router.get('/all', requireSignedIn, async (req, res) => {
         b.id, b.staff_id, b.staff_name, b.class_name, b.booking_date, b.period,
         b.recipe, b.recipe_url, b.recipe_id, b.class_size, b.planner_stream,
         b.cook_mode, b.partner_student_name, b.partner_student_id, b.groups,
-        r.name AS linked_recipe_name
+        r.name AS linked_recipe_name,
+        r.url AS linked_recipe_url
       FROM bookings b
       LEFT JOIN recipes r
         ON r.id = CAST(
@@ -1473,6 +1474,7 @@ router.get('/all', requireSignedIn, async (req, res) => {
           recipe_url: row.recipe_url,
           recipe_id: row.recipe_id,
           linked_recipe_name: row.linked_recipe_name,
+          linked_recipe_url: row.linked_recipe_url,
           class_size: row.class_size,
           planner_stream: row.planner_stream,
           groups: row.groups

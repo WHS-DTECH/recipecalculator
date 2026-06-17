@@ -588,10 +588,11 @@
             if (!isPlannerLikeBooking(row)) return;
             const title = String(row && (row.linked_recipe_name || row.recipe) || '').trim();
             if (!title) return;
+            const resolvedUrl = String(row && (row.recipe_url || row.linked_recipe_url) || '').trim();
             byDay.get(dateKey).entries.push({
               className: String(row && row.class_name || '').trim(),
               title,
-              url: String(row && row.recipe_url || '').trim()
+              url: resolvedUrl
             });
           });
 
