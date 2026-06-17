@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Prepare Shopping List</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --page-bg: #f4f7fb;
+      --card-bg: #ffffff;
+      --ink: #172033;
+      --muted: #5b687a;
+      --accent: #1e63d6;
+      --paper: #ffffff;
+      --paper-line: #d8e1ee;
+      --paper-head: #1f4f8f;
+      --line: #d8e1ee;
+      --soft: #edf3fb;
+      --shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+    }
+
+    body {
+      background: radial-gradient(circle at top, #ffffff 0%, var(--page-bg) 45%, #eef3f9 100%);
+      color: var(--ink);
+    }
+
+    .preview-shell {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 1.2rem 1rem 2rem;
+    }
+
+    .hero {
+      display: flex;
+      justify-content: space-between;
+      gap: 1rem;
+      align-items: end;
+      flex-wrap: wrap;
+      margin-bottom: 1rem;
+    }
+
+    .hero h1 {
+      margin: 0;
+      font-size: clamp(1.6rem, 2vw, 2.1rem);
+      letter-spacing: -0.03em;
+    }
+
+    .hero p {
+      margin: 0.3rem 0 0;
+      color: var(--muted);
+    }
+
+    .hero-actions {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .toolbar-actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 0.7rem;
+      flex-wrap: wrap;
+      align-items: end;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 10px;
+      padding: 0.72rem 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      background: var(--accent);
+      color: #fff;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn.secondary {
+      background: #526074;
+    }
+
+    .toolbar,
+    .meta-card,
+    .preview-card {
+      background: var(--card-bg);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .toolbar {
+      padding: 1rem;
+      display: grid;
+      grid-template-columns: minmax(240px, 1fr) minmax(240px, 1fr) auto;
+      gap: 0.85rem 1rem;
+      align-items: center;
+      margin-bottom: 1.2rem;
+    }
+
+    .toolbar > div {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .toolbar label {
+      font-size: 0.85rem;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    select {
+      padding: 0.6rem 0.8rem;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      background: var(--soft);
+      color: var(--ink);
+      font-family: inherit;
+    }
+
+    .toolbar-status {
+      grid-column: 1 / -1;
+      padding: 0.8rem 1rem;
+      border-radius: 10px;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      font-size: 0.9rem;
+      color: #0369a1;
+      display: none;
+    }
+
+    .toolbar-status.show {
+      display: block;
+    }
+
+    .toolbar-status.success {
+      background: #f0fdf4;
+      border-color: #86efac;
+      color: #166534;
+    }
+
+    .toolbar-status.error {
+      background: #fef2f2;
+      border-color: #fca5a5;
+      color: #b91c1c;
+    }
+
+    .preview-card {
+      padding: 1.5rem;
+    }
+
+    .doc {
+      max-width: 100%;
+    }
+
+    .doc-head {
+      background: linear-gradient(135deg, var(--paper-head) 0%, #2f5aa5 100%);
+      color: #fff;
+      border-radius: 12px 12px 0 0;
+      padding: 1.5rem 1.8rem;
+      margin: -1.5rem -1.5rem 1.5rem;
+    }
+
+    .doc-head-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .doc-head h2 {
+      margin: 0;
+      font-size: 1.8rem;
+      font-weight: 700;
+    }
+
+    .doc-meta {
+      margin: 0.6rem 0 0;
+      font-size: 0.95rem;
+      opacity: 0.93;
+    }
+
+    .doc-note {
+      margin: 0.8rem 0 0;
+      font-size: 0.85rem;
+      opacity: 0.87;
+    }
+
+    .doc-body {
+      min-height: 200px;
+    }
+
+    .empty-state {
+      padding: 2rem 1rem;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+
+    .footer-note {
+      margin-top: 1rem;
+      padding: 0.8rem 1rem;
+      background: #f9fafb;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .recipe-schedule-card {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--paper);
+      overflow: hidden;
+      margin-bottom: 1.2rem;
+    }
+
+    .category-head {
+      background: #eef4fb;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f3b77;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .order-chip {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: #dbeafe;
+      color: #1d4f91;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .category-body {
+      padding: 12px;
+    }
+
+    .section {
+      padding: 10px 12px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+
+    .section-label {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    .section-sublabel {
+      font-size: 12px;
+      color: #64748b;
+    }
+
+    .recipe-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 12px;
+      color: #0f172a;
+      line-height: 1.4;
+    }
+
+    .recipe-item {
+      margin: 0 0 4px 0;
+    }
+
+    .recipe-class {
+      display: inline-block;
+      min-width: 90px;
+      font-weight: 700;
+      color: #1d4f91;
+      margin-right: 6px;
+    }
+
+    .recipe-item a {
+      color: #1d4f91;
+      text-decoration: underline;
+    }
+
+    .recipe-item.empty {
+      color: #64748b;
+    }
+
+    @media print {
+      body {
+        background: #fff;
+      }
+
+      #navbar-include,
+      .hero,
+      .toolbar,
+      .hero-actions,
+      .toolbar-status,
+      .footer-note {
+        display: none !important;
+      }
+
+      .preview-shell {
+        max-width: none;
+        padding: 0;
+      }
+
+      .preview-card {
+        border: 0;
+        box-shadow: none;
+        padding: 0;
+      }
+
+      .doc {
+        border: 0;
+        border-radius: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="navbar-include"></div>
+  <script src="shared/navbar_loader.js"></script>
+
+  <main class="preview-shell">
+    <div class="hero">
+      <div>
+        <h1>Prepare Shopping List</h1>
+        <p>Build a shopping list for a specific term and week by reviewing the planned recipes.</p>
+      </div>
+      <div class="hero-actions">
+        <button id="printBtn" class="btn" type="button">Print / Save PDF</button>
+      </div>
+    </div>
+
+    <section class="toolbar" aria-label="Term and week selection">
+      <div>
+        <label for="termSelect">Term</label>
+        <select id="termSelect" aria-label="Select term">
+          <option value="">Select a term...</option>
+          <option value="1">Term 1</option>
+          <option value="2">Term 2</option>
+          <option value="3">Term 3</option>
+          <option value="4">Term 4</option>
+        </select>
+      </div>
+      <div>
+        <label for="weekSelect">Week</label>
+        <select id="weekSelect" aria-label="Select week">
+          <option value="">Select a week...</option>
+        </select>
+      </div>
+      <div style="align-self: flex-end;">
+        <button id="loadBtn" class="btn secondary" type="button">Load Schedule</button>
+      </div>
+      <div class="toolbar-actions">
+        <div style="flex:1 1 280px;min-width:260px;">
+          <label for="staffEmailSelect">Staff Email</label>
+          <select id="staffEmailSelect" aria-label="Select staff email">
+            <option value="">Loading staff emails...</option>
+          </select>
+        </div>
+        <button id="emailBtn" class="btn email-btn" type="button">Email</button>
+      </div>
+      <div class="toolbar-status" id="statusText"></div>
+    </section>
+
+    <section class="preview-card">
+      <div class="doc" id="docPreview">
+        <div class="doc-head">
+          <div class="doc-head-top">
+            <h2 id="docTitle">Shopping List Preview</h2>
+            <div id="docId" style="font-size:0.95rem;font-weight:700;opacity:0.92;"></div>
+          </div>
+          <p class="doc-meta" id="docMeta">Select a term and week to prepare a shopping list.</p>
+          <div class="doc-note">This preview is sorted into the teacher-facing print order first, so the layout matches the working document before you print or export it.</div>
+        </div>
+        <div class="doc-body" id="docBody">
+          <div class="empty-state">Select a term and week, then click "Load Schedule" to begin.</div>
+        </div>
+      </div>
+      <div class="footer-note">This preview is intentionally read-only. Use Print / Save PDF to export the same layout the teacher sees.</div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const termSelect = document.getElementById('termSelect');
+      const weekSelect = document.getElementById('weekSelect');
+      const loadBtn = document.getElementById('loadBtn');
+      const emailBtn = document.getElementById('emailBtn');
+      const staffEmailSelect = document.getElementById('staffEmailSelect');
+      const printBtn = document.getElementById('printBtn');
+      const statusText = document.getElementById('statusText');
+      const docTitle = document.getElementById('docTitle');
+      const docId = document.getElementById('docId');
+      const docMeta = document.getElementById('docMeta');
+      const docBody = document.getElementById('docBody');
+
+      let currentPreparedState = null;
+      let currentWeekInfo = null;
+
+      const WEEK_RANGES = {
+        1: [
+          { week: 1, start: '2026-02-02', end: '2026-02-06' },
+          { week: 2, start: '2026-02-09', end: '2026-02-13' },
+          { week: 3, start: '2026-02-16', end: '2026-02-20' },
+          { week: 4, start: '2026-02-23', end: '2026-02-27' },
+          { week: 5, start: '2026-03-02', end: '2026-03-06' },
+          { week: 6, start: '2026-03-09', end: '2026-03-13' },
+          { week: 7, start: '2026-03-16', end: '2026-03-20' },
+          { week: 8, start: '2026-03-23', end: '2026-03-27' },
+          { week: 9, start: '2026-03-30', end: '2026-04-03' },
+          { week: 10, start: '2026-04-06', end: '2026-04-10' }
+        ],
+        2: [
+          { week: 1, start: '2026-04-27', end: '2026-05-01' },
+          { week: 2, start: '2026-05-04', end: '2026-05-08' },
+          { week: 3, start: '2026-05-11', end: '2026-05-15' },
+          { week: 4, start: '2026-05-18', end: '2026-05-22' },
+          { week: 5, start: '2026-05-25', end: '2026-05-29' },
+          { week: 6, start: '2026-06-01', end: '2026-06-05' },
+          { week: 7, start: '2026-06-08', end: '2026-06-12' },
+          { week: 8, start: '2026-06-15', end: '2026-06-19' },
+          { week: 9, start: '2026-06-22', end: '2026-06-26' },
+          { week: 10, start: '2026-06-29', end: '2026-07-03' }
+        ],
+        3: [
+          { week: 1, start: '2026-07-20', end: '2026-07-24' },
+          { week: 2, start: '2026-07-27', end: '2026-07-31' },
+          { week: 3, start: '2026-08-03', end: '2026-08-07' },
+          { week: 4, start: '2026-08-10', end: '2026-08-14' },
+          { week: 5, start: '2026-08-17', end: '2026-08-21' },
+          { week: 6, start: '2026-08-24', end: '2026-08-28' },
+          { week: 7, start: '2026-08-31', end: '2026-09-04' },
+          { week: 8, start: '2026-09-07', end: '2026-09-11' },
+          { week: 9, start: '2026-09-14', end: '2026-09-18' },
+          { week: 10, start: '2026-09-21', end: '2026-09-25' }
+        ],
+        4: [
+          { week: 1, start: '2026-10-05', end: '2026-10-09' },
+          { week: 2, start: '2026-10-12', end: '2026-10-16' },
+          { week: 3, start: '2026-10-19', end: '2026-10-23' },
+          { week: 4, start: '2026-10-26', end: '2026-10-30' },
+          { week: 5, start: '2026-11-02', end: '2026-11-06' },
+          { week: 6, start: '2026-11-09', end: '2026-11-13' },
+          { week: 7, start: '2026-11-16', end: '2026-11-20' },
+          { week: 8, start: '2026-11-23', end: '2026-11-27' },
+          { week: 9, start: '2026-11-30', end: '2026-12-04' },
+          { week: 10, start: '2026-12-07', end: '2026-12-11' }
+        ]
+      };
+
+      function esc(value) {
+        return String(value == null ? '' : value)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;')
+          .replace(/'/g, '&#39;');
+      }
+
+      function setStatus(message, type = 'info') {
+        statusText.textContent = message;
+        statusText.className = `toolbar-status show ${type}`;
+        if (type === 'success') {
+          setTimeout(() => {
+            statusText.classList.remove('show');
+          }, 4000);
+        }
+      }
+
+      function requestJson(url, options = {}) {
+        const opts = Object.assign({
+          headers: { 'Content-Type': 'application/json' }
+        }, options);
+        return fetch(url, opts).then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        });
+      }
+
+      function updateWeekOptions() {
+        const term = String(termSelect.value || '');
+        weekSelect.innerHTML = '<option value="">Select a week...</option>';
+        if (!term || !WEEK_RANGES[term]) return;
+        const weeks = WEEK_RANGES[term];
+        weeks.forEach(w => {
+          weekSelect.innerHTML += `<option value="${w.week}">Week ${w.week}</option>`;
+        });
+      }
+
+      function getWeekRange(term, week) {
+        const termWeeks = WEEK_RANGES[term];
+        if (!termWeeks) return null;
+        return termWeeks.find(w => w.week === Number(week));
+      }
+
+      async function loadStaffEmails() {
+        try {
+          const data = await requestJson('/api/staff_upload/dropdown');
+          const staff = Array.isArray(data.staff) ? data.staff.slice() : [];
+          staff.sort((a, b) => {
+            const aName = `${a.last_name || ''} ${a.first_name || ''}`.trim();
+            const bName = `${b.last_name || ''} ${b.first_name || ''}`.trim();
+            return aName.localeCompare(bName);
+          });
+          staffEmailSelect.innerHTML = '<option value="">Select a staff email...</option>' + 
+            staff.map(row => {
+              const email = String(row && row.email_school || '').trim().toLowerCase();
+              const name = `${row.last_name || ''} ${row.first_name || ''}`.trim();
+              return `<option value="${esc(email)}">${esc(name)} - ${esc(email)}</option>`;
+            }).join('');
+        } catch (err) {
+          staffEmailSelect.innerHTML = '<option value="">Unable to load staff emails</option>';
+        }
+      }
+
+      async function loadRecipeSchedule() {
+        const term = String(termSelect.value || '');
+        const week = String(weekSelect.value || '');
+        if (!term || !week) {
+          setStatus('Please select both term and week.', 'error');
+          return;
+        }
+
+        const range = getWeekRange(term, week);
+        if (!range) {
+          setStatus('Invalid term/week selection.', 'error');
+          return;
+        }
+
+        setStatus('Loading recipe schedule...', 'info');
+        try {
+          const data = await requestJson(`/api/bookings/all?start=${range.start}&end=${range.end}&limit=500`);
+          const bookings = Array.isArray(data.bookings) ? data.bookings : [];
+
+          const byDay = new Map();
+          for (let i = 0; i < 5; i += 1) {
+            const day = new Date(range.start);
+            day.setDate(day.getDate() + i);
+            day.setHours(0, 0, 0, 0);
+            const dayKey = toIsoDateKey(day);
+            byDay.set(dayKey, {
+              dateObj: day,
+              label: formatDayLabel(day),
+              entries: []
+            });
+          }
+
+          bookings.forEach(row => {
+            const dateKey = String(row && row.booking_date || '').slice(0, 10);
+            if (!byDay.has(dateKey)) return;
+            const title = String(row && (row.linked_recipe_name || row.recipe) || '').trim();
+            if (!title) return;
+            byDay.get(dateKey).entries.push({
+              className: String(row && row.class_name || '').trim(),
+              title,
+              url: String(row && row.recipe_url || '').trim()
+            });
+          });
+
+          const scheduleRows = Array.from(byDay.values()).map(day => {
+            day.entries.sort((a, b) => 
+              String(a.className).localeCompare(String(b.className)) || 
+              String(a.title).localeCompare(String(b.title))
+            );
+            return day;
+          });
+
+          currentPreparedState = {
+            scheduleRows,
+            term,
+            week
+          };
+
+          currentWeekInfo = `Term ${term} | Week ${week} | Date ending: ${formatDateLabel(range.end)}`;
+
+          renderPreview(scheduleRows);
+          setStatus('Recipe schedule loaded successfully.', 'success');
+        } catch (err) {
+          setStatus(err.message || 'Failed to load recipe schedule.', 'error');
+          console.error(err);
+        }
+      }
+
+      function toIsoDateKey(dateObj) {
+        const y = dateObj.getFullYear();
+        const m = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const d = String(dateObj.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+      }
+
+      function formatDayLabel(dateObj) {
+        return dateObj.toLocaleDateString('en-NZ', { weekday: 'long' });
+      }
+
+      function formatDateLabel(isoDate) {
+        const date = new Date(isoDate + 'T00:00:00');
+        return date.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short' });
+      }
+
+      function renderRecipeSchedule(dayRows) {
+        if (!Array.isArray(dayRows) || !dayRows.length) {
+          return `
+            <div class="recipe-schedule-card">
+              <div class="category-head">Recipe Schedule <span class="order-chip">linked</span></div>
+              <div class="category-body">
+                <div class="empty-state">No recipe schedule found for this week.</div>
+              </div>
+            </div>
+          `;
+        }
+
+        const daysHtml = dayRows.map(day => {
+          const dayLabel = esc(day && day.label ? day.label : 'Day');
+          const dateLabel = esc(formatDateLabel(day && day.dateObj ? toIsoDateKey(day.dateObj) : ''));
+          const entries = Array.isArray(day && day.entries) ? day.entries : [];
+          const itemsHtml = entries.length
+            ? entries.map(entry => {
+              const classHtml = entry.className
+                ? `<span class="recipe-class">${esc(entry.className)}</span>`
+                : '';
+              const title = esc(entry.title || 'Recipe');
+              const link = entry.url
+                ? `<a href="${esc(entry.url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+                : title;
+              return `<li class="recipe-item">${classHtml}${link}</li>`;
+            }).join('')
+            : '<li class="recipe-item empty">No recipes for this day.</li>';
+
+          return `
+            <div class="section">
+              <div class="section-head">
+                <div class="section-label">${dayLabel}</div>
+                <div class="section-sublabel">${dateLabel}</div>
+              </div>
+              <ul class="recipe-list">${itemsHtml}</ul>
+            </div>
+          `;
+        }).join('');
+
+        return `
+          <div class="recipe-schedule-card">
+            <div class="category-head">Recipe Schedule <span class="order-chip">linked</span></div>
+            ${daysHtml}
+          </div>
+        `;
+      }
+
+      function renderPreview(dayRows) {
+        const term = String(termSelect.value || '');
+        const week = String(weekSelect.value || '');
+        docTitle.textContent = `Shopping List - Term ${term} Week ${week}`;
+        docId.textContent = '';
+        docMeta.textContent = currentWeekInfo || 'Prepare shopping list for the term and week';
+        docBody.innerHTML = renderRecipeSchedule(dayRows);
+      }
+
+      async function emailPreparedList() {
+        if (!currentPreparedState) {
+          setStatus('Please load a recipe schedule first.', 'error');
+          return;
+        }
+
+        const recipientEmail = String(staffEmailSelect && staffEmailSelect.value || '').trim().toLowerCase();
+        if (!recipientEmail) {
+          setStatus('Please select a staff email.', 'error');
+          return;
+        }
+
+        setStatus('Sending shopping list email...', 'info');
+        try {
+          const response = await requestJson('/api/shopping-workflow-email/send-list-now', {
+            method: 'POST',
+            body: JSON.stringify({
+              recipientEmail,
+              savedListId: 0
+            })
+          });
+
+          if (!response.success) {
+            throw new Error(response.error || 'Failed to send email');
+          }
+
+          const adminMsg = response.adminNotificationSent 
+            ? ` Admin receipt sent to ${response.adminNotificationRecipients.length} recipient(s).`
+            : '';
+          setStatus(`Email sent successfully.${adminMsg}`, 'success');
+        } catch (err) {
+          setStatus(err.message || 'Failed to send email.', 'error');
+          console.error(err);
+        }
+      }
+
+      // Event listeners
+      termSelect.addEventListener('change', updateWeekOptions);
+      loadBtn.addEventListener('click', loadRecipeSchedule);
+      emailBtn.addEventListener('click', emailPreparedList);
+      printBtn.addEventListener('click', () => window.print());
+
+      // Initialize
+      loadStaffEmails();
+    })();
+  </script>
+</body>
+</html>
