@@ -906,7 +906,12 @@ function renderRecipeScheduleHtml(dayRows) {
 
   const daysHtml = dayRows.map((day) => {
     const dayLabel = esc(day && day.label ? day.label : 'Day');
-    const dateLabel = esc(formatScheduleDateLabel(day && day.dateObj ? day.dateObj : new Date()));
+    let dateObj = day && day.dateObj ? day.dateObj : new Date();
+    // Handle stringified dates (from JSON serialization)
+    if (typeof dateObj === 'string') {
+      dateObj = new Date(dateObj);
+    }
+    const dateLabel = esc(formatScheduleDateLabel(dateObj));
     const entries = Array.isArray(day && day.entries) ? day.entries : [];
     const itemsHtml = entries.length
       ? entries.map((entry) => {
@@ -1671,7 +1676,12 @@ async function sendPreparedShoppingListEmail(options = {}) {
     ...(scheduleRows.length
       ? scheduleRows.flatMap((day) => {
         const dayLabel = String(day && day.label ? day.label : 'Day');
-        const dateLabel = formatScheduleDateLabel(day && day.dateObj ? day.dateObj : new Date());
+        let dateObj = day && day.dateObj ? day.dateObj : new Date();
+        // Handle stringified dates (from JSON serialization)
+        if (typeof dateObj === 'string') {
+          dateObj = new Date(dateObj);
+        }
+        const dateLabel = formatScheduleDateLabel(dateObj);
         const entries = Array.isArray(day && day.entries) ? day.entries : [];
         const items = entries.length
           ? entries.map((entry) => {
