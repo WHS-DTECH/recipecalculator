@@ -553,7 +553,7 @@
           const bookings = Array.isArray(data.bookings) ? data.bookings : [];
 
           const byDay = new Map();
-          for (let i = 0; i < 5; i += 1) {
+          for (let i = 0; i < 7; i += 1) {
             const day = new Date(range.start);
             day.setDate(day.getDate() + i);
             day.setHours(0, 0, 0, 0);
