@@ -761,6 +761,185 @@ function formatEmailDateTime(value) {
   return `${day}/${month}/${year}, ${hours}:${mins}`;
 }
 
+function parseWeekEndingDateForSchedule(text, fallbackYear) {
+  const input = String(text || '').trim();
+  if (!input) return null;
+
+  const isoMatch = input.match(/(\d{4}-\d{2}-\d{2})/);
+  if (isoMatch) {
+    const isoDate = new Date(`${isoMatch[1]}T00:00:00`);
+    return Number.isNaN(isoDate.getTime()) ? null : isoDate;
+  }
+
+  const compact = input.match(/(\d{1,2})\s*([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
+  if (!compact) return null;
+
+  const day = Number(compact[1]);
+  const monthName = String(compact[2] || '').toLowerCase();
+  const monthMap = {
+    jan: 0, january: 0,
+    feb: 1, february: 1,
+    mar: 2, march: 2,
+    apr: 3, april: 3,
+    may: 4,
+    jun: 5, june: 5,
+    jul: 6, july: 6,
+    aug: 7, august: 7,
+    sep: 8, sept: 8, september: 8,
+    oct: 9, october: 9,
+    nov: 10, november: 10,
+    dec: 11, december: 11
+  };
+
+  if (!Number.isFinite(day) || monthMap[monthName] == null) return null;
+
+  const year = compact[3] ? Number(compact[3]) : Number(fallbackYear || (new Date()).getFullYear());
+  const parsed = new Date(year, monthMap[monthName], day);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function deriveWeekRangeFromSavedList(list) {
+  const state = list && list.parsed_state && typeof list.parsed_state === 'object' ? list.parsed_state : {};
+  const fallbackYear = (() => {
+    const created = new Date(list && list.created_at ? list.created_at : '');
+    return Number.isNaN(created.getTime()) ? (new Date()).getFullYear() : created.getFullYear();
+  })();
+
+  const endingDate = parseWeekEndingDateForSchedule(
+    state.weekDate || list.week_date || list.week_info || '',
+    fallbackYear
+  );
+  if (!endingDate) return null;
+
+  const friday = new Date(endingDate.getFullYear(), endingDate.getMonth(), endingDate.getDate());
+  const monday = new Date(friday);
+  monday.setDate(friday.getDate() - 4);
+  monday.setHours(0, 0, 0, 0);
+  friday.setHours(0, 0, 0, 0);
+  return { monday, friday };
+}
+
+function toIsoDateKey(dateObj) {
+  const year = dateObj.getFullYear();
+  const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+  const day = String(dateObj.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function formatScheduleDayLabel(dateObj) {
+  return dateObj.toLocaleDateString('en-NZ', { weekday: 'long' });
+}
+
+function formatScheduleDateLabel(dateObj) {
+  return dateObj.toLocaleDateString('en-NZ', { weekday: 'long', day: 'numeric', month: 'short' });
+}
+
+function sortText(a, b) {
+  return String(a || '').localeCompare(String(b || ''), undefined, { sensitivity: 'base' });
+}
+
+async function loadRecipeScheduleForSavedList(list) {
+  const range = deriveWeekRangeFromSavedList(list);
+  if (!range) return [];
+
+  const startIso = toIsoDateKey(range.monday);
+  const endIso = toIsoDateKey(range.friday);
+  const result = await pool.query(
+    `SELECT b.booking_date,
+            b.class_name,
+            trim(coalesce(r.name, b.recipe, '')) AS recipe_title,
+            trim(coalesce(b.recipe_url, '')) AS recipe_url
+       FROM bookings b
+       LEFT JOIN recipes r
+         ON r.id = CAST(
+              NULLIF(
+                regexp_replace(COALESCE(b.recipe_id::text, ''), '[^0-9]', '', 'g'),
+                ''
+              ) AS INTEGER
+            )
+      WHERE b.booking_date >= $1
+        AND b.booking_date <= $2
+        AND trim(coalesce(r.name, b.recipe, '')) <> ''
+      ORDER BY b.booking_date ASC, upper(trim(coalesce(b.class_name, ''))) ASC, upper(trim(coalesce(r.name, b.recipe, ''))) ASC, b.id ASC`,
+    [startIso, endIso]
+  );
+
+  const byDay = new Map();
+  for (let i = 0; i < 5; i += 1) {
+    const day = new Date(range.monday);
+    day.setDate(range.monday.getDate() + i);
+    day.setHours(0, 0, 0, 0);
+    byDay.set(toIsoDateKey(day), {
+      dateObj: day,
+      label: formatScheduleDayLabel(day),
+      entries: []
+    });
+  }
+
+  for (const row of result.rows) {
+    const dateKey = String(row && row.booking_date || '').slice(0, 10);
+    if (!byDay.has(dateKey)) continue;
+    const title = String(row && row.recipe_title || '').trim();
+    if (!title) continue;
+    byDay.get(dateKey).entries.push({
+      className: String(row && row.class_name || '').trim(),
+      title,
+      url: String(row && row.recipe_url || '').trim()
+    });
+  }
+
+  return Array.from(byDay.values()).map((day) => {
+    day.entries.sort((a, b) => sortText(a.className, b.className) || sortText(a.title, b.title));
+    return day;
+  });
+}
+
+function renderRecipeScheduleHtml(dayRows) {
+  if (!Array.isArray(dayRows) || !dayRows.length) {
+    return `
+      <div style="border:1px solid #dbe4f1;border-radius:10px;background:#ffffff;overflow:hidden;margin:0 0 12px 0;">
+        <div style="background:#eef4fb;padding:8px 12px;font-size:13px;font-weight:700;color:#0f3b77;">Recipe Schedule <span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#dbeafe;color:#1d4f91;font-size:11px;font-weight:700;text-transform:uppercase;">linked</span></div>
+        <div style="padding:12px;font-size:12px;color:#475569;">No recipe schedule found for this week.</div>
+      </div>
+    `;
+  }
+
+  const daysHtml = dayRows.map((day) => {
+    const dayLabel = esc(day && day.label ? day.label : 'Day');
+    const dateLabel = esc(formatScheduleDateLabel(day && day.dateObj ? day.dateObj : new Date()));
+    const entries = Array.isArray(day && day.entries) ? day.entries : [];
+    const itemsHtml = entries.length
+      ? entries.map((entry) => {
+        const classHtml = entry.className
+          ? `<span style="display:inline-block;min-width:90px;font-weight:700;color:#1d4f91;margin-right:6px;">${esc(entry.className)}</span>`
+          : '';
+        const title = esc(entry.title || 'Recipe');
+        const link = entry.url
+          ? `<a href="${esc(entry.url)}" target="_blank" rel="noopener noreferrer" style="color:#1d4f91;text-decoration:underline;">${title}</a>`
+          : title;
+        return `<li style="margin:0 0 4px 0;">${classHtml}${link}</li>`;
+      }).join('')
+      : '<li style="margin:0 0 4px 0;color:#64748b;">No recipes for this day.</li>';
+
+    return `
+      <div style="padding:10px 12px;border-top:1px solid #e5e7eb;">
+        <div style="display:flex;justify-content:space-between;gap:8px;align-items:baseline;">
+          <div style="font-size:13px;font-weight:700;color:#0f172a;">${dayLabel}</div>
+          <div style="font-size:12px;color:#64748b;">${dateLabel}</div>
+        </div>
+        <ul style="margin:6px 0 0 0;padding-left:18px;font-size:12px;color:#0f172a;line-height:1.4;">${itemsHtml}</ul>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div style="border:1px solid #dbe4f1;border-radius:10px;background:#ffffff;overflow:hidden;margin:0 0 12px 0;">
+      <div style="background:#eef4fb;padding:8px 12px;font-size:13px;font-weight:700;color:#0f3b77;">Recipe Schedule <span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;background:#dbeafe;color:#1d4f91;font-size:11px;font-weight:700;text-transform:uppercase;">linked</span></div>
+      ${daysHtml}
+    </div>
+  `;
+}
+
 function renderColumnSectionsHtml(parsedState) {
   const state = parsedState && typeof parsedState === 'object' ? parsedState : {};
   const columns = Array.isArray(state.columns) ? state.columns : [];
@@ -853,13 +1032,14 @@ function renderColumnSectionsHtml(parsedState) {
   `;
 }
 
-function buildSimpleShoppingListEmailHtml(list) {
+function buildSimpleShoppingListEmailHtml(list, recipeScheduleRows) {
   const safeTitle = esc(list && list.title ? list.title : 'Shopping List');
   const safeWeekInfo = esc(list && list.week_info ? list.week_info : 'Upcoming week');
   const safeSavedBy = esc(list && list.created_by_name ? list.created_by_name : 'Unknown');
   const safeCreatedAt = esc(formatEmailDateTime(list && list.created_at));
   const safeUpdatedAt = esc(formatEmailDateTime(list && list.updated_at));
   const safeSource = esc(list && list.source_filename ? list.source_filename : 'N/A');
+  const scheduleHtml = renderRecipeScheduleHtml(recipeScheduleRows);
   const sectionsHtml = renderColumnSectionsHtml((list && list.parsed_state) || {});
 
   return `
@@ -897,6 +1077,7 @@ function buildSimpleShoppingListEmailHtml(list) {
           </tr>
         </table>
 
+        ${scheduleHtml}
         ${sectionsHtml}
       </div>
     </div>
@@ -933,7 +1114,8 @@ async function sendShoppingListNowEmail(options = {}) {
     ...(textItems.length ? textItems.map((item) => `- ${item}`) : ['- No items found'])
   ].join('\n');
 
-  const html = buildSimpleShoppingListEmailHtml(list);
+  const recipeScheduleRows = await loadRecipeScheduleForSavedList(list);
+  const html = buildSimpleShoppingListEmailHtml(list, recipeScheduleRows);
 
   console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
   const info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
