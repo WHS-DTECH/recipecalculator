@@ -556,7 +556,8 @@ async function logShoppingDelivery(eventType, recipientEmail, senderEmail, subje
 async function resolveSavedList(savedListId) {
   if (Number.isInteger(savedListId) && savedListId > 0) {
     const byId = await pool.query(
-      `SELECT id, title, week_info, parsed_state
+      `SELECT id, title, week_info, source_filename, parsed_state,
+              created_by_name, created_at, updated_at
        FROM saved_shopping_lists
        WHERE id = $1
        LIMIT 1`,
@@ -566,7 +567,8 @@ async function resolveSavedList(savedListId) {
   }
 
   const latest = await pool.query(
-    `SELECT id, title, week_info, parsed_state
+    `SELECT id, title, week_info, source_filename, parsed_state,
+            created_by_name, created_at, updated_at
      FROM saved_shopping_lists
      ORDER BY updated_at DESC, id DESC
      LIMIT 1`
@@ -748,21 +750,122 @@ async function sendShoppingSmtpTestEmail(options = {}) {
   };
 }
 
+function formatEmailDateTime(value) {
+  const dt = new Date(value || '');
+  if (Number.isNaN(dt.getTime())) return 'N/A';
+  const day = String(dt.getDate()).padStart(2, '0');
+  const month = String(dt.getMonth() + 1).padStart(2, '0');
+  const year = String(dt.getFullYear());
+  const hours = String(dt.getHours()).padStart(2, '0');
+  const mins = String(dt.getMinutes()).padStart(2, '0');
+  return `${day}/${month}/${year}, ${hours}:${mins}`;
+}
+
+function renderColumnSectionsHtml(parsedState) {
+  const state = parsedState && typeof parsedState === 'object' ? parsedState : {};
+  const columns = Array.isArray(state.columns) ? state.columns : [];
+
+  const renderCategory = (category) => {
+    const categoryName = esc(category && category.name ? category.name : 'Items');
+    const sections = Array.isArray(category && category.sections) ? category.sections : [];
+    const sectionHtml = sections.map((section) => {
+      const label = esc(section && section.label ? section.label : 'General');
+      const sublabel = esc(section && section.sublabel ? section.sublabel : '');
+      const items = Array.isArray(section && section.items) ? section.items : [];
+      const itemsHtml = items.length
+        ? items.slice(0, 120).map((item) => `<li style="margin:0 0 4px 0;">${esc(item)}</li>`).join('')
+        : '<li style="margin:0;">No items</li>';
+
+      return `
+        <div style="padding:10px 12px;border-top:1px solid #e5e7eb;">
+          <div style="font-size:13px;font-weight:700;color:#1d4f91;">${label}</div>
+          ${sublabel ? `<div style="font-size:12px;color:#64748b;margin:2px 0 6px 0;">${sublabel}</div>` : ''}
+          <ul style="margin:0;padding-left:18px;font-size:12px;color:#0f172a;line-height:1.4;">${itemsHtml}</ul>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div style="border:1px solid #dbe4f1;border-radius:10px;background:#ffffff;overflow:hidden;margin:0 0 10px 0;">
+        <div style="background:#eef4fb;padding:8px 12px;font-size:13px;font-weight:700;color:#0f3b77;">${categoryName}</div>
+        ${sectionHtml || '<div style="padding:10px 12px;font-size:12px;color:#475569;">No items</div>'}
+      </div>
+    `;
+  };
+
+  if (!columns.length) {
+    const items = parseItemsFromState(state).slice(0, 120);
+    const fallbackItems = items.length
+      ? items.map((item) => `<li style="margin:0 0 4px 0;">${esc(item)}</li>`).join('')
+      : '<li style="margin:0;">No items found in this saved shopping list yet.</li>';
+    return `
+      <div style="border:1px solid #dbe4f1;border-radius:10px;background:#ffffff;padding:12px;">
+        <div style="font-size:13px;font-weight:700;color:#0f3b77;margin:0 0 8px 0;">Items</div>
+        <ul style="margin:0;padding-left:18px;font-size:12px;color:#0f172a;line-height:1.4;">${fallbackItems}</ul>
+      </div>
+    `;
+  }
+
+  const leftColumn = Array.isArray(columns[0]) ? columns[0] : [];
+  const rightColumn = Array.isArray(columns[1]) ? columns[1] : [];
+  const leftHtml = leftColumn.length ? leftColumn.map(renderCategory).join('') : '<div style="font-size:12px;color:#64748b;">No items</div>';
+  const rightHtml = rightColumn.length ? rightColumn.map(renderCategory).join('') : '<div style="font-size:12px;color:#64748b;">No items</div>';
+
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:10px 0;">
+      <tr>
+        <td valign="top" width="50%" style="width:50%;">${leftHtml}</td>
+        <td valign="top" width="50%" style="width:50%;">${rightHtml}</td>
+      </tr>
+    </table>
+  `;
+}
+
 function buildSimpleShoppingListEmailHtml(list) {
   const safeTitle = esc(list && list.title ? list.title : 'Shopping List');
   const safeWeekInfo = esc(list && list.week_info ? list.week_info : 'Upcoming week');
-  const items = parseItemsFromState((list && list.parsed_state) || {}).slice(0, 120);
-  const itemsHtml = items.length
-    ? items.map((item) => `<li style="margin-bottom:4px;">${esc(item)}</li>`).join('')
-    : '<li>No items found in this saved shopping list yet.</li>';
+  const safeSavedBy = esc(list && list.created_by_name ? list.created_by_name : 'Unknown');
+  const safeCreatedAt = esc(formatEmailDateTime(list && list.created_at));
+  const safeUpdatedAt = esc(formatEmailDateTime(list && list.updated_at));
+  const safeSource = esc(list && list.source_filename ? list.source_filename : 'N/A');
+  const sectionsHtml = renderColumnSectionsHtml((list && list.parsed_state) || {});
 
   return `
-    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#1f2937;line-height:1.45;">
-      <h2 style="margin:0 0 10px;">${safeTitle}</h2>
-      <p style="margin:0 0 12px;"><strong>Week:</strong> ${safeWeekInfo}</p>
-      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
-        <div style="font-size:14px;font-weight:700;margin:0 0 8px;">Items</div>
-        <ul style="margin:0;padding-left:18px;font-size:13px;">${itemsHtml}</ul>
+    <div style="font-family:Arial,sans-serif;max-width:980px;margin:0 auto;color:#1f2937;line-height:1.45;background:#f8fafc;padding:12px;">
+      <div style="background:#1f4f93;border-radius:12px 12px 0 0;padding:14px 16px;color:#ffffff;">
+        <div style="font-size:28px;line-height:1;font-weight:700;color:#7ec2ff;margin:0 0 6px 0;">${safeTitle}</div>
+        <div style="font-size:14px;font-weight:700;color:#dbeafe;">${safeWeekInfo}</div>
+        <div style="font-size:13px;color:#e2e8f0;margin-top:6px;">This email is sorted in the teacher-facing print order.</div>
+      </div>
+
+      <div style="background:#ffffff;border:1px solid #cbd5e1;border-top:0;border-radius:0 0 12px 12px;padding:14px 12px 12px 12px;">
+        <div style="border:1px solid #dbe4f1;border-radius:10px;padding:10px 12px;background:#f8fafc;margin:0 0 12px 0;">
+          <div style="font-size:22px;font-weight:700;color:#1d4f91;margin:0 0 4px 0;">Teacher Preview</div>
+          <div style="font-size:13px;color:#475569;">Layout follows the teacher-facing shopping list format and is sorted before print/export.</div>
+        </div>
+
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:separate;border-spacing:10px 0;margin:0 0 12px 0;">
+          <tr>
+            <td style="border:1px solid #dbe4f1;border-radius:10px;background:#f8fafc;padding:10px;">
+              <div style="font-size:11px;color:#64748b;letter-spacing:0.04em;">SAVED BY</div>
+              <div style="font-size:13px;font-weight:700;color:#0f172a;">${safeSavedBy}</div>
+            </td>
+            <td style="border:1px solid #dbe4f1;border-radius:10px;background:#f8fafc;padding:10px;">
+              <div style="font-size:11px;color:#64748b;letter-spacing:0.04em;">CREATED</div>
+              <div style="font-size:13px;font-weight:700;color:#0f172a;">${safeCreatedAt}</div>
+            </td>
+            <td style="border:1px solid #dbe4f1;border-radius:10px;background:#f8fafc;padding:10px;">
+              <div style="font-size:11px;color:#64748b;letter-spacing:0.04em;">UPDATED</div>
+              <div style="font-size:13px;font-weight:700;color:#0f172a;">${safeUpdatedAt}</div>
+            </td>
+            <td style="border:1px solid #dbe4f1;border-radius:10px;background:#f8fafc;padding:10px;">
+              <div style="font-size:11px;color:#64748b;letter-spacing:0.04em;">SOURCE</div>
+              <div style="font-size:13px;font-weight:700;color:#0f172a;">${safeSource}</div>
+            </td>
+          </tr>
+        </table>
+
+        ${sectionsHtml}
       </div>
     </div>
   `;
@@ -798,21 +901,7 @@ async function sendShoppingListNowEmail(options = {}) {
     ...(textItems.length ? textItems.map((item) => `- ${item}`) : ['- No items found'])
   ].join('\n');
 
-  const safeTitle = escapeHtml(String(list.title || 'Weekly Shopping List'));
-  const safeWeekInfo = escapeHtml(String(list.week_info || 'Upcoming week'));
-  const itemsHtml = textItems.length
-    ? textItems.map((item) => `<li>${escapeHtml(item)}</li>`).join('')
-    : '<li>No items found in this saved shopping list yet.</li>';
-  const html = `
-    <div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;color:#1f2937;line-height:1.45;">
-      <h2 style="margin:0 0 10px;">${safeTitle}</h2>
-      <p style="margin:0 0 12px;"><strong>Week:</strong> ${safeWeekInfo}</p>
-      <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;">
-        <div style="font-size:14px;font-weight:700;margin:0 0 8px;">Items</div>
-        <ul style="margin:0;padding-left:18px;font-size:13px;">${itemsHtml}</ul>
-      </div>
-    </div>
-  `;
+  const html = buildSimpleShoppingListEmailHtml(list);
 
   console.log(`[SHOPPING-REVIEW] List send sending to: ${recipientEmail}, from: ${from}, subject: ${subject}`);
   const info = await mailer.sendMail({ from, to: recipientEmail, replyTo: from, subject, text, html });
