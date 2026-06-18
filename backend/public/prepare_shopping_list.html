@@ -302,6 +302,93 @@
       color: #64748b;
     }
 
+    .ingredients-wrap {
+      margin-top: 1rem;
+    }
+
+    .ingredients-grid {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .ingredients-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .ingredient-card {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      overflow: hidden;
+      background: #fff;
+      min-height: 100%;
+    }
+
+    .ingredient-card.full-width {
+      grid-column: 1 / -1;
+      min-height: 0;
+    }
+
+    .ingredient-head {
+      background: #2164cf;
+      color: #fff;
+      padding: 0.8rem 0.95rem;
+      font-weight: 700;
+      letter-spacing: 0.01em;
+    }
+
+    .ingredient-body {
+      padding: 0.9rem 0.95rem 0.95rem;
+    }
+
+    .ingredient-section {
+      margin-bottom: 0.9rem;
+    }
+
+    .ingredient-section:last-child {
+      margin-bottom: 0;
+    }
+
+    .ingredient-section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: baseline;
+      margin-bottom: 0.5rem;
+      border-bottom: 1px dashed #d7dfeb;
+      padding-bottom: 0.35rem;
+    }
+
+    .ingredient-section-label {
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    .ingredient-section-sublabel {
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: right;
+    }
+
+    .ingredient-items {
+      margin: 0;
+      padding-left: 1.1rem;
+      color: #273246;
+    }
+
+    .ingredient-items li {
+      margin: 0 0 0.3rem;
+    }
+
+    .ingredient-placeholder {
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+      min-height: 2.2rem;
+      background: #fafcff;
+    }
+
     @media print {
       body {
         background: #fff;
@@ -330,6 +417,10 @@
       .doc {
         border: 0;
         border-radius: 0;
+      }
+
+      .ingredient-card {
+        break-inside: avoid;
       }
     }
   </style>
@@ -468,6 +559,40 @@
         ]
       };
 
+      const CATEGORY_ORDER = [
+        'Meat',
+        'Dairy & Pastry',
+        'Dry Ingredients',
+        'Tinned Food',
+        'Cleaning Products',
+        'Fruit and Vegetables',
+        'Other'
+      ];
+
+      const CATEGORY_PAIRS = [
+        ['Meat', 'Dairy & Pastry'],
+        ['Dry Ingredients', 'Tinned Food'],
+        ['Cleaning Products', 'Fruit and Vegetables'],
+        ['Other', '']
+      ];
+
+      const SECTION_ORDER = [
+        'Monday',
+        'Tuesday',
+        'Wednesday',
+        'Thursday',
+        'Friday',
+        'Saturday',
+        'Sunday',
+        'Junior',
+        'L1',
+        'L2',
+        'L3',
+        'St M',
+        'DK',
+        'RS'
+      ];
+
       function esc(value) {
         return String(value == null ? '' : value)
           .replace(/&/g, '&amp;')
@@ -513,6 +638,128 @@
         const termWeeks = WEEK_RANGES[term];
         if (!termWeeks) return null;
         return termWeeks.find(w => w.week === Number(week));
+      }
+
+      function normalizeColumns(state) {
+        const columns = Array.isArray(state && state.columns) ? state.columns : [];
+        const out = [[], []];
+        columns.slice(0, 2).forEach((column, columnIndex) => {
+          out[columnIndex] = Array.isArray(column) ? column : [];
+        });
+        return out;
+      }
+
+      function normalizeCategoryKey(name) {
+        return String(name || '').trim().toLowerCase();
+      }
+
+      function orderIndex(value, orderList) {
+        const index = orderList.indexOf(String(value || '').trim());
+        return index === -1 ? 999 : index;
+      }
+
+      function sortText(valueA, valueB) {
+        return String(valueA || '').localeCompare(String(valueB || ''), undefined, { sensitivity: 'base' });
+      }
+
+      function sortPreviewItems(items) {
+        return (Array.isArray(items) ? items : [])
+          .map((item) => String(item || '').trim())
+          .filter(Boolean)
+          .sort(sortText);
+      }
+
+      function sortPreviewSections(sections) {
+        return (Array.isArray(sections) ? sections : [])
+          .slice()
+          .sort((a, b) => {
+            const orderA = orderIndex(a && a.label, SECTION_ORDER);
+            const orderB = orderIndex(b && b.label, SECTION_ORDER);
+            if (orderA !== orderB) return orderA - orderB;
+            return sortText(a && a.label, b && b.label);
+          })
+          .map((section) => ({
+            label: section && section.label ? section.label : 'Section',
+            sublabel: section && section.sublabel ? section.sublabel : '',
+            items: sortPreviewItems(section && section.items)
+          }));
+      }
+
+      function sortPreviewCategories(column) {
+        return (Array.isArray(column) ? column : [])
+          .slice()
+          .sort((a, b) => {
+            const orderA = orderIndex(a && a.name, CATEGORY_ORDER);
+            const orderB = orderIndex(b && b.name, CATEGORY_ORDER);
+            if (orderA !== orderB) return orderA - orderB;
+            return sortText(a && a.name, b && b.name);
+          })
+          .map((category) => ({
+            name: category && category.name ? category.name : 'Category',
+            sections: sortPreviewSections(category && category.sections)
+          }));
+      }
+
+      function flattenCategories(columns) {
+        return (Array.isArray(columns) ? columns : []).reduce((all, column) => {
+          const entries = Array.isArray(column) ? column : [];
+          entries.forEach((category) => {
+            all.push({
+              name: category && category.name ? category.name : 'Category',
+              sections: sortPreviewSections(category && category.sections)
+            });
+          });
+          return all;
+        }, []);
+      }
+
+      function buildTeacherDocColumns(columns) {
+        const flattened = flattenCategories(columns);
+        const byName = new Map();
+
+        flattened.forEach((category) => {
+          byName.set(normalizeCategoryKey(category.name), category);
+        });
+
+        const left = [];
+        const right = [];
+
+        CATEGORY_PAIRS.forEach((pair) => {
+          const leftName = pair[0];
+          const rightName = pair[1];
+          const leftKey = normalizeCategoryKey(leftName);
+          const rightKey = normalizeCategoryKey(rightName);
+
+          if (leftKey && byName.has(leftKey)) {
+            left.push(byName.get(leftKey));
+          }
+          if (rightKey && byName.has(rightKey)) {
+            right.push(byName.get(rightKey));
+          }
+        });
+
+        return [left, right];
+      }
+
+      async function loadIngredientColumnsForWeek(term, week) {
+        const listsData = await requestJson('/api/saved-shopping-lists');
+        const lists = Array.isArray(listsData && listsData.lists) ? listsData.lists : [];
+        const match = lists.find((list) => String(list && list.term || '').trim() === term && String(list && list.week || '').trim() === week);
+        if (!match || !match.id) {
+          return { columns: [[], []], sourceLabel: 'No saved shopping list found for this term/week.' };
+        }
+
+        const detail = await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(String(match.id)));
+        const list = detail && detail.list ? detail.list : null;
+        const normalizedColumns = normalizeColumns(list && list.state ? list.state : {});
+        const orderedColumns = buildTeacherDocColumns(normalizedColumns);
+        const leftSorted = sortPreviewCategories(orderedColumns[0]);
+        const rightSorted = sortPreviewCategories(orderedColumns[1]);
+
+        return {
+          columns: [leftSorted, rightSorted],
+          sourceLabel: list && list.title ? ('Ingredients from saved list: ' + list.title) : 'Ingredients from saved shopping list'
+        };
       }
 
       function isPlannerLikeBooking(row) {
@@ -566,7 +813,10 @@
 
         setStatus('Loading recipe schedule...', 'info');
         try {
-          const data = await requestJson(`/api/bookings/all?start=${range.start}&end=${range.end}&limit=500`);
+          const [data, ingredientPayload] = await Promise.all([
+            requestJson(`/api/bookings/all?start=${range.start}&end=${range.end}&limit=500`),
+            loadIngredientColumnsForWeek(term, week).catch((err) => ({ columns: [[], []], sourceLabel: err.message || 'Unable to load ingredients.' }))
+          ]);
           const bookings = Array.isArray(data.bookings) ? data.bookings : [];
 
           const byDay = new Map();
@@ -591,6 +841,7 @@
             const resolvedUrl = String(row && (row.recipe_url || row.linked_recipe_url) || '').trim();
             byDay.get(dateKey).entries.push({
               className: String(row && row.class_name || '').trim(),
+              period: String(row && row.period || '').trim(),
               title,
               url: resolvedUrl
             });
@@ -606,13 +857,15 @@
 
           currentPreparedState = {
             scheduleRows,
+            ingredientColumns: ingredientPayload && Array.isArray(ingredientPayload.columns) ? ingredientPayload.columns : [[], []],
+            ingredientSourceLabel: String(ingredientPayload && ingredientPayload.sourceLabel || '').trim(),
             term,
             week
           };
 
           currentWeekInfo = `Term ${term} | Week ${week} | ${formatDateLabel(range.start)} - ${formatDateLabel(range.end)}`;
 
-          renderPreview(scheduleRows);
+          renderPreview(scheduleRows, currentPreparedState.ingredientColumns, currentPreparedState.ingredientSourceLabel);
           setStatus('Recipe schedule loaded successfully.', 'success');
         } catch (err) {
           setStatus(err.message || 'Failed to load recipe schedule.', 'error');
@@ -653,40 +906,146 @@
           `;
         }
 
-        const allEntries = dayRows.flatMap(day =>
-          Array.isArray(day && day.entries) ? day.entries : []
-        );
+        const sectionsHtml = dayRows.map(day => {
+          const dayLabel = esc(day && day.label ? day.label : 'Day');
+          const dateLabel = esc(formatDateLabel(day && day.dateObj ? toIsoDateKey(day.dateObj) : ''));
+          const entries = Array.isArray(day && day.entries) ? day.entries : [];
 
-        const itemsHtml = allEntries.length
-          ? allEntries.map(entry => {
-            const classHtml = entry.className
-              ? `<span class="recipe-class">${esc(entry.className)}</span>`
-              : '';
-            const title = esc(entry.title || 'Recipe');
-            const link = entry.url
-              ? `<a href="${esc(entry.url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
-              : title;
-            return `<li class="recipe-item">${classHtml}${link}</li>`;
-          }).join('')
-          : '<li class="recipe-item empty">No recipes found for this week.</li>';
+          const itemsHtml = entries.length
+            ? entries.map(entry => {
+              const classInfo = [
+                String(entry && entry.period || '').trim(),
+                String(entry && entry.className || '').trim()
+              ].filter(Boolean).join(' ');
+              const classHtml = classInfo
+                ? `<span class="recipe-class">${esc(classInfo)}</span>`
+                : '';
+              const title = esc(entry.title || 'Recipe');
+              const link = entry.url
+                ? `<a href="${esc(entry.url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+                : title;
+              return `<li class="recipe-item">${classHtml}${link}</li>`;
+            }).join('')
+            : '<li class="recipe-item empty">No recipes for this day.</li>';
+
+          return `
+            <div class="section">
+              <div class="section-head">
+                <div class="section-label">${dayLabel}</div>
+                <div class="section-sublabel">${dateLabel}</div>
+              </div>
+              <ul class="recipe-list">${itemsHtml}</ul>
+            </div>
+          `;
+        }).join('');
 
         return `
           <div class="recipe-schedule-card">
             <div class="category-head">Recipe Schedule <span class="order-chip">linked</span></div>
-            <div class="section">
-              <ul class="recipe-list">${itemsHtml}</ul>
-            </div>
+            ${sectionsHtml}
           </div>
         `;
       }
 
-      function renderPreview(dayRows) {
+      function renderIngredientCard(category) {
+        if (!category) {
+          return '<div class="ingredient-placeholder" aria-hidden="true"></div>';
+        }
+
+        const sections = Array.isArray(category && category.sections) ? category.sections : [];
+        const sectionsHtml = sections.length
+          ? sections.map((section) => {
+            const items = Array.isArray(section && section.items) ? section.items : [];
+            const itemsHtml = items.length
+              ? '<ul class="ingredient-items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
+              : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
+
+            return '<div class="ingredient-section">'
+              + '<div class="ingredient-section-head">'
+              + '<div class="ingredient-section-label">' + esc(section.label || 'Section') + '</div>'
+              + '<div class="ingredient-section-sublabel">' + esc(section.sublabel || '') + '</div>'
+              + '</div>'
+              + itemsHtml
+              + '</div>';
+          }).join('')
+          : '<div class="empty-state">No sections yet.</div>';
+
+        return '<article class="ingredient-card">'
+          + '<div class="ingredient-head">' + esc(category.name || 'Category') + '<span class="order-chip">sorted</span></div>'
+          + '<div class="ingredient-body">' + sectionsHtml + '</div>'
+          + '</article>';
+      }
+
+      function renderIngredients(columns, sourceLabel) {
+        const leftColumn = Array.isArray(columns && columns[0]) ? columns[0] : [];
+        const rightColumn = Array.isArray(columns && columns[1]) ? columns[1] : [];
+        const leftOtherIndex = leftColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+        const rightOtherIndex = rightColumn.findIndex((category) => normalizeCategoryKey(category && category.name) === 'other');
+        const firstOtherIndex = [leftOtherIndex, rightOtherIndex].filter((index) => index !== -1).sort((a, b) => a - b)[0];
+        const otherCategory = leftOtherIndex !== -1
+          ? leftColumn[leftOtherIndex]
+          : (rightOtherIndex !== -1 ? rightColumn[rightOtherIndex] : null);
+        const pairedLeftColumn = leftColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
+        const pairedRightColumn = rightColumn.filter((category) => normalizeCategoryKey(category && category.name) !== 'other');
+
+        const rows = [];
+        const renderLimit = Number.isInteger(firstOtherIndex)
+          ? Math.min(firstOtherIndex, Math.max(pairedLeftColumn.length, pairedRightColumn.length))
+          : Math.max(pairedLeftColumn.length, pairedRightColumn.length, 1);
+
+        for (let idx = 0; idx < renderLimit; idx += 1) {
+          const leftCard = renderIngredientCard(pairedLeftColumn[idx] || null);
+          const rightCard = renderIngredientCard(pairedRightColumn[idx] || null);
+          rows.push('<div class="ingredients-row">' + leftCard + rightCard + '</div>');
+        }
+
+        if (otherCategory) {
+          rows.push('<div class="ingredients-row"><article class="ingredient-card full-width"><div class="ingredient-head">' + esc(otherCategory.name || 'Other') + '<span class="order-chip">sorted</span></div><div class="ingredient-body">' + (Array.isArray(otherCategory.sections) && otherCategory.sections.length ? otherCategory.sections.map((section) => {
+            const items = Array.isArray(section && section.items) ? section.items : [];
+            const itemsHtml = items.length
+              ? '<ul class="ingredient-items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
+              : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
+
+            return '<div class="ingredient-section">'
+              + '<div class="ingredient-section-head">'
+              + '<div class="ingredient-section-label">' + esc(section.label || 'Section') + '</div>'
+              + '<div class="ingredient-section-sublabel">' + esc(section.sublabel || '') + '</div>'
+              + '</div>'
+              + itemsHtml
+              + '</div>';
+          }).join('') : '<div class="empty-state">No sections yet.</div>') + '</div></article></div>');
+        }
+
+        const hasAnyCategories = pairedLeftColumn.length || pairedRightColumn.length || otherCategory;
+        if (!hasAnyCategories) {
+          return `
+            <div class="ingredients-wrap">
+              <div class="recipe-schedule-card">
+                <div class="category-head">Ingredients <span class="order-chip">sorted</span></div>
+                <div class="category-body">
+                  <div class="empty-state">${esc(sourceLabel || 'No ingredient sections found for this week.')}</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="ingredients-wrap">
+            <div class="category-head">Ingredients <span class="order-chip">sorted</span></div>
+            ${sourceLabel ? `<div style="padding:8px 2px 10px;color:#5b687a;font-size:0.88rem;">${esc(sourceLabel)}</div>` : ''}
+            <div class="ingredients-grid">${rows.join('')}</div>
+          </div>
+        `;
+      }
+
+      function renderPreview(dayRows, ingredientColumns, ingredientSourceLabel) {
         const term = String(termSelect.value || '');
         const week = String(weekSelect.value || '');
         docTitle.textContent = `Shopping List - Term ${term} Week ${week}`;
         docId.textContent = '';
         docMeta.textContent = currentWeekInfo || 'Prepare shopping list for the term and week';
-        docBody.innerHTML = renderRecipeSchedule(dayRows);
+        docBody.innerHTML = renderRecipeSchedule(dayRows) + renderIngredients(ingredientColumns, ingredientSourceLabel);
       }
 
       async function emailPreparedList() {
