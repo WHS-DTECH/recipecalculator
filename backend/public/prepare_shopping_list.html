@@ -653,38 +653,29 @@
           `;
         }
 
-        const daysHtml = dayRows.map(day => {
-          const dayLabel = esc(day && day.label ? day.label : 'Day');
-          const dateLabel = esc(formatDateLabel(day && day.dateObj ? toIsoDateKey(day.dateObj) : ''));
-          const entries = Array.isArray(day && day.entries) ? day.entries : [];
-          const itemsHtml = entries.length
-            ? entries.map(entry => {
-              const classHtml = entry.className
-                ? `<span class="recipe-class">${esc(entry.className)}</span>`
-                : '';
-              const title = esc(entry.title || 'Recipe');
-              const link = entry.url
-                ? `<a href="${esc(entry.url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
-                : title;
-              return `<li class="recipe-item">${classHtml}${link}</li>`;
-            }).join('')
-            : '<li class="recipe-item empty">No recipes for this day.</li>';
+        const allEntries = dayRows.flatMap(day =>
+          Array.isArray(day && day.entries) ? day.entries : []
+        );
 
-          return `
-            <div class="section">
-              <div class="section-head">
-                <div class="section-label">${dayLabel}</div>
-                <div class="section-sublabel">${dateLabel}</div>
-              </div>
-              <ul class="recipe-list">${itemsHtml}</ul>
-            </div>
-          `;
-        }).join('');
+        const itemsHtml = allEntries.length
+          ? allEntries.map(entry => {
+            const classHtml = entry.className
+              ? `<span class="recipe-class">${esc(entry.className)}</span>`
+              : '';
+            const title = esc(entry.title || 'Recipe');
+            const link = entry.url
+              ? `<a href="${esc(entry.url)}" target="_blank" rel="noopener noreferrer">${title}</a>`
+              : title;
+            return `<li class="recipe-item">${classHtml}${link}</li>`;
+          }).join('')
+          : '<li class="recipe-item empty">No recipes found for this week.</li>';
 
         return `
           <div class="recipe-schedule-card">
             <div class="category-head">Recipe Schedule <span class="order-chip">linked</span></div>
-            ${daysHtml}
+            <div class="section">
+              <ul class="recipe-list">${itemsHtml}</ul>
+            </div>
           </div>
         `;
       }
