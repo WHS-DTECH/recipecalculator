@@ -1217,6 +1217,11 @@
         renderPreview(currentPreparedState.scheduleRows, currentPreparedState.ingredientColumns, currentPreparedState.ingredientSourceLabel);
       }
 
+      // Expose to global scope so inline onclick attributes can call them
+      window.commitItemEdit = commitItemEdit;
+      window.addItemToSection = addItemToSection;
+      window.deleteItemFromSection = deleteItemFromSection;
+
       function renderIngredientCard(category) {
         if (!category) {
           return '<div class="ingredient-placeholder" aria-hidden="true"></div>';
