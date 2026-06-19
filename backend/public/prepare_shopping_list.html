@@ -832,6 +832,10 @@
           const dateKey = String(row && row.booking_date || '').slice(0, 10);
           const id = Number(row && row.id);
           if (!dateKey || !Number.isFinite(id)) return;
+          // Skip planner rows and bookings with no real recipe (Theory / No recipe allocated / blank)
+          if (isPlannerLikeBooking(row)) return;
+          const recipeName = String(row && (row.linked_recipe_name || row.recipe) || '').trim().toLowerCase();
+          if (!recipeName || recipeName === 'theory' || recipeName === 'no recipe allocated') return;
           if (!byDateBookingIds.has(dateKey)) byDateBookingIds.set(dateKey, []);
           byDateBookingIds.get(dateKey).push(id);
         });
