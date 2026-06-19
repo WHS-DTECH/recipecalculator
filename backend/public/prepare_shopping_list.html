@@ -688,61 +688,6 @@
         return { term, week };
       }
 
-      function parseWeekEndingDate(text) {
-        const input = String(text || '').trim();
-        if (!input) return null;
-
-        const iso = input.match(/(\d{4}-\d{2}-\d{2})/);
-        if (iso) {
-          const isoDate = new Date(iso[1] + 'T00:00:00');
-          return Number.isNaN(isoDate.getTime()) ? null : isoDate;
-        }
-
-        const compact = input.match(/(\d{1,2})\s*([A-Za-z]{3,9})(?:\s+(\d{4}))?/);
-        if (!compact) return null;
-
-        const day = Number(compact[1]);
-        const monthName = String(compact[2] || '').toLowerCase();
-        const monthMap = {
-          jan: 0, january: 0,
-          feb: 1, february: 1,
-          mar: 2, march: 2,
-          apr: 3, april: 3,
-          may: 4,
-          jun: 5, june: 5,
-          jul: 6, july: 6,
-          aug: 7, august: 7,
-          sep: 8, sept: 8, september: 8,
-          oct: 9, october: 9,
-          nov: 10, november: 10,
-          dec: 11, december: 11
-        };
-        if (!Number.isFinite(day) || monthMap[monthName] == null) return null;
-
-        const year = compact[3] ? Number(compact[3]) : (new Date()).getFullYear();
-        const parsed = new Date(year, monthMap[monthName], day);
-        return Number.isNaN(parsed.getTime()) ? null : parsed;
-      }
-
-      function extractListWeekEndingKey(list) {
-        const candidates = [
-          list && list.week_date,
-          list && list.weekDate,
-          list && list.week_info,
-          list && list.title,
-          list && list.source_filename
-        ];
-
-        for (let i = 0; i < candidates.length; i += 1) {
-          const parsed = parseWeekEndingDate(candidates[i]);
-          if (parsed) {
-            parsed.setHours(0, 0, 0, 0);
-            return toIsoDateKey(parsed);
-          }
-        }
-        return '';
-      }
-
       function normalizeColumns(state) {
         const columns = Array.isArray(state && state.columns) ? state.columns : [];
         const out = [[], []];
@@ -770,6 +715,24 @@
           .map((item) => String(item || '').trim())
           .filter(Boolean)
           .sort(sortText);
+      }
+
+      function formatQty(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n) || n <= 0) return '';
+        if (Number.isInteger(n)) return String(n);
+        return String(Math.round(n * 1000) / 1000).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+      }
+
+      function formatIngredientLine(item) {
+        const qty = formatQty(item && item.qty);
+        const unit = String(item && item.unit || '').trim();
+        const name = String(item && item.display || '').trim();
+        const parts = [];
+        if (qty) parts.push(qty);
+        if (unit) parts.push(unit);
+        if (name) parts.push(name);
+        return parts.join(' ').trim();
       }
 
       function sortPreviewSections(sections) {
@@ -844,30 +807,92 @@
         return [left, right];
       }
 
-      async function loadIngredientColumnsForWeek(term, week, range) {
-        const listsData = await requestJson('/api/saved-shopping-lists');
-        const lists = Array.isArray(listsData && listsData.lists) ? listsData.lists : [];
-        const selectedWeekEndingKey = range && range.end ? String(range.end).slice(0, 10) : '';
-        const enriched = lists.map((list) => {
-          const meta = extractListTermWeek(list);
-          const weekEndingKey = extractListWeekEndingKey(list);
-          let score = 0;
-          if (meta.term === term && meta.week === week) score += 2;
-          if (selectedWeekEndingKey && weekEndingKey === selectedWeekEndingKey) score += 1;
-          return Object.assign({}, list, {
-            _term: meta.term,
-            _week: meta.week,
-            _weekEndingKey: weekEndingKey,
-            _score: score
+      function createEmptyCategoryColumns() {
+        const categoryByName = new Map();
+        CATEGORY_ORDER.forEach((name) => {
+          categoryByName.set(name, { name, sections: [] });
+        });
+        const left = [];
+        const right = [];
+        CATEGORY_PAIRS.forEach((pair) => {
+          const leftName = pair[0];
+          const rightName = pair[1];
+          if (leftName && categoryByName.has(leftName)) left.push(categoryByName.get(leftName));
+          if (rightName && categoryByName.has(rightName)) right.push(categoryByName.get(rightName));
+        });
+        return { columns: [left, right], categoryByName };
+      }
+
+      async function buildFallbackIngredientColumnsFromBookings(bookings, scheduleRows) {
+        const rows = Array.isArray(scheduleRows) ? scheduleRows : [];
+        const bookingRows = Array.isArray(bookings) ? bookings : [];
+        const byDateBookingIds = new Map();
+
+        bookingRows.forEach((row) => {
+          const dateKey = String(row && row.booking_date || '').slice(0, 10);
+          const id = Number(row && row.id);
+          if (!dateKey || !Number.isFinite(id)) return;
+          if (!byDateBookingIds.has(dateKey)) byDateBookingIds.set(dateKey, []);
+          byDateBookingIds.get(dateKey).push(id);
+        });
+
+        const { columns, categoryByName } = createEmptyCategoryColumns();
+        const categoryMap = {
+          produce: 'Fruit and Vegetables',
+          dairy: 'Dairy & Pastry',
+          pantry: 'Dry Ingredients',
+          other: 'Other'
+        };
+
+        const dayResults = await Promise.all(rows.map(async (day) => {
+          const dateKey = day && day.dateObj ? toIsoDateKey(day.dateObj) : '';
+          const ids = byDateBookingIds.get(dateKey) || [];
+          if (!ids.length) {
+            return { dayLabel: String(day && day.label || 'Day'), data: {} };
+          }
+          const payload = await requestJson('/api/shopping-list/by_category?booking_ids=' + encodeURIComponent(ids.join(',')));
+          return {
+            dayLabel: String(day && day.label || 'Day'),
+            data: payload && payload.success && payload.data ? payload.data : {}
+          };
+        }));
+
+        dayResults.forEach((dayResult) => {
+          const dayLabel = String(dayResult && dayResult.dayLabel || 'Day');
+          const data = dayResult && dayResult.data && typeof dayResult.data === 'object' ? dayResult.data : {};
+          Object.keys(data).forEach((rawCategory) => {
+            const mappedName = categoryMap[String(rawCategory || '').trim().toLowerCase()] || 'Other';
+            const target = categoryByName.get(mappedName);
+            if (!target) return;
+            const items = (Array.isArray(data[rawCategory]) ? data[rawCategory] : [])
+              .map((item) => formatIngredientLine(item))
+              .filter(Boolean)
+              .sort(sortText);
+            if (!items.length) return;
+            target.sections.push({ label: dayLabel, sublabel: '', items });
           });
         });
 
-        const scored = enriched
-          .filter((list) => list._score > 0)
-          .sort((a, b) => b._score - a._score || Number(b.id || 0) - Number(a.id || 0));
-        const match = scored[0] || null;
+        columns[0] = sortPreviewCategories(columns[0]);
+        columns[1] = sortPreviewCategories(columns[1]);
+
+        return {
+          columns,
+          sourceLabel: 'Auto-generated from current week bookings (no saved shopping list yet).'
+        };
+      }
+
+      async function loadIngredientColumnsForWeek(term, week, bookings, scheduleRows) {
+        const listsData = await requestJson('/api/saved-shopping-lists');
+        const lists = Array.isArray(listsData && listsData.lists) ? listsData.lists : [];
+        const enriched = lists.map((list) => {
+          const meta = extractListTermWeek(list);
+          return Object.assign({}, list, { _term: meta.term, _week: meta.week });
+        });
+
+        const match = enriched.find((list) => list._term === term && list._week === week);
         if (!match || !match.id) {
-          return { columns: [[], []], sourceLabel: 'No saved shopping list found for this term/week.' };
+          return buildFallbackIngredientColumnsFromBookings(bookings, scheduleRows);
         }
 
         const detail = await requestJson('/api/saved-shopping-lists/' + encodeURIComponent(String(match.id)));
@@ -934,10 +959,7 @@
 
         setStatus('Loading recipe schedule...', 'info');
         try {
-          const [data, ingredientPayload] = await Promise.all([
-            requestJson(`/api/bookings/all?start=${range.start}&end=${range.end}&limit=500`),
-            loadIngredientColumnsForWeek(term, week, range).catch((err) => ({ columns: [[], []], sourceLabel: err.message || 'Unable to load ingredients.' }))
-          ]);
+          const data = await requestJson(`/api/bookings/all?start=${range.start}&end=${range.end}&limit=500`);
           const bookings = Array.isArray(data.bookings) ? data.bookings : [];
 
           const byDay = new Map();
@@ -974,6 +996,9 @@
             );
             return day;
           });
+
+          const ingredientPayload = await loadIngredientColumnsForWeek(term, week, bookings, scheduleRows)
+            .catch((err) => ({ columns: [[], []], sourceLabel: err.message || 'Unable to load ingredients.' }));
 
           currentPreparedState = {
             scheduleRows,
