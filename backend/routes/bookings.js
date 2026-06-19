@@ -1123,6 +1123,7 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             const isSinglePeriodClass = uniquePeriods.length === 1;
             const isSeniorSingleTheory = isSinglePeriodClass && ['11HOSP', '12HOSP', '13HOSP'].includes(String(classCode || '').toUpperCase());
             const isMiddleSingleTheory = isSinglePeriodClass && String(classCode || '').toUpperCase() === 'MFOOD';
+            const isSeniorPlannerClass = ['11HOSP', '12HOSP', '13HOSP'].includes(String(classCode || '').toUpperCase());
             const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
             const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
 
@@ -1135,21 +1136,36 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             } else {
               const plannerKey = `${dateIso}|${stream}`;
               const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
-              const planner = (classCode
+              const classSpecificPlanner = classCode
                 ? (plannerByDateAndClassCode.get(classPlannerKey) || plannerByDateAndClassCode.get(classWeekKey))
-                : null
-              ) || plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey);
+                : null;
+
+              // Senior classes must not inherit another class's stream recipe when blank in planner.
+              if (isSeniorPlannerClass && !classSpecificPlanner) {
+                targetRecipe = 'No recipe allocated';
+                targetRecipeUrl = '';
+                targetRecipeId = null;
+              }
+
+              const planner = classSpecificPlanner ||
+                (isSeniorPlannerClass ? null : (plannerByDateAndStream.get(plannerKey) || plannerByDateAndStream.get(weekKey)));
               if (!planner) {
+                if (targetRecipe === 'No recipe allocated') {
+                  // Keep explicit placeholder for senior classes with blank planner recipe.
+                } else {
                 stats.skippedNoPlanner += uniquePeriods.length;
                 if (dryRun && diagNoPlanner.length < 20) {
                   diagNoPlanner.push({ date: dateIso, teacher: teacherCode, class: classGroupKey, classCode, stream, periods: uniquePeriods });
                 }
                 continue;
+                }
               }
 
-              targetRecipe = String(planner.recipe || '').trim();
-              targetRecipeUrl = planner.recipe_url || '';
-              targetRecipeId = planner.recipe_id || null;
+              if (planner) {
+                targetRecipe = String(planner.recipe || '').trim();
+                targetRecipeUrl = planner.recipe_url || '';
+                targetRecipeId = planner.recipe_id || null;
+              }
             }
 
             const staffRow = staffByCode.get(teacherCode);
@@ -1194,8 +1210,9 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
 
                   const nameChangedWithForce = forceUpdateRecipe && targetRecipeName && existingRecipe !== targetRecipeName;
                   const linkedRecipeChanged = desiredRecipeId && existingRecipeId !== desiredRecipeId;
+                  const explicitNoRecipe = targetRecipeName === 'no recipe allocated' && existingRecipe !== targetRecipeName;
 
-                  if (nameChangedWithForce || linkedRecipeChanged) {
+                  if (nameChangedWithForce || linkedRecipeChanged || explicitNoRecipe) {
                     recipeUpdates.push({
                       id: Number(existingBooking.id),
                       recipe: targetRecipe,
