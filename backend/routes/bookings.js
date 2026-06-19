@@ -1048,10 +1048,21 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
 
     const existingSlots = new Set();
     const existingBookingBySlot = new Map();
+    const existingBookingsByGroupedSlot = new Map();
     for (const row of existingResult.rows) {
-      const slotKey = `${String(row.booking_date || '').slice(0, 10)}|${String(row.period || '').trim()}|${normalizeClassToken(row.class_name)}`;
+      const rowDateIso = String(row.booking_date || '').slice(0, 10);
+      const rowPeriod = String(row.period || '').trim();
+      const rowClassToken = normalizeClassToken(row.class_name);
+      const slotKey = `${rowDateIso}|${rowPeriod}|${rowClassToken}`;
       existingSlots.add(slotKey);
       if (!existingBookingBySlot.has(slotKey)) existingBookingBySlot.set(slotKey, row);
+
+      const groupedClassKey = classGroupKeyForPrefill(rowClassToken);
+      const groupedSlotKey = `${rowDateIso}|${rowPeriod}|${groupedClassKey}`;
+      if (!existingBookingsByGroupedSlot.has(groupedSlotKey)) {
+        existingBookingsByGroupedSlot.set(groupedSlotKey, []);
+      }
+      existingBookingsByGroupedSlot.get(groupedSlotKey).push(row);
     }
 
     const inserts = [];
@@ -1188,10 +1199,13 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                 stats.multiPeriodCandidates += 1;
               }
               const slotKey = `${dateIso}|${period}|${classTokenForBooking}`;
+              const groupedSlotKey = `${dateIso}|${period}|${classGroupKey}`;
               const resolvedClassSize = resolvePrefillClassSize(classTokenForBooking, teacherCode);
               const defaultGroupCount = defaultGroupCountForStream(stream, resolvedClassSize);
-              if (existingSlots.has(slotKey)) {
-                const existingBooking = existingBookingBySlot.get(slotKey);
+              const groupedMatches = existingBookingsByGroupedSlot.get(groupedSlotKey) || [];
+              const exactExistingBooking = existingSlots.has(slotKey) ? existingBookingBySlot.get(slotKey) : null;
+              const existingBooking = exactExistingBooking || groupedMatches[0] || null;
+              if (existingBooking) {
                 const hasClassSize = existingBooking && String(existingBooking.class_size || '').trim() !== '';
                 if (!hasClassSize && resolvedClassSize) {
                   updates.push({

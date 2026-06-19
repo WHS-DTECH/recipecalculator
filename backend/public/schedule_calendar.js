@@ -788,6 +788,52 @@ function normalizeRecipeForCompare(value) {
     .trim();
 }
 
+function inferPlannerClassCodeFromToken(classToken) {
+  const canonical = String(classToken || '')
+    .trim()
+    .toUpperCase()
+    .replace(/HSOP/g, 'HOSP')
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!canonical) return '';
+
+  const hospMatch = canonical.match(/(?:^|[-_])((?:\d{2,3})HOSP)(?:[-_]|$)/);
+  if (hospMatch && hospMatch[1]) return hospMatch[1];
+  if (canonical.includes('HOSPCOOK')) return 'HOSPCOOK';
+  if (canonical.includes('HOSP')) return 'HOSP';
+  if (canonical.includes('MFOOD')) return 'MFOOD';
+  return '';
+}
+
+function buildSeniorNoRecipePlannerPlaceholders(dayIso, dayBookings, plannerEntries) {
+  const requiredCodes = new Set(['13HOSP', 'HOSPCOOK']);
+  const plannerCodes = new Set(
+    (plannerEntries || [])
+      .map((entry) => inferPlannerClassCodeFromToken(entry && entry.class_name ? entry.class_name : ''))
+      .filter(Boolean)
+  );
+
+  const bookedSeniorCodes = new Set();
+  for (const booking of (dayBookings || [])) {
+    if (isPlannerLikeBooking(booking)) continue;
+    const code = inferPlannerClassCodeFromToken(booking && booking.class_name ? booking.class_name : '');
+    if (requiredCodes.has(code)) bookedSeniorCodes.add(code);
+  }
+
+  const placeholders = [];
+  for (const code of bookedSeniorCodes) {
+    if (plannerCodes.has(code)) continue;
+    placeholders.push({
+      id: `placeholder-${dayIso}-${code}`,
+      class_name: code,
+      recipe: 'No recipe allocated',
+      planner_stream: 'Senior',
+      isPlaceholder: true
+    });
+  }
+  return placeholders;
+}
+
 // Build a map of { "weekMonday|stream" => { recipes: string[], normalized: Set<string> } }
 // from all planner entries in the bookings list.
 function buildPlannerMap(bookings) {
@@ -1669,13 +1715,18 @@ async function renderScheduleCalendar() {
         snapToNearestMonday(b.booking_date) === dayIso &&
         String(b.recipe || '').trim()
     );
-    if (plannerEntries.length) {
+    const dayBookings = bookings.filter((b) => String(b.booking_date || '').slice(0, 10) === dayIso);
+    const plannerDisplayEntries = plannerEntries.concat(buildSeniorNoRecipePlannerPlaceholders(dayIso, dayBookings, plannerEntries));
+    if (plannerDisplayEntries.length) {
       html += `<td style='vertical-align:top;text-align:center;padding:0.2rem 0.1rem;'>` +
-        plannerEntries.map(entry => {
+        plannerDisplayEntries.map(entry => {
           const style = plannerChipStyle(normalizePlannerStream(entry));
           const classCode = String(entry.class_name || '').trim().toUpperCase();
           const label = `${classCode ? `${classCode}: ` : ''}${String(entry.recipe || '').trim()}`;
           const safeRecipe = escHtml(label);
+          if (entry.isPlaceholder) {
+            return `<div class='planner-chip' style='background:${style.bg};border:1px dashed ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:700;margin-bottom:2px;display:flex;align-items:center;justify-content:center;'>${safeRecipe}</div>`;
+          }
           return `<div class='planner-chip' data-booking-id='${entry.id}' title='Click to choose a linked recipe version' style='background:${style.bg};border:1px solid ${style.border};border-radius:5px;padding:0.12rem 0.2rem;font-size:0.82em;color:${style.text};font-weight:600;margin-bottom:2px;display:flex;align-items:center;gap:3px;justify-content:space-between;cursor:pointer;'><span style='flex:1;overflow:hidden;text-overflow:ellipsis;white-space:normal;'>${safeRecipe}</span><div style='display:flex;align-items:center;gap:2px;flex-shrink:0;'><button class='planner-action-btn' onclick='event.stopPropagation();handlePlannerChipClick(${Number(entry.id)})' style='padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #065f46;background:#ecfdf5;color:#065f46;font-size:0.72rem;cursor:pointer;font-weight:700;'>Recipes</button><button class='planner-action-btn' onclick='event.stopPropagation();printBookingInfoSheet(${Number(entry.id)})' title='Print planner recipe sheet' style='padding:0.08rem 0.34rem;border-radius:999px;border:1px solid #7c3aed;background:#f5f3ff;color:#5b21b6;font-size:0.72rem;cursor:pointer;font-weight:700;'>&#128438; Print</button><button class='planner-delete-btn' data-booking-id='${entry.id}' data-recipe='${safeRecipe}' title='Delete this entry' style='background:none;border:none;cursor:pointer;color:${style.text};font-size:1em;opacity:0.7;padding:0 2px;line-height:1;flex-shrink:0;' aria-label='Delete ${safeRecipe}'>&#x2715;</button></div></div>`;
         }).join('') +
         `</td>`;
