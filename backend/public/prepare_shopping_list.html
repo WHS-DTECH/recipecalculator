@@ -1160,31 +1160,112 @@
         `;
       }
 
+      // ── Editable ingredient cards ──────────────────────────────────────────
+
+      // Resolve a category object by its name from currentPreparedState
+      function findCategoryByName(name) {
+        const cols = currentPreparedState && currentPreparedState.ingredientColumns;
+        if (!Array.isArray(cols)) return null;
+        for (const col of cols) {
+          if (!Array.isArray(col)) continue;
+          for (const cat of col) {
+            if (cat && normalizeCategoryKey(cat.name) === normalizeCategoryKey(name)) return cat;
+          }
+        }
+        return null;
+      }
+
+      function saveIngredientEdits() {
+        // no-op: edits are written directly into the category objects in currentPreparedState
+      }
+
+      function commitItemEdit(catName, sectionLabel, itemIndex, newValue) {
+        const cat = findCategoryByName(catName);
+        if (!cat) return;
+        const section = (cat.sections || []).find(s => s.label === sectionLabel);
+        if (!section) return;
+        const trimmed = String(newValue || '').trim();
+        if (trimmed) {
+          section.items[itemIndex] = trimmed;
+        } else {
+          section.items.splice(itemIndex, 1);
+        }
+      }
+
+      function addItemToSection(catName, sectionLabel) {
+        const cat = findCategoryByName(catName);
+        if (!cat) return;
+        let section = (cat.sections || []).find(s => s.label === sectionLabel);
+        if (!section) {
+          if (!Array.isArray(cat.sections)) cat.sections = [];
+          section = { label: sectionLabel, sublabel: '', items: [] };
+          cat.sections.push(section);
+        }
+        section.items.push('');
+        // re-render and immediately focus the new item
+        renderPreview(currentPreparedState.scheduleRows, currentPreparedState.ingredientColumns, currentPreparedState.ingredientSourceLabel);
+        const cards = docBody.querySelectorAll('.ingredient-item-input');
+        if (cards.length) cards[cards.length - 1].focus();
+      }
+
+      function deleteItemFromSection(catName, sectionLabel, itemIndex) {
+        const cat = findCategoryByName(catName);
+        if (!cat) return;
+        const section = (cat.sections || []).find(s => s.label === sectionLabel);
+        if (!section) return;
+        section.items.splice(itemIndex, 1);
+        renderPreview(currentPreparedState.scheduleRows, currentPreparedState.ingredientColumns, currentPreparedState.ingredientSourceLabel);
+      }
+
       function renderIngredientCard(category) {
         if (!category) {
           return '<div class="ingredient-placeholder" aria-hidden="true"></div>';
         }
 
-        const sections = Array.isArray(category && category.sections) ? category.sections : [];
+        const catName = String(category.name || 'Category');
+        const sections = Array.isArray(category.sections) ? category.sections : [];
+
         const sectionsHtml = sections.length
           ? sections.map((section) => {
-            const items = Array.isArray(section && section.items) ? section.items : [];
-            const itemsHtml = items.length
-              ? '<ul class="ingredient-items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
-              : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
+            const sectionLabel = String(section.label || 'Section');
+            const items = Array.isArray(section.items) ? section.items : [];
+            const catAttr = 'data-cat="' + esc(catName) + '"';
+            const secAttr = 'data-sec="' + esc(sectionLabel) + '"';
+
+            const itemsHtml = items.map((item, idx) =>
+              '<li style="display:flex;align-items:flex-start;gap:4px;margin:0 0 3px 0;">'
+              + '<input type="text" class="ingredient-item-input" ' + catAttr + ' ' + secAttr + ' data-idx="' + idx + '"'
+              + ' value="' + esc(item) + '" aria-label="Ingredient item" '
+              + 'style="flex:1;border:1px solid transparent;border-radius:4px;padding:1px 4px;font-size:0.88rem;background:transparent;color:inherit;cursor:text;min-width:0;"'
+              + ' onfocus="this.style.background=\'#fff\';this.style.border=\'1px solid #93c5fd\'"'
+              + ' onblur="this.style.background=\'transparent\';this.style.border=\'1px solid transparent\';'
+              + 'commitItemEdit(this.dataset.cat,this.dataset.sec,Number(this.dataset.idx),this.value)"'
+              + ' onkeydown="if(event.key===\'Enter\'){this.blur();}if(event.key===\'Escape\'){this.blur();}" />'
+              + '<button type="button" aria-label="Remove item" onclick="deleteItemFromSection(\'' + esc(catName).replace(/'/g,"\\'")
+                + '\',\'' + esc(sectionLabel).replace(/'/g,"\\'")
+                + '\',' + idx + ')" '
+              + 'style="flex-shrink:0;border:none;background:none;color:#9ca3af;cursor:pointer;font-size:0.9rem;padding:0 2px;line-height:1;" '
+              + 'title="Remove">&#x2715;</button>'
+              + '</li>'
+            ).join('');
 
             return '<div class="ingredient-section">'
               + '<div class="ingredient-section-head">'
-              + '<div class="ingredient-section-label">' + esc(section.label || 'Section') + '</div>'
+              + '<div class="ingredient-section-label">' + esc(sectionLabel) + '</div>'
               + '<div class="ingredient-section-sublabel">' + esc(section.sublabel || '') + '</div>'
               + '</div>'
-              + itemsHtml
+              + (items.length
+                ? '<ul class="ingredient-items" style="list-style:none;padding:0;margin:0 0 4px 0;">' + itemsHtml + '</ul>'
+                : '<div class="empty-state" style="padding:0.35rem 0;">No items yet.</div>')
+              + '<button type="button" onclick="addItemToSection(\'' + esc(catName).replace(/'/g,"\\'")
+                + '\',\'' + esc(sectionLabel).replace(/'/g,"\\'")
+                + '\')" style="margin-top:2px;border:1px dashed #93c5fd;background:#eff6ff;color:#1d4ed8;border-radius:4px;padding:1px 8px;font-size:0.78rem;cursor:pointer;">+ Add item</button>'
               + '</div>';
           }).join('')
           : '<div class="empty-state">No sections yet.</div>';
 
         return '<article class="ingredient-card">'
-          + '<div class="ingredient-head">' + esc(category.name || 'Category') + '<span class="order-chip">sorted</span></div>'
+          + '<div class="ingredient-head">' + esc(catName) + '<span class="order-chip">sorted</span></div>'
           + '<div class="ingredient-body">' + sectionsHtml + '</div>'
           + '</article>';
       }
@@ -1213,20 +1294,8 @@
         }
 
         if (otherCategory) {
-          rows.push('<div class="ingredients-row"><article class="ingredient-card full-width"><div class="ingredient-head">' + esc(otherCategory.name || 'Other') + '<span class="order-chip">sorted</span></div><div class="ingredient-body">' + (Array.isArray(otherCategory.sections) && otherCategory.sections.length ? otherCategory.sections.map((section) => {
-            const items = Array.isArray(section && section.items) ? section.items : [];
-            const itemsHtml = items.length
-              ? '<ul class="ingredient-items">' + items.map((item) => '<li>' + esc(item) + '</li>').join('') + '</ul>'
-              : '<div class="empty-state" style="padding:0.5rem 0;text-align:left;">No items yet.</div>';
-
-            return '<div class="ingredient-section">'
-              + '<div class="ingredient-section-head">'
-              + '<div class="ingredient-section-label">' + esc(section.label || 'Section') + '</div>'
-              + '<div class="ingredient-section-sublabel">' + esc(section.sublabel || '') + '</div>'
-              + '</div>'
-              + itemsHtml
-              + '</div>';
-          }).join('') : '<div class="empty-state">No sections yet.</div>') + '</div></article></div>');
+          const otherCardHtml = renderIngredientCard(otherCategory).replace('<article class="ingredient-card">', '<article class="ingredient-card full-width">');
+          rows.push('<div class="ingredients-row">' + otherCardHtml + '</div>');
         }
 
         const hasAnyCategories = pairedLeftColumn.length || pairedRightColumn.length || otherCategory;
