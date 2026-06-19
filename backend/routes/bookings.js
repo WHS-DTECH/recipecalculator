@@ -1143,19 +1143,23 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             const isSeniorPlannerClass = seniorPlannerClassCodes.has(String(classCode || '').toUpperCase());
             const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
             const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
+            const classSpecificPlanner = classCode
+              ? (plannerByDateAndClassCode.get(classPlannerKey) || plannerByDateAndClassCode.get(classWeekKey))
+              : null;
 
             let targetRecipe = '';
             let targetRecipeUrl = '';
             let targetRecipeId = null;
 
-            if (isSeniorSingleTheory || isMiddleSingleTheory) {
+            if (isSeniorSingleTheory && !classSpecificPlanner) {
+              targetRecipe = 'No recipe allocated';
+              targetRecipeUrl = '';
+              targetRecipeId = null;
+            } else if (isSeniorSingleTheory || isMiddleSingleTheory) {
               targetRecipe = 'Theory';
             } else {
               const plannerKey = `${dateIso}|${stream}`;
               const weekKey = `${weekMondayIso(dateIso)}|${stream}`;
-              const classSpecificPlanner = classCode
-                ? (plannerByDateAndClassCode.get(classPlannerKey) || plannerByDateAndClassCode.get(classWeekKey))
-                : null;
 
               // Senior classes must not inherit another class's stream recipe when blank in planner.
               if (isSeniorPlannerClass && !classSpecificPlanner) {
