@@ -221,16 +221,21 @@ function inferStreamFromClassToken(classToken) {
 function inferPlannerClassCode(classToken) {
   const value = normalizeHospTypo(normalizeClassToken(classToken));
   if (!value) return '';
+  const canonical = value
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
-  const hospMatch = value.match(/(?:^|[-_])((?:\d{2,3})HOSP)(?:[-_]|$)/);
+  const hospMatch = canonical.match(/(?:^|[-_])((?:\d{2,3})HOSP)(?:[-_]|$)/);
   if (hospMatch && hospMatch[1]) return hospMatch[1];
 
+  if (canonical.includes('HOSPCOOK')) return 'HOSPCOOK';
+
   for (const code of JUNIOR_FOOD_CODES) {
-    if (value.includes(code)) return code;
+    if (canonical.includes(code)) return code;
   }
 
-  if (value.includes('MFOOD')) return 'MFOOD';
-  if (value.includes('HOSP')) return 'HOSP';
+  if (canonical.includes('MFOOD')) return 'MFOOD';
+  if (canonical.includes('HOSP')) return 'HOSP';
   return '';
 }
 
@@ -1123,7 +1128,8 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
             const isSinglePeriodClass = uniquePeriods.length === 1;
             const isSeniorSingleTheory = isSinglePeriodClass && ['11HOSP', '12HOSP', '13HOSP'].includes(String(classCode || '').toUpperCase());
             const isMiddleSingleTheory = isSinglePeriodClass && String(classCode || '').toUpperCase() === 'MFOOD';
-            const isSeniorPlannerClass = ['11HOSP', '12HOSP', '13HOSP'].includes(String(classCode || '').toUpperCase());
+            const seniorPlannerClassCodes = new Set(['11HOSP', '12HOSP', '13HOSP', 'HOSPCOOK', 'HOSP']);
+            const isSeniorPlannerClass = seniorPlannerClassCodes.has(String(classCode || '').toUpperCase());
             const classPlannerKey = classCode ? `${dateIso}|${classCode}` : '';
             const classWeekKey = classCode ? `${weekMondayIso(dateIso)}|${classCode}` : '';
 

@@ -1284,6 +1284,27 @@ function formatDateLong(date) {
   return longDateFormatter.format(date);
 }
 
+function formatCalendarWeekHeading(weekStart, weekEnd) {
+  const startLabel = formatDateLong(weekStart);
+  const endLabel = formatDateLong(weekEnd);
+  const isoStart = toLocalIsoDate(weekStart);
+  const info = getNzSchoolDateInfo(isoStart);
+  if (!info || !info.termName || !window.NZSchoolCalendar || !Array.isArray(window.NZSchoolCalendar.terms)) {
+    return `Week of ${startLabel} to ${endLabel}`;
+  }
+
+  const matchingTerm = window.NZSchoolCalendar.terms.find((term) => String(term.name || '') === String(info.termName || ''));
+  if (!matchingTerm || !matchingTerm.start) {
+    return `Week of ${startLabel} to ${endLabel}`;
+  }
+
+  const termStart = new Date(`${matchingTerm.start}T00:00:00`);
+  const mondayStart = getStartOfWeek(new Date(weekStart));
+  const diffDays = Math.floor((mondayStart.getTime() - termStart.getTime()) / (24 * 60 * 60 * 1000));
+  const weekNumber = Math.max(1, Math.floor(diffDays / 7) + 1);
+  return `Week ${weekNumber}: ${startLabel} to ${endLabel}`;
+}
+
 function canViewRecentPlannerSidebar(roleName) {
   const normalized = String(roleName || '').trim().toLowerCase();
   return normalized === 'admin' || normalized === 'lead_teacher';
@@ -1887,7 +1908,7 @@ async function renderScheduleCalendar() {
   const weekStart = new Date(currentMonday);
   const weekEnd = new Date(currentMonday);
   weekEnd.setDate(weekStart.getDate() + 6);
-  document.getElementById('calendarWeekLabel').textContent = `Week of ${formatDateLong(weekStart)} to ${formatDateLong(weekEnd)}`;
+  document.getElementById('calendarWeekLabel').textContent = formatCalendarWeekHeading(weekStart, weekEnd);
   ensureWeekendToggleButton();
 }
 
