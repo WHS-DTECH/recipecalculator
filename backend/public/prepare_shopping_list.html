@@ -1237,6 +1237,8 @@
           const week = String(weekSelect.value || '');
           const title = `Shopping List - Term ${term} Week ${week}`;
           const scheduleRows = Array.isArray(currentPreparedState.scheduleRows) ? currentPreparedState.scheduleRows : [];
+          const ingredientColumns = Array.isArray(currentPreparedState.ingredientColumns) ? currentPreparedState.ingredientColumns : [[], []];
+          const ingredientSourceLabel = String(currentPreparedState.ingredientSourceLabel || '').trim();
 
           const response = await requestJson('/api/shopping-workflow-email/send-prepared-list', {
             method: 'POST',
@@ -1244,7 +1246,9 @@
               recipientEmail,
               title,
               weekInfo: currentWeekInfo,
-              scheduleRows
+              scheduleRows,
+              ingredientColumns,
+              ingredientSourceLabel
             })
           });
 

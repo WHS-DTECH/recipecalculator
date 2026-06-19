@@ -1652,6 +1652,8 @@ async function sendPreparedShoppingListEmail(options = {}) {
   const title = String(options.title || 'Shopping List');
   const weekInfo = String(options.weekInfo || 'Upcoming week');
   const scheduleRows = Array.isArray(options.scheduleRows) ? options.scheduleRows : [];
+  const ingredientColumns = Array.isArray(options.ingredientColumns) ? options.ingredientColumns : [[], []];
+  const ingredientSourceLabel = String(options.ingredientSourceLabel || '').trim();
 
   if (!isLikelyEmail(recipientEmail)) {
     throw new Error('A valid recipient email is required.');
@@ -1702,7 +1704,10 @@ async function sendPreparedShoppingListEmail(options = {}) {
     created_at: new Date(),
     updated_at: new Date(),
     source_filename: 'Prepared Shopping List',
-    parsed_state: { columns: [] }
+    parsed_state: {
+      columns: ingredientColumns,
+      sourceLabel: ingredientSourceLabel
+    }
   };
 
   const html = buildSimpleShoppingListEmailHtml(mockList, scheduleRows);
@@ -1813,7 +1818,9 @@ router.post('/send-prepared-list', async (req, res) => {
       recipientEmail: req.body && req.body.recipientEmail,
       title: req.body && req.body.title,
       weekInfo: req.body && req.body.weekInfo,
-      scheduleRows: req.body && req.body.scheduleRows
+      scheduleRows: req.body && req.body.scheduleRows,
+      ingredientColumns: req.body && req.body.ingredientColumns,
+      ingredientSourceLabel: req.body && req.body.ingredientSourceLabel
     });
     return res.json(Object.assign({ success: true }, sent));
   } catch (err) {
