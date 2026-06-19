@@ -1052,6 +1052,9 @@ app.use('/api/shopping-plan', shoppingPlanRouter);
 const shoppingExtrasRouter = require('./routes/shopping_extras');
 app.use('/api/shopping-extras', shoppingExtrasRouter);
 
+const shoppingListRouter = require('./routes/shoppingList');
+app.use('/api/shopping-list', shoppingListRouter);
+
 // --- Google Auth API ---
 app.get('/api/auth/google/config', (req, res) => {
   const clientId = getGoogleClientId();
