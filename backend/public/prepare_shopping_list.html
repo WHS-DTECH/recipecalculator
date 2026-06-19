@@ -952,6 +952,29 @@
           ['JFOOD', 'VEFOOD', 'MMFOOD', 'SDFOOD', 'PIFOOD', 'SRFOOD', 'JTRFOOD', 'MTRFOOD'].includes(className);
       }
 
+      const RECENT_EMAILS_KEY = 'prepareShoppingList_emailUsage';
+
+      function getEmailUsage() {
+        try {
+          return JSON.parse(localStorage.getItem(RECENT_EMAILS_KEY) || '{}');
+        } catch (_) { return {}; }
+      }
+
+      function recordEmailUsage(email) {
+        if (!email) return;
+        const usage = getEmailUsage();
+        usage[email] = (usage[email] || 0) + 1;
+        try { localStorage.setItem(RECENT_EMAILS_KEY, JSON.stringify(usage)); } catch (_) {}
+      }
+
+      function getTop5Emails() {
+        const usage = getEmailUsage();
+        return Object.entries(usage)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 5)
+          .map(([email]) => email);
+      }
+
       async function loadStaffEmails() {
         try {
           const data = await requestJson('/api/staff_upload/dropdown');
@@ -961,12 +984,30 @@
             const bName = `${b.last_name || ''} ${b.first_name || ''}`.trim();
             return aName.localeCompare(bName);
           });
-          staffEmailSelect.innerHTML = '<option value="">Select a staff email...</option>' + 
-            staff.map(row => {
-              const email = String(row && row.email_school || '').trim().toLowerCase();
-              const name = `${row.last_name || ''} ${row.first_name || ''}`.trim();
-              return `<option value="${esc(email)}">${esc(name)} - ${esc(email)}</option>`;
-            }).join('');
+
+          const makeOption = (email, label) =>
+            `<option value="${esc(email)}">${esc(label)} - ${esc(email)}</option>`;
+
+          const emailToLabel = {};
+          staff.forEach(row => {
+            const email = String(row && row.email_school || '').trim().toLowerCase();
+            if (email) emailToLabel[email] = `${row.last_name || ''} ${row.first_name || ''}`.trim();
+          });
+
+          const top5 = getTop5Emails().filter(e => emailToLabel[e]);
+          const allOptions = staff.map(row => {
+            const email = String(row && row.email_school || '').trim().toLowerCase();
+            const name = `${row.last_name || ''} ${row.first_name || ''}`.trim();
+            return makeOption(email, name);
+          }).join('');
+
+          let html = '<option value="">Select a staff email...</option>';
+          if (top5.length) {
+            html += top5.map(e => makeOption(e, emailToLabel[e])).join('');
+            html += `<option value="" disabled>──────────────────────</option>`;
+          }
+          html += allOptions;
+          staffEmailSelect.innerHTML = html;
         } catch (err) {
           staffEmailSelect.innerHTML = '<option value="">Unable to load staff emails</option>';
         }
@@ -1007,6 +1048,7 @@
           bookings.forEach(row => {
             const dateKey = String(row && row.booking_date || '').slice(0, 10);
             if (!byDay.has(dateKey)) return;
+            if (isPlannerLikeBooking(row)) return;
             const title = String(row && (row.linked_recipe_name || row.recipe) || '').trim();
             if (!title) return;
             const resolvedUrl = String(row && (row.recipe_url || row.linked_recipe_url) || '').trim();
@@ -1255,6 +1297,10 @@
           if (!response.success) {
             throw new Error(response.error || 'Failed to send email');
           }
+
+          recordEmailUsage(recipientEmail);
+          await loadStaffEmails();
+          staffEmailSelect.value = recipientEmail;
 
           const adminMsg = response.adminNotificationSent 
             ? ` Admin receipt sent to ${response.adminNotificationRecipients.length} recipient(s).`
