@@ -844,6 +844,25 @@
           other: 'Other'
         };
 
+        const categoryKeywords = {
+          'Meat': ['chicken', 'lamb', 'beef', 'pork', 'mince', 'steak', 'drumstick', 'wing', 'thigh', 'bacon', 'ham', 'sausage', 'salami', 'veal', 'turkey'],
+          'Tinned Food': ['canned', 'can ', 'cans ', 'tinned', 'tin ', 'beans', 'chickpeas', 'lentils', 'tomato paste', 'diced tomatoes'],
+          'Cleaning Products': ['dishwash', 'cleaner', 'washing powder', 'paper towel', 'cling wrap', 'foil', 'jif', 'nappy', 'hairnet', 'glove', 'bin liner', 'sanit'],
+          'Dairy & Pastry': ['milk', 'cream', 'cheese', 'yoghurt', 'yogurt', 'butter', 'feta', 'parmesan', 'pastry', 'eggs', 'egg '],
+          'Fruit and Vegetables': ['onion', 'carrot', 'tomato', 'lettuce', 'spinach', 'capsicum', 'pepper', 'cabbage', 'potato', 'apple', 'pear', 'garlic', 'ginger', 'lemon', 'lime', 'coriander', 'parsley', 'spring onion', 'avocado'],
+          'Dry Ingredients': ['flour', 'sugar', 'salt', 'pepper', 'rice', 'pasta', 'yeast', 'baking', 'powder', 'spice', 'oregano', 'thyme', 'cacao', 'breadcrumbs', 'sauce', 'vinegar', 'oil']
+        };
+
+        function classifyFallbackItem(itemLine, defaultCategory) {
+          const text = String(itemLine || '').toLowerCase();
+          const priorityOrder = ['Meat', 'Tinned Food', 'Cleaning Products', 'Dairy & Pastry', 'Fruit and Vegetables', 'Dry Ingredients'];
+          for (const categoryName of priorityOrder) {
+            const words = categoryKeywords[categoryName] || [];
+            if (words.some((word) => text.includes(word))) return categoryName;
+          }
+          return defaultCategory || 'Other';
+        }
+
         const dayResults = await Promise.all(rows.map(async (day) => {
           const dateKey = day && day.dateObj ? toIsoDateKey(day.dateObj) : '';
           const ids = byDateBookingIds.get(dateKey) || [];
@@ -860,16 +879,26 @@
         dayResults.forEach((dayResult) => {
           const dayLabel = String(dayResult && dayResult.dayLabel || 'Day');
           const data = dayResult && dayResult.data && typeof dayResult.data === 'object' ? dayResult.data : {};
+          const itemsByCategory = new Map();
+
           Object.keys(data).forEach((rawCategory) => {
             const mappedName = categoryMap[String(rawCategory || '').trim().toLowerCase()] || 'Other';
-            const target = categoryByName.get(mappedName);
-            if (!target) return;
-            const items = (Array.isArray(data[rawCategory]) ? data[rawCategory] : [])
+            const rawItems = (Array.isArray(data[rawCategory]) ? data[rawCategory] : [])
               .map((item) => formatIngredientLine(item))
-              .filter(Boolean)
-              .sort(sortText);
-            if (!items.length) return;
-            target.sections.push({ label: dayLabel, sublabel: '', items });
+              .filter(Boolean);
+
+            rawItems.forEach((line) => {
+              const classifiedName = classifyFallbackItem(line, mappedName);
+              if (!itemsByCategory.has(classifiedName)) itemsByCategory.set(classifiedName, []);
+              itemsByCategory.get(classifiedName).push(line);
+            });
+          });
+
+          itemsByCategory.forEach((items, categoryName) => {
+            const target = categoryByName.get(categoryName);
+            if (!target || !items.length) return;
+            const deduped = Array.from(new Set(items)).sort(sortText);
+            target.sections.push({ label: dayLabel, sublabel: '', items: deduped });
           });
         });
 
