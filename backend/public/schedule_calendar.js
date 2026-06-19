@@ -1760,6 +1760,7 @@ async function renderScheduleCalendar() {
     html += `<tr><td style='background:#f5f5f5;font-weight:bold;text-align:center;'>P${periods[p]}</td>`;
       for (let d = 0; d < visibleDayIndices.length; ++d) {
       const dayIdx = visibleDayIndices[d];
+      const dayIso = weekDates[dayIdx].iso;
       const cell = grid[p][dayIdx];
         if (cell && cell.length > 0) {
           html += `<td style='vertical-align:top;text-align:center;padding:0.25rem 0.1rem;'>`;
