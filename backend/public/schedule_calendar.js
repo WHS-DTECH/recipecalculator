@@ -88,7 +88,11 @@ function buildCalendarDateHeaderHtml(weekDate) {
 
 function getCellPrimaryText(booking) {
   if (scheduleViewMode === 'recipe') {
-    const recipeLabel = String((booking && booking.linked_recipe_name) || (booking && booking.recipe) || '').trim();
+    const bookingRecipe = String((booking && booking.recipe) || '').trim();
+    const bookingRecipeLower = bookingRecipe.toLowerCase();
+    const recipeLabel = (bookingRecipeLower === 'no recipe allocated' || bookingRecipeLower === 'theory')
+      ? bookingRecipe
+      : String((booking && booking.linked_recipe_name) || bookingRecipe || '').trim();
     return recipeLabel ? `Recipe: ${recipeLabel}` : `Class: ${booking.class_name || ''}`;
   }
   return `Class: ${booking.class_name || ''}`;

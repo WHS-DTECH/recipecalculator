@@ -1211,8 +1211,12 @@ router.post('/prefill-from-planner', requirePlanningRole, async (req, res) => {
                   const nameChangedWithForce = forceUpdateRecipe && targetRecipeName && existingRecipe !== targetRecipeName;
                   const linkedRecipeChanged = desiredRecipeId && existingRecipeId !== desiredRecipeId;
                   const explicitNoRecipe = targetRecipeName === 'no recipe allocated' && existingRecipe !== targetRecipeName;
+                  const clearStaleNoRecipeLink = targetRecipeName === 'no recipe allocated' && (
+                    existingRecipeId !== null ||
+                    String(existingBooking && existingBooking.recipe_url ? existingBooking.recipe_url : '').trim() !== ''
+                  );
 
-                  if (nameChangedWithForce || linkedRecipeChanged || explicitNoRecipe) {
+                  if (nameChangedWithForce || linkedRecipeChanged || explicitNoRecipe || clearStaleNoRecipeLink) {
                     recipeUpdates.push({
                       id: Number(existingBooking.id),
                       recipe: targetRecipe,
