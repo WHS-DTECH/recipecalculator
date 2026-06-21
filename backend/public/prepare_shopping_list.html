@@ -1066,6 +1066,7 @@
 
           const scheduleRows = Array.from(byDay.values()).map(day => {
             day.entries.sort((a, b) => 
+              (Number.parseInt(String(a.period || ''), 10) || 99) - (Number.parseInt(String(b.period || ''), 10) || 99) ||
               String(a.className).localeCompare(String(b.className)) || 
               String(a.title).localeCompare(String(b.title))
             );
