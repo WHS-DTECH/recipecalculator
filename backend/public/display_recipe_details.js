@@ -247,6 +247,15 @@ document.addEventListener('DOMContentLoaded', function() {
     window.location.href = buildRecipeUrl(recipeId);
   }
 
+  function isNonRecipePlannerLabel(value) {
+    const normalized = String(value || '').trim().toLowerCase();
+    if (!normalized) return true;
+    return normalized === 'theory'
+      || normalized.startsWith('theory ')
+      || normalized === 'no recipe allocated'
+      || normalized === 'no recipe';
+  }
+
   function updateRecipeList(recipes, currentId) {
     const listContainer = document.getElementById('recipeNavigationList');
     if (!listContainer) return;
@@ -417,10 +426,12 @@ document.addEventListener('DOMContentLoaded', function() {
       return fetch(displayUrl)
         .then(res => res.json())
         .then(rows => {
-          allRecipes = rows.slice().sort((a, b) =>
+          const filteredRows = (Array.isArray(rows) ? rows : [])
+            .filter((row) => !isNonRecipePlannerLabel(row && row.name));
+          allRecipes = filteredRows.slice().sort((a, b) =>
             String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
           );
-          let recipe = rows.find(r => String(r.id) === String(id));
+          let recipe = filteredRows.find(r => String(r.id) === String(id));
           if (!recipe && allRecipes.length > 0) {
             recipe = allRecipes[0];
             id = String(recipe.id);

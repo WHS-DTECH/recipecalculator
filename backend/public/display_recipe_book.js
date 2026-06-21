@@ -597,7 +597,10 @@ document.addEventListener('DOMContentLoaded', function() {
   function isNonRecipePlannerLabel(value) {
     const normalized = String(value || '').trim().toLowerCase();
     if (!normalized) return true;
-    return normalized === 'theory' || normalized.startsWith('theory ');
+    return normalized === 'theory'
+      || normalized.startsWith('theory ')
+      || normalized === 'no recipe allocated'
+      || normalized === 'no recipe';
   }
 
   function createRecipeCard(row, index, recipeById) {
@@ -729,7 +732,8 @@ document.addEventListener('DOMContentLoaded', function() {
     fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
   ])
     .then(([, displayRows, bookingsPayload]) => {
-      const rows = Array.isArray(displayRows) ? displayRows : [];
+      const rows = (Array.isArray(displayRows) ? displayRows : [])
+        .filter((row) => !isNonRecipePlannerLabel(row && row.name));
       if (rows.length === 0) return;
       const cardList = document.getElementById('recipeCardList');
       const badge = document.getElementById('recipeCountBadge');
