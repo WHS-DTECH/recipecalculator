@@ -37,6 +37,18 @@ function getSiteUrl() {
   return String(process.env.SITE_URL || process.env.APP_URL || process.env.RENDER_EXTERNAL_URL || 'https://recipe-calculator-backend.onrender.com').replace(/\/$/, '');
 }
 
+function getBootstrapAdminEmails() {
+  const configured = String(process.env.ADMIN_BOOTSTRAP_EMAILS || '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean);
+
+  const preferred = normalizeEmail(process.env.PREFERRED_ADMIN_EMAIL || '');
+  if (preferred && !configured.includes(preferred)) configured.push(preferred);
+
+  return new Set(configured);
+}
+
 function getFromAddress() {
   return String(process.env.PLACE_ORDER_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
 }
@@ -455,6 +467,10 @@ function getAuthEmail(req) {
 async function resolveEffectiveRoleForEmail(email) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return 'public_access';
+
+  if (getBootstrapAdminEmails().has(normalizedEmail)) {
+    return 'admin';
+  }
 
   const staffResult = await pool.query(
     `SELECT COALESCE(NULLIF(lower(trim(primary_role)), ''), 'staff') AS primary_role
