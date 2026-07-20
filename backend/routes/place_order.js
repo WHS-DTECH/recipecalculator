@@ -10,6 +10,7 @@ const router = express.Router();
 const ROLE_PRIORITY = ['admin', 'lead_teacher', 'teacher', 'technician', 'student', 'public_access'];
 const PLACE_ORDER_ALLOWED_ROLES = new Set(['admin', 'lead_teacher', 'teacher']);
 const DEFAULT_PILOT_RECIPIENT = 'vanessapringle@westlandhigh.school.nz';
+const DEFAULT_ADMIN_COPY_RECIPIENT = 'tech@westlandhigh.school.nz';
 const DEFAULT_GOOGLE_FORM_EDIT_URL = 'https://docs.google.com/forms/d/1BD9mD_tGjrWcujbPfMp7JtDOuSdSpmb97_EWKt6mXyo/edit';
 const DEFAULT_GOOGLE_SHEET_RESPONSES_EDIT_URL = 'https://docs.google.com/spreadsheets/d/1dwlodt5NtO13MxB8MDktqJgP9Yvf9oLVajDFSSw-jmM/edit?usp=sharing';
 
@@ -398,6 +399,16 @@ function getPilotRecipient() {
   return normalizeEmail(process.env.PLACE_ORDER_PILOT_RECIPIENT || DEFAULT_PILOT_RECIPIENT);
 }
 
+function getAdminCopyRecipients() {
+  const configured = String(process.env.PLACE_ORDER_ADMIN_COPY_RECIPIENTS || process.env.PLACE_ORDER_ADMIN_COPY_RECIPIENT || DEFAULT_ADMIN_COPY_RECIPIENT || '')
+    .split(',')
+    .map((entry) => normalizeEmail(entry))
+    .filter(Boolean)
+    .filter((email, index, array) => array.indexOf(email) === index);
+
+  return configured.filter((email) => isLikelyEmail(email));
+}
+
 async function getActiveRecipients() {
   await ensureSchema();
 
@@ -763,9 +774,13 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
     weekEnd: fridayIso
   });
 
+  const adminCopyRecipients = getAdminCopyRecipients().filter((email) => email !== normalizedRecipient);
+  const bcc = adminCopyRecipients.length ? adminCopyRecipients : undefined;
+
   const result = await mailer.sendMail({
     from: getFromAddress(),
     to: normalizedRecipient,
+    bcc,
     subject,
     html,
     text: `Please submit class purchase items for ${mondayIso} to ${fridayIso}: ${formUrl}`
@@ -781,6 +796,7 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
     success: true,
     skipped: false,
     recipientEmail: normalizedRecipient,
+    adminCopyRecipients,
     sendKey,
     messageId: String(result && result.messageId ? result.messageId : '')
   };
