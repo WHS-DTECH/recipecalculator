@@ -1,0 +1,522 @@
+(function () {
+  'use strict';
+
+  var state = {
+    weekStart: '',
+    weekEnd: '',
+    today: '',
+    formUrl: '',
+    submissions: [],
+    runningItems: [],
+    teacher: null,
+    sourceReady: true,
+    sourceMessage: '',
+    isAdmin: false,
+    activeRecipients: [],
+    resolvedFormUrl: '',
+    resolvedCsvUrl: '',
+    liveCheckSummary: 'Not run yet.'
+  };
+
+  function esc(value) {
+    return String(value == null ? '' : value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function toDate(iso) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(String(iso || '').trim())) return null;
+    return new Date(iso + 'T00:00:00');
+  }
+
+  function addDaysIso(iso, days) {
+    var d = toDate(iso);
+    if (!d) return '';
+    d.setDate(d.getDate() + Number(days || 0));
+    return d.toISOString().slice(0, 10);
+  }
+
+  function mondayFromIso(iso) {
+    var d = toDate(iso);
+    if (!d) return '';
+    var day = d.getDay();
+    var diff = (day + 6) % 7;
+    d.setDate(d.getDate() - diff);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function longLabel(iso) {
+    var d = toDate(iso);
+    if (!d) return iso;
+    try {
+      return d.toLocaleDateString('en-NZ', { day: 'numeric', month: 'short', year: 'numeric' });
+    } catch (_) {
+      return iso;
+    }
+  }
+
+  function getWeekRangeLabel(start, end) {
+    return longLabel(start) + ' - ' + longLabel(end);
+  }
+
+  function renderTimetable(teacher) {
+    var host = document.getElementById('poTimetable');
+    if (!host) return;
+
+    var week = teacher && Array.isArray(teacher.timetable) ? teacher.timetable : [];
+    if (!week.length) {
+      host.innerHTML = '<div class="place-order-muted">No timetable found for this teacher yet.</div>';
+      return;
+    }
+
+    var html = '<div class="po-day-grid">';
+    week.forEach(function (day) {
+      var periods = day && day.periods ? day.periods : {};
+      var list = [];
+      ['P1', 'P2', 'P3', 'P4', 'P5'].forEach(function (slot) {
+        var classes = Array.isArray(periods[slot]) ? periods[slot].filter(Boolean) : [];
+        if (classes.length) {
+          list.push('<li><b>' + slot + ':</b> ' + esc(classes.join(', ')) + '</li>');
+        }
+      });
+      html += '<div class="po-day">';
+      html += '<h3>' + esc(day.day || '') + '</h3>';
+      html += list.length ? ('<ul>' + list.join('') + '</ul>') : '<div class="place-order-muted">No classes</div>';
+      html += '</div>';
+    });
+    html += '</div>';
+
+    host.innerHTML = html;
+  }
+
+  function renderRunningItems(items) {
+    var host = document.getElementById('poRunningList');
+    if (!host) return;
+    var list = Array.isArray(items) ? items : [];
+    if (!list.length) {
+      host.innerHTML = '<div class="place-order-muted">No items submitted for this week yet.</div>';
+      return;
+    }
+
+    var rows = list.map(function (row) {
+      return '<tr><td>' + esc(row.item || '') + '</td><td>' + String(row.count || 0) + '</td></tr>';
+    }).join('');
+
+    host.innerHTML = '<table class="po-running-table"><thead><tr><th>Item</th><th>Count</th></tr></thead><tbody>' + rows + '</tbody></table>';
+  }
+
+  function renderSubmissions(submissions) {
+    var host = document.getElementById('poEmailList');
+    if (!host) return;
+
+    var rows = Array.isArray(submissions) ? submissions : [];
+    if (!rows.length) {
+      host.innerHTML = '<li class="place-order-muted">No requests submitted for this week yet.</li>';
+      return;
+    }
+
+    host.innerHTML = rows.map(function (row) {
+      var who = row.teacher_name || row.email || 'Teacher';
+      var when = row.submitted_at_iso ? new Date(row.submitted_at_iso).toLocaleString('en-NZ') : '';
+      var classLabel = row.class_name ? ('Class: ' + row.class_name) : '';
+      var dayLabel = row.day_label ? ('Day: ' + row.day_label) : '';
+      var items = Array.isArray(row.items) ? row.items : [];
+      var itemHtml = items.length
+        ? items.map(function (item) { return '<span class="po-item-badge">' + esc(item) + '</span>'; }).join('')
+        : '<span class="place-order-muted">No item lines detected.</span>';
+      var isManual = row && row.source === 'manual_import' && Number(row.manual_import_id) > 0;
+      var actionsHtml = isManual
+        ? ('<div class="po-submission-actions"><button class="btn btn-secondary po-remove-import-btn" data-import-id="' + String(row.manual_import_id) + '" type="button">Remove Imported Entry</button></div>')
+        : '';
+
+      return '<li>' +
+        '<div class="po-email-meta"><span><b>' + esc(who) + '</b></span><span>' + esc(when) + '</span>' +
+        (classLabel ? ('<span>' + esc(classLabel) + '</span>') : '') +
+        (dayLabel ? ('<span>' + esc(dayLabel) + '</span>') : '') +
+        '</div>' +
+        '<div>' + itemHtml + '</div>' +
+        actionsHtml +
+      '</li>';
+    }).join('');
+
+    host.querySelectorAll('.po-remove-import-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = Number(btn.getAttribute('data-import-id') || 0);
+        removeManualImport(id).catch(function (err) {
+          if (window.showToast) window.showToast(err.message || 'Unable to remove imported entry.', 'error');
+        });
+      });
+    });
+  }
+
+  function renderStatusPanel() {
+    var formEl = document.getElementById('poResolvedFormUrl');
+    var csvEl = document.getElementById('poResolvedCsvUrl');
+    var detailsEl = document.getElementById('poLiveCheckDetails');
+    var summaryEl = document.getElementById('poLiveCheckSummary');
+
+    if (formEl) formEl.textContent = state.resolvedFormUrl || 'Not set';
+    if (csvEl) csvEl.textContent = state.resolvedCsvUrl || 'Not set';
+    if (detailsEl) detailsEl.textContent = state.liveCheckSummary || 'Not run yet.';
+    if (summaryEl) summaryEl.textContent = state.liveCheckSummary || 'Not run yet.';
+  }
+
+  function renderHeader() {
+    var teacherLabel = document.getElementById('poTeacherLabel');
+    var formLink = document.getElementById('poFormLink');
+    var weekBadge = document.getElementById('poWeekBadge');
+    var sourceWarning = document.getElementById('poSourceWarning');
+    var sendNowBtn = document.getElementById('poSendNowBtn');
+    var adminRecipientsSection = document.getElementById('poAdminRecipientsSection');
+
+    var teacherName = '';
+    if (state.teacher) {
+      teacherName = [state.teacher.first_name || '', state.teacher.last_name || ''].join(' ').trim();
+    }
+    teacherLabel.textContent = teacherName ? ('Teacher: ' + teacherName) : 'Teacher Place Order dashboard';
+
+    if (state.formUrl) {
+      formLink.href = state.formUrl;
+      formLink.removeAttribute('aria-disabled');
+      formLink.style.pointerEvents = '';
+      formLink.style.opacity = '';
+    } else {
+      formLink.href = '#';
+      formLink.setAttribute('aria-disabled', 'true');
+      formLink.style.pointerEvents = 'none';
+      formLink.style.opacity = '0.6';
+    }
+
+    weekBadge.textContent = getWeekRangeLabel(state.weekStart, state.weekEnd);
+
+    if (sendNowBtn) {
+      sendNowBtn.style.display = state.isAdmin ? '' : 'none';
+    }
+    if (adminRecipientsSection) {
+      adminRecipientsSection.style.display = state.isAdmin ? '' : 'none';
+    }
+
+    if (!state.sourceReady && state.sourceMessage) {
+      sourceWarning.style.display = '';
+      sourceWarning.textContent = state.sourceMessage;
+    } else {
+      sourceWarning.style.display = 'none';
+      sourceWarning.textContent = '';
+    }
+
+    renderRecipientsList(state.activeRecipients);
+  }
+
+  function renderRecipientsList(recipients) {
+    var host = document.getElementById('poRecipientsList');
+    if (!host) return;
+
+    var list = Array.isArray(recipients) ? recipients : [];
+    if (!list.length) {
+      host.innerHTML = '<div class="place-order-muted">No active recipients added yet. Fallback recipient is still used.</div>';
+      return;
+    }
+
+    host.innerHTML = list.map(function (email) {
+      var encoded = encodeURIComponent(String(email || '').trim());
+      return '<div class="po-recipient-item">' +
+        '<span>' + esc(email) + '</span>' +
+        '<button class="btn btn-secondary po-remove-recipient-btn" data-email="' + encoded + '" type="button">Remove</button>' +
+      '</div>';
+    }).join('');
+
+    host.querySelectorAll('.po-remove-recipient-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var encodedEmail = btn.getAttribute('data-email') || '';
+        removeRecipient(encodedEmail);
+      });
+    });
+  }
+
+  function renderAll() {
+    renderHeader();
+    renderTimetable(state.teacher);
+    renderRunningItems(state.runningItems);
+    renderSubmissions(state.submissions);
+    renderStatusPanel();
+  }
+
+  async function loadDashboard(weekStart) {
+    var query = weekStart ? ('?week_start=' + encodeURIComponent(weekStart)) : '';
+    var res = await fetch('/api/place-order/dashboard' + query, { credentials: 'include' });
+    var data = await res.json().catch(function () { return {}; });
+
+    if (!res.ok || !data.success) {
+      var message = data && data.error ? data.error : 'Unable to load Place Order dashboard.';
+      throw new Error(message);
+    }
+
+    state.weekStart = data.week_start;
+    state.weekEnd = data.week_end;
+    state.today = data.today_date;
+    state.formUrl = data.form_url || '';
+    state.teacher = data.teacher || null;
+    state.submissions = Array.isArray(data.submissions) ? data.submissions : [];
+    state.runningItems = Array.isArray(data.running_items) ? data.running_items : [];
+    state.sourceReady = !!data.responses_source_ready;
+    state.sourceMessage = String(data.responses_source_message || '');
+    state.isAdmin = !!data.is_admin;
+    state.activeRecipients = Array.isArray(data.active_recipients) ? data.active_recipients : [];
+    state.resolvedFormUrl = String(data.resolved_form_url || data.form_url || '');
+    state.resolvedCsvUrl = String(data.resolved_csv_url || '');
+    if (!state.liveCheckSummary || state.liveCheckSummary === 'Not run yet.') {
+      state.liveCheckSummary = state.sourceReady ? 'Source loaded from dashboard.' : (state.sourceMessage || 'Source not ready.');
+    }
+
+    renderAll();
+  }
+
+  async function runLiveCheck() {
+    var btn = document.getElementById('poRunLiveCheckBtn');
+    if (!btn) return;
+
+    btn.disabled = true;
+    var prior = btn.textContent;
+    btn.textContent = 'Checking...';
+
+    try {
+      var res = await fetch('/api/place-order/admin/live-check', { credentials: 'include' });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || !data.success || !data.check) {
+        throw new Error(data && data.error ? data.error : 'Live check failed.');
+      }
+
+      var check = data.check;
+      state.resolvedFormUrl = String(check.resolved_form_url || state.resolvedFormUrl || '');
+      state.resolvedCsvUrl = String(check.resolved_csv_url || state.resolvedCsvUrl || '');
+      state.liveCheckSummary = String(check.message || '') + ' (' + String(check.csv_status || 'n/a') + ')';
+      renderStatusPanel();
+
+      if (window.showToast) {
+        window.showToast(state.liveCheckSummary, check.csv_fetch_ok ? 'success' : 'error');
+      }
+    } catch (err) {
+      state.liveCheckSummary = err.message || 'Live check failed.';
+      renderStatusPanel();
+      if (window.showToast) window.showToast(state.liveCheckSummary, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prior;
+    }
+  }
+
+  async function removeManualImport(id) {
+    if (!id || id <= 0) return;
+    var res = await fetch('/api/place-order/manual-import/' + encodeURIComponent(String(id)), {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.success) {
+      throw new Error(data && data.error ? data.error : 'Unable to remove imported entry.');
+    }
+
+    await loadDashboard(state.weekStart || '');
+    if (window.showToast) window.showToast('Imported entry removed.', 'success');
+  }
+
+  async function addRecipient() {
+    var input = document.getElementById('poRecipientEmailInput');
+    if (!input) return;
+    var email = String(input.value || '').trim().toLowerCase();
+    if (!email) {
+      if (window.showToast) window.showToast('Enter an email first.', 'error');
+      return;
+    }
+
+    var res = await fetch('/api/place-order/recipients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: email })
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.success) {
+      throw new Error(data && data.error ? data.error : 'Unable to add recipient.');
+    }
+
+    input.value = '';
+    await loadDashboard(state.weekStart || '');
+    if (window.showToast) window.showToast('Recipient added.', 'success');
+  }
+
+  async function removeRecipient(encodedEmail) {
+    if (!encodedEmail) return;
+    var res = await fetch('/api/place-order/recipients/' + encodedEmail, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.success) {
+      throw new Error(data && data.error ? data.error : 'Unable to remove recipient.');
+    }
+
+    await loadDashboard(state.weekStart || '');
+    if (window.showToast) window.showToast('Recipient removed.', 'success');
+  }
+
+  async function importManualText() {
+    var textEl = document.getElementById('poManualImportText');
+    var statusEl = document.getElementById('poManualImportStatus');
+    var btn = document.getElementById('poManualImportBtn');
+    if (!textEl || !statusEl || !btn) return;
+
+    var text = String(textEl.value || '').trim();
+    if (!text) {
+      statusEl.textContent = 'Paste text before importing.';
+      return;
+    }
+
+    btn.disabled = true;
+    statusEl.textContent = 'Importing...';
+
+    try {
+      var res = await fetch('/api/place-order/manual-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ text: text, week_start: state.weekStart })
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || !data.success) {
+        throw new Error(data && data.error ? data.error : 'Unable to import text.');
+      }
+
+      statusEl.textContent = 'Imported ' + String(data.imported || 0) + ' entries.';
+      textEl.value = '';
+      await loadDashboard(state.weekStart || '');
+      if (window.showToast) window.showToast('Manual import successful.', 'success');
+    } catch (err) {
+      statusEl.textContent = err.message || 'Import failed.';
+      if (window.showToast) window.showToast(err.message || 'Import failed.', 'error');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  async function sendNow() {
+    var btn = document.getElementById('poSendNowBtn');
+    if (!btn) return;
+
+    btn.disabled = true;
+    var prior = btn.textContent;
+    btn.textContent = 'Sending...';
+
+    try {
+      var res = await fetch('/api/place-order/send-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || !data.success) {
+        throw new Error(data && data.error ? data.error : 'Unable to send email.');
+      }
+
+      if (window.showToast) {
+        var sentCount = Number(data.result && data.result.sent || 0);
+        var skippedCount = Number(data.result && data.result.skipped || 0);
+        var failedCount = Number(data.result && data.result.failed || 0);
+        if (sentCount > 0) {
+          window.showToast('Place Order reminders sent: ' + sentCount + ' (skipped: ' + skippedCount + ', failed: ' + failedCount + ').', 'success');
+        } else if (skippedCount > 0 && failedCount === 0) {
+          window.showToast('All Place Order reminders were already sent for today.', 'info');
+        } else {
+          window.showToast('No reminders sent. Failed: ' + failedCount + '.', 'error');
+        }
+      } else {
+        alert('Pilot email request complete.');
+      }
+    } catch (err) {
+      if (window.showToast) {
+        window.showToast(err.message || 'Unable to send pilot email.', 'error');
+      } else {
+        alert(err.message || 'Unable to send pilot email.');
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prior;
+    }
+  }
+
+  function bindEvents() {
+    var prevBtn = document.getElementById('poPrevWeekBtn');
+    var nextBtn = document.getElementById('poNextWeekBtn');
+    var thisBtn = document.getElementById('poThisWeekBtn');
+    var sendBtn = document.getElementById('poSendNowBtn');
+    var addRecipientBtn = document.getElementById('poAddRecipientBtn');
+    var manualImportBtn = document.getElementById('poManualImportBtn');
+    var liveCheckBtn = document.getElementById('poRunLiveCheckBtn');
+
+    if (prevBtn) {
+      prevBtn.addEventListener('click', function () {
+        if (!state.weekStart) return;
+        loadDashboard(addDaysIso(state.weekStart, -7)).catch(handleLoadError);
+      });
+    }
+
+    if (nextBtn) {
+      nextBtn.addEventListener('click', function () {
+        if (!state.weekStart) return;
+        loadDashboard(addDaysIso(state.weekStart, 7)).catch(handleLoadError);
+      });
+    }
+
+    if (thisBtn) {
+      thisBtn.addEventListener('click', function () {
+        var start = mondayFromIso(state.today || new Date().toISOString().slice(0, 10));
+        loadDashboard(start).catch(handleLoadError);
+      });
+    }
+
+    if (sendBtn) {
+      sendBtn.addEventListener('click', sendNow);
+    }
+
+    if (addRecipientBtn) {
+      addRecipientBtn.addEventListener('click', function () {
+        addRecipient().catch(function (err) {
+          if (window.showToast) window.showToast(err.message || 'Unable to add recipient.', 'error');
+        });
+      });
+    }
+
+    if (manualImportBtn) {
+      manualImportBtn.addEventListener('click', function () {
+        importManualText();
+      });
+    }
+
+    if (liveCheckBtn) {
+      liveCheckBtn.addEventListener('click', function () {
+        runLiveCheck();
+      });
+    }
+  }
+
+  function handleLoadError(err) {
+    var host = document.getElementById('poEmailList');
+    if (host) {
+      host.innerHTML = '<li class="place-order-muted" style="color:#b91c1c;">' + esc(err.message || 'Unable to load Place Order data.') + '</li>';
+    }
+  }
+
+  function init() {
+    bindEvents();
+    loadDashboard('').catch(handleLoadError);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();

@@ -362,6 +362,7 @@
       food_truck:    isAuth,
       booking:       isTeacher,
       shopping:      isAuth,
+      place_order:   isTeacher,
       add_recipes:   isAdmin,
       planning:      isPlanning,
       ft_teacher:    isTeacher,

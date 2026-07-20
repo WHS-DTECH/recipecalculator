@@ -11,6 +11,7 @@ const DEFAULT_ROLES = {
     browse_practicals: true,
     add_recipes: true,
     shopping: true,
+    place_order: true,
     booking: true,
     food_truck: true,
     ft_teacher: true,
@@ -23,6 +24,7 @@ const DEFAULT_ROLES = {
     browse_practicals: true,
     add_recipes: true,
     shopping: true,
+    place_order: true,
     booking: true,
     food_truck: true,
     ft_teacher: true,
@@ -35,6 +37,7 @@ const DEFAULT_ROLES = {
     browse_practicals: true,
     add_recipes: true,
     shopping: true,
+    place_order: true,
     booking: true,
     food_truck: true,
     ft_teacher: true,
@@ -47,6 +50,7 @@ const DEFAULT_ROLES = {
     browse_practicals: true,
     add_recipes: false,
     shopping: true,
+    place_order: false,
     booking: false,
     food_truck: false,
     ft_teacher: false,
@@ -59,6 +63,7 @@ const DEFAULT_ROLES = {
     browse_practicals: true,
     add_recipes: false,
     shopping: false,
+    place_order: false,
     booking: false,
     food_truck: true,
     ft_teacher: false,
@@ -71,6 +76,7 @@ const DEFAULT_ROLES = {
     browse_practicals: true,
     add_recipes: false,
     shopping: false,
+    place_order: false,
     booking: false,
     food_truck: false,
     ft_teacher: false,
@@ -83,6 +89,7 @@ const DEFAULT_ROLES = {
     browse_practicals: false,
     add_recipes: false,
     shopping: false,
+    place_order: false,
     booking: false,
     food_truck: false,
     ft_teacher: false,
@@ -91,8 +98,8 @@ const DEFAULT_ROLES = {
   }
 };
 
-const ROUTES = ['inventory', 'add_recipes', 'recipes', 'browse_practicals', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
-const ROLE_PERMISSION_COLUMNS = ['recipes', 'browse_practicals', 'add_recipes', 'inventory', 'shopping', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
+const ROUTES = ['inventory', 'add_recipes', 'recipes', 'browse_practicals', 'shopping', 'place_order', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
+const ROLE_PERMISSION_COLUMNS = ['recipes', 'browse_practicals', 'add_recipes', 'inventory', 'shopping', 'place_order', 'booking', 'food_truck', 'ft_teacher', 'planning', 'admin'];
 
 function buildDefaultRolesRows() {
   return Object.entries(DEFAULT_ROLES)
@@ -118,6 +125,7 @@ async function normalizeKnownRoleRows() {
               COALESCE(bool_or(add_recipes), false) AS add_recipes,
               COALESCE(bool_or(inventory), false) AS inventory,
               COALESCE(bool_or(shopping), false) AS shopping,
+              COALESCE(bool_or(place_order), false) AS place_order,
               COALESCE(bool_or(booking), false) AS booking,
               COALESCE(bool_or(food_truck), false) AS food_truck,
               COALESCE(bool_or(ft_teacher), false) AS ft_teacher,
@@ -133,13 +141,14 @@ async function normalizeKnownRoleRows() {
 
     await pool.query(
       `INSERT INTO role_permissions (${['role_name'].concat(ROLE_PERMISSION_COLUMNS).join(', ')})
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        ON CONFLICT (role_name) DO UPDATE
          SET recipes = EXCLUDED.recipes,
              browse_practicals = EXCLUDED.browse_practicals,
              add_recipes = EXCLUDED.add_recipes,
              inventory = EXCLUDED.inventory,
              shopping = EXCLUDED.shopping,
+             place_order = EXCLUDED.place_order,
              booking = EXCLUDED.booking,
              food_truck = EXCLUDED.food_truck,
              ft_teacher = EXCLUDED.ft_teacher,
@@ -153,6 +162,7 @@ async function normalizeKnownRoleRows() {
         merged.add_recipes,
         merged.inventory,
         merged.shopping,
+        merged.place_order,
         merged.booking,
         merged.food_truck,
         merged.ft_teacher,
@@ -182,6 +192,7 @@ async function initializePermissionsSchema() {
         add_recipes BOOLEAN DEFAULT false,
         inventory BOOLEAN DEFAULT false,
         shopping BOOLEAN DEFAULT false,
+        place_order BOOLEAN DEFAULT false,
         booking BOOLEAN DEFAULT false,
         food_truck BOOLEAN DEFAULT false,
         ft_teacher BOOLEAN DEFAULT false,
@@ -197,12 +208,14 @@ async function initializePermissionsSchema() {
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS food_truck BOOLEAN DEFAULT false');
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS ft_teacher BOOLEAN DEFAULT false');
     await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS browse_practicals BOOLEAN DEFAULT false');
+    await pool.query('ALTER TABLE role_permissions ADD COLUMN IF NOT EXISTS place_order BOOLEAN DEFAULT false');
 
     // Normalize duplicate/mixed-case role names into canonical role rows.
     await normalizeKnownRoleRows();
 
     // Keep bootstrap defaults sensible for existing rows.
     await pool.query("UPDATE role_permissions SET food_truck = true, ft_teacher = true WHERE role_name IN ('admin','lead_teacher','teacher')");
+    await pool.query("UPDATE role_permissions SET place_order = true WHERE role_name IN ('admin','lead_teacher','teacher')");
     await pool.query("UPDATE role_permissions SET food_truck = true WHERE role_name = 'student'");
     await pool.query("UPDATE role_permissions SET recipes = true WHERE role_name IN ('admin','lead_teacher','teacher','technician','student','staff')");
     await pool.query("UPDATE role_permissions SET browse_practicals = true WHERE role_name IN ('admin','lead_teacher','teacher','technician','student','staff')");
@@ -210,8 +223,8 @@ async function initializePermissionsSchema() {
     // Ensure all known roles exist without overwriting custom values.
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, browse_practicals, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO role_permissions (role_name, recipes, browse_practicals, add_recipes, inventory, shopping, place_order, booking, food_truck, ft_teacher, planning, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (role_name) DO NOTHING
       `, [
         roleName,
@@ -220,6 +233,7 @@ async function initializePermissionsSchema() {
         permissions.add_recipes,
         permissions.inventory,
         permissions.shopping,
+        permissions.place_order,
         permissions.booking,
         permissions.food_truck,
         permissions.ft_teacher,
@@ -271,7 +285,7 @@ router.get('/all', async (req, res) => {
     }
 
     const result = await pool.query(`
-      SELECT role_name, recipes, browse_practicals, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin
+      SELECT role_name, recipes, browse_practicals, add_recipes, inventory, shopping, place_order, booking, food_truck, ft_teacher, planning, admin
       FROM role_permissions
       ORDER BY CASE 
         WHEN role_name = 'admin' THEN 1
@@ -312,15 +326,16 @@ router.put('/:roleName', requireAdmin, async (req, res) => {
     
     await pool.query(`
       UPDATE role_permissions
-      SET recipes = $1, browse_practicals = $2, add_recipes = $3, inventory = $4, shopping = $5, booking = $6, food_truck = $7, ft_teacher = $8, planning = $9, admin = $10,
+      SET recipes = $1, browse_practicals = $2, add_recipes = $3, inventory = $4, shopping = $5, place_order = $6, booking = $7, food_truck = $8, ft_teacher = $9, planning = $10, admin = $11,
           updated_at = CURRENT_TIMESTAMP
-      WHERE role_name = $11
+      WHERE role_name = $12
     `, [
       permissions.recipes || false,
       permissions.browse_practicals || false,
       permissions.add_recipes || false,
       permissions.inventory || false,
       permissions.shopping || false,
+      permissions.place_order || false,
       permissions.booking || false,
       permissions.food_truck || false,
       permissions.ft_teacher || false,
@@ -351,8 +366,8 @@ router.post('/reset', requireAdmin, async (req, res) => {
 
     for (const [roleName, permissions] of Object.entries(DEFAULT_ROLES)) {
       await pool.query(`
-        INSERT INTO role_permissions (role_name, recipes, browse_practicals, add_recipes, inventory, shopping, booking, food_truck, ft_teacher, planning, admin)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        INSERT INTO role_permissions (role_name, recipes, browse_practicals, add_recipes, inventory, shopping, place_order, booking, food_truck, ft_teacher, planning, admin)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       `, [
         roleName,
         permissions.recipes,
@@ -360,6 +375,7 @@ router.post('/reset', requireAdmin, async (req, res) => {
         permissions.add_recipes,
         permissions.inventory,
         permissions.shopping,
+        permissions.place_order,
         permissions.booking,
         permissions.food_truck,
         permissions.ft_teacher,

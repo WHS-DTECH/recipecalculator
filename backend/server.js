@@ -1046,6 +1046,9 @@ app.use('/api/saved-shopping-lists', savedShoppingListsRouter);
 const shoppingWorkflowEmailRouter = require('./routes/shopping_workflow_email');
 app.use('/api/shopping-workflow-email', shoppingWorkflowEmailRouter);
 
+const placeOrderRouter = require('./routes/place_order');
+app.use('/api/place-order', placeOrderRouter);
+
 const shoppingPlanRouter = require('./routes/shopping_plan');
 app.use('/api/shopping-plan', shoppingPlanRouter);
 
@@ -2956,6 +2959,11 @@ app.listen(PORT, () => {
       console.error('[SHOPPING-REVIEW] SMTP health check error:', err.message);
     });
   }
+  if (typeof placeOrderRouter.logPlaceOrderMailerHealthCheck === 'function') {
+    placeOrderRouter.logPlaceOrderMailerHealthCheck().catch((err) => {
+      console.error('[PLACE-ORDER] SMTP health check error:', err.message);
+    });
+  }
 
   let shoppingReviewSchedulerBusy = false;
   const scheduleIntervalMs = Math.max(30000, Number(process.env.SHOPPING_REVIEW_SCHEDULE_POLL_MS || 60000));
@@ -3002,6 +3010,26 @@ app.listen(PORT, () => {
       }
     }, { timezone: 'Pacific/Auckland' });
     console.log(`[DIGEST] Weekly cron scheduled (${cronExpr}) Pacific/Auckland`);
+
+    const placeOrderCronExpr = String(process.env.PLACE_ORDER_TUESDAY_CRON || '0 9 * * 2').trim();
+    cron.schedule(placeOrderCronExpr, async () => {
+      console.log('[PLACE-ORDER] Tuesday pilot cron triggered');
+      try {
+        if (typeof placeOrderRouter.runTuesdayPilotReminder !== 'function') {
+          console.warn('[PLACE-ORDER] runTuesdayPilotReminder is not available.');
+          return;
+        }
+        const sent = await placeOrderRouter.runTuesdayPilotReminder('scheduler');
+        if (sent && sent.skipped) {
+          console.log('[PLACE-ORDER] Tuesday pilot reminder skipped (already sent).');
+        } else {
+          console.log('[PLACE-ORDER] Tuesday pilot reminder sent.');
+        }
+      } catch (err) {
+        console.error('[PLACE-ORDER] Tuesday pilot reminder failed:', err.message);
+      }
+    }, { timezone: 'Pacific/Auckland' });
+    console.log(`[PLACE-ORDER] Tuesday pilot cron scheduled (${placeOrderCronExpr}) Pacific/Auckland`);
   } catch (cronErr) {
     if (cronErr.code === 'MODULE_NOT_FOUND') {
       console.warn('[DIGEST] node-cron not installed — weekly digest will not auto-send. Run: npm install node-cron');
