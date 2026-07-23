@@ -394,6 +394,17 @@ async function ensureSchema() {
     `);
     await pool.query('CREATE INDEX IF NOT EXISTS place_order_recipients_active_idx ON place_order_recipients(is_active, recipient_email)');
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS place_order_bulk_recipients (
+        id SERIAL PRIMARY KEY,
+        recipient_email TEXT UNIQUE NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT true,
+        created_by_email TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await pool.query('CREATE INDEX IF NOT EXISTS place_order_bulk_recipients_active_idx ON place_order_bulk_recipients(is_active, recipient_email)');
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS place_order_manual_imports (
         id SERIAL PRIMARY KEY,
         owner_email TEXT NOT NULL,
@@ -434,7 +445,7 @@ function getAdminCopyRecipients() {
   return configured.filter((email) => isLikelyEmail(email));
 }
 
-async function getActiveRecipients() {
+async function getActiveTestRecipients() {
   await ensureSchema();
 
   const rows = await pool.query(
@@ -450,6 +461,27 @@ async function getActiveRecipients() {
 
   if (recipients.length) return recipients;
   return [getPilotRecipient()].filter((email) => isLikelyEmail(email));
+}
+
+async function getActiveBulkRecipients() {
+  await ensureSchema();
+
+  const rows = await pool.query(
+    `SELECT lower(trim(recipient_email)) AS recipient_email
+     FROM place_order_bulk_recipients
+     WHERE is_active = true
+     ORDER BY lower(trim(recipient_email))`
+  );
+
+  return rows.rows
+    .map((row) => normalizeEmail(row.recipient_email))
+    .filter((email) => isLikelyEmail(email));
+}
+
+async function getActiveRecipients() {
+  const bulkRecipients = await getActiveBulkRecipients();
+  if (bulkRecipients.length) return bulkRecipients;
+  return getActiveTestRecipients();
 }
 
 function normalizeGoogleFormUrl(rawUrl) {
@@ -559,6 +591,93 @@ async function isPlaceOrderAllowedForEmail(email) {
   }
 
   return { allowed: Boolean(permissionResult.rows[0].place_order), role };
+}
+
+function resolveRolePriority(roles) {
+  const normalizedRoles = Array.from(new Set((roles || []).map((role) => String(role || '').trim().toLowerCase()).filter(Boolean)));
+  if (!normalizedRoles.length) return 'public_access';
+  for (const preferred of ROLE_PRIORITY) {
+    if (normalizedRoles.includes(preferred)) return preferred;
+  }
+  return normalizedRoles[0];
+}
+
+async function listEligibleBulkTeachers() {
+  await ensureSchema();
+
+  const permissionsResult = await pool.query(
+    `SELECT lower(trim(role_name)) AS role_name, place_order
+     FROM role_permissions`
+  );
+  const placeOrderByRole = new Map();
+  permissionsResult.rows.forEach((row) => {
+    const roleName = String(row.role_name || '').trim().toLowerCase();
+    if (roleName) placeOrderByRole.set(roleName, Boolean(row.place_order));
+  });
+
+  const result = await pool.query(
+    `SELECT
+       s.code,
+       s.first_name,
+       s.last_name,
+       s.email_school,
+       COALESCE(NULLIF(lower(trim(s.primary_role)), ''), 'staff') AS primary_role,
+       COALESCE(
+         array_remove(array_agg(DISTINCT lower(trim(uar.role_name))), NULL),
+         ARRAY[]::text[]
+       ) AS additional_roles
+     FROM staff_upload s
+     LEFT JOIN user_additional_roles uar
+       ON uar.user_type = 'staff'
+      AND lower(trim(uar.email)) = lower(trim(s.email_school))
+     WHERE COALESCE(s.status, 'Current') = 'Current'
+       AND trim(COALESCE(s.email_school, '')) <> ''
+     GROUP BY s.code, s.first_name, s.last_name, s.email_school, s.primary_role`
+  );
+
+  const staff = [];
+  result.rows.forEach((row) => {
+    const email = normalizeEmail(row.email_school);
+    if (!isLikelyEmail(email)) return;
+
+    const roleSet = [];
+    if (getBootstrapAdminEmails().has(email)) roleSet.push('admin');
+    roleSet.push(String(row.primary_role || '').trim().toLowerCase());
+    if (Array.isArray(row.additional_roles)) {
+      row.additional_roles.forEach((role) => roleSet.push(String(role || '').trim().toLowerCase()));
+    }
+
+    const effectiveRole = resolveRolePriority(roleSet);
+    const placeOrderAllowed = placeOrderByRole.has(effectiveRole)
+      ? Boolean(placeOrderByRole.get(effectiveRole))
+      : PLACE_ORDER_ALLOWED_ROLES.has(effectiveRole);
+    if (!placeOrderAllowed) return;
+
+    const firstName = String(row.first_name || '').trim();
+    const lastName = String(row.last_name || '').trim();
+    const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+    const displayName = fullName || email;
+    const roleLabel = effectiveRole.split('_').map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+
+    staff.push({
+      code: String(row.code || '').trim(),
+      email,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: displayName,
+      effective_role: effectiveRole,
+      effective_role_label: roleLabel,
+      search_label: `${displayName} <${email}>${row.code ? ` - ${String(row.code).trim()}` : ''}`
+    });
+  });
+
+  staff.sort((a, b) => {
+    const nameCompare = String(a.full_name || '').localeCompare(String(b.full_name || ''), undefined, { sensitivity: 'base' });
+    if (nameCompare !== 0) return nameCompare;
+    return String(a.email || '').localeCompare(String(b.email || ''), undefined, { sensitivity: 'base' });
+  });
+
+  return staff;
 }
 
 async function requirePlaceOrderAccess(req, res, next) {
@@ -951,7 +1070,11 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
 async function sendPilotReminderEmail(options = {}) {
   const recipients = Array.isArray(options.recipients) && options.recipients.length
     ? options.recipients
-    : await getActiveRecipients();
+    : (options.listType === 'test'
+      ? await getActiveTestRecipients()
+      : options.listType === 'bulk'
+        ? await getActiveBulkRecipients()
+        : await getActiveRecipients());
 
   const results = [];
   for (const recipient of recipients) {
@@ -1042,7 +1165,9 @@ router.get('/dashboard', requirePlaceOrderAccess, async (req, res) => {
       resolved_csv_url: getGoogleFormResponsesCsvUrl(),
       responses_source_ready: source.sourceReady,
       responses_source_message: source.sourceMessage,
-      active_recipients: isAdmin ? await getActiveRecipients() : [],
+      active_recipients: isAdmin ? await getActiveTestRecipients() : [],
+      bulk_recipients: isAdmin ? await getActiveBulkRecipients() : [],
+      eligible_bulk_teachers: isAdmin ? await listEligibleBulkTeachers() : [],
       teacher: profile || {
         first_name: '',
         last_name: '',
@@ -1065,14 +1190,37 @@ router.post('/send-now', requirePlaceOrderAccess, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Only admin can trigger send now.' });
     }
 
-    const recipients = await getActiveRecipients();
+    const recipients = await getActiveTestRecipients();
     const sent = await sendPilotReminderEmail({
       recipients,
+      listType: 'test',
       source: 'manual'
     });
     return res.json({ success: true, result: sent });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message || 'Unable to send pilot email.' });
+  }
+});
+
+router.post('/send-bulk-now', requirePlaceOrderAccess, async (req, res) => {
+  try {
+    if (String(req.placeOrderAccess && req.placeOrderAccess.role || '') !== 'admin') {
+      return res.status(403).json({ success: false, error: 'Only admin can trigger bulk send.' });
+    }
+
+    const recipients = await getActiveBulkRecipients();
+    if (!recipients.length) {
+      return res.status(400).json({ success: false, error: 'No bulk recipients are configured.' });
+    }
+
+    const sent = await sendPilotReminderEmail({
+      recipients,
+      listType: 'bulk',
+      source: 'manual-bulk'
+    });
+    return res.json({ success: true, result: sent });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to send bulk email.' });
   }
 });
 
@@ -1092,7 +1240,8 @@ router.get('/status', requirePlaceOrderAccess, async (req, res) => {
     return res.json({
       success: true,
       pilot_recipient: pilotRecipient,
-      active_recipients: await getActiveRecipients(),
+      active_recipients: await getActiveTestRecipients(),
+      bulk_recipients: await getActiveBulkRecipients(),
       form_url: getGoogleFormUrl(),
       resolved_form_url: getGoogleFormUrl(),
       resolved_csv_url: getGoogleFormResponsesCsvUrl(),
@@ -1145,6 +1294,83 @@ router.post('/recipients', requireAdmin, async (req, res) => {
     return res.status(201).json({ success: true, recipient: upsert.rows[0] });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message || 'Unable to add recipient.' });
+  }
+});
+
+router.get('/bulk-recipients', requireAdmin, async (req, res) => {
+  try {
+    await ensureSchema();
+    const rows = await pool.query(
+      `SELECT recipient_email, is_active, created_by_email, created_at, updated_at
+       FROM place_order_bulk_recipients
+       ORDER BY lower(recipient_email)`
+    );
+
+    return res.json({
+      success: true,
+      recipients: rows.rows,
+      eligible_teachers: await listEligibleBulkTeachers()
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to load bulk recipients.' });
+  }
+});
+
+router.post('/bulk-recipients', requireAdmin, async (req, res) => {
+  try {
+    await ensureSchema();
+    const recipientEmail = normalizeEmail(req.body && req.body.email);
+    if (!isLikelyEmail(recipientEmail)) {
+      return res.status(400).json({ success: false, error: 'A valid email is required.' });
+    }
+
+    const eligibleTeachers = await listEligibleBulkTeachers();
+    const eligibleMatch = eligibleTeachers.find((teacher) => teacher.email === recipientEmail);
+    if (!eligibleMatch) {
+      return res.status(400).json({ success: false, error: 'Only current staff with Place Order teacher access can be added to the bulk list.' });
+    }
+
+    const creator = normalizeEmail(req.authUserEmail || '');
+    const upsert = await pool.query(
+      `INSERT INTO place_order_bulk_recipients (recipient_email, is_active, created_by_email, updated_at)
+       VALUES ($1, true, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (recipient_email) DO UPDATE
+         SET is_active = true,
+             updated_at = CURRENT_TIMESTAMP
+       RETURNING recipient_email, is_active, created_by_email, created_at, updated_at`,
+      [recipientEmail, creator]
+    );
+
+    return res.status(201).json({ success: true, recipient: upsert.rows[0], teacher: eligibleMatch });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to add bulk recipient.' });
+  }
+});
+
+router.delete('/bulk-recipients/:email', requireAdmin, async (req, res) => {
+  try {
+    await ensureSchema();
+    const recipientEmail = normalizeEmail(decodeURIComponent(req.params.email || ''));
+    if (!recipientEmail) {
+      return res.status(400).json({ success: false, error: 'Recipient email is required.' });
+    }
+
+    const update = await pool.query(
+      `UPDATE place_order_bulk_recipients
+       SET is_active = false,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE lower(recipient_email) = lower($1)
+       RETURNING recipient_email, is_active, updated_at`,
+      [recipientEmail]
+    );
+
+    if (!update.rowCount) {
+      return res.status(404).json({ success: false, error: 'Bulk recipient not found.' });
+    }
+
+    return res.json({ success: true, recipient: update.rows[0] });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message || 'Unable to remove bulk recipient.' });
   }
 });
 
@@ -1282,7 +1508,7 @@ router.logPlaceOrderMailerHealthCheck = async function logPlaceOrderMailerHealth
 };
 
 router.runTuesdayPilotReminder = async function runTuesdayPilotReminder(source) {
-  return sendPilotReminderEmail({ source: source || 'scheduler' });
+  return sendPilotReminderEmail({ source: source || 'scheduler', listType: 'bulk' });
 };
 
 module.exports = router;

@@ -15,6 +15,8 @@
     sourceMessage: '',
     isAdmin: false,
     activeRecipients: [],
+    bulkRecipients: [],
+    eligibleBulkTeachers: [],
     resolvedFormUrl: '',
     resolvedCsvUrl: '',
     liveCheckSummary: 'Not run yet.',
@@ -226,6 +228,7 @@
     var sourceWarning = document.getElementById('poSourceWarning');
     var sendNowBtn = document.getElementById('poSendNowBtn');
     var adminRecipientsSection = document.getElementById('poAdminRecipientsSection');
+    var adminBulkRecipientsSection = document.getElementById('poAdminBulkRecipientsSection');
 
     var teacherName = '';
     if (state.teacher) {
@@ -253,6 +256,9 @@
     if (adminRecipientsSection) {
       adminRecipientsSection.style.display = state.isAdmin ? '' : 'none';
     }
+    if (adminBulkRecipientsSection) {
+      adminBulkRecipientsSection.style.display = state.isAdmin ? '' : 'none';
+    }
 
     if (!state.sourceReady && state.sourceMessage) {
       sourceWarning.style.display = '';
@@ -263,6 +269,8 @@
     }
 
     renderRecipientsList(state.activeRecipients);
+    renderBulkRecipientsList(state.bulkRecipients);
+    renderEligibleTeacherOptions(state.eligibleBulkTeachers);
   }
 
   function renderRecipientsList(recipients) {
@@ -289,6 +297,80 @@
         removeRecipient(encodedEmail);
       });
     });
+  }
+
+  function renderBulkRecipientsList(recipients) {
+    var host = document.getElementById('poBulkRecipientsList');
+    if (!host) return;
+
+    var eligibleMap = getEligibleTeacherMap();
+    var list = Array.isArray(recipients) ? recipients : [];
+    if (!list.length) {
+      host.innerHTML = '<div class="place-order-muted">No bulk recipients added yet.</div>';
+      return;
+    }
+
+    host.innerHTML = list.map(function (email) {
+      var encoded = encodeURIComponent(String(email || '').trim());
+      var teacher = eligibleMap[email] || null;
+      var label = teacher ? (teacher.full_name + ' <' + email + '>') : email;
+      var roleNote = teacher && teacher.effective_role_label ? ('<div class="po-recipient-note">' + esc(teacher.effective_role_label) + '</div>') : '';
+      return '<div class="po-recipient-item">' +
+        '<div><span>' + esc(label) + '</span>' + roleNote + '</div>' +
+        '<button class="btn btn-secondary po-remove-bulk-recipient-btn" data-email="' + encoded + '" type="button">Remove</button>' +
+      '</div>';
+    }).join('');
+
+    host.querySelectorAll('.po-remove-bulk-recipient-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var encodedEmail = btn.getAttribute('data-email') || '';
+        removeBulkRecipient(encodedEmail);
+      });
+    });
+  }
+
+  function getEligibleTeacherMap() {
+    var map = {};
+    (Array.isArray(state.eligibleBulkTeachers) ? state.eligibleBulkTeachers : []).forEach(function (teacher) {
+      var email = String(teacher && teacher.email || '').trim().toLowerCase();
+      if (email) map[email] = teacher;
+    });
+    return map;
+  }
+
+  function renderEligibleTeacherOptions(teachers) {
+    var host = document.getElementById('poEligibleTeacherList');
+    var help = document.getElementById('poBulkRecipientHelp');
+    if (!host) return;
+
+    var list = Array.isArray(teachers) ? teachers : [];
+    host.innerHTML = list.map(function (teacher) {
+      return '<option value="' + esc(teacher.search_label || teacher.email || '') + '"></option>';
+    }).join('');
+
+    if (help) {
+      help.textContent = list.length
+        ? String(list.length) + ' eligible teachers available from current staff and role permissions.'
+        : 'No eligible teachers found from the current staff upload and role settings.';
+    }
+  }
+
+  function resolveBulkRecipientEmail(rawValue) {
+    var value = String(rawValue || '').trim();
+    if (!value) return '';
+
+    var lowerValue = value.toLowerCase();
+    var teachers = Array.isArray(state.eligibleBulkTeachers) ? state.eligibleBulkTeachers : [];
+    for (var i = 0; i < teachers.length; i += 1) {
+      var teacher = teachers[i] || {};
+      var email = String(teacher.email || '').trim().toLowerCase();
+      var searchLabel = String(teacher.search_label || '').trim().toLowerCase();
+      if (lowerValue === email || lowerValue === searchLabel) {
+        return email;
+      }
+    }
+
+    return /^\S+@\S+\.\S+$/.test(value) ? lowerValue : '';
   }
 
   function renderAll() {
@@ -322,6 +404,8 @@
     state.sourceMessage = String(data.responses_source_message || '');
     state.isAdmin = !!data.is_admin;
     state.activeRecipients = Array.isArray(data.active_recipients) ? data.active_recipients : [];
+    state.bulkRecipients = Array.isArray(data.bulk_recipients) ? data.bulk_recipients : [];
+    state.eligibleBulkTeachers = Array.isArray(data.eligible_bulk_teachers) ? data.eligible_bulk_teachers : [];
     state.resolvedFormUrl = String(data.resolved_form_url || data.form_url || '');
     state.resolvedCsvUrl = String(data.resolved_csv_url || '');
     if (!state.liveCheckSummary || state.liveCheckSummary === 'Not run yet.') {
@@ -420,6 +504,45 @@
     if (window.showToast) window.showToast('Recipient removed.', 'success');
   }
 
+  async function addBulkRecipient() {
+    var input = document.getElementById('poBulkRecipientInput');
+    if (!input) return;
+    var email = resolveBulkRecipientEmail(input.value || '');
+    if (!email) {
+      throw new Error('Select a teacher from the staff list or enter a valid school email with Place Order access.');
+    }
+
+    var res = await fetch('/api/place-order/bulk-recipients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email: email })
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.success) {
+      throw new Error(data && data.error ? data.error : 'Unable to add bulk recipient.');
+    }
+
+    input.value = '';
+    await loadDashboard(state.weekStart || '');
+    if (window.showToast) window.showToast('Bulk recipient added.', 'success');
+  }
+
+  async function removeBulkRecipient(encodedEmail) {
+    if (!encodedEmail) return;
+    var res = await fetch('/api/place-order/bulk-recipients/' + encodedEmail, {
+      method: 'DELETE',
+      credentials: 'include'
+    });
+    var data = await res.json().catch(function () { return {}; });
+    if (!res.ok || !data.success) {
+      throw new Error(data && data.error ? data.error : 'Unable to remove bulk recipient.');
+    }
+
+    await loadDashboard(state.weekStart || '');
+    if (window.showToast) window.showToast('Bulk recipient removed.', 'success');
+  }
+
   async function importManualText() {
     var textEl = document.getElementById('poManualImportText');
     var statusEl = document.getElementById('poManualImportStatus');
@@ -504,12 +627,55 @@
     }
   }
 
+  async function sendBulkNow() {
+    var btn = document.getElementById('poSendBulkNowBtn');
+    if (!btn) return;
+
+    btn.disabled = true;
+    var prior = btn.textContent;
+    btn.textContent = 'Sending...';
+
+    try {
+      var res = await fetch('/api/place-order/send-bulk-now', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include'
+      });
+      var data = await res.json().catch(function () { return {}; });
+      if (!res.ok || !data.success) {
+        throw new Error(data && data.error ? data.error : 'Unable to send bulk emails.');
+      }
+
+      if (window.showToast) {
+        var sentCount = Number(data.result && data.result.sent || 0);
+        var skippedCount = Number(data.result && data.result.skipped || 0);
+        var failedCount = Number(data.result && data.result.failed || 0);
+        if (sentCount > 0) {
+          window.showToast('Bulk Place Order reminders sent: ' + sentCount + ' (skipped: ' + skippedCount + ', failed: ' + failedCount + ').', 'success');
+        } else if (skippedCount > 0 && failedCount === 0) {
+          window.showToast('All bulk Place Order reminders were already sent for today.', 'info');
+        } else {
+          window.showToast('No bulk reminders sent. Failed: ' + failedCount + '.', 'error');
+        }
+      }
+    } catch (err) {
+      if (window.showToast) {
+        window.showToast(err.message || 'Unable to send bulk reminders.', 'error');
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = prior;
+    }
+  }
+
   function bindEvents() {
     var prevBtn = document.getElementById('poPrevWeekBtn');
     var nextBtn = document.getElementById('poNextWeekBtn');
     var thisBtn = document.getElementById('poThisWeekBtn');
     var sendBtn = document.getElementById('poSendNowBtn');
     var addRecipientBtn = document.getElementById('poAddRecipientBtn');
+    var addBulkRecipientBtn = document.getElementById('poAddBulkRecipientBtn');
+    var sendBulkBtn = document.getElementById('poSendBulkNowBtn');
     var manualImportBtn = document.getElementById('poManualImportBtn');
     var liveCheckBtn = document.getElementById('poRunLiveCheckBtn');
     var runningTeacherFilter = document.getElementById('poRunningTeacherFilter');
@@ -545,6 +711,20 @@
         addRecipient().catch(function (err) {
           if (window.showToast) window.showToast(err.message || 'Unable to add recipient.', 'error');
         });
+      });
+    }
+
+    if (addBulkRecipientBtn) {
+      addBulkRecipientBtn.addEventListener('click', function () {
+        addBulkRecipient().catch(function (err) {
+          if (window.showToast) window.showToast(err.message || 'Unable to add bulk recipient.', 'error');
+        });
+      });
+    }
+
+    if (sendBulkBtn) {
+      sendBulkBtn.addEventListener('click', function () {
+        sendBulkNow();
       });
     }
 
