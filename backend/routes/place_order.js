@@ -11,6 +11,7 @@ const ROLE_PRIORITY = ['admin', 'lead_teacher', 'teacher', 'technician', 'studen
 const PLACE_ORDER_ALLOWED_ROLES = new Set(['admin', 'lead_teacher', 'teacher']);
 const DEFAULT_PILOT_RECIPIENT = 'vanessapringle@westlandhigh.school.nz';
 const DEFAULT_ADMIN_COPY_RECIPIENT = 'tech@westlandhigh.school.nz';
+const DEFAULT_PLACE_ORDER_FROM_ADDRESS = 'tech@westlandhigh.school.nz';
 const DEFAULT_GOOGLE_FORM_EDIT_URL = 'https://docs.google.com/forms/d/1BD9mD_tGjrWcujbPfMp7JtDOuSdSpmb97_EWKt6mXyo/edit';
 const DEFAULT_GOOGLE_SHEET_RESPONSES_EDIT_URL = 'https://docs.google.com/spreadsheets/d/1dwlodt5NtO13MxB8MDktqJgP9Yvf9oLVajDFSSw-jmM/edit?usp=sharing';
 
@@ -51,7 +52,7 @@ function getBootstrapAdminEmails() {
 }
 
 function getFromAddress() {
-  return String(process.env.PLACE_ORDER_EMAIL_FROM || process.env.SMTP_FROM || process.env.SMTP_USER || '').trim();
+  return String(process.env.PLACE_ORDER_EMAIL_FROM || process.env.SMTP_FROM || DEFAULT_PLACE_ORDER_FROM_ADDRESS).trim();
 }
 
 function resolveSmtpAuthUser(preferredUser, fallbackFrom) {
