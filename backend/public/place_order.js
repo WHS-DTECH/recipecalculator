@@ -15,7 +15,9 @@
     activeRecipients: [],
     resolvedFormUrl: '',
     resolvedCsvUrl: '',
-    liveCheckSummary: 'Not run yet.'
+    liveCheckSummary: 'Not run yet.',
+    runningTeacherFilter: '',
+    runningSort: 'count_desc'
   };
 
   function esc(value) {
@@ -94,18 +96,69 @@
 
   function renderRunningItems(items) {
     var host = document.getElementById('poRunningList');
+    var teacherFilter = document.getElementById('poRunningTeacherFilter');
     if (!host) return;
-    var list = Array.isArray(items) ? items : [];
+    var baseList = Array.isArray(items) ? items : [];
+    var teacherOptions = [];
+
+    baseList.forEach(function (row) {
+      var names = Array.isArray(row && row.submitter_names) ? row.submitter_names : [];
+      names.forEach(function (name) {
+        if (name && teacherOptions.indexOf(name) === -1) teacherOptions.push(name);
+      });
+    });
+
+    teacherOptions.sort(function (a, b) { return String(a).localeCompare(String(b)); });
+
+    if (teacherFilter) {
+      var selected = state.runningTeacherFilter || '';
+      if (selected && teacherOptions.indexOf(selected) === -1) {
+        selected = '';
+        state.runningTeacherFilter = '';
+      }
+
+      teacherFilter.innerHTML = '<option value="">All teachers</option>' + teacherOptions.map(function (name) {
+        var isSelected = name === selected ? ' selected' : '';
+        return '<option value="' + esc(name) + '"' + isSelected + '>' + esc(name) + '</option>';
+      }).join('');
+    }
+
+    var list = baseList.slice();
+    if (state.runningTeacherFilter) {
+      list = list.filter(function (row) {
+        var names = Array.isArray(row && row.submitter_names) ? row.submitter_names : [];
+        return names.indexOf(state.runningTeacherFilter) !== -1;
+      });
+    }
+
+    list.sort(function (a, b) {
+      var sortMode = state.runningSort || 'count_desc';
+      if (sortMode === 'item_asc') {
+        return String(a.item || '').localeCompare(String(b.item || ''));
+      }
+      if (sortMode === 'teacher_asc') {
+        var aTeacher = Array.isArray(a.submitter_names) && a.submitter_names.length ? a.submitter_names[0] : '';
+        var bTeacher = Array.isArray(b.submitter_names) && b.submitter_names.length ? b.submitter_names[0] : '';
+        var teacherCompare = String(aTeacher).localeCompare(String(bTeacher));
+        if (teacherCompare !== 0) return teacherCompare;
+        return String(a.item || '').localeCompare(String(b.item || ''));
+      }
+      if (Number(b.count || 0) !== Number(a.count || 0)) {
+        return Number(b.count || 0) - Number(a.count || 0);
+      }
+      return String(a.item || '').localeCompare(String(b.item || ''));
+    });
+
     if (!list.length) {
       host.innerHTML = '<div class="place-order-muted">No items submitted for this week yet.</div>';
       return;
     }
 
     var rows = list.map(function (row) {
-      return '<tr><td>' + esc(row.item || '') + '</td><td>' + String(row.count || 0) + '</td></tr>';
+      return '<tr><td>' + esc(row.item || '') + '</td><td>' + String(row.count || 0) + '</td><td>' + esc(row.submitter_summary || '') + '</td></tr>';
     }).join('');
 
-    host.innerHTML = '<table class="po-running-table"><thead><tr><th>Item</th><th>Count</th></tr></thead><tbody>' + rows + '</tbody></table>';
+    host.innerHTML = '<table class="po-running-table"><thead><tr><th>Item</th><th>Count</th><th>Submitted By</th></tr></thead><tbody>' + rows + '</tbody></table>';
   }
 
   function renderSubmissions(submissions) {
@@ -455,6 +508,8 @@
     var addRecipientBtn = document.getElementById('poAddRecipientBtn');
     var manualImportBtn = document.getElementById('poManualImportBtn');
     var liveCheckBtn = document.getElementById('poRunLiveCheckBtn');
+    var runningTeacherFilter = document.getElementById('poRunningTeacherFilter');
+    var runningSortSelect = document.getElementById('poRunningSortSelect');
 
     if (prevBtn) {
       prevBtn.addEventListener('click', function () {
@@ -498,6 +553,21 @@
     if (liveCheckBtn) {
       liveCheckBtn.addEventListener('click', function () {
         runLiveCheck();
+      });
+    }
+
+    if (runningTeacherFilter) {
+      runningTeacherFilter.addEventListener('change', function () {
+        state.runningTeacherFilter = String(runningTeacherFilter.value || '');
+        renderRunningItems(state.runningItems);
+      });
+    }
+
+    if (runningSortSelect) {
+      runningSortSelect.value = state.runningSort || 'count_desc';
+      runningSortSelect.addEventListener('change', function () {
+        state.runningSort = String(runningSortSelect.value || 'count_desc');
+        renderRunningItems(state.runningItems);
       });
     }
   }

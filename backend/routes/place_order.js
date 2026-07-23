@@ -153,6 +153,31 @@ function dateOffsetIso(isoDate, offsetDays) {
   return d.toISOString().slice(0, 10);
 }
 
+function nextMondayAfterIso(isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(isoDate || '').trim())) return '';
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  const dayOfWeek = d.getUTCDay();
+  const daysUntilMonday = ((8 - dayOfWeek) % 7) || 7;
+  d.setUTCDate(d.getUTCDate() + daysUntilMonday);
+  return d.toISOString().slice(0, 10);
+}
+
+function longDateLabel(isoDate) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(isoDate || '').trim())) return String(isoDate || '').trim();
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  try {
+    return d.toLocaleDateString('en-NZ', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+      timeZone: 'Pacific/Auckland'
+    });
+  } catch (_) {
+    return isoDate;
+  }
+}
+
 function parseCsvLine(line) {
   const out = [];
   let cur = '';
@@ -625,16 +650,37 @@ async function fetchTeacherProfileByEmail(email) {
 function summarizeRunningItems(submissions) {
   const counts = new Map();
   submissions.forEach((row) => {
+    const submitter = String(row.teacher_name || row.email || 'Teacher').trim() || 'Teacher';
     (Array.isArray(row.items) ? row.items : []).forEach((item) => {
       const key = String(item || '').trim().toLowerCase();
       if (!key) return;
-      const current = counts.get(key) || { item: String(item || '').trim(), count: 0 };
+      const current = counts.get(key) || {
+        item: String(item || '').trim(),
+        count: 0,
+        submitters_map: new Map()
+      };
       current.count += 1;
+      current.submitters_map.set(submitter, (current.submitters_map.get(submitter) || 0) + 1);
       counts.set(key, current);
     });
   });
 
-  return Array.from(counts.values()).sort((a, b) => {
+  return Array.from(counts.values()).map((entry) => {
+    const submitters = Array.from(entry.submitters_map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => {
+        if (b.count !== a.count) return b.count - a.count;
+        return a.name.localeCompare(b.name);
+      });
+
+    return {
+      item: entry.item,
+      count: entry.count,
+      submitters,
+      submitter_names: submitters.map((row) => row.name),
+      submitter_summary: submitters.map((row) => `${row.name} (${row.count})`).join(', ')
+    };
+  }).sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
     return a.item.localeCompare(b.item);
   });
@@ -665,6 +711,28 @@ async function loadGoogleFormSubmissions() {
   const parsed = parseCsv(csvText);
   const submissions = normalizeFormRows(parsed.headers, parsed.rows);
   return { submissions, sourceReady: true, sourceMessage: '' };
+}
+
+async function loadManualImportPreviewForWeek(weekStart) {
+  await ensureSchema();
+  const normalizedWeekStart = String(weekStart || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalizedWeekStart)) return [];
+
+  const result = await pool.query(
+    `SELECT teacher_name, class_name, day_label, raw_text, items_json, submitted_at
+     FROM place_order_manual_imports
+     WHERE week_start = $1::date
+     ORDER BY submitted_at ASC, id ASC`,
+    [normalizedWeekStart]
+  );
+
+  return result.rows.map((row) => ({
+    teacher_name: String(row.teacher_name || '').trim(),
+    class_name: String(row.class_name || '').trim(),
+    day_label: String(row.day_label || '').trim(),
+    raw_text: String(row.raw_text || '').trim(),
+    items: Array.isArray(row.items_json) ? row.items_json.map((item) => String(item || '').trim()).filter(Boolean) : []
+  }));
 }
 
 async function runLiveSourceCheck() {
@@ -719,22 +787,91 @@ function buildPilotEmailHtml(payload) {
   const formUrl = String(payload.formUrl || '').trim();
   const weekStart = String(payload.weekStart || '').trim();
   const weekEnd = String(payload.weekEnd || '').trim();
+  const deadline = String(payload.deadline || '').trim();
+  const plannerPreview = Array.isArray(payload.plannerPreview) ? payload.plannerPreview : [];
   const greeting = teacherName ? `Hi ${esc(teacherName)},` : 'Hi,';
   const subjectWeek = weekStart && weekEnd ? `${weekStart} to ${weekEnd}` : 'this week';
+  const deadlineLabel = deadline ? longDateLabel(deadline) : '';
+  const plannerHtml = plannerPreview.length
+    ? `
+      <div style="margin-top:22px;border:1px solid #dbe4f0;border-radius:10px;padding:16px;background:#f8fbff;">
+        <h3 style="margin:0 0 10px;color:#0f5da6;font-size:18px;">Planning Snapshot</h3>
+        <p style="margin:0 0 12px;color:#475569;">Use the notes below as a reference when completing the form.</p>
+        ${plannerPreview.map((entry) => {
+          const title = [entry.class_name, entry.teacher_name].filter(Boolean).join(' - ') || 'Planning Notes';
+          const meta = entry.day_label ? `<div style="font-size:12px;color:#64748b;margin:0 0 8px;">${esc(entry.day_label)}</div>` : '';
+          const rawLines = String(entry.raw_text || '').split(/\r?\n/).map((line) => String(line || '').trim()).filter(Boolean);
+          const detailHtml = rawLines.length
+            ? `<div style="white-space:pre-wrap;font-size:14px;color:#1f2937;line-height:1.55;">${esc(rawLines.join('\n'))}</div>`
+            : `<ul style="margin:0;padding-left:18px;color:#1f2937;">${(Array.isArray(entry.items) ? entry.items : []).map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`;
+          return `
+            <div style="padding:12px 0;border-top:1px solid #dbe4f0;">
+              <div style="font-weight:700;color:#0f172a;margin:0 0 4px;">${esc(title)}</div>
+              ${meta}
+              ${detailHtml}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `
+    : '';
 
   return `
     <div style="font-family:Arial,sans-serif;line-height:1.5;color:#1f2937;max-width:640px;margin:0 auto;padding:18px;">
       <h2 style="margin:0 0 10px;color:#0f5da6;">Place Order Request</h2>
       <p>${greeting}</p>
       <p>Please submit items your classes need purchased for <strong>${esc(subjectWeek)}</strong>.</p>
+      ${deadlineLabel ? `<p><strong>Please complete this by ${esc(deadlineLabel)}.</strong></p>` : ''}
       <p>
         <a href="${esc(formUrl)}" style="display:inline-block;background:#0f5da6;color:#fff;padding:10px 16px;border-radius:6px;text-decoration:none;font-weight:700;">Open Place Order Form</a>
       </p>
-      <p style="margin-top:14px;color:#475569;">After submission, your requests appear on the Place Order page in Food Room.</p>
+      <p style="margin-top:14px;color:#475569;">After submission, your requests appear on the Ordering page in Food Room.</p>
+      ${plannerHtml}
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:18px 0;">
-      <p style="font-size:12px;color:#64748b;">Automated Tuesday reminder from Westland High School Food Room.</p>
+      <p style="font-size:12px;color:#64748b;">Automated Tuesday reminder from Westland High School Food Room. Submission window closes the following Monday.</p>
     </div>
   `;
+}
+
+function buildPilotEmailText(payload) {
+  const weekStart = String(payload.weekStart || '').trim();
+  const weekEnd = String(payload.weekEnd || '').trim();
+  const formUrl = String(payload.formUrl || '').trim();
+  const deadline = String(payload.deadline || '').trim();
+  const plannerPreview = Array.isArray(payload.plannerPreview) ? payload.plannerPreview : [];
+
+  const lines = [
+    'Place Order Request',
+    '',
+    weekStart && weekEnd
+      ? `Please submit items your classes need purchased for ${weekStart} to ${weekEnd}.`
+      : 'Please submit items your classes need purchased.',
+    deadline ? `Please complete this by ${longDateLabel(deadline)}.` : '',
+    '',
+    `Open Place Order Form: ${formUrl}`,
+    '',
+    'After submission, your requests appear on the Ordering page in Food Room.'
+  ].filter(Boolean);
+
+  if (plannerPreview.length) {
+    lines.push('', 'Planning Snapshot');
+    plannerPreview.forEach((entry) => {
+      const title = [entry.class_name, entry.teacher_name].filter(Boolean).join(' - ') || 'Planning Notes';
+      lines.push('', title);
+      if (entry.day_label) lines.push(entry.day_label);
+      const rawText = String(entry.raw_text || '').trim();
+      if (rawText) {
+        lines.push(rawText);
+      } else {
+        (Array.isArray(entry.items) ? entry.items : []).forEach((item) => {
+          lines.push(`- ${item}`);
+        });
+      }
+    });
+  }
+
+  lines.push('', 'Automated Tuesday reminder from Westland High School Food Room. Submission window closes the following Monday.');
+  return lines.join('\n');
 }
 
 async function sendReminderToRecipient(recipientEmail, options = {}) {
@@ -747,9 +884,12 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
   if (!formUrl) throw new Error('PLACE_ORDER_GOOGLE_FORM_URL is not configured.');
 
   const nz = nowInNz();
-  const mondayIso = mondayFromYmd(nz.isoDate);
+  const sendDateIso = String(options.sendDate || nz.isoDate).trim() || nz.isoDate;
+  const mondayIso = mondayFromYmd(sendDateIso);
   const fridayIso = dateOffsetIso(mondayIso, 4);
-  const sendKeyDate = options.sendKeyDate || nz.isoDate;
+  const deadlineIso = nextMondayAfterIso(sendDateIso);
+  const plannerPreview = await loadManualImportPreviewForWeek(mondayIso);
+  const sendKeyDate = options.sendKeyDate || sendDateIso;
   const sendKey = `${sendKeyDate}|${normalizedRecipient}|place-order-tuesday`;
 
   const existing = await pool.query('SELECT id FROM place_order_email_log WHERE send_key = $1 LIMIT 1', [sendKey]);
@@ -766,13 +906,19 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
     ? `${String(profile.first_name || '').trim()} ${String(profile.last_name || '').trim()}`.trim()
     : '';
 
-  const subject = `Place Order Request - Week ${mondayIso} to ${fridayIso}`;
-  const html = buildPilotEmailHtml({
+  const subject = deadlineIso
+    ? `Place Order Request - Due ${deadlineIso}`
+    : `Place Order Request - Week ${mondayIso} to ${fridayIso}`;
+  const emailPayload = {
     teacherName,
     formUrl,
     weekStart: mondayIso,
-    weekEnd: fridayIso
-  });
+    weekEnd: fridayIso,
+    deadline: deadlineIso,
+    plannerPreview
+  };
+  const html = buildPilotEmailHtml(emailPayload);
+  const text = buildPilotEmailText(emailPayload);
 
   const adminCopyRecipients = getAdminCopyRecipients().filter((email) => email !== normalizedRecipient);
   const bcc = adminCopyRecipients.length ? adminCopyRecipients : undefined;
@@ -783,7 +929,7 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
     bcc,
     subject,
     html,
-    text: `Please submit class purchase items for ${mondayIso} to ${fridayIso}: ${formUrl}`
+    text
   });
 
   await pool.query(

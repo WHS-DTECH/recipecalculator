@@ -129,6 +129,38 @@
       letter-spacing: 0.02em;
     }
 
+    .po-running-controls {
+      display: flex;
+      gap: 0.55rem;
+      flex-wrap: wrap;
+      align-items: end;
+      margin: 0.45rem 0 0.2rem;
+    }
+
+    .po-running-control {
+      display: grid;
+      gap: 0.18rem;
+      min-width: 180px;
+      flex: 1 1 180px;
+    }
+
+    .po-running-label {
+      font-size: 0.79rem;
+      color: #486178;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+    }
+
+    .po-running-select {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 0.42rem 0.55rem;
+      font-size: 0.92rem;
+      background: #fff;
+      color: #0f2c47;
+    }
+
     .po-day-grid {
       display: grid;
       grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -295,6 +327,22 @@
 
       <article class="place-order-card">
         <h2 style="margin:0 0 0.35rem;font-size:1.07rem;color:#143c66;">Running Item List (Selected Week)</h2>
+        <div class="po-running-controls">
+          <label class="po-running-control" for="poRunningTeacherFilter">
+            <span class="po-running-label">Filter By Teacher</span>
+            <select id="poRunningTeacherFilter" class="po-running-select">
+              <option value="">All teachers</option>
+            </select>
+          </label>
+          <label class="po-running-control" for="poRunningSortSelect">
+            <span class="po-running-label">Sort By</span>
+            <select id="poRunningSortSelect" class="po-running-select">
+              <option value="count_desc">Count: Highest first</option>
+              <option value="item_asc">Item: A to Z</option>
+              <option value="teacher_asc">Teacher: A to Z</option>
+            </select>
+          </label>
+        </div>
         <div id="poRunningList" class="place-order-muted">Loading items...</div>
       </article>
     </section>
