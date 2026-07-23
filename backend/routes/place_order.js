@@ -179,6 +179,13 @@ function longDateLabel(isoDate) {
   }
 }
 
+function shortDateLabel(isoDate) {
+  const raw = String(isoDate || '').trim();
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return raw;
+  return `${m[3]}/${m[2]}/${m[1]}`;
+}
+
 function parseCsvLine(line) {
   const out = [];
   let cur = '';
@@ -910,7 +917,7 @@ function buildPilotEmailHtml(payload) {
   const deadline = String(payload.deadline || '').trim();
   const plannerPreview = Array.isArray(payload.plannerPreview) ? payload.plannerPreview : [];
   const greeting = teacherName ? `Hi ${esc(teacherName)},` : 'Hi,';
-  const subjectWeek = weekStart && weekEnd ? `${weekStart} to ${weekEnd}` : 'this week';
+  const subjectWeek = weekStart && weekEnd ? `${shortDateLabel(weekStart)} to ${shortDateLabel(weekEnd)}` : 'this week';
   const deadlineLabel = deadline ? longDateLabel(deadline) : '';
   const plannerHtml = plannerPreview.length
     ? `
@@ -964,7 +971,7 @@ function buildPilotEmailText(payload) {
     'Place Order Request',
     '',
     weekStart && weekEnd
-      ? `Please submit items your classes need purchased for ${weekStart} to ${weekEnd}.`
+      ? `Please submit items your classes need purchased for ${shortDateLabel(weekStart)} to ${shortDateLabel(weekEnd)}.`
       : 'Please submit items your classes need purchased.',
     deadline ? `Please complete this by ${longDateLabel(deadline)}.` : '',
     '',
@@ -1027,8 +1034,8 @@ async function sendReminderToRecipient(recipientEmail, options = {}) {
     : '';
 
   const subject = deadlineIso
-    ? `Place Order Request - Due ${deadlineIso}`
-    : `Place Order Request - Week ${mondayIso} to ${fridayIso}`;
+    ? `Place Order Request - Due ${shortDateLabel(deadlineIso)}`
+    : `Place Order Request - Week ${shortDateLabel(mondayIso)} to ${shortDateLabel(fridayIso)}`;
   const emailPayload = {
     teacherName,
     formUrl,
