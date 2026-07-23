@@ -276,6 +276,17 @@ function parseTimestampToIso(value) {
   return Number.isNaN(d.getTime()) ? '' : d.toISOString();
 }
 
+function deriveNameFromEmail(email) {
+  const local = String(email || '').split('@')[0] || '';
+  if (!local) return '';
+  return local
+    .split(/[._\-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
+    .trim();
+}
+
 function normalizeFormRows(headers, rows) {
   const timestampKey = findHeaderKey(headers, ['Timestamp', 'Submitted at', 'Date']);
   const emailKey = findHeaderKey(headers, ['Email Address', 'Email', 'Teacher Email']);
@@ -288,13 +299,15 @@ function normalizeFormRows(headers, rows) {
     .map((row) => {
       const submittedAtIso = parseTimestampToIso(timestampKey ? row[timestampKey] : '');
       const submittedDate = submittedAtIso ? submittedAtIso.slice(0, 10) : '';
+      const email = normalizeEmail(emailKey ? row[emailKey] : '');
+      const explicitTeacherName = String(teacherKey ? row[teacherKey] : '').trim();
       const items = splitItems(itemsKey ? row[itemsKey] : '');
 
       return {
         submitted_at_iso: submittedAtIso,
         submitted_date: submittedDate,
-        email: normalizeEmail(emailKey ? row[emailKey] : ''),
-        teacher_name: String(teacherKey ? row[teacherKey] : '').trim(),
+        email,
+        teacher_name: explicitTeacherName || deriveNameFromEmail(email),
         class_name: String(classKey ? row[classKey] : '').trim(),
         day_label: String(dayKey ? row[dayKey] : '').trim(),
         items,
