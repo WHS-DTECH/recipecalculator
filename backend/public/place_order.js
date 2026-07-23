@@ -4,6 +4,8 @@
   var state = {
     weekStart: '',
     weekEnd: '',
+    timelineStart: '',
+    timelineEnd: '',
     today: '',
     formUrl: '',
     submissions: [],
@@ -243,7 +245,7 @@
       formLink.style.opacity = '0.6';
     }
 
-    weekBadge.textContent = getWeekRangeLabel(state.weekStart, state.weekEnd);
+    weekBadge.textContent = getWeekRangeLabel(state.timelineStart || state.weekStart, state.timelineEnd || state.weekEnd);
 
     if (sendNowBtn) {
       sendNowBtn.style.display = state.isAdmin ? '' : 'none';
@@ -309,6 +311,8 @@
 
     state.weekStart = data.week_start;
     state.weekEnd = data.week_end;
+    state.timelineStart = data.timeline_start || data.week_start;
+    state.timelineEnd = data.timeline_end || data.week_end;
     state.today = data.today_date;
     state.formUrl = data.form_url || '';
     state.teacher = data.teacher || null;

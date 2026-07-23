@@ -981,8 +981,9 @@ router.get('/dashboard', requirePlaceOrderAccess, async (req, res) => {
     const activeWeekStart = /^\d{4}-\d{2}-\d{2}$/.test(requestedWeekStart)
       ? mondayFromYmd(requestedWeekStart)
       : mondayFromYmd(now.isoDate);
-
     const activeWeekEnd = dateOffsetIso(activeWeekStart, 6);
+    const timelineStart = dateOffsetIso(activeWeekStart, 1);
+    const timelineEnd = dateOffsetIso(activeWeekStart, 7);
     const profile = await fetchTeacherProfileByEmail(requestEmail);
     const isAdmin = String(req.placeOrderAccess && req.placeOrderAccess.role || '') === 'admin';
 
@@ -1022,7 +1023,7 @@ router.get('/dashboard', requirePlaceOrderAccess, async (req, res) => {
     const weekSubmissions = combinedSubmissions.filter((row) => {
       const d = String(row.submitted_date || '').trim();
       if (!d) return false;
-      return d >= activeWeekStart && d <= activeWeekEnd;
+      return d >= timelineStart && d <= timelineEnd;
     });
 
     const runningItems = summarizeRunningItems(weekSubmissions);
@@ -1033,6 +1034,8 @@ router.get('/dashboard', requirePlaceOrderAccess, async (req, res) => {
       is_admin: isAdmin,
       week_start: activeWeekStart,
       week_end: activeWeekEnd,
+      timeline_start: timelineStart,
+      timeline_end: timelineEnd,
       today_date: now.isoDate,
       form_url: getGoogleFormUrl(),
       resolved_form_url: getGoogleFormUrl(),
