@@ -673,6 +673,7 @@
     var nextBtn = document.getElementById('poNextWeekBtn');
     var thisBtn = document.getElementById('poThisWeekBtn');
     var sendBtn = document.getElementById('poSendNowBtn');
+    var sendTestBtn = document.getElementById('poSendTestNowBtn');
     var addRecipientBtn = document.getElementById('poAddRecipientBtn');
     var addBulkRecipientBtn = document.getElementById('poAddBulkRecipientBtn');
     var sendBulkBtn = document.getElementById('poSendBulkNowBtn');
@@ -704,6 +705,10 @@
 
     if (sendBtn) {
       sendBtn.addEventListener('click', sendNow);
+    }
+
+    if (sendTestBtn) {
+      sendTestBtn.addEventListener('click', sendNow);
     }
 
     if (addRecipientBtn) {
