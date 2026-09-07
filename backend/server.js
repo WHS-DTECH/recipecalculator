@@ -2945,28 +2945,53 @@ app.use((req, res, next) => {
   next();
 });
 
+function getLowMemoryMode() {
+  const explicit = String(process.env.LOW_MEMORY_MODE || '').trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(explicit)) return true;
+  if (['0', 'false', 'no', 'off'].includes(explicit)) return false;
+
+  const renderPlan = String(process.env.RENDER_SERVICE_PLAN || process.env.RENDER_PLAN || '').trim().toLowerCase();
+  const configuredMemoryMb = Number(process.env.MEMORY_MB || process.env.TOTAL_MEMORY_MB || 0);
+  return renderPlan.includes('starter') || (configuredMemoryMb > 0 && configuredMemoryMb <= 512);
+}
+
 // =========================
 // Start Server
 // =========================
 
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);
-  logSuggestionMailerHealthCheck().catch((err) => {
-    console.error('[SUGGESTIONS] SMTP health check error:', err.message);
-  });
-  if (typeof shoppingWorkflowEmailRouter.logShoppingMailerHealthCheck === 'function') {
-    shoppingWorkflowEmailRouter.logShoppingMailerHealthCheck().catch((err) => {
-      console.error('[SHOPPING-REVIEW] SMTP health check error:', err.message);
+  const lowMemoryMode = getLowMemoryMode();
+
+  if (!lowMemoryMode) {
+    logSuggestionMailerHealthCheck().catch((err) => {
+      console.error('[SUGGESTIONS] SMTP health check error:', err.message);
     });
+  } else {
+    console.log('[SERVER] Low-memory mode enabled — skipped startup SMTP health checks to reduce idle memory spikes.');
+  }
+  if (typeof shoppingWorkflowEmailRouter.logShoppingMailerHealthCheck === 'function') {
+    if (lowMemoryMode) {
+      console.log('[SHOPPING-REVIEW] Low-memory mode enabled — deferring SMTP status health check.');
+    } else {
+      shoppingWorkflowEmailRouter.logShoppingMailerHealthCheck().catch((err) => {
+        console.error('[SHOPPING-REVIEW] SMTP health check error:', err.message);
+      });
+    }
   }
   if (typeof placeOrderRouter.logPlaceOrderMailerHealthCheck === 'function') {
-    placeOrderRouter.logPlaceOrderMailerHealthCheck().catch((err) => {
-      console.error('[PLACE-ORDER] SMTP health check error:', err.message);
-    });
+    if (lowMemoryMode) {
+      console.log('[PLACE-ORDER] Low-memory mode enabled — deferring SMTP status health check.');
+    } else {
+      placeOrderRouter.logPlaceOrderMailerHealthCheck().catch((err) => {
+        console.error('[PLACE-ORDER] SMTP health check error:', err.message);
+      });
+    }
   }
 
   let shoppingReviewSchedulerBusy = false;
-  const scheduleIntervalMs = Math.max(30000, Number(process.env.SHOPPING_REVIEW_SCHEDULE_POLL_MS || 60000));
+  const defaultPollMs = lowMemoryMode ? 300000 : 60000;
+  const scheduleIntervalMs = Math.max(30000, Number(process.env.SHOPPING_REVIEW_SCHEDULE_POLL_MS || defaultPollMs));
   setInterval(async () => {
     if (shoppingReviewSchedulerBusy) return;
     shoppingReviewSchedulerBusy = true;
@@ -2983,7 +3008,7 @@ app.listen(PORT, () => {
       shoppingReviewSchedulerBusy = false;
     }
   }, scheduleIntervalMs);
-  console.log(`[SHOPPING-REVIEW] Schedule poll started (${scheduleIntervalMs}ms)`);
+  console.log(`[SHOPPING-REVIEW] Schedule poll started (${scheduleIntervalMs}ms)${lowMemoryMode ? ' [low-memory mode]' : ''}`);
 
   // ── Weekly Digest Scheduler ──────────────────────────────────────────────
   // Fires every Monday at 07:00 NZT (UTC+13 NZDT / UTC+12 NZST).
