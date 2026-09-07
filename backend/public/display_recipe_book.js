@@ -726,36 +726,62 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  Promise.all([
-    refreshAuthState(),
-    fetch('/api/recipes/display-table').then(res => res.json()).catch(() => []),
-    fetch('/api/bookings/all').then(res => res.json()).catch(() => ({ bookings: [] }))
-  ])
-    .then(([, displayRows, bookingsPayload]) => {
-      const rows = (Array.isArray(displayRows) ? displayRows : [])
-        .filter((row) => !isNonRecipePlannerLabel(row && row.name));
-      if (rows.length === 0) return;
-      const cardList = document.getElementById('recipeCardList');
-      const badge = document.getElementById('recipeCountBadge');
-      const chips = document.getElementById('recipeCategoryChips');
-      const recipeIndexSearch = document.getElementById('recipeIndexSearch');
-      const recipeIndexSort = document.getElementById('recipeIndexSort');
-      const recipeFilterEmpty = document.getElementById('recipeFilterEmpty');
-      const weeklyBox = document.getElementById('weeklyRecipeBox');
-      const weeklyDateLabel = document.getElementById('weeklyRecipeDateLabel');
-      const weeklyList = document.getElementById('weeklyRecipeList');
-      const weeklyEmpty = document.getElementById('weeklyRecipeEmpty');
-      if (!cardList) return;
+  function buildBookingsRangeQuery() {
+    const start = new Date();
+    const end = new Date();
+    start.setDate(start.getDate() - 30);
+    end.setDate(end.getDate() + 60);
+    return {
+      start: start.toISOString().slice(0, 10),
+      end: end.toISOString().slice(0, 10),
+      fields: 'summary',
+      limit: 300
+    };
+  }
 
-      const recipeById = new Map();
-      rows.forEach((row) => {
-        const keys = [rowRecipeKey(row), String(row.id || '').trim()].filter(Boolean);
-        keys.forEach((key) => recipeById.set(key, row));
-      });
-      const displayByRecipeId = new Map(rows.map(row => [rowRecipeKey(row), row]));
-      const displayByName = new Map(rows.map(row => [String(row.name || '').trim().toLowerCase(), row]));
-      const displayByNormalizedName = new Map(rows.map(row => [normalizeRecipeLookupName(row.name || ''), row]));
-      const bookings = Array.isArray(bookingsPayload && bookingsPayload.bookings) ? bookingsPayload.bookings : [];
+  function loadRecipeGallery() {
+    const cardList = document.getElementById('recipeCardList');
+    if (!cardList) return;
+
+    const recipeFetch = fetch('/api/recipes/display-table', { cache: 'no-store' })
+      .then((res) => res.json())
+      .catch(() => []);
+
+    const weeklyBox = document.getElementById('weeklyRecipeBox');
+    const bookingRange = buildBookingsRangeQuery();
+    const bookingsFetch = weeklyBox
+      ? fetch(`/api/bookings/all?start=${bookingRange.start}&end=${bookingRange.end}&fields=${bookingRange.fields}&limit=${bookingRange.limit}`, { cache: 'no-store' })
+          .then((res) => res.json())
+          .catch(() => ({ bookings: [] }))
+      : Promise.resolve({ bookings: [] });
+
+    Promise.all([
+      refreshAuthState(),
+      recipeFetch,
+      bookingsFetch
+    ])
+      .then(([, displayRows, bookingsPayload]) => {
+        const rows = (Array.isArray(displayRows) ? displayRows : [])
+          .filter((row) => !isNonRecipePlannerLabel(row && row.name));
+        if (rows.length === 0) return;
+        const badge = document.getElementById('recipeCountBadge');
+        const chips = document.getElementById('recipeCategoryChips');
+        const recipeIndexSearch = document.getElementById('recipeIndexSearch');
+        const recipeIndexSort = document.getElementById('recipeIndexSort');
+        const recipeFilterEmpty = document.getElementById('recipeFilterEmpty');
+        const weeklyDateLabel = document.getElementById('weeklyRecipeDateLabel');
+        const weeklyList = document.getElementById('weeklyRecipeList');
+        const weeklyEmpty = document.getElementById('weeklyRecipeEmpty');
+
+        const recipeById = new Map();
+        rows.forEach((row) => {
+          const keys = [rowRecipeKey(row), String(row.id || '').trim()].filter(Boolean);
+          keys.forEach((key) => recipeById.set(key, row));
+        });
+        const displayByRecipeId = new Map(rows.map(row => [rowRecipeKey(row), row]));
+        const displayByName = new Map(rows.map(row => [String(row.name || '').trim().toLowerCase(), row]));
+        const displayByNormalizedName = new Map(rows.map(row => [normalizeRecipeLookupName(row.name || ''), row]));
+        const bookings = Array.isArray(bookingsPayload && bookingsPayload.bookings) ? bookingsPayload.bookings : [];
 
       const now = new Date();
       const weekStart = getWeekStart(now);
@@ -867,7 +893,32 @@ document.addEventListener('DOMContentLoaded', function() {
       }
 
       refreshGallery();
+    })
+    .catch((error) => {
+      console.error('[Recipe Book] Failed to initialise gallery data:', error);
     });
+  }
+
+  function startLazyGalleryLoad() {
+    const cardList = document.getElementById('recipeCardList');
+    if (!cardList) return;
+
+    const runLoad = () => {
+      if (document.visibilityState === 'hidden') {
+        setTimeout(runLoad, 1500);
+        return;
+      }
+      loadRecipeGallery();
+    };
+
+    if ('requestIdleCallback' in window) {
+      window.requestIdleCallback(runLoad, { timeout: 4000 });
+    } else {
+      setTimeout(runLoad, 600);
+    }
+  }
+
+  startLazyGalleryLoad();
 
   document.addEventListener('click', toggleInlineLoginFromNavbar);
 
