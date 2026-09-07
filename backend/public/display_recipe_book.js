@@ -743,7 +743,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const cardList = document.getElementById('recipeCardList');
     if (!cardList) return;
 
-    const recipeFetch = fetch('/api/recipes/display-table', { cache: 'no-store' })
+    const recipeFetch = fetch('/api/recipes/display-table?fields=summary', { cache: 'no-store' })
       .then((res) => res.json())
       .catch(() => []);
 

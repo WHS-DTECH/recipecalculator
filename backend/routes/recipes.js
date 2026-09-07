@@ -623,6 +623,7 @@ router.get('/display-table', async (req, res) => {
   try {
     await ensureFoodTruckModerationColumns();
     const scope = String(req.query && req.query.scope || '').trim().toLowerCase();
+    const fieldsMode = String(req.query && req.query.fields || '').trim().toLowerCase();
 
     const sql = `
       SELECT rd.*,
@@ -639,8 +640,25 @@ router.get('/display-table', async (req, res) => {
        )
        ORDER BY rd.id DESC`;
     const result = await pool.query(sql, [scope]);
-    logJsonTransfer('GET /api/recipes/display-table', result.rows, `rows=${result.rows.length} scope=${scope || 'all'}`);
-    res.json(result.rows);
+
+    let rows = result.rows;
+    if (fieldsMode === 'summary') {
+      rows = result.rows.map((row) => ({
+        id: row.id,
+        recipeid: row.recipeid,
+        recipe_id: row.recipe_id,
+        name: row.name,
+        url: row.url,
+        image_url: row.image_url,
+        ft_images: row.ft_images,
+        ft_primary_slot: row.ft_primary_slot,
+        planner_stream: row.planner_stream,
+        department: row.department
+      }));
+    }
+
+    logJsonTransfer('GET /api/recipes/display-table', rows, `rows=${rows.length} scope=${scope || 'all'} fields=${fieldsMode || 'full'}`);
+    res.json(rows);
   } catch (err) {
     console.error('[ERROR][GET /api/recipes/display-table]', err);
     res.status(500).json({ success: false, error: err.message });
